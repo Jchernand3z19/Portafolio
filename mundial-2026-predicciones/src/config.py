@@ -37,6 +37,7 @@ TAB_EQUIVALENCIAS = "dim_equivalencias_selecciones"
 
 TAB_SALIDA = "fact_predicciones_2026"
 TAB_SNAPSHOT = "fact_predicciones_snapshot_2026"
+TAB_VALIDACION = "fact_validacion_predicciones_2026"
 TAB_LOGS = "_logs_mundial_2026"
 
 
