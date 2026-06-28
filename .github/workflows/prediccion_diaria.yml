@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  ejecutar-prediccion:
+  ejecutar-pipeline:
     runs-on: ubuntu-latest
 
     defaults:
@@ -43,3 +43,6 @@ jobs:
 
       - name: Ejecutar prediccion dinamica
         run: python scripts/01_prediccion_dinamica_2026.py
+
+      - name: Ejecutar validacion de predicciones
+        run: python scripts/02_validacion_predicciones_2026.py
