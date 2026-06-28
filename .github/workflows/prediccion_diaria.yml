@@ -20,6 +20,7 @@ jobs:
         working-directory: mundial-2026-predicciones
 
     env:
+      PYTHONPATH: ${{ github.workspace }}/mundial-2026-predicciones
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
       GOOGLE_CLIENT_EMAIL: ${{ secrets.GOOGLE_CLIENT_EMAIL }}
       GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
