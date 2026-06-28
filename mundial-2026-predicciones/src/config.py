@@ -8,6 +8,10 @@ No colocar credenciales reales dentro del código.
 import os
 
 
+# ============================================================
+# VARIABLES DE ENTORNO / CREDENCIALES
+# ============================================================
+
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "")
 
 GOOGLE_CLIENT_EMAIL = os.environ.get("GOOGLE_CLIENT_EMAIL", "")
@@ -17,20 +21,38 @@ MODEL_VERSION = os.environ.get("MODEL_VERSION", "v1.1")
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
 
 
+# ============================================================
+# TABLAS DE ENTRADA
+# ============================================================
+
 TAB_CALENDARIO = "Calendario Mundial 2026 - Data Matrix"
 TAB_RANKING = "dim_ranking_equipos"
 TAB_RESULTADOS = "fact_resultados_recientes"
 TAB_EQUIVALENCIAS = "dim_equivalencias_selecciones"
 
+
+# ============================================================
+# TABLAS DE SALIDA
+# ============================================================
+
 TAB_SALIDA = "fact_predicciones_2026"
 TAB_SNAPSHOT = "fact_predicciones_snapshot_2026"
+TAB_LOGS = "_logs_mundial_2026"
 
+
+# ============================================================
+# MODELO
+# ============================================================
 
 MODELO_NOMBRE = (
     "Poisson ajustado por ranking FIFA, Elo, forma reciente "
     "y partidos jugados del Mundial 2026"
 )
 
+
+# ============================================================
+# VALIDACIÓN DE CONFIGURACIÓN
+# ============================================================
 
 def validar_configuracion():
     """
