@@ -7,6 +7,7 @@ Este script:
 3. Genera predicciones dinámicas solo para partidos pendientes/programados.
 4. Sobrescribe fact_predicciones_2026.
 5. Agrega histórico en fact_predicciones_snapshot_2026.
+6. Registra cada ejecución en _logs_mundial_2026.
 
 No contiene credenciales.
 Las credenciales se leen desde variables de entorno o GitHub Secrets.
@@ -24,8 +25,10 @@ from src.config import (
     TAB_EQUIVALENCIAS,
     TAB_SALIDA,
     TAB_SNAPSHOT,
+    TAB_LOGS,
     MODEL_VERSION,
     MODELO_NOMBRE,
+    ENVIRONMENT,
 )
 
 from src.sheets_client import (
@@ -594,6 +597,35 @@ def crear_snapshot(pred_df):
     return snapshot_df
 
 
+def crear_log_ejecucion(
+    pred_df,
+    snapshot_df,
+    estado="OK",
+    mensaje="Proceso terminado correctamente",
+):
+    """
+    Crea una fila de auditoría para registrar cada ejecución del pipeline.
+    """
+    return pd.DataFrame(
+        [
+            {
+                "run_id": RUN_ID,
+                "fecha_hora_ejecucion": FECHA_HORA_EJECUCION,
+                "proyecto": "mundial-2026-predicciones",
+                "script": "01_prediccion_dinamica_2026.py",
+                "origen": ENVIRONMENT,
+                "estado": estado,
+                "filas_predicciones": len(pred_df),
+                "filas_snapshot": len(snapshot_df),
+                "tabla_predicciones": TAB_SALIDA,
+                "tabla_snapshot": TAB_SNAPSHOT,
+                "version_modelo": MODEL_VERSION,
+                "mensaje": mensaje,
+            }
+        ]
+    )
+
+
 def main():
     """
     Ejecución principal del pipeline.
@@ -641,10 +673,14 @@ def main():
     escribir_df_en_hoja(pred_df, TAB_SALIDA)
     append_df_en_hoja(snapshot_df, TAB_SNAPSHOT)
 
+    log_df = crear_log_ejecucion(pred_df, snapshot_df)
+    append_df_en_hoja(log_df, TAB_LOGS)
+
     print("====================================================")
     print("Proceso terminado.")
     print(f"Tabla dinámica escrita en: {TAB_SALIDA}")
     print(f"Snapshot agregado en: {TAB_SNAPSHOT}")
+    print(f"Log agregado en: {TAB_LOGS}")
     print(f"Filas dinámicas generadas: {len(pred_df)}")
     print(f"Filas agregadas al snapshot: {len(snapshot_df)}")
     print("====================================================")
