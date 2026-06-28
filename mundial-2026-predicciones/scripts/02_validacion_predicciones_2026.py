@@ -60,8 +60,8 @@ COLUMNAS_VALIDACION = [
     "codigo_a",
     "equipo_b",
     "codigo_b",
-    "goles_a",
-    "goles_b",
+    "goles_reales_a",
+    "goles_reales_b",
     "marcador_real",
     "resultado_real",
     "run_id_prediccion",
@@ -70,6 +70,8 @@ COLUMNAS_VALIDACION = [
     "favorito_predicho",
     "resultado_predicho",
     "marcador_estimado",
+    "goles_estimados_a",
+    "goles_estimados_b",
     "prob_a",
     "prob_empate",
     "prob_b",
@@ -207,8 +209,8 @@ def preparar_calendario_jugado(calendario):
         codigo_a = texto_limpio(row.get("codigo_a", "")).upper()
         codigo_b = texto_limpio(row.get("codigo_b", "")).upper()
 
-        goles_a = entero(row.get("goles_a", ""))
-        goles_b = entero(row.get("goles_b", ""))
+        goles_reales_a = entero(row.get("goles_a", ""))
+        goles_reales_b = entero(row.get("goles_b", ""))
 
         if not match_id:
             continue
@@ -222,10 +224,13 @@ def preparar_calendario_jugado(calendario):
         if not codigo_valido(codigo_a) or not codigo_valido(codigo_b):
             continue
 
-        if pd.isna(goles_a) or pd.isna(goles_b):
+        if pd.isna(goles_reales_a) or pd.isna(goles_reales_b):
             continue
 
-        resultado_real_codigo = obtener_resultado(goles_a, goles_b)
+        resultado_real_codigo = obtener_resultado(
+            goles_reales_a,
+            goles_reales_b,
+        )
 
         registros.append(
             {
@@ -238,9 +243,9 @@ def preparar_calendario_jugado(calendario):
                 "codigo_a": codigo_a,
                 "equipo_b": equipo_b,
                 "codigo_b": codigo_b,
-                "goles_a": goles_a,
-                "goles_b": goles_b,
-                "marcador_real": f"{goles_a}-{goles_b}",
+                "goles_reales_a": goles_reales_a,
+                "goles_reales_b": goles_reales_b,
+                "marcador_real": f"{goles_reales_a}-{goles_reales_b}",
                 "resultado_real_codigo": resultado_real_codigo,
                 "resultado_real": resultado_texto(
                     resultado_real_codigo,
@@ -259,8 +264,7 @@ def preparar_calendario_jugado(calendario):
 
 def preparar_snapshot(snapshot):
     """
-    Limpia el snapshot y deja una predicción por match_id:
-    la última predicción disponible.
+    Limpia el snapshot de predicciones.
     """
     columnas_minimas = [
         "run_id",
@@ -276,6 +280,7 @@ def preparar_snapshot(snapshot):
         "prob_favorito",
         "confianza",
         "version_modelo",
+        "fecha_prediccion",
     ]
 
     if snapshot.empty:
@@ -302,20 +307,58 @@ def preparar_snapshot(snapshot):
     else:
         snapshot["fecha_hora_ejecucion_dt"] = pd.NaT
 
+    if "fecha_prediccion" in snapshot.columns:
+        snapshot["fecha_prediccion_dt"] = pd.to_datetime(
+            snapshot["fecha_prediccion"],
+            errors="coerce",
+        )
+    else:
+        snapshot["fecha_prediccion_dt"] = pd.NaT
+
     snapshot = snapshot.sort_values(
         ["match_id", "fecha_hora_ejecucion_dt"],
         ascending=[True, True],
     )
 
-    snapshot_ultima = (
-        snapshot
-        .drop_duplicates(subset=["match_id"], keep="last")
-        .copy()
+    print("Registros de snapshot disponibles:", len(snapshot))
+
+    return snapshot
+
+
+def seleccionar_prediccion_para_partido(snapshot, match_id, fecha_partido_dt):
+    """
+    Selecciona la última predicción disponible antes o en la fecha del partido.
+
+    Esto evita validar usando una predicción generada después del resultado real.
+    """
+    if snapshot.empty:
+        return {}
+
+    if "match_id" not in snapshot.columns:
+        return {}
+
+    candidatos = snapshot[snapshot["match_id"] == match_id].copy()
+
+    if candidatos.empty:
+        return {}
+
+    if "fecha_prediccion_dt" in candidatos.columns and not pd.isna(fecha_partido_dt):
+        candidatos_previos = candidatos[
+            candidatos["fecha_prediccion_dt"].notna()
+            & (candidatos["fecha_prediccion_dt"] <= fecha_partido_dt)
+        ].copy()
+
+        if candidatos_previos.empty:
+            return {}
+
+        candidatos = candidatos_previos
+
+    candidatos = candidatos.sort_values(
+        "fecha_hora_ejecucion_dt",
+        ascending=True,
     )
 
-    print("Predicciones únicas disponibles para validar:", len(snapshot_ultima))
-
-    return snapshot_ultima
+    return candidatos.iloc[-1].to_dict()
 
 
 def obtener_resultado_predicho(pred_row, equipo_a, equipo_b):
@@ -339,7 +382,7 @@ def obtener_resultado_predicho(pred_row, equipo_a, equipo_b):
     return ""
 
 
-def generar_validacion(partidos_jugados, snapshot_ultima):
+def generar_validacion(partidos_jugados, snapshot):
     """
     Genera la tabla final de validación.
     """
@@ -349,14 +392,14 @@ def generar_validacion(partidos_jugados, snapshot_ultima):
         print("No hay partidos jugados para validar.")
         return pd.DataFrame(columns=COLUMNAS_VALIDACION)
 
-    snapshot_dict = {}
-
-    if not snapshot_ultima.empty and "match_id" in snapshot_ultima.columns:
-        snapshot_dict = snapshot_ultima.set_index("match_id").to_dict("index")
-
     for _, partido in partidos_jugados.iterrows():
         match_id = texto_limpio(partido["match_id"])
-        pred = snapshot_dict.get(match_id, {})
+
+        pred = seleccionar_prediccion_para_partido(
+            snapshot=snapshot,
+            match_id=match_id,
+            fecha_partido_dt=partido["fecha_dt"],
+        )
 
         tiene_prediccion = bool(pred)
 
@@ -370,8 +413,8 @@ def generar_validacion(partidos_jugados, snapshot_ultima):
         favorito_predicho = ""
         marcador_estimado = ""
 
-        goles_estimados_a = np.nan
-        goles_estimados_b = np.nan
+        goles_estimados_a = ""
+        goles_estimados_b = ""
 
         acerto_resultado = "No"
         acerto_marcador = "No"
@@ -383,11 +426,13 @@ def generar_validacion(partidos_jugados, snapshot_ultima):
 
         if tiene_prediccion:
             favorito_predicho = texto_limpio(pred.get("favorito", ""))
+
             resultado_predicho_codigo = obtener_resultado_predicho(
                 pred,
                 equipo_a,
                 equipo_b,
             )
+
             resultado_predicho = resultado_texto(
                 resultado_predicho_codigo,
                 equipo_a,
@@ -395,31 +440,42 @@ def generar_validacion(partidos_jugados, snapshot_ultima):
             )
 
             marcador_estimado = texto_limpio(pred.get("marcador_estimado", ""))
-            goles_estimados_a, goles_estimados_b = parsear_marcador_estimado(
+
+            goles_estimados_a_tmp, goles_estimados_b_tmp = parsear_marcador_estimado(
                 marcador_estimado
             )
+
+            if not pd.isna(goles_estimados_a_tmp):
+                goles_estimados_a = int(goles_estimados_a_tmp)
+
+            if not pd.isna(goles_estimados_b_tmp):
+                goles_estimados_b = int(goles_estimados_b_tmp)
 
             if resultado_predicho_codigo == resultado_real_codigo:
                 acerto_resultado = "Sí"
 
             if (
-                not pd.isna(goles_estimados_a)
-                and not pd.isna(goles_estimados_b)
-                and int(goles_estimados_a) == int(partido["goles_a"])
-                and int(goles_estimados_b) == int(partido["goles_b"])
+                goles_estimados_a != ""
+                and goles_estimados_b != ""
+                and int(goles_estimados_a) == int(partido["goles_reales_a"])
+                and int(goles_estimados_b) == int(partido["goles_reales_b"])
             ):
                 acerto_marcador = "Sí"
 
-            if not pd.isna(goles_estimados_a):
-                diferencia_goles_a = int(goles_estimados_a) - int(partido["goles_a"])
+            if goles_estimados_a != "":
+                diferencia_goles_a = int(goles_estimados_a) - int(
+                    partido["goles_reales_a"]
+                )
 
-            if not pd.isna(goles_estimados_b):
-                diferencia_goles_b = int(goles_estimados_b) - int(partido["goles_b"])
+            if goles_estimados_b != "":
+                diferencia_goles_b = int(goles_estimados_b) - int(
+                    partido["goles_reales_b"]
+                )
 
             if resultado_predicho_codigo == "":
                 notas = "No se pudo mapear el favorito predicho contra equipo_a/equipo_b."
         else:
-            notas = "No existe predicción histórica para este match_id en el snapshot."
+            notas = "No existe predicción histórica previa para este match_id en el snapshot."
 
         registros.append(
             {
@@ -433,8 +489,8 @@ def generar_validacion(partidos_jugados, snapshot_ultima):
                 "codigo_a": partido["codigo_a"],
                 "equipo_b": equipo_b,
                 "codigo_b": partido["codigo_b"],
-                "goles_a": partido["goles_a"],
-                "goles_b": partido["goles_b"],
+                "goles_reales_a": partido["goles_reales_a"],
+                "goles_reales_b": partido["goles_reales_b"],
                 "marcador_real": partido["marcador_real"],
                 "resultado_real": partido["resultado_real"],
                 "run_id_prediccion": texto_limpio(pred.get("run_id", "")),
@@ -445,6 +501,8 @@ def generar_validacion(partidos_jugados, snapshot_ultima):
                 "favorito_predicho": favorito_predicho,
                 "resultado_predicho": resultado_predicho,
                 "marcador_estimado": marcador_estimado,
+                "goles_estimados_a": goles_estimados_a,
+                "goles_estimados_b": goles_estimados_b,
                 "prob_a": pred.get("prob_a", ""),
                 "prob_empate": pred.get("prob_empate", ""),
                 "prob_b": pred.get("prob_b", ""),
@@ -473,6 +531,10 @@ def generar_validacion(partidos_jugados, snapshot_ultima):
     print("Filas de validación generadas:", len(validacion_df))
 
     if not validacion_df.empty:
+        print(
+            "Filas con predicción histórica previa:",
+            (validacion_df["tiene_prediccion"] == "Sí").sum(),
+        )
         print(
             "Predicciones con resultado acertado:",
             (validacion_df["acerto_resultado"] == "Sí").sum(),
@@ -530,9 +592,9 @@ def main():
 
     partidos_jugados = preparar_calendario_jugado(calendario)
 
-    snapshot_ultima = preparar_snapshot(snapshot)
+    snapshot_preparado = preparar_snapshot(snapshot)
 
-    validacion_df = generar_validacion(partidos_jugados, snapshot_ultima)
+    validacion_df = generar_validacion(partidos_jugados, snapshot_preparado)
 
     escribir_df_en_hoja(validacion_df, TAB_VALIDACION)
 
