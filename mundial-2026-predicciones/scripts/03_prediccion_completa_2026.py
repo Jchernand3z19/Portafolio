@@ -693,15 +693,12 @@ def predecir_match(
     if goles_b > goles_a:
         return resultado, equipo_b, codigo_b, equipo_a, codigo_a
 
-    # Eliminatoria con marcador empatado.
-    # Se desempata usando probabilidades sin empate.
     if resultado["prob_a"] > resultado["prob_b"]:
         return resultado, equipo_a, codigo_a, equipo_b, codigo_b
 
     if resultado["prob_b"] > resultado["prob_a"]:
         return resultado, equipo_b, codigo_b, equipo_a, codigo_a
 
-    # Último desempate por rating.
     if rating_equipo(codigo_a, ranking_dict) >= rating_equipo(codigo_b, ranking_dict):
         return resultado, equipo_a, codigo_a, equipo_b, codigo_b
 
@@ -1037,6 +1034,8 @@ def extraer_grupos_mencionados(texto):
     - 1A
     - 2B
     - 3C
+    - 3CEFHI
+    - 3.º Grupo C/E/F/H/I
     - 3A/B/C
     - Mejor tercero A/B/C
     """
@@ -1044,33 +1043,48 @@ def extraer_grupos_mencionados(texto):
 
     grupos = []
 
-    patrones = [
-        r"GRUPO\s*([A-L])",
-        r"GROUP\s*([A-L])",
-        r"\b[123]\s*([A-L])\b",
-        r"\b[123]([A-L])\b",
-    ]
-
-    for patron in patrones:
-        for g in re.findall(patron, t):
+    def agregar_grupos(lista):
+        for g in lista:
+            g = texto_limpio(g).upper()
             if g in GROUPS and g not in grupos:
                 grupos.append(g)
 
-    # Casos tipo 3A/B/C o 3A-C-D.
-    match_terceros = re.search(r"\b3\s*([A-L](?:\s*[/,\-]\s*[A-L])*)", t)
+    match_grupo_bloque = re.search(
+        r"GRUPO\s*([A-L](?:\s*[/,\-]\s*[A-L])*)",
+        t,
+    )
+
+    if match_grupo_bloque:
+        bloque = match_grupo_bloque.group(1)
+        agregar_grupos(re.findall(r"[A-L]", bloque))
+
+    match_group_bloque = re.search(
+        r"GROUP\s*([A-L](?:\s*[/,\-]\s*[A-L])*)",
+        t,
+    )
+
+    if match_group_bloque:
+        bloque = match_group_bloque.group(1)
+        agregar_grupos(re.findall(r"[A-L]", bloque))
+
+    for g in re.findall(r"\b[123]\s*([A-L])\b", t):
+        agregar_grupos([g])
+
+    for bloque in re.findall(r"\b[123]\s*([A-L]{2,12})\b", t):
+        agregar_grupos(re.findall(r"[A-L]", bloque))
+
+    match_terceros = re.search(
+        r"\b3(?:\.|º|°|\s|ER|ERO|RD)*\s*([A-L](?:\s*[/,\-]\s*[A-L])*)",
+        t,
+    )
 
     if match_terceros:
         bloque = match_terceros.group(1)
-        for g in re.findall(r"[A-L]", bloque):
-            if g in GROUPS and g not in grupos:
-                grupos.append(g)
+        agregar_grupos(re.findall(r"[A-L]", bloque))
 
-    # Casos tipo "Mejor tercero A/B/C".
     if any(x in t for x in ["TERCERO", "THIRD", "BEST THIRD", "MEJOR TERCERO"]):
         posibles = re.findall(r"\b[A-L]\b", t)
-        for g in posibles:
-            if g in GROUPS and g not in grupos:
-                grupos.append(g)
+        agregar_grupos(posibles)
 
     return grupos
 
@@ -1080,6 +1094,28 @@ def detectar_tipo_slot(texto):
     Detecta si el slot pide primero, segundo, tercero, ganador o perdedor.
     """
     t = texto_norm(texto)
+
+    if re.search(r"\b1\s*[A-L]\b", t):
+        return "primero_grupo"
+
+    if re.search(r"\b2\s*[A-L]\b", t):
+        return "segundo_grupo"
+
+    if re.search(r"\b3\s*[A-L]\b", t):
+        return "tercero_grupo"
+
+    if re.search(r"\b3\s*[A-L]{2,12}\b", t):
+        return "tercero_grupo"
+
+    if "GRUPO" in t or "GROUP" in t:
+        if any(x in t for x in ["TERCERO", "TERCERA", "3RD", "THIRD", "MEJOR TERCERO", "BEST THIRD"]):
+            return "tercero_grupo"
+
+        if any(x in t for x in ["SEGUNDO", "SEGUNDA", "2ND", "RUNNER", "RUNNER UP"]):
+            return "segundo_grupo"
+
+        if any(x in t for x in ["PRIMERO", "PRIMER", "1ST", "GANADOR", "WINNER", "VENCEDOR"]):
+            return "primero_grupo"
 
     if re.search(r"\bW\s*-?\s*\d+\b", t):
         return "ganador_partido"
@@ -1093,16 +1129,7 @@ def detectar_tipo_slot(texto):
     if any(x in t for x in ["PERDEDOR", "LOSER", "L OF", "LOSER OF", "L-"]):
         return "perdedor_partido"
 
-    if re.search(r"\b1\s*[A-L]\b", t):
-        return "primero_grupo"
-
-    if re.search(r"\b2\s*[A-L]\b", t):
-        return "segundo_grupo"
-
-    if re.search(r"\b3\s*[A-L]\b", t):
-        return "tercero_grupo"
-
-    if any(x in t for x in ["PRIMERO", "1ST", "WINNER GROUP", "GANADOR GRUPO"]):
+    if any(x in t for x in ["PRIMERO", "1ST"]):
         return "primero_grupo"
 
     if any(x in t for x in ["SEGUNDO", "2ND", "RUNNER", "RUNNER UP"]):
