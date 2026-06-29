@@ -233,7 +233,19 @@ def es_placeholder(texto):
         "LOSER OF",
     ]
 
-    return any(p in t for p in palabras_placeholder)
+    if any(p in t for p in palabras_placeholder):
+        return True
+
+    if re.search(r"\b[123]\s*[A-L]\b", t):
+        return True
+
+    if re.search(r"\bW\s*-?\s*\d+\b", t):
+        return True
+
+    if re.search(r"\bL\s*-?\s*\d+\b", t):
+        return True
+
+    return False
 
 
 def equipo_concreto(equipo, codigo):
@@ -924,13 +936,17 @@ def simular_fase_grupos(
     ).copy()
     terceros["orden_tercero"] = range(1, len(terceros) + 1)
 
-    tabla_df["orden_tercero"] = ""
+    tabla_df["orden_tercero"] = pd.Series(
+        pd.NA,
+        index=tabla_df.index,
+        dtype="Int64",
+    )
 
     for _, row in terceros.iterrows():
         tabla_df.loc[
             tabla_df["codigo"] == row["codigo"],
             "orden_tercero",
-        ] = row["orden_tercero"]
+        ] = int(row["orden_tercero"])
 
     mejores_terceros_codigos = terceros.head(8)["codigo"].tolist()
 
@@ -1014,19 +1030,45 @@ def crear_mapa_clasificados(tabla_grupos):
 def extraer_grupos_mencionados(texto):
     """
     Extrae letras de grupo desde placeholders.
+
+    Soporta formatos como:
+    - Ganador Grupo A
+    - Segundo Grupo B
+    - 1A
+    - 2B
+    - 3C
+    - 3A/B/C
+    - Mejor tercero A/B/C
     """
     t = texto_norm(texto)
 
     grupos = []
 
     patrones = [
-        r"GRUPO\s+([A-L])",
-        r"GROUP\s+([A-L])",
-        r"\b([A-L])\b",
+        r"GRUPO\s*([A-L])",
+        r"GROUP\s*([A-L])",
+        r"\b[123]\s*([A-L])\b",
+        r"\b[123]([A-L])\b",
     ]
 
     for patron in patrones:
         for g in re.findall(patron, t):
+            if g in GROUPS and g not in grupos:
+                grupos.append(g)
+
+    # Casos tipo 3A/B/C o 3A-C-D.
+    match_terceros = re.search(r"\b3\s*([A-L](?:\s*[/,\-]\s*[A-L])*)", t)
+
+    if match_terceros:
+        bloque = match_terceros.group(1)
+        for g in re.findall(r"[A-L]", bloque):
+            if g in GROUPS and g not in grupos:
+                grupos.append(g)
+
+    # Casos tipo "Mejor tercero A/B/C".
+    if any(x in t for x in ["TERCERO", "THIRD", "BEST THIRD", "MEJOR TERCERO"]):
+        posibles = re.findall(r"\b[A-L]\b", t)
+        for g in posibles:
             if g in GROUPS and g not in grupos:
                 grupos.append(g)
 
@@ -1039,11 +1081,26 @@ def detectar_tipo_slot(texto):
     """
     t = texto_norm(texto)
 
+    if re.search(r"\bW\s*-?\s*\d+\b", t):
+        return "ganador_partido"
+
+    if re.search(r"\bL\s*-?\s*\d+\b", t):
+        return "perdedor_partido"
+
     if any(x in t for x in ["GANADOR", "WINNER", "VENCEDOR", "W OF", "WINNER OF", "W-"]):
         return "ganador_partido"
 
     if any(x in t for x in ["PERDEDOR", "LOSER", "L OF", "LOSER OF", "L-"]):
         return "perdedor_partido"
+
+    if re.search(r"\b1\s*[A-L]\b", t):
+        return "primero_grupo"
+
+    if re.search(r"\b2\s*[A-L]\b", t):
+        return "segundo_grupo"
+
+    if re.search(r"\b3\s*[A-L]\b", t):
+        return "tercero_grupo"
 
     if any(x in t for x in ["PRIMERO", "1ST", "WINNER GROUP", "GANADOR GRUPO"]):
         return "primero_grupo"
@@ -1063,6 +1120,7 @@ def extraer_match_referencia(texto):
     - Winner of 73
     - Ganador 73
     - W-73
+    - W73
     """
     t = texto_norm(texto)
 
@@ -1087,7 +1145,7 @@ def resolver_tercero(grupos_posibles, mapa_clasificados):
         return None
 
     if grupos_posibles:
-        for equipo in disponibles:
+        for equipo in list(disponibles):
             if equipo["grupo"] in grupos_posibles:
                 disponibles.remove(equipo)
                 return equipo
