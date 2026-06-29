@@ -7,7 +7,7 @@ Importante:
 - NO usa resultados reales del Mundial actual.
 - NO usa goles_a/goles_b del calendario.
 - NO usa estado = Jugado del calendario.
-- Usa el calendario solo como estructura: grupos, partidos, fases y equipos.
+- Usa el calendario como estructura: grupos, partidos, fases, slots y llaves.
 - Usa ranking, Elo, forma reciente histórica y modelo Poisson.
 
 Salida:
@@ -117,8 +117,10 @@ COLUMNAS_GRUPOS = [
     "gc",
     "dg",
     "pts",
+    "ranking_aux",
     "clasifica",
     "tipo_clasificacion",
+    "orden_tercero",
     "version_modelo",
 ]
 
@@ -146,7 +148,7 @@ COLUMNAS_CAMINO = [
 
 def quitar_acentos(texto):
     """
-    Quita acentos para facilitar búsquedas de texto.
+    Quita acentos para facilitar comparaciones.
     """
     texto = texto_limpio(texto)
     return "".join(
@@ -178,31 +180,57 @@ def id_limpio(x):
     return txt
 
 
+def id_numero(x):
+    """
+    Extrae número de match_id.
+    """
+    txt = id_limpio(x)
+    nums = re.findall(r"\d+", txt)
+
+    if not nums:
+        return np.nan
+
+    return int(nums[0])
+
+
 def es_placeholder(texto):
     """
-    Detecta si un texto parece placeholder y no una selección real.
+    Detecta si un texto parece placeholder y no selección real.
     """
     t = texto_norm(texto)
 
     palabras_placeholder = [
         "TBD",
         "PENDIENTE",
+        "POR DEFINIR",
         "GANADOR",
+        "GANADORA",
         "WINNER",
         "VENCEDOR",
+        "VENCEDORA",
         "PERDEDOR",
+        "PERDEDORA",
         "LOSER",
         "GRUPO",
         "GROUP",
         "RUNNER",
+        "RUNNER UP",
         "SEGUNDO",
+        "SEGUNDA",
         "TERCERO",
+        "TERCERA",
         "THIRD",
+        "MEJOR TERCERO",
+        "BEST THIRD",
         "1ST",
         "2ND",
         "3RD",
         "W OF",
         "L OF",
+        "W-",
+        "L-",
+        "WINNER OF",
+        "LOSER OF",
     ]
 
     return any(p in t for p in palabras_placeholder)
@@ -239,7 +267,7 @@ def fase_normalizada(fase):
     if any(x in f for x in ["GRUPO", "GROUP"]):
         return "Fase de grupos"
 
-    if any(x in f for x in ["RONDA DE 32", "ROUND OF 32", "32"]):
+    if any(x in f for x in ["RONDA DE 32", "ROUND OF 32", "32", "DIECISEISAVOS"]):
         return "Ronda de 32"
 
     if any(x in f for x in ["OCTAVOS", "ROUND OF 16", "16"]):
@@ -335,6 +363,26 @@ def validar_columnas(calendario, ranking, resultados):
     for col in columnas_resultados:
         if col not in resultados.columns:
             raise ValueError(f"Falta columna en fact_resultados_recientes: {col}")
+
+
+def preparar_calendario(calendario):
+    """
+    Prepara calendario y columnas auxiliares.
+    """
+    df = calendario.copy()
+
+    df["fase_norm"] = df["fase"].apply(fase_normalizada)
+    df["match_id_limpio"] = df["match_id"].apply(id_limpio)
+    df["match_id_num"] = df["match_id"].apply(id_numero)
+    df["fecha_dt"] = df["fecha"].apply(fecha_yyyy_mm_dd)
+
+    df["codigo_a"] = df["codigo_a"].astype(str).str.strip().str.upper()
+    df["codigo_b"] = df["codigo_b"].astype(str).str.strip().str.upper()
+    df["equipo_a"] = df["equipo_a"].astype(str).str.strip()
+    df["equipo_b"] = df["equipo_b"].astype(str).str.strip()
+    df["grupo"] = df["grupo"].astype(str).str.strip().str.upper()
+
+    return df
 
 
 def preparar_ranking(ranking):
@@ -633,8 +681,8 @@ def predecir_match(
     if goles_b > goles_a:
         return resultado, equipo_b, codigo_b, equipo_a, codigo_a
 
-    # Eliminatoria con marcador estimado empatado.
-    # Se desempata usando probabilidad directa sin empate.
+    # Eliminatoria con marcador empatado.
+    # Se desempata usando probabilidades sin empate.
     if resultado["prob_a"] > resultado["prob_b"]:
         return resultado, equipo_a, codigo_a, equipo_b, codigo_b
 
@@ -707,18 +755,10 @@ def extraer_partidos_grupo(calendario):
     Toma del calendario únicamente partidos de fase de grupos con equipos definidos.
     Ignora resultados reales aunque existan.
     """
-    df = calendario.copy()
-    df["fase_norm"] = df["fase"].apply(fase_normalizada)
-    df["match_id_limpio"] = df["match_id"].apply(id_limpio)
-    df["fecha_dt"] = df["fecha"].apply(fecha_yyyy_mm_dd)
-
-    partidos = df[
-        (df["fase_norm"] == "Fase de grupos")
-        & df["grupo"].astype(str).str.strip().str.upper().isin(GROUPS)
+    partidos = calendario[
+        (calendario["fase_norm"] == "Fase de grupos")
+        & calendario["grupo"].isin(GROUPS)
     ].copy()
-
-    partidos["codigo_a"] = partidos["codigo_a"].astype(str).str.strip().str.upper()
-    partidos["codigo_b"] = partidos["codigo_b"].astype(str).str.strip().str.upper()
 
     partidos = partidos[
         partidos.apply(lambda r: equipo_concreto(r["equipo_a"], r["codigo_a"]), axis=1)
@@ -726,7 +766,7 @@ def extraer_partidos_grupo(calendario):
     ].copy()
 
     partidos = partidos.sort_values(
-        ["grupo", "fecha_dt", "match_id_limpio"],
+        ["grupo", "fecha_dt", "match_id_num"],
         ascending=[True, True, True],
     )
 
@@ -882,6 +922,15 @@ def simular_fase_grupos(
         ["pts", "dg", "gf", "ranking_aux"],
         ascending=[False, False, False, False],
     ).copy()
+    terceros["orden_tercero"] = range(1, len(terceros) + 1)
+
+    tabla_df["orden_tercero"] = ""
+
+    for _, row in terceros.iterrows():
+        tabla_df.loc[
+            tabla_df["codigo"] == row["codigo"],
+            "orden_tercero",
+        ] = row["orden_tercero"]
 
     mejores_terceros_codigos = terceros.head(8)["codigo"].tolist()
 
@@ -902,28 +951,7 @@ def simular_fase_grupos(
     tabla_salida.insert(2, "escenario", ESCENARIO)
     tabla_salida["version_modelo"] = MODEL_VERSION
 
-    tabla_salida = tabla_salida[
-        [
-            "run_id",
-            "fecha_hora_ejecucion",
-            "escenario",
-            "grupo",
-            "posicion_grupo",
-            "seleccion",
-            "codigo",
-            "pj",
-            "pg",
-            "pe",
-            "pp",
-            "gf",
-            "gc",
-            "dg",
-            "pts",
-            "clasifica",
-            "tipo_clasificacion",
-            "version_modelo",
-        ]
-    ].copy()
+    tabla_salida = tabla_salida[COLUMNAS_GRUPOS].copy()
 
     partidos_df = pd.DataFrame(registros_partidos)
 
@@ -938,116 +966,261 @@ def simular_fase_grupos(
     return partidos_df, tabla_salida
 
 
-def lista_clasificados(tabla_grupos):
+def crear_mapa_clasificados(tabla_grupos):
     """
-    Devuelve clasificados ordenados por posición, puntos y diferencia.
+    Crea estructuras para resolver slots de eliminación directa.
     """
-    clasificados = tabla_grupos[tabla_grupos["clasifica"] == "Sí"].copy()
+    tabla = tabla_grupos.copy()
 
-    tipo_orden = {
-        "Primero de grupo": 1,
-        "Segundo de grupo": 2,
-        "Mejor tercero": 3,
+    mapa = {
+        "primeros": {},
+        "segundos": {},
+        "terceros": {},
+        "terceros_disponibles": [],
     }
 
-    clasificados["tipo_orden"] = clasificados["tipo_clasificacion"].map(tipo_orden).fillna(9)
-
-    clasificados = clasificados.sort_values(
-        ["tipo_orden", "pts", "dg", "gf"],
-        ascending=[True, False, False, False],
-    ).copy()
-
-    return [
-        {
+    for _, row in tabla.iterrows():
+        info = {
             "equipo": row["seleccion"],
             "codigo": row["codigo"],
             "grupo": row["grupo"],
             "posicion_grupo": row["posicion_grupo"],
             "tipo_clasificacion": row["tipo_clasificacion"],
+            "pts": row["pts"],
+            "dg": row["dg"],
+            "gf": row["gf"],
+            "ranking_aux": row["ranking_aux"],
         }
-        for _, row in clasificados.iterrows()
+
+        if row["posicion_grupo"] == 1:
+            mapa["primeros"][row["grupo"]] = info
+
+        elif row["posicion_grupo"] == 2:
+            mapa["segundos"][row["grupo"]] = info
+
+        elif row["posicion_grupo"] == 3 and row["clasifica"] == "Sí":
+            mapa["terceros"][row["grupo"]] = info
+            mapa["terceros_disponibles"].append(info)
+
+    mapa["terceros_disponibles"] = sorted(
+        mapa["terceros_disponibles"],
+        key=lambda x: (x["pts"], x["dg"], x["gf"], x["ranking_aux"]),
+        reverse=True,
+    )
+
+    return mapa
+
+
+def extraer_grupos_mencionados(texto):
+    """
+    Extrae letras de grupo desde placeholders.
+    """
+    t = texto_norm(texto)
+
+    grupos = []
+
+    patrones = [
+        r"GRUPO\s+([A-L])",
+        r"GROUP\s+([A-L])",
+        r"\b([A-L])\b",
     ]
 
+    for patron in patrones:
+        for g in re.findall(patron, t):
+            if g in GROUPS and g not in grupos:
+                grupos.append(g)
 
-def fallback_ronda_32(tabla_grupos):
+    return grupos
+
+
+def detectar_tipo_slot(texto):
     """
-    Crea emparejamientos simulados si el calendario no trae slots resolubles.
+    Detecta si el slot pide primero, segundo, tercero, ganador o perdedor.
     """
-    clasificados = lista_clasificados(tabla_grupos)
+    t = texto_norm(texto)
 
-    if len(clasificados) < 32:
-        raise ValueError(
-            f"No hay 32 clasificados para armar ronda de 32. Hay: {len(clasificados)}"
-        )
+    if any(x in t for x in ["GANADOR", "WINNER", "VENCEDOR", "W OF", "WINNER OF", "W-"]):
+        return "ganador_partido"
 
-    clasificados = clasificados[:32]
-    partidos = []
+    if any(x in t for x in ["PERDEDOR", "LOSER", "L OF", "LOSER OF", "L-"]):
+        return "perdedor_partido"
 
-    for i in range(16):
-        equipo_a = clasificados[i]
-        equipo_b = clasificados[31 - i]
+    if any(x in t for x in ["PRIMERO", "1ST", "WINNER GROUP", "GANADOR GRUPO"]):
+        return "primero_grupo"
 
-        partidos.append(
-            {
-                "match_id": f"R32_{i + 1:02d}",
-                "fecha": "",
-                "grupo": "",
-                "equipo_a_resuelto": equipo_a,
-                "equipo_b_resuelto": equipo_b,
-                "notas": "Cruce generado por siembra simulada 1-vs-32. No usa resultados reales.",
-            }
-        )
+    if any(x in t for x in ["SEGUNDO", "2ND", "RUNNER", "RUNNER UP"]):
+        return "segundo_grupo"
 
-    return partidos
+    if any(x in t for x in ["TERCERO", "3RD", "THIRD", "MEJOR TERCERO", "BEST THIRD"]):
+        return "tercero_grupo"
+
+    return "desconocido"
 
 
-def fallback_emparejar_lista(equipos, fase_objetivo):
+def extraer_match_referencia(texto):
     """
-    Fallback para emparejar ganadores de la ronda anterior.
+    Extrae match_id referenciado desde placeholders como:
+    - Winner of 73
+    - Ganador 73
+    - W-73
     """
-    partidos = []
+    t = texto_norm(texto)
 
-    for i in range(0, len(equipos), 2):
-        if i + 1 >= len(equipos):
-            break
+    nums = re.findall(r"\d+", t)
 
-        partidos.append(
-            {
-                "match_id": f"{fase_objetivo.replace(' ', '_').upper()}_{(i // 2) + 1:02d}",
-                "fecha": "",
-                "grupo": "",
-                "equipo_a_resuelto": equipos[i],
-                "equipo_b_resuelto": equipos[i + 1],
-                "notas": "Cruce generado por ganadores previos. No usa resultados reales.",
-            }
-        )
+    if not nums:
+        return ""
 
-    return partidos
+    return str(int(nums[-1]))
 
 
-def simular_eliminatoria(
-    partidos,
+def resolver_tercero(grupos_posibles, mapa_clasificados):
+    """
+    Resuelve un mejor tercero disponible.
+
+    Si el slot trae grupos posibles, toma el mejor tercero disponible
+    de esos grupos. Si no trae grupos, toma el mejor tercero disponible general.
+    """
+    disponibles = mapa_clasificados["terceros_disponibles"]
+
+    if not disponibles:
+        return None
+
+    if grupos_posibles:
+        for equipo in disponibles:
+            if equipo["grupo"] in grupos_posibles:
+                disponibles.remove(equipo)
+                return equipo
+
+        return None
+
+    equipo = disponibles.pop(0)
+    return equipo
+
+
+def resolver_slot(
+    equipo_slot,
+    codigo_slot,
+    mapa_clasificados,
+    ganadores_por_match,
+    perdedores_por_match,
+):
+    """
+    Resuelve un slot de calendario a una selección concreta.
+    """
+    equipo_slot = texto_limpio(equipo_slot)
+    codigo_slot = texto_limpio(codigo_slot).upper()
+
+    texto_slot = f"{equipo_slot} {codigo_slot}"
+
+    if equipo_concreto(equipo_slot, codigo_slot):
+        return {
+            "equipo": equipo_slot,
+            "codigo": codigo_slot,
+            "grupo": "",
+            "posicion_grupo": "",
+            "tipo_clasificacion": "Equipo definido en calendario",
+        }
+
+    tipo_slot = detectar_tipo_slot(texto_slot)
+    grupos = extraer_grupos_mencionados(texto_slot)
+
+    if tipo_slot == "primero_grupo":
+        if len(grupos) != 1:
+            return None
+
+        return mapa_clasificados["primeros"].get(grupos[0])
+
+    if tipo_slot == "segundo_grupo":
+        if len(grupos) != 1:
+            return None
+
+        return mapa_clasificados["segundos"].get(grupos[0])
+
+    if tipo_slot == "tercero_grupo":
+        return resolver_tercero(grupos, mapa_clasificados)
+
+    if tipo_slot == "ganador_partido":
+        match_ref = extraer_match_referencia(texto_slot)
+        return ganadores_por_match.get(match_ref)
+
+    if tipo_slot == "perdedor_partido":
+        match_ref = extraer_match_referencia(texto_slot)
+        return perdedores_por_match.get(match_ref)
+
+    return None
+
+
+def extraer_partidos_fase(calendario, fase):
+    """
+    Extrae partidos de una fase.
+    """
+    df = calendario[calendario["fase_norm"] == fase].copy()
+
+    df = df.sort_values(
+        ["fecha_dt", "match_id_num"],
+        ascending=[True, True],
+    )
+
+    return df
+
+
+def simular_fase_eliminatoria_desde_calendario(
+    calendario,
     fase,
+    mapa_clasificados,
+    ganadores_por_match,
+    perdedores_por_match,
     ranking_dict,
     stats_dict,
     global_gf,
     global_ga,
 ):
     """
-    Simula una fase de eliminación directa.
+    Simula una fase de eliminación directa usando la estructura del calendario.
     """
+    partidos_fase = extraer_partidos_fase(calendario, fase)
+
+    if partidos_fase.empty:
+        raise ValueError(f"No se encontraron partidos en calendario para la fase: {fase}")
+
     registros = []
     ganadores_fase = []
     perdedores_fase = []
+    no_resueltos = []
 
-    for partido in partidos:
-        match_id = id_limpio(partido["match_id"])
-        fecha = texto_limpio(partido.get("fecha", ""))
-        grupo = texto_limpio(partido.get("grupo", ""))
-        notas = texto_limpio(partido.get("notas", ""))
+    for _, row in partidos_fase.iterrows():
+        match_id = id_limpio(row["match_id"])
+        match_id_alt = str(int(row["match_id_num"])) if not pd.isna(row["match_id_num"]) else match_id
 
-        equipo_a_info = partido["equipo_a_resuelto"]
-        equipo_b_info = partido["equipo_b_resuelto"]
+        equipo_a_info = resolver_slot(
+            equipo_slot=row["equipo_a"],
+            codigo_slot=row["codigo_a"],
+            mapa_clasificados=mapa_clasificados,
+            ganadores_por_match=ganadores_por_match,
+            perdedores_por_match=perdedores_por_match,
+        )
+
+        equipo_b_info = resolver_slot(
+            equipo_slot=row["equipo_b"],
+            codigo_slot=row["codigo_b"],
+            mapa_clasificados=mapa_clasificados,
+            ganadores_por_match=ganadores_por_match,
+            perdedores_por_match=perdedores_por_match,
+        )
+
+        if equipo_a_info is None or equipo_b_info is None:
+            no_resueltos.append(
+                {
+                    "fase": fase,
+                    "match_id": match_id,
+                    "equipo_a": row["equipo_a"],
+                    "codigo_a": row["codigo_a"],
+                    "equipo_b": row["equipo_b"],
+                    "codigo_b": row["codigo_b"],
+                }
+            )
+            continue
 
         equipo_a = equipo_a_info["equipo"]
         codigo_a = equipo_a_info["codigo"]
@@ -1082,6 +1255,13 @@ def simular_eliminatoria(
             "tipo_clasificacion": "",
         }
 
+        ganadores_por_match[match_id] = ganador_info
+        perdedores_por_match[match_id] = perdedor_info
+
+        if match_id_alt:
+            ganadores_por_match[match_id_alt] = ganador_info
+            perdedores_por_match[match_id_alt] = perdedor_info
+
         ganadores_fase.append(ganador_info)
         perdedores_fase.append(perdedor_info)
 
@@ -1089,8 +1269,8 @@ def simular_eliminatoria(
             crear_registro_partido(
                 fase=fase,
                 match_id=match_id,
-                fecha=fecha,
-                grupo=grupo,
+                fecha=texto_limpio(row.get("fecha", "")),
+                grupo=texto_limpio(row.get("grupo", "")),
                 equipo_a=equipo_a,
                 codigo_a=codigo_a,
                 equipo_b=equipo_b,
@@ -1100,8 +1280,19 @@ def simular_eliminatoria(
                 ganador_codigo=codigo_ganador,
                 perdedor_nombre=perdedor,
                 perdedor_codigo=codigo_perdedor,
-                notas=notas,
+                notas=(
+                    "Cruce resuelto desde la estructura del calendario. "
+                    "No usa resultados reales del Mundial."
+                ),
             )
+        )
+
+    if no_resueltos:
+        detalle = pd.DataFrame(no_resueltos).to_string(index=False)
+        raise ValueError(
+            "No se pudieron resolver algunos slots de eliminación directa.\n"
+            f"Fase: {fase}\n"
+            f"{detalle}"
         )
 
     df = pd.DataFrame(registros)
@@ -1113,7 +1304,7 @@ def simular_eliminatoria(
 
     print(f"Partidos simulados - {fase}:", len(df))
 
-    return df, ganadores_fase, perdedores_fase
+    return df, ganadores_fase, perdedores_fase, ganadores_por_match, perdedores_por_match
 
 
 def actualizar_camino_inicial(tabla_grupos):
@@ -1194,7 +1385,7 @@ def generar_prediccion_completa(
     global_ga,
 ):
     """
-    Genera simulación completa del Mundial.
+    Genera simulación completa del Mundial usando la estructura del calendario.
     """
     partidos_grupo = extraer_partidos_grupo(calendario)
 
@@ -1206,98 +1397,50 @@ def generar_prediccion_completa(
         global_ga=global_ga,
     )
 
+    if tabla_grupos_df.empty:
+        raise ValueError("No se pudo generar tabla de grupos simulada.")
+
+    total_clasificados = (tabla_grupos_df["clasifica"] == "Sí").sum()
+
+    if total_clasificados != 32:
+        raise ValueError(
+            f"La simulación debe producir 32 clasificados. Produjo: {total_clasificados}"
+        )
+
+    mapa_clasificados = crear_mapa_clasificados(tabla_grupos_df)
+
     camino = actualizar_camino_inicial(tabla_grupos_df)
     todos_partidos = [partidos_grupo_df]
 
-    # Ronda de 32.
-    partidos_r32 = fallback_ronda_32(tabla_grupos_df)
+    ganadores_por_match = {}
+    perdedores_por_match = {}
 
-    df_r32, ganadores_r32, _ = simular_eliminatoria(
-        partidos=partidos_r32,
-        fase="Ronda de 32",
-        ranking_dict=ranking_dict,
-        stats_dict=stats_dict,
-        global_gf=global_gf,
-        global_ga=global_ga,
-    )
+    fases_eliminatorias = [
+        "Ronda de 32",
+        "Octavos",
+        "Cuartos",
+        "Semifinal",
+        "Tercer lugar",
+        "Final",
+    ]
 
-    todos_partidos.append(df_r32)
-    camino = actualizar_camino_por_fase(camino, df_r32, "Ronda de 32")
+    for fase in fases_eliminatorias:
+        df_fase, _, _, ganadores_por_match, perdedores_por_match = (
+            simular_fase_eliminatoria_desde_calendario(
+                calendario=calendario,
+                fase=fase,
+                mapa_clasificados=mapa_clasificados,
+                ganadores_por_match=ganadores_por_match,
+                perdedores_por_match=perdedores_por_match,
+                ranking_dict=ranking_dict,
+                stats_dict=stats_dict,
+                global_gf=global_gf,
+                global_ga=global_ga,
+            )
+        )
 
-    # Octavos.
-    partidos_octavos = fallback_emparejar_lista(ganadores_r32, "Octavos")
-
-    df_octavos, ganadores_octavos, _ = simular_eliminatoria(
-        partidos=partidos_octavos,
-        fase="Octavos",
-        ranking_dict=ranking_dict,
-        stats_dict=stats_dict,
-        global_gf=global_gf,
-        global_ga=global_ga,
-    )
-
-    todos_partidos.append(df_octavos)
-    camino = actualizar_camino_por_fase(camino, df_octavos, "Octavos")
-
-    # Cuartos.
-    partidos_cuartos = fallback_emparejar_lista(ganadores_octavos, "Cuartos")
-
-    df_cuartos, ganadores_cuartos, _ = simular_eliminatoria(
-        partidos=partidos_cuartos,
-        fase="Cuartos",
-        ranking_dict=ranking_dict,
-        stats_dict=stats_dict,
-        global_gf=global_gf,
-        global_ga=global_ga,
-    )
-
-    todos_partidos.append(df_cuartos)
-    camino = actualizar_camino_por_fase(camino, df_cuartos, "Cuartos")
-
-    # Semifinal.
-    partidos_semifinal = fallback_emparejar_lista(ganadores_cuartos, "Semifinal")
-
-    df_semifinal, ganadores_semifinal, perdedores_semifinal = simular_eliminatoria(
-        partidos=partidos_semifinal,
-        fase="Semifinal",
-        ranking_dict=ranking_dict,
-        stats_dict=stats_dict,
-        global_gf=global_gf,
-        global_ga=global_ga,
-    )
-
-    todos_partidos.append(df_semifinal)
-    camino = actualizar_camino_por_fase(camino, df_semifinal, "Semifinal")
-
-    # Tercer lugar.
-    partidos_tercero = fallback_emparejar_lista(perdedores_semifinal, "Tercer lugar")
-
-    df_tercero, _, _ = simular_eliminatoria(
-        partidos=partidos_tercero[:1],
-        fase="Tercer lugar",
-        ranking_dict=ranking_dict,
-        stats_dict=stats_dict,
-        global_gf=global_gf,
-        global_ga=global_ga,
-    )
-
-    todos_partidos.append(df_tercero)
-    camino = actualizar_camino_por_fase(camino, df_tercero, "Tercer lugar")
-
-    # Final.
-    partidos_final = fallback_emparejar_lista(ganadores_semifinal, "Final")
-
-    df_final, _, _ = simular_eliminatoria(
-        partidos=partidos_final[:1],
-        fase="Final",
-        ranking_dict=ranking_dict,
-        stats_dict=stats_dict,
-        global_gf=global_gf,
-        global_ga=global_ga,
-    )
-
-    todos_partidos.append(df_final)
-    camino = actualizar_camino_por_fase(camino, df_final, "Final")
+        todos_partidos.append(df_fase)
+        camino = actualizar_camino_por_fase(camino, df_fase, fase)
 
     prediccion_completa_df = pd.concat(
         todos_partidos,
@@ -1368,11 +1511,14 @@ def main():
     print(f"Run ID: {RUN_ID}")
     print(f"Fecha/hora ejecución: {FECHA_HORA_EJECUCION}")
     print("IMPORTANTE: No usa resultados reales del Mundial actual.")
+    print("IMPORTANTE: Eliminatorias se resuelven desde slots del calendario.")
     print("====================================================")
 
     calendario, ranking, resultados = cargar_tablas()
 
     validar_columnas(calendario, ranking, resultados)
+
+    calendario = preparar_calendario(calendario)
 
     _, ranking_dict, codigos_objetivo = preparar_ranking(ranking)
 
