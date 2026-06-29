@@ -32,12 +32,27 @@ TAB_EQUIVALENCIAS = "dim_equivalencias_selecciones"
 
 
 # ============================================================
-# TABLAS DE SALIDA
+# TABLAS DE SALIDA - PREDICCIÓN DINÁMICA
 # ============================================================
 
 TAB_SALIDA = "fact_predicciones_2026"
 TAB_SNAPSHOT = "fact_predicciones_snapshot_2026"
 TAB_VALIDACION = "fact_validacion_predicciones_2026"
+
+
+# ============================================================
+# TABLAS DE SALIDA - PREDICCIÓN COMPLETA BASE
+# ============================================================
+
+TAB_PREDICCION_COMPLETA = "fact_prediccion_completa_2026"
+TAB_TABLA_GRUPOS_PREDICHA = "fact_tabla_grupos_predicha_2026"
+TAB_CAMINO_PREDICHO = "fact_camino_predicho_2026"
+
+
+# ============================================================
+# TABLAS DE CONTROL / LOGS
+# ============================================================
+
 TAB_LOGS = "_logs_mundial_2026"
 
 
