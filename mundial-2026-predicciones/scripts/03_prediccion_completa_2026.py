@@ -1780,6 +1780,14 @@ def actualizar_camino_inicial(tabla_grupos):
 def actualizar_camino_por_fase(camino, partidos_df, fase):
     """
     Actualiza camino de selecciones usando ganadores/perdedores de una fase.
+
+    Regla para eliminado_por:
+    - Campeón: queda vacío.
+    - Subcampeón: eliminado_por = campeón.
+    - Tercer lugar: conserva quién lo eliminó en semifinal.
+    - Cuarto lugar: eliminado_por = ganador del partido por tercer lugar.
+    - Eliminados en R32/Octavos/Cuartos/Semifinal: eliminado_por = ganador de esa llave.
+    - No clasificados: eliminado_por queda vacío.
     """
     if partidos_df.empty:
         return camino
@@ -1794,9 +1802,17 @@ def actualizar_camino_por_fase(camino, partidos_df, fase):
             if fase == "Final":
                 camino[ganador_codigo]["ronda_alcanzada"] = "Campeón"
                 camino[ganador_codigo]["campeon_predicho"] = "Sí"
+                camino[ganador_codigo]["eliminado_por"] = ""
+                camino[ganador_codigo]["codigo_eliminado_por"] = ""
+
             elif fase == "Tercer lugar":
                 camino[ganador_codigo]["ronda_alcanzada"] = "Tercer lugar"
                 camino[ganador_codigo]["tercer_lugar_predicho"] = "Sí"
+
+                # No borramos eliminado_por.
+                # El tercer lugar conserva quién lo eliminó de la final.
+                # Ejemplo: Francia queda tercero, pero España lo eliminó en semifinal.
+
             else:
                 camino[ganador_codigo]["ronda_alcanzada"] = f"Avanza desde {fase}"
 
@@ -1804,9 +1820,15 @@ def actualizar_camino_por_fase(camino, partidos_df, fase):
             if fase == "Final":
                 camino[perdedor_codigo]["ronda_alcanzada"] = "Subcampeón"
                 camino[perdedor_codigo]["subcampeon_predicho"] = "Sí"
+                camino[perdedor_codigo]["eliminado_por"] = ganador_nombre
+                camino[perdedor_codigo]["codigo_eliminado_por"] = ganador_codigo
+
             elif fase == "Tercer lugar":
                 camino[perdedor_codigo]["ronda_alcanzada"] = "Cuarto lugar"
                 camino[perdedor_codigo]["cuarto_lugar_predicho"] = "Sí"
+                camino[perdedor_codigo]["eliminado_por"] = ganador_nombre
+                camino[perdedor_codigo]["codigo_eliminado_por"] = ganador_codigo
+
             else:
                 camino[perdedor_codigo]["ronda_alcanzada"] = f"Eliminado en {fase}"
                 camino[perdedor_codigo]["eliminado_por"] = ganador_nombre
@@ -2036,6 +2058,80 @@ def validar_ronda_32_contra_tabla_grupos(prediccion_completa_df, tabla_grupos_df
     print("====================================================")
 
 
+def validar_camino_predicho(camino_df):
+    """
+    Valida consistencia básica de fact_camino_predicho_2026.
+
+    Reglas:
+    - Debe haber exactamente un campeón, subcampeón, tercer lugar y cuarto lugar.
+    - El campeón no debe tener eliminado_por.
+    - El subcampeón sí debe tener eliminado_por.
+    - El cuarto lugar sí debe tener eliminado_por.
+    - Los no clasificados no deben tener eliminado_por.
+    """
+    campeones = camino_df[camino_df["campeon_predicho"] == "Sí"]
+    subcampeones = camino_df[camino_df["subcampeon_predicho"] == "Sí"]
+    terceros = camino_df[camino_df["tercer_lugar_predicho"] == "Sí"]
+    cuartos = camino_df[camino_df["cuarto_lugar_predicho"] == "Sí"]
+
+    errores = []
+
+    if len(campeones) != 1:
+        errores.append(f"Debe haber 1 campeón. Hay {len(campeones)}.")
+
+    if len(subcampeones) != 1:
+        errores.append(f"Debe haber 1 subcampeón. Hay {len(subcampeones)}.")
+
+    if len(terceros) != 1:
+        errores.append(f"Debe haber 1 tercer lugar. Hay {len(terceros)}.")
+
+    if len(cuartos) != 1:
+        errores.append(f"Debe haber 1 cuarto lugar. Hay {len(cuartos)}.")
+
+    if len(campeones) == 1:
+        campeon = campeones.iloc[0]
+        if texto_limpio(campeon["eliminado_por"]) != "":
+            errores.append("El campeón no debe tener eliminado_por.")
+
+    if len(subcampeones) == 1:
+        subcampeon = subcampeones.iloc[0]
+        if texto_limpio(subcampeon["eliminado_por"]) == "":
+            errores.append("El subcampeón debe tener eliminado_por.")
+
+    if len(cuartos) == 1:
+        cuarto = cuartos.iloc[0]
+        if texto_limpio(cuarto["eliminado_por"]) == "":
+            errores.append("El cuarto lugar debe tener eliminado_por.")
+
+    no_clasificados = camino_df[camino_df["clasifica_grupos"] == "No"].copy()
+    no_clasificados_con_eliminador = no_clasificados[
+        no_clasificados["eliminado_por"].astype(str).str.strip() != ""
+    ].copy()
+
+    if not no_clasificados_con_eliminador.empty:
+        errores.append(
+            "Hay no clasificados con eliminado_por:\n"
+            + no_clasificados_con_eliminador[
+                ["seleccion", "codigo", "eliminado_por", "codigo_eliminado_por"]
+            ].to_string(index=False)
+        )
+
+    if errores:
+        raise ValueError(
+            "VALIDACIÓN FINAL FALLIDA - Camino predicho\n\n"
+            + "\n\n".join(errores)
+        )
+
+    print("====================================================")
+    print("VALIDACIÓN FINAL CAMINO PREDICHO")
+    print("Estado: OK")
+    print("Campeón:", campeones.iloc[0]["seleccion"])
+    print("Subcampeón:", subcampeones.iloc[0]["seleccion"])
+    print("Tercer lugar:", terceros.iloc[0]["seleccion"])
+    print("Cuarto lugar:", cuartos.iloc[0]["seleccion"])
+    print("====================================================")
+
+
 def crear_log_ejecucion(
     prediccion_completa_df,
     tabla_grupos_df,
@@ -2065,7 +2161,8 @@ def crear_log_ejecucion(
                     f"Partidos simulados: {len(prediccion_completa_df)}. "
                     f"Tabla grupos: {len(tabla_grupos_df)}. "
                     f"Camino predicho: {len(camino_df)}. "
-                    "Validación final Ronda de 32: OK."
+                    "Validación final Ronda de 32: OK. "
+                    "Validación final Camino predicho: OK."
                 ),
             }
         ]
@@ -2084,6 +2181,7 @@ def main():
     print("IMPORTANTE: Eliminatorias se resuelven desde slots del calendario.")
     print("IMPORTANTE: Ronda de 32 se valida contra clasificados simulados.")
     print("IMPORTANTE: El script falla si Ronda de 32 tiene no clasificados, duplicados o faltantes.")
+    print("IMPORTANTE: Camino predicho valida campeón, subcampeón, tercero, cuarto y eliminado_por.")
     print("====================================================")
 
     calendario, ranking, resultados = cargar_tablas()
@@ -2117,6 +2215,8 @@ def main():
         tabla_grupos_df=tabla_grupos_df,
     )
 
+    validar_camino_predicho(camino_df=camino_df)
+
     escribir_df_en_hoja(prediccion_completa_df, TAB_PREDICCION_COMPLETA)
     escribir_df_en_hoja(tabla_grupos_df, TAB_TABLA_GRUPOS_PREDICHA)
     escribir_df_en_hoja(camino_df, TAB_CAMINO_PREDICHO)
@@ -2136,6 +2236,7 @@ def main():
     print(f"Tabla escrita: {TAB_CAMINO_PREDICHO}")
     print(f"Partidos simulados: {len(prediccion_completa_df)}")
     print("Validación final Ronda de 32: OK")
+    print("Validación final Camino predicho: OK")
     print("====================================================")
 
 
