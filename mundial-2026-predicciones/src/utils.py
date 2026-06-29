@@ -140,21 +140,43 @@ def normalizar_estado_partido(estado):
     Normaliza estados de partido a:
     - Jugado
     - Programado
+    - En vivo
     - Pendiente
     """
     estado_raw = texto_limpio(estado)
-    estado_lower = estado_raw.lower()
+    estado_lower = estado_raw.lower().strip()
 
     if estado_lower in [
         "jugado",
         "finalizado",
+        "finalizado ✅",
+        "terminado",
         "complete",
         "completed",
         "finished",
         "final",
         "completo",
+        "ft",
+        "full time",
+        "finalizado.",
+        "terminado.",
     ]:
         return "Jugado"
+
+    if estado_lower in [
+        "en vivo",
+        "live",
+        "in progress",
+        "jugando",
+        "en juego",
+        "1t",
+        "2t",
+        "primer tiempo",
+        "segundo tiempo",
+        "halftime",
+        "medio tiempo",
+    ]:
+        return "En vivo"
 
     if estado_lower in [
         "programado",
@@ -179,10 +201,25 @@ def detectar_estado_partido(row):
     """
     Detecta el estado del partido usando:
     - estado_partido si existe
+    - estado si existe
+    - status si existe
     - goles_a y goles_b si ya hay marcador
     - equipos/códigos definidos si está programado
+
+    Nota:
+    En el calendario actual del proyecto, la columna se llama 'estado'.
+    Por eso esta función revisa 'estado_partido' y también 'estado'.
     """
     estado = texto_limpio(row.get("estado_partido", ""))
+
+    if estado == "":
+        estado = texto_limpio(row.get("estado", ""))
+
+    if estado == "":
+        estado = texto_limpio(row.get("status", ""))
+
+    if estado != "":
+        return normalizar_estado_partido(estado)
 
     goles_a = row.get("goles_a", "")
     goles_b = row.get("goles_b", "")
@@ -191,9 +228,6 @@ def detectar_estado_partido(row):
         texto_limpio(goles_a) != ""
         and texto_limpio(goles_b) != ""
     )
-
-    if estado != "":
-        return normalizar_estado_partido(estado)
 
     if tiene_goles:
         return "Jugado"
