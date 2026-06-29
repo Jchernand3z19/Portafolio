@@ -693,12 +693,15 @@ def predecir_match(
     if goles_b > goles_a:
         return resultado, equipo_b, codigo_b, equipo_a, codigo_a
 
+    # Eliminatoria con empate estimado.
+    # Se resuelve por probabilidad del modelo.
     if resultado["prob_a"] > resultado["prob_b"]:
         return resultado, equipo_a, codigo_a, equipo_b, codigo_b
 
     if resultado["prob_b"] > resultado["prob_a"]:
         return resultado, equipo_b, codigo_b, equipo_a, codigo_a
 
+    # Último desempate por rating.
     if rating_equipo(codigo_a, ranking_dict) >= rating_equipo(codigo_b, ranking_dict):
         return resultado, equipo_a, codigo_a, equipo_b, codigo_b
 
@@ -933,11 +936,7 @@ def simular_fase_grupos(
     ).copy()
     terceros["orden_tercero"] = range(1, len(terceros) + 1)
 
-    tabla_df["orden_tercero"] = pd.Series(
-        pd.NA,
-        index=tabla_df.index,
-        dtype="Int64",
-    )
+    tabla_df["orden_tercero"] = pd.NA
 
     for _, row in terceros.iterrows():
         tabla_df.loc[
@@ -966,6 +965,10 @@ def simular_fase_grupos(
 
     tabla_salida = tabla_salida[COLUMNAS_GRUPOS].copy()
 
+    tabla_salida["orden_tercero"] = tabla_salida["orden_tercero"].apply(
+        lambda x: "" if pd.isna(x) else str(int(x))
+    )
+
     partidos_df = pd.DataFrame(registros_partidos)
 
     if partidos_df.empty:
@@ -982,6 +985,10 @@ def simular_fase_grupos(
 def crear_mapa_clasificados(tabla_grupos):
     """
     Crea estructuras para resolver slots de eliminación directa.
+
+    También guarda un índice de clasificados por código para evitar que
+    equipos no clasificados entren a Ronda de 32 aunque aparezcan escritos
+    como equipo concreto en el calendario.
     """
     tabla = tabla_grupos.copy()
 
@@ -990,6 +997,7 @@ def crear_mapa_clasificados(tabla_grupos):
         "segundos": {},
         "terceros": {},
         "terceros_disponibles": [],
+        "clasificados_por_codigo": {},
     }
 
     for _, row in tabla.iterrows():
@@ -1004,6 +1012,9 @@ def crear_mapa_clasificados(tabla_grupos):
             "gf": row["gf"],
             "ranking_aux": row["ranking_aux"],
         }
+
+        if row["clasifica"] == "Sí":
+            mapa["clasificados_por_codigo"][row["codigo"]] = info
 
         if row["posicion_grupo"] == 1:
             mapa["primeros"][row["grupo"]] = info
@@ -1024,11 +1035,58 @@ def crear_mapa_clasificados(tabla_grupos):
     return mapa
 
 
+def obtener_texto_slot_desde_row(row, lado):
+    """
+    Busca columnas auxiliares del calendario que puedan contener el slot real
+    de una fase eliminatoria.
+
+    Ejemplos:
+    - 1A
+    - 2B
+    - 3.º Grupo C/E/F/H/I
+    - Ganador 73
+    - W73
+    """
+    posibles_columnas = [
+        f"slot_{lado}",
+        f"origen_{lado}",
+        f"clasificacion_{lado}",
+        f"clasificación_{lado}",
+        f"placeholder_{lado}",
+        f"llave_{lado}",
+        f"ronda_{lado}",
+        f"equipo_{lado}_slot",
+        f"codigo_{lado}_slot",
+        f"equipo_{lado}_origen",
+        f"codigo_{lado}_origen",
+        f"descripcion_{lado}",
+        f"descripción_{lado}",
+        f"detalle_{lado}",
+    ]
+
+    textos = []
+
+    for col in posibles_columnas:
+        if col in row.index:
+            valor = texto_limpio(row.get(col, ""))
+
+            if valor and valor.lower() != "nan":
+                textos.append(valor)
+
+    textos_unicos = []
+
+    for t in textos:
+        if t not in textos_unicos:
+            textos_unicos.append(t)
+
+    return " ".join(textos_unicos)
+
+
 def extraer_grupos_mencionados(texto):
     """
     Extrae letras de grupo desde placeholders.
 
-    Soporta formatos como:
+    Soporta:
     - Ganador Grupo A
     - Segundo Grupo B
     - 1A
@@ -1159,13 +1217,16 @@ def extraer_match_referencia(texto):
     return str(int(nums[-1]))
 
 
-def resolver_tercero(grupos_posibles, mapa_clasificados):
+def resolver_tercero(grupos_posibles, mapa_clasificados, codigos_excluidos=None):
     """
     Resuelve un mejor tercero disponible.
 
     Si el slot trae grupos posibles, toma el mejor tercero disponible
     de esos grupos. Si no trae grupos, toma el mejor tercero disponible general.
     """
+    if codigos_excluidos is None:
+        codigos_excluidos = set()
+
     disponibles = mapa_clasificados["terceros_disponibles"]
 
     if not disponibles:
@@ -1173,14 +1234,38 @@ def resolver_tercero(grupos_posibles, mapa_clasificados):
 
     if grupos_posibles:
         for equipo in list(disponibles):
+            if equipo["codigo"] in codigos_excluidos:
+                continue
+
             if equipo["grupo"] in grupos_posibles:
                 disponibles.remove(equipo)
                 return equipo
 
         return None
 
-    equipo = disponibles.pop(0)
-    return equipo
+    for equipo in list(disponibles):
+        if equipo["codigo"] in codigos_excluidos:
+            continue
+
+        disponibles.remove(equipo)
+        return equipo
+
+    return None
+
+
+def remover_tercero_disponible(mapa_clasificados, codigo):
+    """
+    Si un mejor tercero se resolvió desde equipo concreto,
+    lo remueve de terceros_disponibles para evitar duplicados.
+    """
+    codigo = texto_limpio(codigo).upper()
+
+    disponibles = mapa_clasificados["terceros_disponibles"]
+
+    for equipo in list(disponibles):
+        if equipo["codigo"] == codigo:
+            disponibles.remove(equipo)
+            return
 
 
 def resolver_slot(
@@ -1189,23 +1274,26 @@ def resolver_slot(
     mapa_clasificados,
     ganadores_por_match,
     perdedores_por_match,
+    fase="",
+    texto_slot_extra="",
+    codigos_excluidos=None,
 ):
     """
     Resuelve un slot de calendario a una selección concreta.
+
+    Regla importante:
+    - En Ronda de 32, si el calendario trae un equipo concreto,
+      solo se acepta si ese equipo está dentro de los 32 clasificados
+      de la tabla de grupos simulada.
     """
+    if codigos_excluidos is None:
+        codigos_excluidos = set()
+
     equipo_slot = texto_limpio(equipo_slot)
     codigo_slot = texto_limpio(codigo_slot).upper()
+    texto_slot_extra = texto_limpio(texto_slot_extra)
 
-    texto_slot = f"{equipo_slot} {codigo_slot}"
-
-    if equipo_concreto(equipo_slot, codigo_slot):
-        return {
-            "equipo": equipo_slot,
-            "codigo": codigo_slot,
-            "grupo": "",
-            "posicion_grupo": "",
-            "tipo_clasificacion": "Equipo definido en calendario",
-        }
+    texto_slot = f"{texto_slot_extra} {equipo_slot} {codigo_slot}".strip()
 
     tipo_slot = detectar_tipo_slot(texto_slot)
     grupos = extraer_grupos_mencionados(texto_slot)
@@ -1214,16 +1302,30 @@ def resolver_slot(
         if len(grupos) != 1:
             return None
 
-        return mapa_clasificados["primeros"].get(grupos[0])
+        equipo = mapa_clasificados["primeros"].get(grupos[0])
+
+        if equipo and equipo["codigo"] not in codigos_excluidos:
+            return equipo
+
+        return None
 
     if tipo_slot == "segundo_grupo":
         if len(grupos) != 1:
             return None
 
-        return mapa_clasificados["segundos"].get(grupos[0])
+        equipo = mapa_clasificados["segundos"].get(grupos[0])
+
+        if equipo and equipo["codigo"] not in codigos_excluidos:
+            return equipo
+
+        return None
 
     if tipo_slot == "tercero_grupo":
-        return resolver_tercero(grupos, mapa_clasificados)
+        return resolver_tercero(
+            grupos_posibles=grupos,
+            mapa_clasificados=mapa_clasificados,
+            codigos_excluidos=codigos_excluidos,
+        )
 
     if tipo_slot == "ganador_partido":
         match_ref = extraer_match_referencia(texto_slot)
@@ -1232,6 +1334,29 @@ def resolver_slot(
     if tipo_slot == "perdedor_partido":
         match_ref = extraer_match_referencia(texto_slot)
         return perdedores_por_match.get(match_ref)
+
+    if equipo_concreto(equipo_slot, codigo_slot):
+        if fase == "Ronda de 32":
+            equipo = mapa_clasificados["clasificados_por_codigo"].get(codigo_slot)
+
+            if equipo is None:
+                return None
+
+            if codigo_slot in codigos_excluidos:
+                return None
+
+            if equipo["tipo_clasificacion"] == "Mejor tercero":
+                remover_tercero_disponible(mapa_clasificados, codigo_slot)
+
+            return equipo
+
+        return {
+            "equipo": equipo_slot,
+            "codigo": codigo_slot,
+            "grupo": "",
+            "posicion_grupo": "",
+            "tipo_clasificacion": "Equipo definido en calendario",
+        }
 
     return None
 
@@ -1263,6 +1388,10 @@ def simular_fase_eliminatoria_desde_calendario(
 ):
     """
     Simula una fase de eliminación directa usando la estructura del calendario.
+
+    Validación clave:
+    - En Ronda de 32, ningún equipo puede participar si no clasificó
+      desde la tabla de grupos simulada.
     """
     partidos_fase = extraer_partidos_fase(calendario, fase)
 
@@ -1274,9 +1403,14 @@ def simular_fase_eliminatoria_desde_calendario(
     perdedores_fase = []
     no_resueltos = []
 
+    codigos_usados_ronda_32 = set()
+
     for _, row in partidos_fase.iterrows():
         match_id = id_limpio(row["match_id"])
         match_id_alt = str(int(row["match_id_num"])) if not pd.isna(row["match_id_num"]) else match_id
+
+        texto_slot_a_extra = obtener_texto_slot_desde_row(row, "a")
+        texto_slot_b_extra = obtener_texto_slot_desde_row(row, "b")
 
         equipo_a_info = resolver_slot(
             equipo_slot=row["equipo_a"],
@@ -1284,7 +1418,15 @@ def simular_fase_eliminatoria_desde_calendario(
             mapa_clasificados=mapa_clasificados,
             ganadores_por_match=ganadores_por_match,
             perdedores_por_match=perdedores_por_match,
+            fase=fase,
+            texto_slot_extra=texto_slot_a_extra,
+            codigos_excluidos=codigos_usados_ronda_32 if fase == "Ronda de 32" else set(),
         )
+
+        codigos_temp = set(codigos_usados_ronda_32)
+
+        if fase == "Ronda de 32" and equipo_a_info is not None:
+            codigos_temp.add(texto_limpio(equipo_a_info["codigo"]).upper())
 
         equipo_b_info = resolver_slot(
             equipo_slot=row["equipo_b"],
@@ -1292,17 +1434,55 @@ def simular_fase_eliminatoria_desde_calendario(
             mapa_clasificados=mapa_clasificados,
             ganadores_por_match=ganadores_por_match,
             perdedores_por_match=perdedores_por_match,
+            fase=fase,
+            texto_slot_extra=texto_slot_b_extra,
+            codigos_excluidos=codigos_temp if fase == "Ronda de 32" else set(),
         )
 
-        if equipo_a_info is None or equipo_b_info is None:
+        motivo_error = ""
+
+        if equipo_a_info is None:
+            motivo_error += "No se pudo resolver equipo A. "
+
+        if equipo_b_info is None:
+            motivo_error += "No se pudo resolver equipo B. "
+
+        if fase == "Ronda de 32":
+            if equipo_a_info is not None:
+                codigo_a_resuelto = texto_limpio(equipo_a_info["codigo"]).upper()
+
+                if codigo_a_resuelto not in mapa_clasificados["clasificados_por_codigo"]:
+                    motivo_error += f"Equipo A no clasificó: {codigo_a_resuelto}. "
+
+                if codigo_a_resuelto in codigos_usados_ronda_32:
+                    motivo_error += f"Equipo A duplicado en Ronda de 32: {codigo_a_resuelto}. "
+
+            if equipo_b_info is not None:
+                codigo_b_resuelto = texto_limpio(equipo_b_info["codigo"]).upper()
+
+                if codigo_b_resuelto not in mapa_clasificados["clasificados_por_codigo"]:
+                    motivo_error += f"Equipo B no clasificó: {codigo_b_resuelto}. "
+
+                if codigo_b_resuelto in codigos_usados_ronda_32:
+                    motivo_error += f"Equipo B duplicado en Ronda de 32: {codigo_b_resuelto}. "
+
+                if equipo_a_info is not None:
+                    codigo_a_resuelto = texto_limpio(equipo_a_info["codigo"]).upper()
+                    if codigo_b_resuelto == codigo_a_resuelto:
+                        motivo_error += f"Equipo duplicado en el mismo partido: {codigo_b_resuelto}. "
+
+        if motivo_error:
             no_resueltos.append(
                 {
                     "fase": fase,
                     "match_id": match_id,
-                    "equipo_a": row["equipo_a"],
-                    "codigo_a": row["codigo_a"],
-                    "equipo_b": row["equipo_b"],
-                    "codigo_b": row["codigo_b"],
+                    "equipo_a_calendario": row["equipo_a"],
+                    "codigo_a_calendario": row["codigo_a"],
+                    "slot_a_extra": texto_slot_a_extra,
+                    "equipo_b_calendario": row["equipo_b"],
+                    "codigo_b_calendario": row["codigo_b"],
+                    "slot_b_extra": texto_slot_b_extra,
+                    "motivo": motivo_error.strip(),
                 }
             )
             continue
@@ -1311,6 +1491,10 @@ def simular_fase_eliminatoria_desde_calendario(
         codigo_a = equipo_a_info["codigo"]
         equipo_b = equipo_b_info["equipo"]
         codigo_b = equipo_b_info["codigo"]
+
+        if fase == "Ronda de 32":
+            codigos_usados_ronda_32.add(codigo_a)
+            codigos_usados_ronda_32.add(codigo_b)
 
         resultado, ganador, codigo_ganador, perdedor, codigo_perdedor = predecir_match(
             equipo_a=equipo_a,
@@ -1367,6 +1551,7 @@ def simular_fase_eliminatoria_desde_calendario(
                 perdedor_codigo=codigo_perdedor,
                 notas=(
                     "Cruce resuelto desde la estructura del calendario. "
+                    "Validado contra clasificados simulados. "
                     "No usa resultados reales del Mundial."
                 ),
             )
@@ -1376,9 +1561,19 @@ def simular_fase_eliminatoria_desde_calendario(
         detalle = pd.DataFrame(no_resueltos).to_string(index=False)
         raise ValueError(
             "No se pudieron resolver algunos slots de eliminación directa.\n"
+            "Esto evita que equipos no clasificados entren a Ronda de 32.\n"
             f"Fase: {fase}\n"
             f"{detalle}"
         )
+
+    if fase == "Ronda de 32":
+        total_usados = len(codigos_usados_ronda_32)
+
+        if total_usados != 32:
+            raise ValueError(
+                "La Ronda de 32 debe usar exactamente 32 selecciones únicas. "
+                f"Se usaron: {total_usados}"
+            )
 
     df = pd.DataFrame(registros)
 
@@ -1597,6 +1792,7 @@ def main():
     print(f"Fecha/hora ejecución: {FECHA_HORA_EJECUCION}")
     print("IMPORTANTE: No usa resultados reales del Mundial actual.")
     print("IMPORTANTE: Eliminatorias se resuelven desde slots del calendario.")
+    print("IMPORTANTE: Ronda de 32 se valida contra clasificados simulados.")
     print("====================================================")
 
     calendario, ranking, resultados = cargar_tablas()
