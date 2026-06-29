@@ -98,10 +98,39 @@ def asegurar_hoja(nombre_hoja, filas=1000, columnas=30):
     return ws
 
 
+def preparar_df_para_sheets(df):
+    """
+    Convierte un DataFrame a una matriz lista para Google Sheets.
+
+    Esta función evita errores con tipos especiales de pandas como:
+    - Int64 nullable
+    - Float64 nullable
+    - boolean nullable
+    - pd.NA
+
+    Google Sheets recibe todo como texto/valor plano.
+    """
+    if df is None:
+        return [[]]
+
+    df_salida = df.copy()
+
+    df_salida = df_salida.astype(object)
+    df_salida = df_salida.where(pd.notna(df_salida), "")
+
+    valores = [df_salida.columns.tolist()]
+
+    if len(df_salida) > 0:
+        valores += df_salida.astype(str).values.tolist()
+
+    return valores
+
+
 def escribir_df_en_hoja(df, nombre_hoja):
     """
     Sobrescribe una hoja completa con el contenido del DataFrame.
-    Se usará para fact_predicciones_2026.
+
+    Limpia la hoja antes de escribir.
     """
     ws = asegurar_hoja(
         nombre_hoja,
@@ -111,18 +140,15 @@ def escribir_df_en_hoja(df, nombre_hoja):
 
     ws.clear()
 
-    valores = [df.columns.tolist()] + df.fillna("").astype(str).values.tolist()
+    valores = preparar_df_para_sheets(df)
 
-    if len(valores) > 1:
-        ws.update("A1", valores)
-    else:
-        ws.update("A1", [df.columns.tolist()])
+    ws.update("A1", valores)
 
 
 def append_df_en_hoja(df, nombre_hoja):
     """
     Agrega filas nuevas al final de una hoja.
-    Se usará para fact_predicciones_snapshot_2026.
+    Se usa para logs, snapshots o históricos.
     """
     if df.empty:
         print(f"No se agregaron filas a {nombre_hoja} porque el DataFrame está vacío.")
@@ -137,11 +163,15 @@ def append_df_en_hoja(df, nombre_hoja):
     existentes = ws.get_all_values()
 
     if not existentes:
-        ws.update("A1", [df.columns.tolist()])
-        ws.append_rows(
-            df.fillna("").astype(str).values.tolist(),
-            value_input_option="USER_ENTERED",
-        )
+        valores = preparar_df_para_sheets(df)
+        ws.update("A1", [valores[0]])
+
+        if len(valores) > 1:
+            ws.append_rows(
+                valores[1:],
+                value_input_option="USER_ENTERED",
+            )
+
         return
 
     encabezado_actual = existentes[0]
@@ -168,7 +198,10 @@ def append_df_en_hoja(df, nombre_hoja):
 
     df_append = df_append[encabezado_actual]
 
-    ws.append_rows(
-        df_append.fillna("").astype(str).values.tolist(),
-        value_input_option="USER_ENTERED",
-    )
+    valores = preparar_df_para_sheets(df_append)
+
+    if len(valores) > 1:
+        ws.append_rows(
+            valores[1:],
+            value_input_option="USER_ENTERED",
+        )
