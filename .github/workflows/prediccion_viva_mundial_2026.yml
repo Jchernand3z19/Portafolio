@@ -1,0 +1,80 @@
+name: Predicción Viva Mundial 2026
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # Corre todos los días a las 6:30 AM hora Honduras
+    # Honduras UTC-6 -> 12:30 UTC
+    - cron: "30 12 * * *"
+
+jobs:
+  actualizar-prediccion-viva:
+    name: Actualizar Predicción Viva 2026
+    runs-on: ubuntu-latest
+
+    env:
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+      GOOGLE_APPLICATION_CREDENTIALS: service_account.json
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: mundial-2026-predicciones
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create Google service account file
+        working-directory: mundial-2026-predicciones
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > service_account.json
+
+      - name: Validate required files
+        working-directory: mundial-2026-predicciones
+        run: |
+          echo "Validando archivos requeridos..."
+
+          if [ ! -f "scripts/04_crear_fact_partidos_prediccion_2026.py" ]; then
+            echo "ERROR: No existe scripts/04_crear_fact_partidos_prediccion_2026.py"
+            exit 1
+          fi
+
+          if [ ! -f "requirements.txt" ]; then
+            echo "ERROR: No existe requirements.txt"
+            exit 1
+          fi
+
+          if [ ! -f "service_account.json" ]; then
+            echo "ERROR: No se pudo crear service_account.json"
+            exit 1
+          fi
+
+          echo "Archivos requeridos encontrados."
+
+      - name: Run fact_partidos_prediccion_2026
+        working-directory: mundial-2026-predicciones
+        run: |
+          echo "Ejecutando tabla maestra fact_partidos_prediccion_2026..."
+          python scripts/04_crear_fact_partidos_prediccion_2026.py
+
+      - name: Run fact_prediccion_viva_2026 if exists
+        working-directory: mundial-2026-predicciones
+        run: |
+          if [ -f "scripts/05_crear_fact_prediccion_viva_2026.py" ]; then
+            echo "Ejecutando tabla final fact_prediccion_viva_2026..."
+            python scripts/05_crear_fact_prediccion_viva_2026.py
+          else
+            echo "scripts/05_crear_fact_prediccion_viva_2026.py todavía no existe. Se omite este paso."
+          fi
+
+      - name: Finish
+        run: |
+          echo "Predicción Viva Mundial 2026 actualizada correctamente."
