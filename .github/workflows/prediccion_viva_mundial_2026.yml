@@ -1,44 +1,80 @@
-name: Predicción Viva Mundial 2026
+name: Prediccion Viva Mundial 2026
 
 on:
   workflow_dispatch:
 
   schedule:
-    # Corre todos los días a las 6:30 AM hora Honduras
+    # Corre todos los dias a las 6:30 AM hora Honduras
     # Honduras UTC-6 -> 12:30 UTC
     - cron: "30 12 * * *"
 
+permissions:
+  contents: read
+
 jobs:
   actualizar-prediccion-viva:
-    name: Actualizar Predicción Viva 2026
+    name: Actualizar Prediccion Viva 2026
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: mundial-2026-predicciones
+
     env:
+      PYTHONPATH: ${{ github.workspace }}/mundial-2026-predicciones
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+      GOOGLE_CLIENT_EMAIL: ${{ secrets.GOOGLE_CLIENT_EMAIL }}
+      GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
       GOOGLE_APPLICATION_CREDENTIALS: service_account.json
+      MODEL_VERSION: v1.1
+      ENVIRONMENT: production
 
     steps:
-      - name: Checkout repository
+      - name: Descargar codigo del repositorio
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        working-directory: mundial-2026-predicciones
+      - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Create Google service account file
-        working-directory: mundial-2026-predicciones
+      - name: Crear archivo service_account.json
         run: |
-          echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > service_account.json
+          python - <<'PY'
+          import json
+          import os
 
-      - name: Validate required files
-        working-directory: mundial-2026-predicciones
+          client_email = os.getenv("GOOGLE_CLIENT_EMAIL")
+          private_key = os.getenv("GOOGLE_PRIVATE_KEY")
+
+          if not client_email:
+              raise ValueError("Falta el secret GOOGLE_CLIENT_EMAIL")
+
+          if not private_key:
+              raise ValueError("Falta el secret GOOGLE_PRIVATE_KEY")
+
+          private_key = private_key.replace("\\n", "\n")
+
+          service_account_info = {
+              "type": "service_account",
+              "client_email": client_email,
+              "private_key": private_key,
+              "token_uri": "https://oauth2.googleapis.com/token"
+          }
+
+          with open("service_account.json", "w", encoding="utf-8") as f:
+              json.dump(service_account_info, f)
+
+          print("service_account.json creado correctamente")
+          print("Client email:", client_email)
+          PY
+
+      - name: Validar archivos requeridos
         run: |
           echo "Validando archivos requeridos..."
 
@@ -59,22 +95,20 @@ jobs:
 
           echo "Archivos requeridos encontrados."
 
-      - name: Run fact_partidos_prediccion_2026
-        working-directory: mundial-2026-predicciones
+      - name: Ejecutar tabla maestra fact_partidos_prediccion_2026
         run: |
           echo "Ejecutando tabla maestra fact_partidos_prediccion_2026..."
           python scripts/04_crear_fact_partidos_prediccion_2026.py
 
-      - name: Run fact_prediccion_viva_2026 if exists
-        working-directory: mundial-2026-predicciones
+      - name: Ejecutar tabla final fact_prediccion_viva_2026 si existe
         run: |
           if [ -f "scripts/05_crear_fact_prediccion_viva_2026.py" ]; then
             echo "Ejecutando tabla final fact_prediccion_viva_2026..."
             python scripts/05_crear_fact_prediccion_viva_2026.py
           else
-            echo "scripts/05_crear_fact_prediccion_viva_2026.py todavía no existe. Se omite este paso."
+            echo "scripts/05_crear_fact_prediccion_viva_2026.py todavia no existe. Se omite este paso."
           fi
 
-      - name: Finish
+      - name: Finalizar
         run: |
-          echo "Predicción Viva Mundial 2026 actualizada correctamente."
+          echo "Prediccion Viva Mundial 2026 actualizada correctamente."
