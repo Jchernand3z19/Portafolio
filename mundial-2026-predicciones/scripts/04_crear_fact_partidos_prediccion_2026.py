@@ -271,7 +271,10 @@ def detectar_columnas_base(df):
             "prediccion_goles_a",
             "goles_equipo_a",
             "goles_a",
-            "score_a"
+            "score_a",
+            "goles_esperados_a",
+            "expected_goals_a",
+            "xg_a"
         ]),
         "goles_pred_b": find_col(df, [
             "goles_pred_b",
@@ -280,23 +283,35 @@ def detectar_columnas_base(df):
             "prediccion_goles_b",
             "goles_equipo_b",
             "goles_b",
-            "score_b"
+            "score_b",
+            "goles_esperados_b",
+            "expected_goals_b",
+            "xg_b"
         ]),
         "ganador_predicho": find_col(df, [
             "ganador_predicho",
             "winner_pred",
             "predicted_winner",
             "ganador",
-            "clasificado"
+            "clasificado",
+            "favorito"
         ]),
         "confianza": find_col(df, [
             "confianza",
             "nivel_confianza",
-            "confidence"
+            "confidence",
+            "prob_favorito"
+        ]),
+        "estado_partido": find_col(df, [
+            "estado_partido",
+            "estado",
+            "status",
+            "match_status"
         ]),
     }
 
     required = [
+        "partido_id",
         "fase",
         "equipo_a",
         "equipo_b",
@@ -312,6 +327,19 @@ def detectar_columnas_base(df):
             f"Faltan columnas base en {SOURCE_SHEET}: {missing}. "
             f"Columnas disponibles: {list(df.columns)}"
         )
+
+    print("Columnas detectadas:")
+    print(f"partido_id: {cols['partido_id']}")
+    print(f"fecha: {cols['fecha']}")
+    print(f"fase: {cols['fase']}")
+    print(f"grupo: {cols['grupo']}")
+    print(f"equipo_a: {cols['equipo_a']}")
+    print(f"equipo_b: {cols['equipo_b']}")
+    print(f"goles_pred_a: {cols['goles_pred_a']}")
+    print(f"goles_pred_b: {cols['goles_pred_b']}")
+    print(f"ganador_predicho: {cols['ganador_predicho']}")
+    print(f"confianza: {cols['confianza']}")
+    print(f"estado_partido: {cols['estado_partido']}")
 
     return cols
 
@@ -377,6 +405,7 @@ def crear_base_partidos(df_source, cols):
         )
 
         confianza = cell(row, cols["confianza"])
+        estado = normalize_estado(cell(row, cols["estado_partido"], "PENDIENTE"))
 
         rows.append({
             "partido_id": partido_id,
@@ -404,7 +433,7 @@ def crear_base_partidos(df_source, cols):
             "penales_pred_vivo_b": "",
             "ganador_penales_pred_vivo": "",
 
-            "estado_partido": "PENDIENTE",
+            "estado_partido": estado,
             "goles_real_a": "",
             "goles_real_b": "",
             "penales_real_a": "",
@@ -638,7 +667,9 @@ def aplicar_resultado_usado(df):
 
             ganador_pred = resolver_ganador_pred_vivo(row)
 
-            df.at[idx, "estado_partido"] = normalize_estado(row.get("estado_partido", "PENDIENTE"))
+            df.at[idx, "estado_partido"] = normalize_estado(
+                row.get("estado_partido", "PENDIENTE")
+            )
             df.at[idx, "estado_usado"] = "PRED"
             df.at[idx, "goles_usados_a"] = goles_a
             df.at[idx, "goles_usados_b"] = goles_b
