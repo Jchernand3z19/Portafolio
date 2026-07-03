@@ -19,7 +19,7 @@ SERVICE_ACCOUNT_FILE = os.getenv(
 )
 
 CALENDAR_SHEET = "dim_calendario_mundial_2026"
-RANKING_SHEET = "ranking_equipos"
+RANKING_SHEET = "dim_ranking_equipos"
 RECENT_RESULTS_SHEET = "fact_resultados_recientes"
 EQUIVALENCES_SHEET = "dim_equivalencias_selecciones"
 OUTPUT_SHEET = "fact_partidos_prediccion_2026"
@@ -33,8 +33,14 @@ OUTPUT_COLUMNS = [
     "fase",
     "grupo",
     "sede",
+    "ciudad",
+    "pais_sede",
+    "region_sede",
+
     "equipo_a",
+    "codigo_a",
     "equipo_b",
+    "codigo_b",
     "origen_equipo_a",
     "origen_equipo_b",
     "siguiente_partido_id",
@@ -106,11 +112,15 @@ def write_sheet(spreadsheet, sheet_name, df):
     try:
         worksheet = spreadsheet.worksheet(sheet_name)
         worksheet.clear()
+        worksheet.resize(
+            rows=max(len(df) + 50, 150),
+            cols=max(len(df.columns) + 5, 50),
+        )
     except gspread.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(
             title=sheet_name,
             rows=max(len(df) + 50, 150),
-            cols=max(len(df.columns) + 5, 45),
+            cols=max(len(df.columns) + 5, 50),
         )
 
     values = [df.columns.tolist()] + df.fillna("").astype(str).values.tolist()
@@ -118,7 +128,7 @@ def write_sheet(spreadsheet, sheet_name, df):
 
 
 # =====================================================
-# UTILIDADES
+# UTILIDADES GENERALES
 # =====================================================
 
 def normalize_columns(df):
@@ -157,31 +167,6 @@ def is_blank(value):
     ]
 
 
-def cell(row, col, default=""):
-    if col is None:
-        return default
-
-    if col not in row:
-        return default
-
-    value = row.get(col, default)
-
-    if pd.isna(value):
-        return default
-
-    return value
-
-
-def to_number(value):
-    try:
-        if is_blank(value):
-            return None
-
-        return float(str(value).replace(",", "."))
-    except Exception:
-        return None
-
-
 def clean_text(value):
     if is_blank(value):
         return ""
@@ -215,22 +200,47 @@ def clean_key(value):
     return value
 
 
+def to_number(value):
+    try:
+        if is_blank(value):
+            return None
+
+        return float(str(value).replace(",", "."))
+    except Exception:
+        return None
+
+
 def normalize_estado(value):
     estado = clean_text(value).upper()
 
     if estado in [
         "FINAL",
         "FINALIZADO",
+        "JUGADO",
         "COMPLETADO",
         "COMPLETE",
         "COMPLETED",
     ]:
         return "FINAL"
 
-    if estado in ["EN VIVO", "LIVE"]:
+    if estado in [
+        "EN VIVO",
+        "LIVE",
+        "PLAYING",
+        "IN PROGRESS",
+    ]:
         return "EN VIVO"
 
     return "PENDIENTE"
+
+
+def es_fase_grupos(fase):
+    fase = clean_key(fase)
+    return "grupo" in fase or "group" in fase
+
+
+def es_fase_eliminatoria(fase):
+    return not es_fase_grupos(fase)
 
 
 def is_tbd(value):
@@ -251,47 +261,58 @@ def is_tbd(value):
     ]
 
 
-def es_fase_grupos(fase):
-    fase = clean_key(fase)
+def looks_like_origin_text(value):
+    value = clean_text(value)
 
-    return "grupo" in fase or "group" in fase
-
-
-def es_fase_eliminatoria(fase):
-    return not es_fase_grupos(fase)
-
-
-def looks_like_origin(value):
     if is_blank(value):
         return False
 
-    text = clean_text(value)
-    key = clean_key(text).upper()
+    value_upper = value.upper()
+    value_key = clean_key(value).upper()
 
-    if re.match(r"^[123][A-L]$", key):
+    if re.match(r"^[WL]\d+$", value_upper):
         return True
 
-    if re.match(r"^[A-L][123]$", key):
+    if re.match(r"^GANADOR_\d+$", value_key):
         return True
 
-    if re.match(r"^[WL]\d+$", text.upper()):
+    if re.match(r"^PERDEDOR_\d+$", value_key):
         return True
 
-    if key.startswith("3") and re.search(r"[A-L]", key):
+    if re.match(r"^WINNER_\d+$", value_key):
         return True
 
-    words = [
-        "GANADOR",
-        "WINNER",
-        "PERDEDOR",
-        "LOSER",
-        "PRIMERO",
-        "SEGUNDO",
-        "TERCERO",
-        "GRUPO",
-    ]
+    if re.match(r"^LOSER_\d+$", value_key):
+        return True
 
-    return any(word in key for word in words)
+    return False
+
+
+def origin_from_text(value):
+    value = clean_text(value)
+    value_upper = value.upper()
+    value_key = clean_key(value).upper()
+
+    if re.match(r"^[WL]\d+$", value_upper):
+        return value_upper
+
+    match = re.search(r"GANADOR_(\d+)", value_key)
+    if match:
+        return f"W{match.group(1)}"
+
+    match = re.search(r"WINNER_(\d+)", value_key)
+    if match:
+        return f"W{match.group(1)}"
+
+    match = re.search(r"PERDEDOR_(\d+)", value_key)
+    if match:
+        return f"L{match.group(1)}"
+
+    match = re.search(r"LOSER_(\d+)", value_key)
+    if match:
+        return f"L{match.group(1)}"
+
+    return ""
 
 
 # =====================================================
@@ -332,6 +353,20 @@ def detect_calendar_columns(df):
             "estadio",
             "stadium",
         ]),
+        "ciudad": find_col(df, [
+            "ciudad",
+            "city",
+        ]),
+        "pais_sede": find_col(df, [
+            "pais_sede",
+            "host_country",
+            "country_host",
+        ]),
+        "region_sede": find_col(df, [
+            "region_sede",
+            "host_region",
+            "region",
+        ]),
         "equipo_a": find_col(df, [
             "equipo_a",
             "seleccion_a",
@@ -340,6 +375,12 @@ def detect_calendar_columns(df):
             "home_team",
             "pais_a",
         ]),
+        "codigo_a": find_col(df, [
+            "codigo_a",
+            "code_a",
+            "team_a_code",
+            "codigo_equipo_a",
+        ]),
         "equipo_b": find_col(df, [
             "equipo_b",
             "seleccion_b",
@@ -347,6 +388,12 @@ def detect_calendar_columns(df):
             "visitante",
             "away_team",
             "pais_b",
+        ]),
+        "codigo_b": find_col(df, [
+            "codigo_b",
+            "code_b",
+            "team_b_code",
+            "codigo_equipo_b",
         ]),
         "origen_equipo_a": find_col(df, [
             "origen_equipo_a",
@@ -369,6 +416,40 @@ def detect_calendar_columns(df):
             "slot_siguiente",
             "next_slot",
             "slot_next",
+        ]),
+        "estado_partido": find_col(df, [
+            "estado_partido",
+            "estado",
+            "status",
+            "match_status",
+        ]),
+        "goles_real_a": find_col(df, [
+            "goles_real_a",
+            "goles_a",
+            "score_a",
+            "home_score",
+        ]),
+        "goles_real_b": find_col(df, [
+            "goles_real_b",
+            "goles_b",
+            "score_b",
+            "away_score",
+        ]),
+        "penales_real_a": find_col(df, [
+            "penales_real_a",
+            "penales_a",
+            "pens_a",
+        ]),
+        "penales_real_b": find_col(df, [
+            "penales_real_b",
+            "penales_b",
+            "pens_b",
+        ]),
+        "ganador_real": find_col(df, [
+            "ganador_real",
+            "winner",
+            "ganador",
+            "winner_real",
         ]),
     }
 
@@ -449,47 +530,124 @@ def canonical_team(value, equivalences):
 # CALENDARIO BASE
 # =====================================================
 
+def get_real_winner(row):
+    ganador_real = clean_text(row.get("ganador_real", ""))
+
+    if not is_blank(ganador_real):
+        return ganador_real
+
+    goles_a = to_number(row.get("goles_real_a", ""))
+    goles_b = to_number(row.get("goles_real_b", ""))
+
+    if goles_a is None or goles_b is None:
+        return ""
+
+    if goles_a > goles_b:
+        return clean_text(row.get("equipo_a", ""))
+
+    if goles_b > goles_a:
+        return clean_text(row.get("equipo_b", ""))
+
+    penales_a = to_number(row.get("penales_real_a", ""))
+    penales_b = to_number(row.get("penales_real_b", ""))
+
+    if penales_a is not None and penales_b is not None:
+        if penales_a > penales_b:
+            return clean_text(row.get("equipo_a", ""))
+
+        if penales_b > penales_a:
+            return clean_text(row.get("equipo_b", ""))
+
+    return ""
+
+
 def build_calendar(df_calendar, cols, equivalences):
     rows = []
 
     for _, row in df_calendar.iterrows():
-        partido_id = clean_text(cell(row, cols["partido_id"]))
+        partido_id = clean_text(row.get(cols["partido_id"], ""))
 
-        raw_equipo_a = cell(row, cols["equipo_a"])
-        raw_equipo_b = cell(row, cols["equipo_b"])
+        raw_equipo_a = clean_text(row.get(cols["equipo_a"], ""))
+        raw_equipo_b = clean_text(row.get(cols["equipo_b"], ""))
 
-        origen_a = cell(row, cols["origen_equipo_a"])
-        origen_b = cell(row, cols["origen_equipo_b"])
+        codigo_a = clean_text(row.get(cols["codigo_a"], "")) if cols["codigo_a"] else ""
+        codigo_b = clean_text(row.get(cols["codigo_b"], "")) if cols["codigo_b"] else ""
 
-        if is_blank(origen_a) and looks_like_origin(raw_equipo_a):
-            origen_a = raw_equipo_a
+        origen_a = clean_text(row.get(cols["origen_equipo_a"], "")) if cols["origen_equipo_a"] else ""
+        origen_b = clean_text(row.get(cols["origen_equipo_b"], "")) if cols["origen_equipo_b"] else ""
+
+        if is_blank(origen_a) and looks_like_origin_text(raw_equipo_a):
+            origen_a = origin_from_text(raw_equipo_a)
+            equipo_a = ""
+        elif is_blank(origen_a) and looks_like_origin_text(codigo_a):
+            origen_a = origin_from_text(codigo_a)
             equipo_a = ""
         else:
             equipo_a = canonical_team(raw_equipo_a, equivalences)
 
-        if is_blank(origen_b) and looks_like_origin(raw_equipo_b):
-            origen_b = raw_equipo_b
+        if is_blank(origen_b) and looks_like_origin_text(raw_equipo_b):
+            origen_b = origin_from_text(raw_equipo_b)
+            equipo_b = ""
+        elif is_blank(origen_b) and looks_like_origin_text(codigo_b):
+            origen_b = origin_from_text(codigo_b)
             equipo_b = ""
         else:
             equipo_b = canonical_team(raw_equipo_b, equivalences)
 
-        rows.append({
+        estado_partido = normalize_estado(
+            row.get(cols["estado_partido"], "PENDIENTE")
+        ) if cols["estado_partido"] else "PENDIENTE"
+
+        goles_real_a = row.get(cols["goles_real_a"], "") if cols["goles_real_a"] else ""
+        goles_real_b = row.get(cols["goles_real_b"], "") if cols["goles_real_b"] else ""
+        penales_real_a = row.get(cols["penales_real_a"], "") if cols["penales_real_a"] else ""
+        penales_real_b = row.get(cols["penales_real_b"], "") if cols["penales_real_b"] else ""
+        ganador_real = row.get(cols["ganador_real"], "") if cols["ganador_real"] else ""
+
+        if estado_partido != "FINAL":
+            goles_real_a = ""
+            goles_real_b = ""
+            penales_real_a = ""
+            penales_real_b = ""
+            ganador_real = ""
+
+        output_row = {
             "partido_id": partido_id,
-            "fecha": cell(row, cols["fecha"]),
-            "hora": cell(row, cols["hora"]),
-            "fase": cell(row, cols["fase"]),
-            "grupo": cell(row, cols["grupo"]),
-            "sede": cell(row, cols["sede"]),
+            "fecha": row.get(cols["fecha"], ""),
+            "hora": row.get(cols["hora"], "") if cols["hora"] else "",
+            "fase": row.get(cols["fase"], ""),
+            "grupo": row.get(cols["grupo"], "") if cols["grupo"] else "",
+            "sede": row.get(cols["sede"], "") if cols["sede"] else "",
+            "ciudad": row.get(cols["ciudad"], "") if cols["ciudad"] else "",
+            "pais_sede": row.get(cols["pais_sede"], "") if cols["pais_sede"] else "",
+            "region_sede": row.get(cols["region_sede"], "") if cols["region_sede"] else "",
+
             "equipo_a": equipo_a,
+            "codigo_a": codigo_a,
             "equipo_b": equipo_b,
+            "codigo_b": codigo_b,
             "origen_equipo_a": origen_a,
             "origen_equipo_b": origen_b,
-            "siguiente_partido_id": cell(row, cols["siguiente_partido_id"]),
-            "slot_siguiente": cell(row, cols["slot_siguiente"]),
-        })
+            "siguiente_partido_id": row.get(cols["siguiente_partido_id"], "") if cols["siguiente_partido_id"] else "",
+            "slot_siguiente": row.get(cols["slot_siguiente"], "") if cols["slot_siguiente"] else "",
+
+            "estado_partido": estado_partido,
+            "goles_real_a": goles_real_a,
+            "goles_real_b": goles_real_b,
+            "penales_real_a": penales_real_a,
+            "penales_real_b": penales_real_b,
+            "ganador_real": ganador_real,
+        }
+
+        output_row["ganador_real"] = get_real_winner(output_row)
+
+        rows.append(output_row)
 
     df = pd.DataFrame(rows)
     df = df.drop_duplicates(subset=["partido_id"], keep="first")
+
+    df["_orden"] = pd.to_numeric(df["partido_id"], errors="coerce")
+    df = df.sort_values(["_orden", "partido_id"]).drop(columns=["_orden"])
 
     return df
 
@@ -504,17 +662,26 @@ def validate_calendar(df_calendar):
             "No se crea la predicción viva hasta tener el calendario completo."
         )
 
-    blank_ids = df_calendar["partido_id"].astype(str).str.strip().eq("").sum()
+    ids = df_calendar["partido_id"].astype(str).str.strip()
 
-    if blank_ids > 0:
-        raise ValueError(f"Hay {blank_ids} partido_id vacíos en el calendario.")
+    if ids.eq("").any():
+        raise ValueError("Hay partido_id vacíos en el calendario.")
 
-    unique_ids = df_calendar["partido_id"].astype(str).nunique()
+    unique_ids = ids.nunique()
 
     if unique_ids != total:
         raise ValueError(
             f"Hay partido_id duplicados. "
             f"Filas: {total}, IDs únicos: {unique_ids}."
+        )
+
+    min_id = pd.to_numeric(df_calendar["partido_id"], errors="coerce").min()
+    max_id = pd.to_numeric(df_calendar["partido_id"], errors="coerce").max()
+
+    if min_id != 1 or max_id != EXPECTED_MATCHES:
+        raise ValueError(
+            f"El calendario debe ir de 1 a {EXPECTED_MATCHES}. "
+            f"MIN={min_id}, MAX={max_id}."
         )
 
 
@@ -524,38 +691,46 @@ def validate_calendar(df_calendar):
 
 def detect_ranking_columns(df):
     team_col = find_col(df, [
-        "equipo",
         "seleccion",
+        "equipo",
         "pais",
         "team",
         "country",
         "nombre",
     ])
 
+    code_col = find_col(df, [
+        "codigo",
+        "code",
+        "team_code",
+        "codigo_fifa",
+    ])
+
     rating_col = find_col(df, [
+        "elo",
+        "elo_rating",
+        "ranking_elo",
         "rating",
+        "puntos_fifa",
         "puntos",
         "score",
         "fuerza",
         "power_score",
-        "elo",
-        "elo_rating",
-        "ranking_elo",
-        "valor_ranking",
         "strength",
     ])
 
     rank_col = find_col(df, [
+        "ranking_fifa",
         "ranking",
         "rank",
         "posicion",
         "posicion_ranking",
     ])
 
-    if team_col is None:
+    if team_col is None and code_col is None:
         raise ValueError(
             f"No se puede usar {RANKING_SHEET}. "
-            f"Falta columna de equipo. "
+            f"Falta columna de equipo o código. "
             f"Columnas disponibles: {list(df.columns)}"
         )
 
@@ -566,7 +741,7 @@ def detect_ranking_columns(df):
             f"Columnas disponibles: {list(df.columns)}"
         )
 
-    return team_col, rating_col, rank_col
+    return team_col, code_col, rating_col, rank_col
 
 
 def build_ranking_strength(df_ranking, equivalences):
@@ -574,12 +749,16 @@ def build_ranking_strength(df_ranking, equivalences):
         raise ValueError(f"La hoja {RANKING_SHEET} está vacía o no existe.")
 
     df_ranking = normalize_columns(df_ranking)
-    team_col, rating_col, rank_col = detect_ranking_columns(df_ranking)
+    team_col, code_col, rating_col, rank_col = detect_ranking_columns(df_ranking)
 
     raw = []
 
     for _, row in df_ranking.iterrows():
-        team = canonical_team(row.get(team_col, ""), equivalences)
+        team = canonical_team(row.get(team_col, ""), equivalences) if team_col else ""
+        code = clean_text(row.get(code_col, "")) if code_col else ""
+
+        if is_blank(team) and not is_blank(code):
+            team = equivalences.get(clean_key(code), code)
 
         if is_blank(team):
             continue
@@ -589,6 +768,7 @@ def build_ranking_strength(df_ranking, equivalences):
 
         raw.append({
             "equipo": team,
+            "codigo": code,
             "rating": rating,
             "rank": rank,
         })
@@ -612,7 +792,13 @@ def build_ranking_strength(df_ranking, equivalences):
     strength = {}
 
     for _, row in df.iterrows():
-        strength[row["equipo"]] = float(row["strength"])
+        team = clean_text(row["equipo"])
+        code = clean_text(row["codigo"])
+
+        strength[team] = float(row["strength"])
+
+        if not is_blank(code):
+            strength[code] = float(row["strength"])
 
     return strength
 
@@ -658,6 +844,7 @@ def detect_recent_result_columns(df):
 
 def build_recent_form(df_results, equivalences):
     if df_results.empty:
+        print(f"Advertencia: {RECENT_RESULTS_SHEET} está vacía. Se usará solo ranking.")
         return {}
 
     df_results = normalize_columns(df_results)
@@ -724,7 +911,7 @@ def build_recent_form(df_results, equivalences):
 
 
 # =====================================================
-# MODELO SIMPLE DE PREDICCIÓN
+# MODELO DE PREDICCIÓN
 # =====================================================
 
 def get_strength(team, ranking_strength, recent_form):
@@ -732,6 +919,9 @@ def get_strength(team, ranking_strength, recent_form):
         return None
 
     base = ranking_strength.get(team)
+
+    if base is None:
+        base = ranking_strength.get(clean_text(team).upper())
 
     if base is None:
         base = 55.0
@@ -819,6 +1009,21 @@ def partido_finalizado(row):
     return not is_blank(goles_real_a) and not is_blank(goles_real_b)
 
 
+def existing_table_is_complete(df_existing):
+    if df_existing.empty:
+        return False
+
+    df_existing = normalize_columns(df_existing)
+
+    if "partido_id" not in df_existing.columns:
+        return False
+
+    ids = df_existing["partido_id"].astype(str).str.strip()
+    ids = ids[ids != ""]
+
+    return ids.nunique() == EXPECTED_MATCHES
+
+
 def merge_existing(df_base, df_existing):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -826,10 +1031,10 @@ def merge_existing(df_base, df_existing):
         if col not in df_base.columns:
             df_base[col] = ""
 
-    if df_existing.empty:
-        df_base["estado_partido"] = "PENDIENTE"
-        df_base["ultima_actualizacion"] = now
+    preserve_initial_predictions = existing_table_is_complete(df_existing)
 
+    if df_existing.empty:
+        df_base["ultima_actualizacion"] = now
         return df_base[OUTPUT_COLUMNS]
 
     df_existing = normalize_columns(df_existing)
@@ -844,7 +1049,13 @@ def merge_existing(df_base, df_existing):
         if not is_blank(row.get("partido_id", ""))
     }
 
-    rows = []
+    if preserve_initial_predictions:
+        print("Tabla existente completa: se conservan pronósticos iniciales.")
+    else:
+        print(
+            "Tabla existente incompleta: NO se conservan pronósticos iniciales "
+            "para evitar arrastrar una corrida vieja incompleta."
+        )
 
     preserve_initial = [
         "goles_pred_inicial_a",
@@ -875,6 +1086,8 @@ def merge_existing(df_base, df_existing):
         "ganador_penales_pred_vivo",
     ]
 
+    rows = []
+
     for _, base_row in df_base.iterrows():
         partido_id = clean_text(base_row.get("partido_id", ""))
         new = base_row.to_dict()
@@ -882,9 +1095,10 @@ def merge_existing(df_base, df_existing):
         if partido_id in existing_map:
             old = existing_map[partido_id]
 
-            for col in preserve_initial:
-                if not is_blank(old.get(col, "")):
-                    new[col] = old.get(col, "")
+            if preserve_initial_predictions:
+                for col in preserve_initial:
+                    if not is_blank(old.get(col, "")):
+                        new[col] = old.get(col, "")
 
             for col in preserve_real:
                 if not is_blank(old.get(col, "")):
@@ -906,7 +1120,7 @@ def merge_existing(df_base, df_existing):
 
 
 # =====================================================
-# TABLA DE GRUPOS PARA RESOLVER CRUCES
+# TABLA DE GRUPOS
 # =====================================================
 
 def init_standings():
@@ -962,75 +1176,6 @@ def add_group_result(standings, group, equipo_a, equipo_b, goles_a, goles_b):
     standings[group][equipo_b]["gf"] += goles_b
     standings[group][equipo_b]["gc"] += goles_a
     standings[group][equipo_b]["gd"] += goles_b - goles_a
-
-
-def sorted_group_table(standings, group):
-    group = clean_text(group).upper()
-    teams = standings.get(group, {})
-
-    rows = []
-
-    for team, stats in teams.items():
-        rows.append({
-            "team": team,
-            "pts": stats["pts"],
-            "gd": stats["gd"],
-            "gf": stats["gf"],
-            "gc": stats["gc"],
-        })
-
-    return sorted(
-        rows,
-        key=lambda item: (
-            item["pts"],
-            item["gd"],
-            item["gf"],
-        ),
-        reverse=True,
-    )
-
-
-def get_group_position(standings, group, position):
-    table = sorted_group_table(standings, group)
-
-    if len(table) >= position:
-        return table[position - 1]["team"]
-
-    return ""
-
-
-def get_best_third_from_options(standings, options, used_groups):
-    candidates = []
-
-    for group in options:
-        group = clean_text(group).upper()
-
-        if group in used_groups:
-            continue
-
-        table = sorted_group_table(standings, group)
-
-        if len(table) >= 3:
-            third = table[2].copy()
-            third["group"] = group
-            candidates.append(third)
-
-    if not candidates:
-        return "", ""
-
-    candidates = sorted(
-        candidates,
-        key=lambda item: (
-            item["pts"],
-            item["gd"],
-            item["gf"],
-        ),
-        reverse=True,
-    )
-
-    selected = candidates[0]
-
-    return selected["team"], selected["group"]
 
 
 # =====================================================
@@ -1094,119 +1239,29 @@ def parse_match_reference(origin):
     return "", ""
 
 
-def parse_group_slot(origin):
-    text = clean_text(origin).upper()
-    key = clean_key(text).upper()
-
-    match = re.search(r"^([123])([A-L])$", key)
-
-    if match:
-        return int(match.group(1)), [match.group(2)]
-
-    match = re.search(r"^([A-L])([123])$", key)
-
-    if match:
-        return int(match.group(2)), [match.group(1)]
-
-    match = re.search(r"(?:1RO|1|PRIMERO|GANADOR)_?GRUPO_?([A-L])", key)
-
-    if match:
-        return 1, [match.group(1)]
-
-    match = re.search(r"(?:2DO|2|SEGUNDO)_?GRUPO_?([A-L])", key)
-
-    if match:
-        return 2, [match.group(1)]
-
-    match = re.search(r"(?:3RO|3|TERCERO)_?GRUPO_?([A-L])", key)
-
-    if match:
-        return 3, [match.group(1)]
-
-    if key.startswith("3"):
-        groups = re.findall(r"[A-L]", key)
-
-        if groups:
-            return 3, groups
-
-    return None, []
-
-
-def resolve_origin(origin, processed_rows, standings, used_third_groups):
+def resolve_origin(origin, processed_rows):
     if is_blank(origin):
         return ""
 
-    origin = clean_text(origin)
-
     ref_type, match_id = parse_match_reference(origin)
 
-    if ref_type and match_id:
-        match = get_match_by_id(processed_rows, match_id)
+    if not ref_type or not match_id:
+        return ""
 
-        if match is None:
-            return ""
+    match = get_match_by_id(processed_rows, match_id)
 
-        if ref_type == "W":
-            return clean_text(match.get("ganador_usado", ""))
+    if match is None:
+        return ""
 
-        return get_loser(match)
+    if ref_type == "W":
+        return clean_text(match.get("ganador_usado", ""))
 
-    position, groups = parse_group_slot(origin)
-
-    if position and groups:
-        if position in [1, 2]:
-            return get_group_position(standings, groups[0], position)
-
-        if position == 3 and len(groups) == 1:
-            return get_group_position(standings, groups[0], 3)
-
-        if position == 3 and len(groups) > 1:
-            team, group = get_best_third_from_options(
-                standings,
-                groups,
-                used_third_groups,
-            )
-
-            if group:
-                used_third_groups.add(group)
-
-            return team
-
-    return ""
+    return get_loser(match)
 
 
 # =====================================================
 # RESULTADO USADO
 # =====================================================
-
-def get_real_winner(row):
-    if not is_blank(row.get("ganador_real", "")):
-        return clean_text(row.get("ganador_real", ""))
-
-    goles_a = to_number(row.get("goles_real_a", ""))
-    goles_b = to_number(row.get("goles_real_b", ""))
-
-    if goles_a is None or goles_b is None:
-        return ""
-
-    if goles_a > goles_b:
-        return clean_text(row.get("equipo_a", ""))
-
-    if goles_b > goles_a:
-        return clean_text(row.get("equipo_b", ""))
-
-    penales_a = to_number(row.get("penales_real_a", ""))
-    penales_b = to_number(row.get("penales_real_b", ""))
-
-    if penales_a is not None and penales_b is not None:
-        if penales_a > penales_b:
-            return clean_text(row.get("equipo_a", ""))
-
-        if penales_b > penales_a:
-            return clean_text(row.get("equipo_b", ""))
-
-    return ""
-
 
 def apply_used_result(row):
     row = dict(row)
@@ -1255,7 +1310,6 @@ def apply_used_result(row):
 def calculate_predictions(df, ranking_strength, recent_form):
     standings = init_standings()
     processed_rows = []
-    used_third_groups = set()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     for _, source_row in df.iterrows():
@@ -1268,16 +1322,12 @@ def calculate_predictions(df, ranking_strength, recent_form):
             equipo_a = resolve_origin(
                 row.get("origen_equipo_a", ""),
                 processed_rows,
-                standings,
-                used_third_groups,
             )
 
         if is_tbd(equipo_b):
             equipo_b = resolve_origin(
                 row.get("origen_equipo_b", ""),
                 processed_rows,
-                standings,
-                used_third_groups,
             )
 
         row["equipo_a"] = equipo_a
@@ -1285,24 +1335,33 @@ def calculate_predictions(df, ranking_strength, recent_form):
 
         final = partido_finalizado(row)
 
-        if not final:
-            pred = predict_match(
-                equipo_a,
-                equipo_b,
-                row.get("fase", ""),
-                ranking_strength,
-                recent_form,
-            )
+        pred = predict_match(
+            equipo_a,
+            equipo_b,
+            row.get("fase", ""),
+            ranking_strength,
+            recent_form,
+        )
 
-            if is_blank(row.get("goles_pred_inicial_a", "")):
-                row["goles_pred_inicial_a"] = pred["goles_a"]
-                row["goles_pred_inicial_b"] = pred["goles_b"]
-                row["ganador_pred_inicial"] = pred["ganador"]
-                row["confianza_pred_inicial"] = pred["confianza"]
-                row["penales_pred_inicial_a"] = pred["penales_a"]
-                row["penales_pred_inicial_b"] = pred["penales_b"]
-                row["ganador_penales_pred_inicial"] = pred["ganador_penales"]
+        if is_blank(row.get("goles_pred_inicial_a", "")):
+            row["goles_pred_inicial_a"] = pred["goles_a"]
+            row["goles_pred_inicial_b"] = pred["goles_b"]
+            row["ganador_pred_inicial"] = pred["ganador"]
+            row["confianza_pred_inicial"] = pred["confianza"]
+            row["penales_pred_inicial_a"] = pred["penales_a"]
+            row["penales_pred_inicial_b"] = pred["penales_b"]
+            row["ganador_penales_pred_inicial"] = pred["ganador_penales"]
 
+        if final:
+            if is_blank(row.get("goles_pred_vivo_a", "")):
+                row["goles_pred_vivo_a"] = pred["goles_a"]
+                row["goles_pred_vivo_b"] = pred["goles_b"]
+                row["ganador_pred_vivo"] = pred["ganador"]
+                row["confianza_pred_vivo"] = pred["confianza"]
+                row["penales_pred_vivo_a"] = pred["penales_a"]
+                row["penales_pred_vivo_b"] = pred["penales_b"]
+                row["ganador_penales_pred_vivo"] = pred["ganador_penales"]
+        else:
             row["goles_pred_vivo_a"] = pred["goles_a"]
             row["goles_pred_vivo_b"] = pred["goles_b"]
             row["ganador_pred_vivo"] = pred["ganador"]
@@ -1345,13 +1404,14 @@ def main():
     client = get_client()
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
 
-    print(f"Leyendo calendario oficial: {CALENDAR_SHEET}")
+    print(f"Leyendo calendario oficial normalizado: {CALENDAR_SHEET}")
     df_calendar_raw = read_sheet(spreadsheet, CALENDAR_SHEET)
 
     if df_calendar_raw.empty:
         raise ValueError(
             f"No existe o está vacía la hoja {CALENDAR_SHEET}. "
-            "Primero cargá el calendario oficial FIFA 2026 con los 104 partidos."
+            "Primero se debe crear dim_calendario_mundial_2026 desde "
+            "Calendario Mundial 2026 - Data Matrix."
         )
 
     df_calendar_raw = normalize_columns(df_calendar_raw)
@@ -1361,8 +1421,10 @@ def main():
     df_equiv = read_sheet(spreadsheet, EQUIVALENCES_SHEET)
     equivalences = build_equivalence_map(df_equiv)
 
-    print("Construyendo calendario normalizado...")
+    print("Construyendo calendario base...")
     df_calendar = build_calendar(df_calendar_raw, calendar_cols, equivalences)
+
+    print("Validando calendario base...")
     validate_calendar(df_calendar)
 
     print(f"Leyendo ranking: {RANKING_SHEET}")
