@@ -78,6 +78,11 @@ jobs:
         run: |
           echo "Validando archivos requeridos..."
 
+          if [ ! -f "scripts/04A_crear_dim_calendario_mundial_2026.py" ]; then
+            echo "ERROR: No existe scripts/04A_crear_dim_calendario_mundial_2026.py"
+            exit 1
+          fi
+
           if [ ! -f "scripts/04_crear_fact_partidos_prediccion_2026.py" ]; then
             echo "ERROR: No existe scripts/04_crear_fact_partidos_prediccion_2026.py"
             exit 1
@@ -94,6 +99,11 @@ jobs:
           fi
 
           echo "Archivos requeridos encontrados."
+
+      - name: Crear dim_calendario_mundial_2026
+        run: |
+          echo "Creando calendario normalizado dim_calendario_mundial_2026..."
+          python scripts/04A_crear_dim_calendario_mundial_2026.py
 
       - name: Ejecutar tabla maestra fact_partidos_prediccion_2026
         run: |
