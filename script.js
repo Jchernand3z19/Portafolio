@@ -14,9 +14,8 @@
         title: "Mundial 2026: análisis y predicción",
         tags: ["Python", "Google Sheets", "Apps Script", "Chart.js"],
         objective: "Centralizar información histórica de Copas del Mundo y presentar una predicción actualizable del torneo 2026 mediante una experiencia visual única.",
-        previewLabel: "Dashboard histórico y predictivo",
-        image: "assets/mundial-dashboard-preview.svg",
-        imageAlt: "Dashboard Mundial 2026 con histórico, predicción inicial y predicción viva",
+        previewLabel: "Dashboard Mundial 2026 disponible en Google Apps Script",
+        liveUrl: "https://script.google.com/macros/s/AKfycbzE26z7tcEbnwLPKSLLW8H_rK7UqwKV17rV8YBJVT4lB4slY0qorsf8cL4cnsys5ShGhw/exec",
         process: [
           ["Integración de fuentes", "Se consolidaron tablas históricas, calendario, selecciones, jugadores y eventos del torneo."],
           ["Preparación y homologación", "Se limpiaron formatos y se normalizaron nombres para relacionar correctamente las distintas fuentes."],
@@ -191,6 +190,14 @@ const status = profitMargin < 0
       const detailPreviewImage = document.getElementById("detail-preview-image");
       const detailPreviewPlaceholder = document.getElementById("detail-preview-placeholder");
       document.getElementById("detail-preview-label").textContent = project.previewLabel;
+      const detailLiveLink = document.getElementById("detail-live-link");
+      if (project.liveUrl) {
+        detailLiveLink.href = project.liveUrl;
+        detailLiveLink.hidden = false;
+      } else {
+        detailLiveLink.removeAttribute("href");
+        detailLiveLink.hidden = true;
+      }
 
       if (project.image) {
         detailPreviewImage.src = project.image;

@@ -122,3 +122,13 @@
       fill: currentColor;
     }
 
+
+
+.dashboard-live-preview { text-decoration:none; background:radial-gradient(circle at 30% 20%,rgba(59,130,246,.18),transparent 42%),linear-gradient(135deg,#0d1220,#111a2d); border-bottom:1px solid var(--border); transition:background .25s ease,box-shadow .25s ease; }
+.dashboard-live-preview::after { background:linear-gradient(135deg,rgba(59,130,246,.04),rgba(10,14,26,.18)); }
+.dashboard-live-preview:hover { background:radial-gradient(circle at 30% 20%,rgba(59,130,246,.28),transparent 45%),linear-gradient(135deg,#0d1220,#14213a); box-shadow:inset 0 0 0 1px rgba(59,130,246,.45); }
+.dashboard-live-preview__content strong { color:var(--text-main); font-size:18px; }
+.dashboard-live-preview__content span { color:var(--accent); font-weight:500; }
+.dashboard-direct-link { color:var(--accent); }
+.detail-live-actions { display:flex; justify-content:center; margin-top:-28px; margin-bottom:52px; }
+.detail-live-link { min-width:260px; }
