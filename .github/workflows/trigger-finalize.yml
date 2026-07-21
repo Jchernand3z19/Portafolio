@@ -1,0 +1,31 @@
+name: Ejecutar finalización del portafolio
+
+on:
+  push:
+    paths:
+      - 'portfolio-trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  run-finalizer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Ejecutar pasos de finalización
+        shell: bash
+        run: |
+          ruby -ryaml -e '
+            workflow = YAML.load_file(".github/workflows/finalize-portfolio.yml")
+            steps = workflow.fetch("jobs").fetch("finalize").fetch("steps")
+            steps.select { |step| step["run"] }.each_with_index do |step, index|
+              path = "/tmp/finalize-step-#{index}.sh"
+              File.write(path, "set -euo pipefail\n" + step.fetch("run"))
+              abort("Falló el paso #{index + 1}") unless system("bash", path)
+            end
+          '
