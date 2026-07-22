@@ -8,13 +8,27 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
-<link href="css/base.css?v=20260721-0452" rel="stylesheet"/>
-<link href="css/projects.css?v=20260721-0452" rel="stylesheet"/>
-<link href="css/detail.css?v=20260721-0452" rel="stylesheet"/>
-<link href="css/responsive.css?v=20260721-0452" rel="stylesheet"/>
-<meta name="portfolio-build" content="dashboard-real-20260721-0452"/>
+<link href="css/base.css?v=20260722-1801" rel="stylesheet"/>
+<link href="css/projects.css?v=20260722-1801" rel="stylesheet"/>
+<link href="css/detail.css?v=20260722-1801" rel="stylesheet"/>
+<link href="css/responsive.css?v=20260722-1801" rel="stylesheet"/>
+<meta name="portfolio-build" content="portfolio-fluid-20260722-1801"/>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": "Juan Carlos Hernández Ramos",
+  "jobTitle": "Analista de Datos",
+  "url": "https://jchernand3z19.github.io/Portafolio/",
+  "sameAs": [
+    "https://www.linkedin.com/in/juan-carlos-hernandez-ramos",
+    "https://github.com/Jchernand3z19"
+  ]
+}
+</script>
 </head>
 <body>
+<a href="#main-content" class="skip-link">Saltar al contenido principal</a>
 <header class="site-header" id="top">
 <nav aria-label="Navegación principal" class="nav container">
 <a aria-label="Ir al inicio" class="brand" href="#inicio">
@@ -36,8 +50,8 @@
 </ul>
 </nav>
 </header>
-<main>
-<section class="hero section--main" data-section="" id="inicio">
+<main id="main-content" tabindex="-1">
+<section class="hero section--main section-glow" data-section="" id="inicio">
 <div class="hero__content container fade-in">
 <p class="hero__eyebrow">Portafolio de análisis de datos</p>
 <h1>De la información desordenada a la decisión clara.</h1>
@@ -48,8 +62,9 @@
 <a class="button" href="#proyectos">Explorar proyectos</a>
 </div>
 </section>
+<hr class="section-divider">
 <section class="section section--alt" data-section="" id="soluciones">
-<div class="container">
+<div class="container grid-section">
 <div class="section-heading fade-in">
 <h2>Soluciones</h2>
 <p>Trabajo el ciclo completo de la información: preparación, análisis, automatización y presentación de resultados.</p>
@@ -99,8 +114,9 @@
 </div>
 </div>
 </section>
-<section class="section section--main" data-section="" id="experiencia">
-<div class="container">
+<hr class="section-divider">
+<section class="section section--main section-glow" data-section="" id="experiencia">
+<div class="container grid-section">
 <div class="section-heading fade-in">
 <h2>Experiencia Aplicada</h2>
 <p>Experiencia trabajando con información comercial, operativa y bancaria en entornos de reportería y análisis.</p>
@@ -124,8 +140,9 @@
 </div>
 </div>
 </section>
+<hr class="section-divider">
 <section class="section section--alt" data-section="" id="herramientas">
-<div class="container">
+<div class="container grid-section">
 <div class="section-heading fade-in">
 <h2>Herramientas</h2>
 <p>Las herramientas se seleccionan según el problema, la fuente de información y el tipo de solución requerida.</p>
@@ -170,8 +187,9 @@
 </div>
 </div>
 </section>
-<section class="section section--main" data-section="" id="proyectos">
-<div class="container">
+<hr class="section-divider">
+<section class="section section--main section-glow" data-section="" id="proyectos">
+<div class="container grid-section">
 <div class="section-heading fade-in">
 <h2>Proyectos</h2>
 <p>Casos que muestran el trabajo técnico detrás de los dashboards, desde la preparación de datos hasta la experiencia final.</p>
@@ -261,6 +279,7 @@
 </div>
 </div>
 </section>
+<hr class="section-divider">
 <section class="section section--alt" data-section="" id="contacto">
 <div class="container contact-wrap fade-in">
 <h2>Contacto</h2>
@@ -280,7 +299,30 @@
 </section>
 </main>
 <footer class="site-footer">
-<div class="container">Juan Carlos Hernández Ramos — Portafolio de Análisis de Datos</div>
+<div class="container footer-grid">
+<div class="footer-brand">
+<span class="brand__initials">JC</span>
+<span class="brand__surname">HERNANDEZ</span>
+<p>Analista de Datos</p>
+<p>“Transformando datos en decisiones”</p>
+</div>
+<nav class="footer-nav" aria-label="Navegación del pie">
+<a href="#inicio">Inicio</a>
+<a href="#soluciones">Soluciones</a>
+<a href="#experiencia">Experiencia</a>
+<a href="#herramientas">Herramientas</a>
+<a href="#proyectos">Proyectos</a>
+<a href="#contacto">Contacto</a>
+</nav>
+<div class="footer-social">
+<a href="https://www.linkedin.com/in/juan-carlos-hernandez-ramos" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+<a href="https://github.com/Jchernand3z19" target="_blank" rel="noopener noreferrer">GitHub</a>
+</div>
+</div>
+<div class="footer-bottom">
+<span>© 2026 Juan Carlos Hernández Ramos</span>
+<span>Hecho con Python y precisión</span>
+</div>
 </footer>
 <section aria-labelledby="detail-title" aria-modal="true" class="project-view" hidden="" id="project-view" role="dialog">
 <div class="project-view__bar">
@@ -312,7 +354,7 @@
 <p id="detail-objective"></p>
 </div>
 <div class="detail-preview" id="detail-preview">
-<img alt="" class="detail-preview-image" hidden="" id="detail-preview-image"/>
+<img alt="" class="detail-preview-image" decoding="async" hidden="" id="detail-preview-image" loading="lazy"/>
 <div class="preview-placeholder" id="detail-preview-placeholder">
 <svg aria-hidden="true" fill="none" viewbox="0 0 96 96">
 <rect height="64" rx="7" stroke="currentColor" stroke-width="4" width="68" x="14" y="16"></rect>
@@ -347,6 +389,17 @@
 </section>
 </div>
 </section>
-<script src="script.js?v=20260721-0452"></script>
+<div class="scroll-progress" aria-hidden="true">
+<div class="scroll-progress__bar"><span class="scroll-progress__fill" id="scroll-progress-fill"></span></div>
+<div class="scroll-progress__dots">
+<span class="scroll-progress__dot is-active" data-section-dot="inicio"></span>
+<span class="scroll-progress__dot" data-section-dot="soluciones"></span>
+<span class="scroll-progress__dot" data-section-dot="experiencia"></span>
+<span class="scroll-progress__dot" data-section-dot="herramientas"></span>
+<span class="scroll-progress__dot" data-section-dot="proyectos"></span>
+<span class="scroll-progress__dot" data-section-dot="contacto"></span>
+</div>
+</div>
+<script src="script.js?v=20260722-1801"></script>
 </body>
 </html>
