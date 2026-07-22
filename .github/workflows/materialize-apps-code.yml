@@ -1,0 +1,74 @@
+name: Materialize Apps Script code
+
+on:
+  push:
+    branches:
+      - fix-code-viewer-empty-files-20260722
+    paths:
+      - '.github/workflows/materialize-apps-code.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: fix-code-viewer-empty-files-20260722
+
+      - name: Decode public source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          output='assets/code/apps-script/plain'
+          mkdir -p "$output"
+
+          base64 --decode assets/code/apps-script/Code.gs.txt.gz.b64 | gzip --decompress > "$output/Code.gs.txt"
+          base64 --decode assets/code/apps-script/index.html.txt.gz.b64 | gzip --decompress > "$output/index.html.txt"
+          cat assets/code/apps-script/style.html.txt.gz.b64.part* | base64 --decode | gzip --decompress > "$output/style.html.txt"
+          cat assets/code/apps-script/script.html.txt.gz.b64.part* | base64 --decode | gzip --decompress > "$output/script.html.txt"
+
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('assets/code/apps-script/plain/Code.gs.txt')
+          text = path.read_text(encoding='utf-8')
+          replacements = {
+              '1SYnQxZ3c8I_FQbzfo_3WRD53ZxTLqmbr': 'YOUR_TROPHY_IMAGE_FILE_ID',
+              '1tP_O0pdd2d3aG9BbuMQeTQc4-cQb2CZgRQmV2z3jEUI': 'YOUR_PREDICTION_SPREADSHEET_ID',
+              '1r0kR6EF1Pbw2kWYVWgNit0o-44PTRek-hIr2qukDbow': 'YOUR_TEAMS_SPREADSHEET_ID',
+              '1EiVauyu_2tTnhPmqyWDL-OGg6xz4omRYczYaux8LGng': 'YOUR_MATCHES_SPREADSHEET_ID',
+              '10GLz1zXG50XV-vJrcvCAxcTF0tXN8YAXyVQ3BYv8IL0': 'YOUR_PLAYERS_SPREADSHEET_ID',
+              '1RYtp89i8J1tPdpfaL8FujSvkng9kuFAWxIjCBxOkLVI': 'YOUR_EVENTS_SPREADSHEET_ID',
+          }
+          for source, replacement in replacements.items():
+              text = text.replace(source, replacement)
+          header = '// Versión pública completa: los identificadores privados fueron sustituidos por marcadores.\n'
+          if not text.startswith(header):
+              text = header + text
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          test -s "$output/Code.gs.txt"
+          test -s "$output/index.html.txt"
+          test -s "$output/style.html.txt"
+          test -s "$output/script.html.txt"
+
+          wc -l "$output"/*.txt
+
+      - name: Commit decoded files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/code/apps-script/plain
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Materializa código completo para el visor'
+          git push origin HEAD:fix-code-viewer-empty-files-20260722
