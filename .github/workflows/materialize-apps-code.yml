@@ -1,11 +1,13 @@
 name: Materialize Apps Script code
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix-code-viewer-empty-files-20260722
-    paths:
-      - '.github/workflows/materialize-apps-code.yml'
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
   workflow_dispatch:
 
 permissions:
@@ -13,12 +15,14 @@ permissions:
 
 jobs:
   materialize:
+    if: github.head_ref == 'fix-code-viewer-empty-files-20260722'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout correction branch
         uses: actions/checkout@v4
         with:
           ref: fix-code-viewer-empty-files-20260722
+          fetch-depth: 0
 
       - name: Decode public source files
         shell: bash
@@ -57,7 +61,6 @@ jobs:
           test -s "$output/index.html.txt"
           test -s "$output/style.html.txt"
           test -s "$output/script.html.txt"
-
           wc -l "$output"/*.txt
 
       - name: Commit decoded files
