@@ -455,7 +455,7 @@ function testPrediccionVivaData() {
     columnasPrediccionViva2026Original: prediccionViva2026Original.length > 0 ? Object.keys(prediccionViva2026Original[0]) : [],
 
     primerPartidoPrediccion2026: partidosPrediccion2026.length > 0 ? partidosPrediccion2026[0] : null,
-    primerPartidoPrediccionViva2026: partidosPrediccion2026.length > 0 ? partidosPrediccion2022026[0] : null,
+    primerPartidoPrediccionViva2026: partidosPrediccion2026.length > 0 ? partidosPrediccion2026[0] : null,
     primerPartidoPrediccionViva2026Original: prediccionViva2026Original.length > 0 ? prediccionViva2026Original[0] : null
   };
 

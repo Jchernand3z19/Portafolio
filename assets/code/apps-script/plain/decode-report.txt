@@ -2,13 +2,8 @@ Code.gs.txt: parts=1
   assets/code/apps-script/Code.gs.txt.gz.b64: exists=True size=4244
   encoded_chars=4244
   decoded_bytes=3182 magic=1f8b0800
-  status=error BadGzipFile: CRC check failed
-Traceback (most recent call last):
-  File "<stdin>", line 24, in decode
-  File "/usr/lib/python3.12/gzip.py", line 638, in decompress
-    raise BadGzipFile("CRC check failed")
-gzip.BadGzipFile: CRC check failed
-
+  text_chars=16232 lines=466
+  status=ok
 index.html.txt: parts=1
   assets/code/apps-script/index.html.txt.gz.b64: exists=True size=6964
   encoded_chars=6964
