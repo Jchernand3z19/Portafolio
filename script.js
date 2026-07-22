@@ -40,11 +40,11 @@
 
     const style=document.createElement('link');
     style.rel='stylesheet';
-    style.href='project-mundial.css?v=20260721-2205';
+    style.href='project-mundial.css?v=20260722-0015';
     document.head.appendChild(style);
 
     const projectScript=document.createElement('script');
-    projectScript.src='project-mundial.js?v=20260721-2205';
+    projectScript.src='project-mundial.js?v=20260722-0015';
     projectScript.defer=true;
     document.body.appendChild(projectScript);
   }
