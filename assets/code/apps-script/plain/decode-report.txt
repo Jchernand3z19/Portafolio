@@ -26,13 +26,9 @@ style.html.txt: parts=4
   status=ok
 script.html.txt: parts=3
   assets/code/apps-script/script.html.txt.gz.b64.part01: exists=True size=9900
-  assets/code/apps-script/script.html.txt.gz.b64.part02: exists=True size=9902
+  assets/code/apps-script/script.html.txt.gz.b64.part02: exists=True size=9900
   assets/code/apps-script/script.html.txt.gz.b64.part03: exists=True size=9900
-  encoded_chars=29702
-  status=error Error: Invalid base64-encoded string: number of data characters (29701) cannot be 1 more than a multiple of 4
-Traceback (most recent call last):
-  File "<stdin>", line 22, in decode
-  File "/usr/lib/python3.12/base64.py", line 88, in b64decode
-    return binascii.a2b_base64(s, strict_mode=validate)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-binascii.Error: Invalid base64-encoded string: number of data characters (29701) cannot be 1 more than a multiple of 4
+  encoded_chars=29700
+  decoded_bytes=22275 magic=1f8b0800
+  text_chars=99084 lines=3544
+  status=ok
