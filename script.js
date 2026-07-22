@@ -28,23 +28,53 @@
 
     const sections=[...document.querySelectorAll('[data-section]')];
     const nav=[...document.querySelectorAll('.nav__link')];
+    const progressDots=[...document.querySelectorAll('.scroll-progress__dot')];
+    const setActiveSection=id=>{
+      nav.forEach(a=>a.classList.toggle('is-active',a.getAttribute('href')==='#'+id));
+      progressDots.forEach(dot=>dot.classList.toggle('is-active',dot.dataset.sectionDot===id));
+    };
     if('IntersectionObserver' in window){
       const active=new IntersectionObserver(entries=>{
         const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio);
         if(!visible.length)return;
         const id=visible[0].target.id;
-        nav.forEach(a=>a.classList.toggle('is-active',a.getAttribute('href')==='#'+id));
+        setActiveSection(id);
       },{rootMargin:'-30% 0px -55% 0px',threshold:[.05,.25,.5]});
       sections.forEach(s=>active.observe(s));
     }
 
+
+const progressFill=document.getElementById('scroll-progress-fill');
+let scrollTicking=false;
+const updateScrollProgress=()=>{
+  const maxScroll=document.documentElement.scrollHeight-window.innerHeight;
+  const percentage=maxScroll>0?Math.min(100,Math.max(0,(window.scrollY/maxScroll)*100)):0;
+  if(progressFill)progressFill.style.height=`${percentage}%`;
+
+  const marker=window.scrollY+(window.innerHeight*.45);
+  let current=sections[0]?.id;
+  sections.forEach(section=>{
+    if(section.offsetTop<=marker)current=section.id;
+  });
+  if(current)setActiveSection(current);
+  scrollTicking=false;
+};
+
+window.addEventListener('scroll',()=>{
+  if(scrollTicking)return;
+  scrollTicking=true;
+  window.requestAnimationFrame(updateScrollProgress);
+},{passive:true});
+window.addEventListener('resize',updateScrollProgress);
+updateScrollProgress();
+
     const style=document.createElement('link');
     style.rel='stylesheet';
-    style.href='project-mundial.css?v=20260722-0015';
+    style.href='project-mundial.css?v=20260722-1801';
     document.head.appendChild(style);
 
     const projectScript=document.createElement('script');
-    projectScript.src='project-mundial.js?v=20260722-0015';
+    projectScript.src='project-mundial.js?v=20260722-1801';
     projectScript.defer=true;
     document.body.appendChild(projectScript);
   }
