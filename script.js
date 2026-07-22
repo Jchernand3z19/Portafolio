@@ -66,11 +66,11 @@
 
     const style=document.createElement('link');
     style.rel='stylesheet';
-    style.href='project-mundial.css?v=20260722-1928';
+    style.href='project-mundial.css?v=20260722-2013';
     document.head.appendChild(style);
 
     const projectScript=document.createElement('script');
-    projectScript.src='project-mundial.js?v=20260722-1928';
+    projectScript.src='project-mundial.js?v=20260722-2013';
     projectScript.defer=true;
     document.body.appendChild(projectScript);
   }
