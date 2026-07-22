@@ -7,74 +7,70 @@
         const open=links.classList.toggle('is-open');
         toggle.setAttribute('aria-expanded',String(open));
       });
-      links.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{
+      links.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>{
         links.classList.remove('is-open');
         toggle.setAttribute('aria-expanded','false');
       }));
     }
 
-    const items=[...document.querySelectorAll('.fade-in')];
+    const items=Array.from(document.querySelectorAll('.fade-in'));
     if('IntersectionObserver' in window){
-      const obs=new IntersectionObserver(entries=>entries.forEach(e=>{
-        if(e.isIntersecting){
-          e.target.classList.add('is-visible');
-          obs.unobserve(e.target);
-        }
-      }),{threshold:.12});
-      items.forEach(x=>obs.observe(x));
+      const appearanceObserver=new IntersectionObserver(entries=>{
+        entries.forEach(entry=>{
+          if(entry.isIntersecting){
+            entry.target.classList.add('is-visible');
+            appearanceObserver.unobserve(entry.target);
+          }
+        });
+      },{threshold:.12});
+      items.forEach(item=>appearanceObserver.observe(item));
     }else{
-      items.forEach(x=>x.classList.add('is-visible'));
+      items.forEach(item=>item.classList.add('is-visible'));
     }
 
-    const sections=[...document.querySelectorAll('[data-section]')];
-    const nav=[...document.querySelectorAll('.nav__link')];
-    const progressDots=[...document.querySelectorAll('.scroll-progress__dot')];
-    const setActiveSection=id=>{
-      nav.forEach(a=>a.classList.toggle('is-active',a.getAttribute('href')==='#'+id));
-      progressDots.forEach(dot=>dot.classList.toggle('is-active',dot.dataset.sectionDot===id));
-    };
+    const sections=Array.from(document.querySelectorAll('[data-section]'));
+    const navLinks=Array.from(document.querySelectorAll('.nav__link'));
+    const progressDots=Array.from(document.querySelectorAll('.scroll-progress__dot'));
+
+    function setActiveSection(id){
+      navLinks.forEach(link=>link.classList.remove('is-active'));
+      progressDots.forEach(dot=>dot.classList.remove('is-active'));
+
+      const currentLink=navLinks.find(link=>link.getAttribute('href')==='#'+id);
+      const currentDot=progressDots.find(dot=>dot.dataset.sectionDot===id);
+      if(currentLink)currentLink.classList.add('is-active');
+      if(currentDot)currentDot.classList.add('is-active');
+    }
+
     if('IntersectionObserver' in window){
-      const active=new IntersectionObserver(entries=>{
-        const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>b.intersectionRatio-a.intersectionRatio);
-        if(!visible.length)return;
-        const id=visible[0].target.id;
-        setActiveSection(id);
-      },{rootMargin:'-30% 0px -55% 0px',threshold:[.05,.25,.5]});
-      sections.forEach(s=>active.observe(s));
+      const activeSectionObserver=new IntersectionObserver(entries=>{
+        entries.forEach(entry=>{
+          if(entry.isIntersecting)setActiveSection(entry.target.id);
+        });
+      },{rootMargin:'-45% 0px -45% 0px',threshold:0});
+      sections.forEach(section=>activeSectionObserver.observe(section));
+    }else if(sections.length){
+      setActiveSection(sections[0].id);
     }
 
+    const progressFill=document.getElementById('scroll-progress-fill');
+    function updateProgressFill(){
+      const maxScroll=document.documentElement.scrollHeight-window.innerHeight;
+      const percentage=maxScroll>0?Math.min(100,Math.max(0,(window.scrollY/maxScroll)*100)):0;
+      if(progressFill)progressFill.style.height=percentage+'%';
+    }
 
-const progressFill=document.getElementById('scroll-progress-fill');
-let scrollTicking=false;
-const updateScrollProgress=()=>{
-  const maxScroll=document.documentElement.scrollHeight-window.innerHeight;
-  const percentage=maxScroll>0?Math.min(100,Math.max(0,(window.scrollY/maxScroll)*100)):0;
-  if(progressFill)progressFill.style.height=`${percentage}%`;
-
-  const marker=window.scrollY+(window.innerHeight*.45);
-  let current=sections[0]?.id;
-  sections.forEach(section=>{
-    if(section.offsetTop<=marker)current=section.id;
-  });
-  if(current)setActiveSection(current);
-  scrollTicking=false;
-};
-
-window.addEventListener('scroll',()=>{
-  if(scrollTicking)return;
-  scrollTicking=true;
-  window.requestAnimationFrame(updateScrollProgress);
-},{passive:true});
-window.addEventListener('resize',updateScrollProgress);
-updateScrollProgress();
+    window.addEventListener('scroll',updateProgressFill,{passive:true});
+    window.addEventListener('resize',updateProgressFill);
+    updateProgressFill();
 
     const style=document.createElement('link');
     style.rel='stylesheet';
-    style.href='project-mundial.css?v=20260722-1801';
+    style.href='project-mundial.css?v=20260722-1928';
     document.head.appendChild(style);
 
     const projectScript=document.createElement('script');
-    projectScript.src='project-mundial.js?v=20260722-1801';
+    projectScript.src='project-mundial.js?v=20260722-1928';
     projectScript.defer=true;
     document.body.appendChild(projectScript);
   }
