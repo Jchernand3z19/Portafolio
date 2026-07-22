@@ -1,7 +1,7 @@
 (() => {
   const DASHBOARD='https://script.google.com/macros/s/AKfycbzE26z7tcEbnwLPKSLLW8H_rK7UqwKV17rV8YBJVT4lB4slY0qorsf8cL4cnsys5ShGhw/exec';
   const REPO='https://github.com/Jchernand3z19/Portafolio/tree/main/mundial-2026-predicciones';
-  const BUILD='20260722-1801';
+  const BUILD='20260722-1928';
   const preview=['assets/mundial/resumen-01.txt','assets/mundial/resumen-02.txt','assets/mundial/resumen-03.txt'];
   const apps=[
     ['Code.gs','Servidor y acceso a datos','Publica el Web App, lee las hojas históricas y predictivas y entrega al navegador los objetos que utiliza el dashboard.','Solicitud web y tablas de Google Sheets.','HTML evaluado y colecciones de datos.','Los IDs reales fueron sustituidos por marcadores; no se publican credenciales.',['assets/code/apps-script/Code.gs.txt.gz.b64']],
