@@ -1,0 +1,38 @@
+Code.gs.txt: parts=1
+  assets/code/apps-script/Code.gs.txt.gz.b64: exists=True size=4175
+  encoded_chars=4175
+  status=error Error: Incorrect padding
+Traceback (most recent call last):
+  File "<stdin>", line 22, in decode
+  File "/usr/lib/python3.12/base64.py", line 88, in b64decode
+    return binascii.a2b_base64(s, strict_mode=validate)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+binascii.Error: Incorrect padding
+
+index.html.txt: parts=1
+  assets/code/apps-script/index.html.txt.gz.b64: exists=True size=6964
+  encoded_chars=6964
+  decoded_bytes=5223 magic=1f8b0800
+  text_chars=30098 lines=842
+  status=ok
+style.html.txt: parts=4
+  assets/code/apps-script/style.html.txt.gz.b64.part01: exists=True size=14007
+  assets/code/apps-script/style.html.txt.gz.b64.part02: exists=True size=14007
+  assets/code/apps-script/style.html.txt.gz.b64.part03: exists=True size=14007
+  assets/code/apps-script/style.html.txt.gz.b64.part04: exists=True size=14007
+  encoded_chars=56028
+  decoded_bytes=42020 magic=1f8b0800
+  text_chars=139488 lines=3971
+  status=ok
+script.html.txt: parts=3
+  assets/code/apps-script/script.html.txt.gz.b64.part01: exists=True size=9905
+  assets/code/apps-script/script.html.txt.gz.b64.part02: exists=True size=9902
+  assets/code/apps-script/script.html.txt.gz.b64.part03: exists=True size=9900
+  encoded_chars=29707
+  status=error Error: Invalid base64-encoded string: number of data characters (29705) cannot be 1 more than a multiple of 4
+Traceback (most recent call last):
+  File "<stdin>", line 22, in decode
+  File "/usr/lib/python3.12/base64.py", line 88, in b64decode
+    return binascii.a2b_base64(s, strict_mode=validate)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+binascii.Error: Invalid base64-encoded string: number of data characters (29705) cannot be 1 more than a multiple of 4
