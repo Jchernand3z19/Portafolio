@@ -90,7 +90,7 @@
     }
 
     .section {
-      padding-block: clamp(3.5rem, 7vw, 6rem);
+      padding-block: clamp(3rem, 6vw, 5rem);
     }
 
     .section-divider {
@@ -127,30 +127,30 @@
     #soluciones.section-glow::before {
       top: auto;
       right: auto;
-      bottom: -120px;
-      left: -120px;
+      bottom: -100px;
+      left: -100px;
     }
 
     #experiencia.section-glow::before {
-      top: -110px;
+      top: -100px;
       right: auto;
       bottom: auto;
-      left: -120px;
+      left: -100px;
     }
 
     #herramientas.section-glow::before {
       top: auto;
-      right: -120px;
-      bottom: -120px;
+      right: -100px;
+      bottom: -100px;
       left: auto;
     }
 
     #proyectos.section-glow::before {
-      top: -150px;
-      right: auto;
+      top: -100px;
+      right: 50%;
       bottom: auto;
-      left: 50%;
-      transform: translateX(-50%);
+      left: auto;
+      transform: translateX(50%);
     }
 
     .section-glow > * {
@@ -205,7 +205,7 @@
     }
 
     .section-heading p {
-      margin: -30px 0 48px;
+      margin: -30px 0 32px;
       max-width: 670px;
     }
 
@@ -319,7 +319,7 @@
     .hero {
       position: relative;
       display: grid;
-      min-height: calc(100vh - var(--header-height));
+      min-height: auto;
       place-items: center;
       overflow: hidden;
       text-align: center;
@@ -346,7 +346,7 @@
       position: relative;
       z-index: 1;
       max-width: 980px;
-      padding: 80px 0;
+      padding: clamp(3rem, 6vw, 5rem) 0;
     }
 
     .hero__eyebrow {
@@ -524,8 +524,8 @@
     }
 
     .solution-card {
-      min-height: 250px;
-      padding: clamp(1.25rem, 2.5vw, 1.75rem);
+      min-height: auto;
+      padding: clamp(1rem, 2.5vw, 1.5rem);
       background: var(--bg-main);
       border: 1px solid var(--border);
     }
@@ -568,7 +568,7 @@
     }
 
     .experience-card {
-      padding: clamp(1.25rem, 2vw, 1.5rem);
+      padding: clamp(1rem, 2vw, 1.5rem);
       background: var(--bg-alt);
       border: 1px solid transparent;
     }
@@ -606,7 +606,7 @@
     }
 
     .experience-card .badge {
-      margin-bottom: 22px;
+      margin-bottom: 14px;
     }
 
     .tool-group {
