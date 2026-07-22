@@ -70,11 +70,11 @@
       }
 
       .hero {
-        min-height: calc(100svh - var(--header-height));
+        min-height: auto;
       }
 
       .hero__content {
-        padding: 64px 0;
+        padding: clamp(3rem, 6vw, 5rem) 0;
       }
 
       .hero__subtitle {
