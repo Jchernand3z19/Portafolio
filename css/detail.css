@@ -274,15 +274,6 @@
       fill: currentColor;
     }
 
-    .site-footer {
-      padding: 26px 0;
-      color: var(--text-muted);
-      background: var(--bg-main);
-      border-top: 1px solid var(--border);
-      text-align: center;
-      font-size: 13px;
-    }
-
     .fade-in {
       opacity: 0;
       transform: translateY(20px);
@@ -298,4 +289,3 @@
       outline: 3px solid rgba(59, 130, 246, 0.6);
       outline-offset: 3px;
     }
-
