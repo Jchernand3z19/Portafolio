@@ -64,13 +64,26 @@
     window.addEventListener('resize',updateProgressFill);
     updateProgressFill();
 
+    if(!window.__portfolioAssetCacheFix){
+      const nativeFetch=window.fetch.bind(window);
+      window.fetch=(input,init)=>{
+        if(typeof input==='string'&&(input.includes('assets/code/apps-script/')||input.includes('assets/mundial/'))){
+          const url=new URL(input,window.location.href);
+          url.searchParams.set('assetfix','20260722-2037');
+          return nativeFetch(url.toString(),init);
+        }
+        return nativeFetch(input,init);
+      };
+      window.__portfolioAssetCacheFix=true;
+    }
+
     const style=document.createElement('link');
     style.rel='stylesheet';
-    style.href='project-mundial.css?v=20260722-2013';
+    style.href='project-mundial.css?v=20260722-2037';
     document.head.appendChild(style);
 
     const projectScript=document.createElement('script');
-    projectScript.src='project-mundial.js?v=20260722-2013';
+    projectScript.src='project-mundial.js?v=20260722-2037';
     projectScript.defer=true;
     document.body.appendChild(projectScript);
   }
