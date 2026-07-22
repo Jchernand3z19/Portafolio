@@ -1,13 +1,13 @@
 Code.gs.txt: parts=1
-  assets/code/apps-script/Code.gs.txt.gz.b64: exists=True size=4175
-  encoded_chars=4175
-  status=error Error: Incorrect padding
+  assets/code/apps-script/Code.gs.txt.gz.b64: exists=True size=4244
+  encoded_chars=4244
+  decoded_bytes=3182 magic=1f8b0800
+  status=error BadGzipFile: CRC check failed
 Traceback (most recent call last):
-  File "<stdin>", line 22, in decode
-  File "/usr/lib/python3.12/base64.py", line 88, in b64decode
-    return binascii.a2b_base64(s, strict_mode=validate)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-binascii.Error: Incorrect padding
+  File "<stdin>", line 24, in decode
+  File "/usr/lib/python3.12/gzip.py", line 638, in decompress
+    raise BadGzipFile("CRC check failed")
+gzip.BadGzipFile: CRC check failed
 
 index.html.txt: parts=1
   assets/code/apps-script/index.html.txt.gz.b64: exists=True size=6964
