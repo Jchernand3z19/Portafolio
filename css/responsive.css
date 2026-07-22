@@ -30,7 +30,7 @@
       }
 
       .section {
-        padding: 76px 0;
+        padding-block: clamp(2.5rem, 5vw, 4rem);
       }
 
       h2 {
