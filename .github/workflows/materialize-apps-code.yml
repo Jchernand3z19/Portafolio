@@ -28,19 +28,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          output='assets/code/apps-script/plain'
-          mkdir -p "$output"
-
-          base64 --decode assets/code/apps-script/Code.gs.txt.gz.b64 | gzip --decompress > "$output/Code.gs.txt"
-          base64 --decode assets/code/apps-script/index.html.txt.gz.b64 | gzip --decompress > "$output/index.html.txt"
-          cat assets/code/apps-script/style.html.txt.gz.b64.part* | base64 --decode | gzip --decompress > "$output/style.html.txt"
-          cat assets/code/apps-script/script.html.txt.gz.b64.part* | base64 --decode | gzip --decompress > "$output/script.html.txt"
-
           python - <<'PY'
           from pathlib import Path
+          import base64
+          import gzip
 
-          path = Path('assets/code/apps-script/plain/Code.gs.txt')
-          text = path.read_text(encoding='utf-8')
+          root = Path('assets/code/apps-script')
+          output = root / 'plain'
+          output.mkdir(parents=True, exist_ok=True)
+
+          def decode(paths, target):
+              encoded = ''.join(
+                  ''.join(path.read_text(encoding='utf-8').split())
+                  for path in paths
+              )
+              decoded = gzip.decompress(base64.b64decode(encoded)).decode('utf-8')
+              if not decoded.strip():
+                  raise RuntimeError(f'{target} quedó vacío')
+              (output / target).write_text(decoded, encoding='utf-8')
+
+          decode([root / 'Code.gs.txt.gz.b64'], 'Code.gs.txt')
+          decode([root / 'index.html.txt.gz.b64'], 'index.html.txt')
+          decode(sorted(root.glob('style.html.txt.gz.b64.part*')), 'style.html.txt')
+          decode(sorted(root.glob('script.html.txt.gz.b64.part*')), 'script.html.txt')
+
+          code_path = output / 'Code.gs.txt'
+          code = code_path.read_text(encoding='utf-8')
           replacements = {
               '1SYnQxZ3c8I_FQbzfo_3WRD53ZxTLqmbr': 'YOUR_TROPHY_IMAGE_FILE_ID',
               '1tP_O0pdd2d3aG9BbuMQeTQc4-cQb2CZgRQmV2z3jEUI': 'YOUR_PREDICTION_SPREADSHEET_ID',
@@ -50,18 +63,18 @@ jobs:
               '1RYtp89i8J1tPdpfaL8FujSvkng9kuFAWxIjCBxOkLVI': 'YOUR_EVENTS_SPREADSHEET_ID',
           }
           for source, replacement in replacements.items():
-              text = text.replace(source, replacement)
-          header = '// Versión pública completa: los identificadores privados fueron sustituidos por marcadores.\n'
-          if not text.startswith(header):
-              text = header + text
-          path.write_text(text, encoding='utf-8')
-          PY
+              code = code.replace(source, replacement)
 
-          test -s "$output/Code.gs.txt"
-          test -s "$output/index.html.txt"
-          test -s "$output/style.html.txt"
-          test -s "$output/script.html.txt"
-          wc -l "$output"/*.txt
+          header = '// Versión pública completa: los identificadores privados fueron sustituidos por marcadores.\n'
+          if not code.startswith(header):
+              code = header + code
+          code_path.write_text(code, encoding='utf-8')
+
+          for path in sorted(output.glob('*.txt')):
+              if path.stat().st_size == 0:
+                  raise RuntimeError(f'{path} quedó vacío')
+              print(f'{path}: {path.stat().st_size} bytes')
+          PY
 
       - name: Commit decoded files
         shell: bash
