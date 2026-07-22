@@ -25,7 +25,8 @@
       }
 
       .container {
-        width: min(100% - 30px, var(--container));
+        width: var(--container);
+        padding-inline: clamp(1rem, 4vw, 1.5rem);
       }
 
       .section {
@@ -143,10 +144,10 @@
       *,
       *::before,
       *::after {
-        scroll-behavior: auto !important;
-        transition-duration: 0.01ms !important;
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
+        scroll-behavior: auto;
+        transition-duration: 0.01ms;
+        animation-duration: 0.01ms;
+        animation-iteration-count: 1;
       }
 
       .fade-in {
