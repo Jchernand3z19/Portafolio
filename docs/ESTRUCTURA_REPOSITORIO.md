@@ -2,158 +2,129 @@
 
 ## Objetivo
 
-Mantener el portafolio preparado para crecer sin mezclar la página pública con el código técnico de cada proyecto.
+Mantener un único repositorio público y permitir que cada proyecto se revise sin mezclar sus archivos con los demás.
 
 ## Decisión de arquitectura
 
-`Portafolio` funciona como sitio central de presentación. Los proyectos de datos, automatización o dashboards deben utilizar repositorios independientes.
-
-El sitio puede conservar módulos visuales de cada proyecto, pero no sus pipelines completos, datasets, notebooks ni dependencias.
-
-## Estructura del sitio
+`Portafolio` es un monorepositorio. Cada proyecto completo se guarda en una carpeta principal de la raíz.
 
 ```text
 Portafolio/
+├── .github/workflows/
+├── css/
+├── js/
+├── docs/
+├── mundial-2026/
+├── <proyecto-futuro>/
 ├── index.html
 ├── script.js
-├── css/
-│   ├── base.css
-│   ├── detail.css
-│   ├── projects.css
-│   ├── responsive.css
-│   └── projects/
-│       └── <slug>.css
-├── js/
-│   ├── main.js
-│   └── projects/
-│       ├── registry.js
-│       └── <slug>.js
-├── assets/
-│   └── projects/
-│       └── <slug>/
-├── docs/
 ├── PROJECT_TEMPLATE.md
 ├── README.md
 └── .gitignore
 ```
 
-## Qué permanece en la raíz
+## Archivos compartidos
 
-- `index.html`: página publicada por GitHub Pages.
-- `script.js`: cargador pequeño de la aplicación principal.
-- `README.md`: explicación general del portafolio.
-- `PROJECT_TEMPLATE.md`: guía reutilizable.
-- `.gitignore`: exclusiones generales.
+La raíz y las carpetas compartidas contienen solamente elementos utilizados por todo el sitio:
 
-No deben colocarse en la raíz archivos como `project-algo.js`, `dashboard-final.pbix`, notebooks, exportaciones, scripts de extracción o datasets.
+- `index.html`: página principal publicada con GitHub Pages.
+- `script.js`: cargador mínimo de `js/main.js`.
+- `js/main.js`: navegación, animaciones y carga de proyectos.
+- `js/projects/registry.js`: registro común de tarjetas y vistas.
+- `css/base.css`: base visual del sitio.
+- `css/detail.css`: componentes compartidos de detalle.
+- `css/projects.css`: tarjetas compartidas.
+- `css/responsive.css`: reglas responsive generales.
+- `docs/`: decisiones y reglas generales.
 
-## Código del sitio
+No se deben guardar en la raíz notebooks, datasets, capturas o scripts exclusivos de un proyecto.
 
-### JavaScript general
+## Carpeta de cada proyecto
 
-```text
-js/main.js
-```
-
-Administra navegación, animaciones, progreso y carga de los módulos de proyectos.
-
-### Registro de proyectos
+La estructura se adapta al trabajo real:
 
 ```text
-js/projects/registry.js
-```
-
-Evita que un módulo reemplace o elimine las tarjetas de los demás.
-
-### Módulo visual de cada proyecto
-
-```text
-js/projects/<slug>.js
-css/projects/<slug>.css
-```
-
-El módulo contiene solamente:
-
-- Tarjeta del proyecto.
-- Vista detallada.
-- Enlaces al repositorio y demostración.
-- Eventos propios de la presentación.
-
-## Recursos visuales
-
-```text
-assets/projects/<slug>/
-```
-
-Ejemplo:
-
-```text
-assets/projects/precios-supermercados-sps/
-├── portada.webp
-├── dashboard-01.webp
-└── arquitectura.svg
-```
-
-## Repositorio técnico independiente
-
-Cada proyecto debe organizarse fuera de `Portafolio`:
-
-```text
-<slug>/
-├── .github/workflows/
-├── config/
-├── data/
-│   ├── samples/
-│   └── schemas/
-├── docs/
-├── src/
-├── tests/
+<slug-del-proyecto>/
 ├── README.md
 ├── requirements.txt
-└── .gitignore
+├── .env.example
+├── .gitignore
+├── portfolio/
+│   ├── <slug>.js
+│   ├── <slug>.css
+│   └── assets/
+├── config/
+├── data/
+├── dashboard/
+├── docs/
+├── notebooks/
+├── reports/
+├── scripts/
+├── src/
+└── tests/
 ```
 
-Se crean únicamente las carpetas que el proyecto realmente necesita.
+Solo se crean carpetas con contenido real.
 
-## Convención de nombres
+## Proyecto Mundial 2026
 
-Usar minúsculas y guiones:
+La organización actual es:
 
 ```text
-mundial-2026-analytics
-precios-supermercados-sps
-automatizacion-reportes
+mundial-2026/
+├── README.md
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── portfolio/
+│   ├── mundial-2026.js
+│   ├── mundial-2026.css
+│   └── assets/
+│       ├── mundial-dashboard-preview.svg
+│       └── dashboard/
+├── dashboard/
+│   └── apps-script/
+├── scripts/
+└── src/
 ```
 
-Evitar:
+Todos los recursos exclusivos que antes estaban en `assets/mundial/`, `assets/code/apps-script/`, `css/projects/mundial.css`, `js/projects/mundial.js` y `mundial-2026-predicciones/` quedan consolidados dentro de `mundial-2026/`.
+
+## GitHub Actions
+
+GitHub solo ejecuta workflows ubicados en `.github/workflows/`. Esta es la única excepción a la regla de que todo archivo específico permanezca dentro de la carpeta del proyecto.
+
+Los nombres deben identificar el proyecto:
 
 ```text
-Proyecto1
-prueba-final
-version-2
-carpeta-juan
+.github/workflows/mundial-2026-prediccion-diaria.yml
+.github/workflows/mundial-2026-prediccion-completa.yml
+.github/workflows/mundial-2026-prediccion-viva.yml
 ```
 
-## Flujo para agregar un proyecto
+Cada workflow debe usar:
 
-1. Crear su repositorio independiente.
-2. Completar su README y estructura técnica.
-3. Publicar una demostración o capturas verificables.
-4. Guardar las imágenes del portafolio en `assets/projects/<slug>/`.
-5. Crear `js/projects/<slug>.js`.
-6. Crear `css/projects/<slug>.css`.
-7. Registrar ambos recursos en `js/main.js`.
-8. Verificar enlaces, responsive y accesibilidad.
+```yaml
+defaults:
+  run:
+    working-directory: mundial-2026
+```
 
-## Estado transitorio del Mundial
+## Convenciones
 
-`mundial-2026-predicciones/` todavía permanece en este repositorio para evitar pérdida de código o ruptura de rutas existentes. Su migración debe realizarse hacia `mundial-2026-analytics` antes de eliminar la carpeta heredada.
+- Carpetas y repositorios en minúsculas y guiones.
+- Python en `snake_case.py`.
+- Un README por proyecto.
+- No publicar credenciales, tokens, cookies o datos privados.
+- No crear proyectos ficticios ni carpetas vacías.
+- Trabajar mediante rama y Pull Request para reorganizaciones importantes.
 
-## Reglas
+## Proceso para agregar un proyecto
 
-- No guardar credenciales, tokens ni llaves privadas.
-- No mezclar código técnico de varios proyectos.
-- No subir archivos temporales o duplicados.
-- No utilizar nombres ambiguos.
-- Mantener un README completo por proyecto.
-- Eliminar ramas temporales después de fusionarlas.
+1. Crear `<slug>/` en la raíz.
+2. Agregar su README y estructura real.
+3. Guardar sus archivos visuales en `<slug>/portfolio/`.
+4. Registrar sus rutas en `js/main.js`.
+5. Crear su workflow en `.github/workflows/` cuando sea necesario.
+6. Verificar enlaces, consola, diseño responsive y seguridad.
+7. Crear un Pull Request hacia `main`.

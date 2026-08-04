@@ -1,180 +1,155 @@
-# Plantilla para publicar un proyecto nuevo
+# Plantilla para un proyecto nuevo
 
-Reemplaza `<slug>` y los textos entre corchetes antes de publicar.
+Cada proyecto nuevo se crea como una carpeta independiente en la raíz del repositorio `Portafolio`.
 
-## 1. Repositorio técnico
-
-Crea un repositorio independiente:
+Usa un nombre en minúsculas, sin espacios y separado por guiones:
 
 ```text
-<slug>/
-├── .github/workflows/
+nombre-del-proyecto/
+```
+
+## Estructura base
+
+Crea únicamente las carpetas que tendrán contenido real.
+
+```text
+nombre-del-proyecto/
+├── README.md
+├── requirements.txt           # Cuando utilice Python
+├── .env.example               # Cuando requiera variables de entorno
+├── .gitignore                 # Reglas exclusivas, cuando sean necesarias
+├── portfolio/
+│   ├── nombre-del-proyecto.js
+│   ├── nombre-del-proyecto.css
+│   └── assets/
 ├── config/
 ├── data/
 │   ├── samples/
-│   └── schemas/
+│   └── README.md
+├── dashboard/
 ├── docs/
+├── notebooks/
+├── reports/
+├── scripts/
 ├── src/
-├── tests/
-├── README.md
-├── requirements.txt
-└── .gitignore
+└── tests/
 ```
 
-Ejemplo:
+No todas las carpetas son obligatorias. Un proyecto de Power BI, por ejemplo, puede no necesitar `src/`; un análisis pequeño puede no necesitar `dashboard/`.
 
-```text
-precios-supermercados-sps
-```
-
-Crea únicamente las carpetas que tengan contenido real.
-
-## 2. README del proyecto
+## Contenido mínimo del README
 
 ```markdown
-# [Nombre profesional del proyecto]
+# Nombre del proyecto
 
-[Descripción de una o dos líneas.]
+Descripción clara de una o dos líneas.
 
 ## Estado
 
-[Planificado / En desarrollo / Publicado / Mantenimiento]
+Planificado / En desarrollo / Publicado / Mantenimiento / Archivado.
 
 ## Problema
 
-[Situación concreta que origina el proyecto.]
+Situación concreta que se busca resolver.
 
 ## Objetivo
 
-[Resultado que se busca construir.]
+Resultado esperado.
 
-## Usuarios
+## Alcance
 
-[Quién utilizaría el dashboard, proceso o análisis.]
+Qué incluye y qué no incluye.
 
 ## Fuentes de datos
 
-- [Fuente 1]
-- [Fuente 2]
+Origen, condiciones de uso y restricciones.
 
-## Proceso
+## Arquitectura y proceso
 
-1. [Extracción]
-2. [Limpieza]
-3. [Estandarización]
-4. [Validación]
-5. [Publicación]
-
-## Arquitectura
-
-[Diagrama o explicación del flujo.]
+Extracción, limpieza, transformación, validación, almacenamiento y publicación.
 
 ## Tecnologías
 
-- [Herramienta]
-- [Herramienta]
+Herramientas realmente utilizadas.
 
 ## Estructura del proyecto
 
-[Árbol de carpetas y función de cada componente.]
+Árbol de carpetas y función de cada componente.
 
-## Ejecución
+## Instalación y ejecución
 
-[Pasos reproducibles.]
+Pasos reproducibles.
+
+## Pruebas
+
+Cómo validar el funcionamiento.
 
 ## Resultados
 
-[Indicadores, mejoras o entregables alcanzados.]
+Entregables o resultados reales.
 
 ## Seguridad y privacidad
 
-[Datos, credenciales y variables excluidas.]
+Datos y credenciales excluidos.
 
-## Próximos pasos
+## Limitaciones y próximos pasos
 
-[Mejoras pendientes reales.]
+Pendientes reales.
 ```
 
-## 3. Recursos dentro del portafolio
+## Integración con la página principal
 
-Guardar imágenes en:
+La presentación del proyecto debe permanecer dentro de su propia carpeta:
 
 ```text
-assets/projects/<slug>/
+nombre-del-proyecto/portfolio/nombre-del-proyecto.js
+nombre-del-proyecto/portfolio/nombre-del-proyecto.css
+nombre-del-proyecto/portfolio/assets/
 ```
 
-Crear el módulo visual en:
-
-```text
-js/projects/<slug>.js
-```
-
-Crear sus estilos en:
-
-```text
-css/projects/<slug>.css
-```
-
-## 4. Registro en `js/main.js`
+Después se agregan el CSS y el JavaScript en `js/main.js`:
 
 ```javascript
 const projectStyles = [
-  'css/projects/mundial.css',
-  'css/projects/<slug>.css'
+  'mundial-2026/portfolio/mundial-2026.css',
+  'nombre-del-proyecto/portfolio/nombre-del-proyecto.css'
 ];
 
 const projectModules = [
-  'js/projects/mundial.js',
-  'js/projects/<slug>.js'
+  'mundial-2026/portfolio/mundial-2026.js',
+  'nombre-del-proyecto/portfolio/nombre-del-proyecto.js'
 ];
 ```
 
-## 5. Estructura mínima del módulo visual
+El módulo debe registrarse con `window.PortfolioProjects.register(...)` y no debe borrar las tarjetas de los demás proyectos.
 
-```javascript
-(() => {
-  function card() {
-    return `
-      <article class="card">
-        <h3>Nombre del proyecto</h3>
-        <p>Descripción breve.</p>
-        <a href="https://github.com/Jchernand3z19/<slug>">Ver repositorio</a>
-      </article>`;
-  }
+## GitHub Actions
 
-  function detail() {
-    return `
-      <section id="<slug>-detalle" hidden>
-        <button id="cerrar-<slug>" type="button">Cerrar</button>
-        <h2>Nombre del proyecto</h2>
-      </section>`;
-  }
+Los workflows ejecutables deben estar en:
 
-  function setup() {
-    // Eventos exclusivos de esta presentación.
-  }
-
-  window.PortfolioProjects.register({
-    id: '<slug>',
-    cardHtml: card(),
-    detailHtml: detail(),
-    setup
-  });
-})();
+```text
+.github/workflows/
 ```
+
+Usa un nombre que identifique el proyecto:
+
+```text
+.github/workflows/nombre-del-proyecto-validacion.yml
+```
+
+El workflow debe apuntar a la carpeta correspondiente mediante `working-directory` y `PYTHONPATH` cuando aplique.
 
 ## Checklist
 
-- [ ] Repositorio independiente creado.
-- [ ] Nombre claro en minúsculas y guiones.
+- [ ] Carpeta principal en la raíz.
+- [ ] Nombre en minúsculas y guiones.
 - [ ] README completo.
-- [ ] Enlaces funcionales.
+- [ ] Código y recursos exclusivos dentro del proyecto.
 - [ ] Datos privados excluidos.
-- [ ] Variables de entorno documentadas.
+- [ ] `.env.example` sin valores reales.
 - [ ] Dependencias definidas.
+- [ ] Pruebas de funciones críticas.
 - [ ] Capturas optimizadas.
 - [ ] Tarjeta y detalle responsive.
-- [ ] JavaScript dentro de `js/projects/`.
-- [ ] CSS dentro de `css/projects/`.
-- [ ] Recursos dentro de `assets/projects/<slug>/`.
-- [ ] Código técnico fuera del repositorio `Portafolio`.
+- [ ] Workflow identificado y limitado al proyecto.
+- [ ] Sin carpetas vacías ni proyectos ficticios.

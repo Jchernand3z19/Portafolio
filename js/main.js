@@ -1,5 +1,5 @@
 (() => {
-  const BUILD = '20260804-1248';
+  const BUILD = '20260804-1714';
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -17,6 +17,86 @@
     style.rel = 'stylesheet';
     style.href = `${href}?v=${BUILD}`;
     document.head.appendChild(style);
+  }
+
+  function rewriteLegacyProjectUrl(value) {
+    if (typeof value !== 'string') return value;
+
+    return value
+      .replaceAll('assets/mundial/', 'mundial-2026/portfolio/assets/dashboard/')
+      .replaceAll('assets/code/apps-script/', 'mundial-2026/dashboard/apps-script/')
+      .replaceAll('mundial-2026-predicciones/', 'mundial-2026/');
+  }
+
+  function rewriteLegacyProjectLinks(root = document) {
+    if (!root?.querySelectorAll) return;
+
+    root.querySelectorAll('a[href]').forEach(anchor => {
+      const currentHref = anchor.getAttribute('href');
+      const rewrittenHref = rewriteLegacyProjectUrl(currentHref);
+      if (rewrittenHref && rewrittenHref !== currentHref) {
+        anchor.setAttribute('href', rewrittenHref);
+      }
+    });
+  }
+
+  function setupLegacyProjectCompatibility() {
+    if (!window.__portfolioAssetCacheFix) {
+      const nativeFetch = window.fetch.bind(window);
+
+      window.fetch = (input, init) => {
+        if (typeof input !== 'string') return nativeFetch(input, init);
+
+        const rewrittenInput = rewriteLegacyProjectUrl(input);
+        if (
+          rewrittenInput.includes('mundial-2026/') ||
+          rewrittenInput.includes('assets/projects/')
+        ) {
+          const url = new URL(rewrittenInput, window.location.href);
+          url.searchParams.set('assetfix', BUILD);
+          return nativeFetch(url.toString(), init);
+        }
+
+        return nativeFetch(rewrittenInput, init);
+      };
+
+      window.__portfolioAssetCacheFix = true;
+    }
+
+    rewriteLegacyProjectLinks();
+
+    if (!window.__portfolioLegacyLinkObserver && 'MutationObserver' in window) {
+      const observer = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+          if (mutation.type === 'attributes') {
+            rewriteLegacyProjectLinks(mutation.target.parentElement || document);
+            return;
+          }
+
+          mutation.addedNodes.forEach(node => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              rewriteLegacyProjectLinks(node);
+              if (node.matches?.('a[href]')) {
+                const currentHref = node.getAttribute('href');
+                const rewrittenHref = rewriteLegacyProjectUrl(currentHref);
+                if (rewrittenHref && rewrittenHref !== currentHref) {
+                  node.setAttribute('href', rewrittenHref);
+                }
+              }
+            }
+          });
+        });
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['href']
+      });
+
+      window.__portfolioLegacyLinkObserver = observer;
+    }
   }
 
   function setupSite() {
@@ -86,29 +166,14 @@
     window.addEventListener('resize', updateProgressFill);
     updateProgressFill();
 
-    if (!window.__portfolioAssetCacheFix) {
-      const nativeFetch = window.fetch.bind(window);
-      window.fetch = (input, init) => {
-        if (typeof input === 'string' && (
-          input.includes('assets/code/apps-script/') ||
-          input.includes('assets/mundial/') ||
-          input.includes('assets/projects/')
-        )) {
-          const url = new URL(input, window.location.href);
-          url.searchParams.set('assetfix', BUILD);
-          return nativeFetch(url.toString(), init);
-        }
-        return nativeFetch(input, init);
-      };
-      window.__portfolioAssetCacheFix = true;
-    }
+    setupLegacyProjectCompatibility();
 
     const projectStyles = [
-      'css/projects/mundial.css'
+      'mundial-2026/portfolio/mundial-2026.css'
     ];
 
     const projectModules = [
-      'js/projects/mundial.js'
+      'mundial-2026/portfolio/mundial-2026.js'
     ];
 
     projectStyles.forEach(loadStylesheet);
@@ -121,6 +186,7 @@
           Promise.resolve()
         );
       })
+      .then(() => rewriteLegacyProjectLinks())
       .catch(error => {
         console.error('No se pudieron cargar los proyectos del portafolio.', error);
       });
