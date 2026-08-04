@@ -1,11 +1,11 @@
-name: Prediccion Viva Mundial 2026
+name: Mundial 2026 - Prediccion viva
 
 on:
   workflow_dispatch:
 
   schedule:
-    # Corre todos los dias a las 6:30 AM hora Honduras
-    # Honduras UTC-6 -> 12:30 UTC
+    # Corre todos los dias a las 6:30 AM hora Honduras.
+    # Honduras UTC-6 -> 12:30 UTC.
     - cron: "30 12 * * *"
 
 permissions:
@@ -18,10 +18,10 @@ jobs:
 
     defaults:
       run:
-        working-directory: mundial-2026-predicciones
+        working-directory: mundial-2026
 
     env:
-      PYTHONPATH: ${{ github.workspace }}/mundial-2026-predicciones
+      PYTHONPATH: ${{ github.workspace }}/mundial-2026
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
       GOOGLE_CLIENT_EMAIL: ${{ secrets.GOOGLE_CLIENT_EMAIL }}
       GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
@@ -67,58 +67,29 @@ jobs:
               "token_uri": "https://oauth2.googleapis.com/token"
           }
 
-          with open("service_account.json", "w", encoding="utf-8") as f:
-              json.dump(service_account_info, f)
+          with open("service_account.json", "w", encoding="utf-8") as file:
+              json.dump(service_account_info, file)
 
           print("service_account.json creado correctamente")
-          print("Client email:", client_email)
           PY
 
       - name: Validar archivos requeridos
         run: |
-          echo "Validando archivos requeridos..."
-
-          if [ ! -f "scripts/04A_crear_dim_calendario_mundial_2026.py" ]; then
-            echo "ERROR: No existe scripts/04A_crear_dim_calendario_mundial_2026.py"
-            exit 1
-          fi
-
-          if [ ! -f "scripts/04_crear_fact_partidos_prediccion_2026.py" ]; then
-            echo "ERROR: No existe scripts/04_crear_fact_partidos_prediccion_2026.py"
-            exit 1
-          fi
-
-          if [ ! -f "requirements.txt" ]; then
-            echo "ERROR: No existe requirements.txt"
-            exit 1
-          fi
-
-          if [ ! -f "service_account.json" ]; then
-            echo "ERROR: No se pudo crear service_account.json"
-            exit 1
-          fi
-
-          echo "Archivos requeridos encontrados."
+          test -f scripts/04A_crear_dim_calendario_mundial_2026.py
+          test -f scripts/04_crear_fact_partidos_prediccion_2026.py
+          test -f requirements.txt
+          test -f service_account.json
 
       - name: Crear dim_calendario_mundial_2026
-        run: |
-          echo "Creando calendario normalizado dim_calendario_mundial_2026..."
-          python scripts/04A_crear_dim_calendario_mundial_2026.py
+        run: python scripts/04A_crear_dim_calendario_mundial_2026.py
 
       - name: Ejecutar tabla maestra fact_partidos_prediccion_2026
-        run: |
-          echo "Ejecutando tabla maestra fact_partidos_prediccion_2026..."
-          python scripts/04_crear_fact_partidos_prediccion_2026.py
+        run: python scripts/04_crear_fact_partidos_prediccion_2026.py
 
       - name: Ejecutar tabla final fact_prediccion_viva_2026 si existe
         run: |
           if [ -f "scripts/05_crear_fact_prediccion_viva_2026.py" ]; then
-            echo "Ejecutando tabla final fact_prediccion_viva_2026..."
             python scripts/05_crear_fact_prediccion_viva_2026.py
           else
             echo "scripts/05_crear_fact_prediccion_viva_2026.py todavia no existe. Se omite este paso."
           fi
-
-      - name: Finalizar
-        run: |
-          echo "Prediccion Viva Mundial 2026 actualizada correctamente."

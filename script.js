@@ -1,5 +1,5 @@
 (() => {
-  const BUILD = '20260804-1248';
+  const BUILD = '20260804-1714';
   const entrypoint = document.createElement('script');
   entrypoint.src = `js/main.js?v=${BUILD}`;
   entrypoint.defer = true;
