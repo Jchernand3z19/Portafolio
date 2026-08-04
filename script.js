@@ -1,96 +1,134 @@
 (() => {
-  function setupSite(){
-    const toggle=document.getElementById('menu-toggle');
-    const links=document.getElementById('nav-links');
-    if(toggle&&links){
-      toggle.addEventListener('click',()=>{
-        const open=links.classList.toggle('is-open');
-        toggle.setAttribute('aria-expanded',String(open));
+  const BUILD = '20260724-2242';
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = `${src}?v=${BUILD}`;
+      script.defer = true;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error(`No se pudo cargar ${src}`));
+      document.body.appendChild(script);
+    });
+  }
+
+  function loadStylesheet(href) {
+    const style = document.createElement('link');
+    style.rel = 'stylesheet';
+    style.href = `${href}?v=${BUILD}`;
+    document.head.appendChild(style);
+  }
+
+  function setupSite() {
+    const toggle = document.getElementById('menu-toggle');
+    const links = document.getElementById('nav-links');
+    if (toggle && links) {
+      toggle.addEventListener('click', () => {
+        const open = links.classList.toggle('is-open');
+        toggle.setAttribute('aria-expanded', String(open));
       });
-      links.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>{
+      links.querySelectorAll('a').forEach(link => link.addEventListener('click', () => {
         links.classList.remove('is-open');
-        toggle.setAttribute('aria-expanded','false');
+        toggle.setAttribute('aria-expanded', 'false');
       }));
     }
 
-    const items=Array.from(document.querySelectorAll('.fade-in'));
-    if('IntersectionObserver' in window){
-      const appearanceObserver=new IntersectionObserver(entries=>{
-        entries.forEach(entry=>{
-          if(entry.isIntersecting){
+    const items = Array.from(document.querySelectorAll('.fade-in'));
+    if ('IntersectionObserver' in window) {
+      const appearanceObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
             entry.target.classList.add('is-visible');
             appearanceObserver.unobserve(entry.target);
           }
         });
-      },{threshold:.12});
-      items.forEach(item=>appearanceObserver.observe(item));
-    }else{
-      items.forEach(item=>item.classList.add('is-visible'));
+      }, { threshold: .12 });
+      items.forEach(item => appearanceObserver.observe(item));
+    } else {
+      items.forEach(item => item.classList.add('is-visible'));
     }
 
-    const sections=Array.from(document.querySelectorAll('[data-section]'));
-    const navLinks=Array.from(document.querySelectorAll('.nav__link'));
-    const progressDots=Array.from(document.querySelectorAll('.scroll-progress__dot'));
+    const sections = Array.from(document.querySelectorAll('[data-section]'));
+    const navLinks = Array.from(document.querySelectorAll('.nav__link'));
+    const progressDots = Array.from(document.querySelectorAll('.scroll-progress__dot'));
 
-    function setActiveSection(id){
-      navLinks.forEach(link=>link.classList.remove('is-active'));
-      progressDots.forEach(dot=>dot.classList.remove('is-active'));
+    function setActiveSection(id) {
+      navLinks.forEach(link => link.classList.remove('is-active'));
+      progressDots.forEach(dot => dot.classList.remove('is-active'));
 
-      const currentLink=navLinks.find(link=>link.getAttribute('href')==='#'+id);
-      const currentDot=progressDots.find(dot=>dot.dataset.sectionDot===id);
-      if(currentLink)currentLink.classList.add('is-active');
-      if(currentDot)currentDot.classList.add('is-active');
+      const currentLink = navLinks.find(link => link.getAttribute('href') === `#${id}`);
+      const currentDot = progressDots.find(dot => dot.dataset.sectionDot === id);
+      if (currentLink) currentLink.classList.add('is-active');
+      if (currentDot) currentDot.classList.add('is-active');
     }
 
-    if('IntersectionObserver' in window){
-      const activeSectionObserver=new IntersectionObserver(entries=>{
-        entries.forEach(entry=>{
-          if(entry.isIntersecting)setActiveSection(entry.target.id);
+    if ('IntersectionObserver' in window) {
+      const activeSectionObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) setActiveSection(entry.target.id);
         });
-      },{rootMargin:'-45% 0px -45% 0px',threshold:0});
-      sections.forEach(section=>activeSectionObserver.observe(section));
-    }else if(sections.length){
+      }, { rootMargin: '-45% 0px -45% 0px', threshold: 0 });
+      sections.forEach(section => activeSectionObserver.observe(section));
+    } else if (sections.length) {
       setActiveSection(sections[0].id);
     }
 
-    const progressFill=document.getElementById('scroll-progress-fill');
-    function updateProgressFill(){
-      const maxScroll=document.documentElement.scrollHeight-window.innerHeight;
-      const percentage=maxScroll>0?Math.min(100,Math.max(0,(window.scrollY/maxScroll)*100)):0;
-      if(progressFill)progressFill.style.height=percentage+'%';
+    const progressFill = document.getElementById('scroll-progress-fill');
+    function updateProgressFill() {
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const percentage = maxScroll > 0
+        ? Math.min(100, Math.max(0, (window.scrollY / maxScroll) * 100))
+        : 0;
+      if (progressFill) progressFill.style.height = `${percentage}%`;
     }
 
-    window.addEventListener('scroll',updateProgressFill,{passive:true});
-    window.addEventListener('resize',updateProgressFill);
+    window.addEventListener('scroll', updateProgressFill, { passive: true });
+    window.addEventListener('resize', updateProgressFill);
     updateProgressFill();
 
-    if(!window.__portfolioAssetCacheFix){
-      const nativeFetch=window.fetch.bind(window);
-      window.fetch=(input,init)=>{
-        if(typeof input==='string'&&(input.includes('assets/code/apps-script/')||input.includes('assets/mundial/'))){
-          const url=new URL(input,window.location.href);
-          url.searchParams.set('assetfix','20260722-2037');
-          return nativeFetch(url.toString(),init);
+    if (!window.__portfolioAssetCacheFix) {
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        if (typeof input === 'string' && (
+          input.includes('assets/code/apps-script/') ||
+          input.includes('assets/mundial/') ||
+          input.includes('assets/projects/')
+        )) {
+          const url = new URL(input, window.location.href);
+          url.searchParams.set('assetfix', BUILD);
+          return nativeFetch(url.toString(), init);
         }
-        return nativeFetch(input,init);
+        return nativeFetch(input, init);
       };
-      window.__portfolioAssetCacheFix=true;
+      window.__portfolioAssetCacheFix = true;
     }
 
-    const style=document.createElement('link');
-    style.rel='stylesheet';
-    style.href='project-mundial.css?v=20260722-2037';
-    document.head.appendChild(style);
+    const projectStyles = [
+      'project-mundial.css'
+    ];
 
-    const projectScript=document.createElement('script');
-    projectScript.src='project-mundial.js?v=20260722-2037';
-    projectScript.defer=true;
-    document.body.appendChild(projectScript);
+    const projectModules = [
+      'project-mundial.js'
+    ];
+
+    projectStyles.forEach(loadStylesheet);
+
+    loadScript('project-registry.js')
+      .then(() => {
+        window.PortfolioProjects?.prepare();
+        return projectModules.reduce(
+          (sequence, module) => sequence.then(() => loadScript(module)),
+          Promise.resolve()
+        );
+      })
+      .catch(error => {
+        console.error('No se pudieron cargar los proyectos del portafolio.', error);
+      });
   }
 
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',setupSite);
-  }else{
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupSite);
+  } else {
     setupSite();
   }
 })();
