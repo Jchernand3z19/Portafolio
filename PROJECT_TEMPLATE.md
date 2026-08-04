@@ -1,44 +1,40 @@
-# Plantilla para un proyecto nuevo
+# Plantilla para publicar un proyecto nuevo
 
 Reemplaza `<slug>` y los textos entre corchetes antes de publicar.
 
-## Nombre y ubicación
+## 1. Repositorio técnico
+
+Crea un repositorio independiente:
 
 ```text
 <slug>/
+├── .github/workflows/
+├── config/
+├── data/
+│   ├── samples/
+│   └── schemas/
+├── docs/
+├── src/
+├── tests/
+├── README.md
+├── requirements.txt
+└── .gitignore
 ```
 
 Ejemplo:
 
 ```text
-precios-supermercados-sps/
+precios-supermercados-sps
 ```
 
-## Estructura sugerida
+Crea únicamente las carpetas que tengan contenido real.
 
-```text
-<slug>/
-├── README.md
-├── requirements.txt
-├── .env.example
-├── src/
-├── scripts/
-├── data/
-│   ├── samples/
-│   └── README.md
-├── dashboard/
-├── docs/
-└── tests/
-```
-
-Crea únicamente las carpetas que el proyecto realmente necesite.
-
-## Contenido del README del proyecto
+## 2. README del proyecto
 
 ```markdown
 # [Nombre profesional del proyecto]
 
-[Descripción de una o dos líneas sobre el producto analítico.]
+[Descripción de una o dos líneas.]
 
 ## Estado
 
@@ -50,7 +46,7 @@ Crea únicamente las carpetas que el proyecto realmente necesite.
 
 ## Objetivo
 
-[Resultado medible o producto que se busca construir.]
+[Resultado que se busca construir.]
 
 ## Usuarios
 
@@ -65,13 +61,13 @@ Crea únicamente las carpetas que el proyecto realmente necesite.
 
 1. [Extracción]
 2. [Limpieza]
-3. [Modelado]
+3. [Estandarización]
 4. [Validación]
 5. [Publicación]
 
 ## Arquitectura
 
-[Diagrama o explicación del flujo de datos.]
+[Diagrama o explicación del flujo.]
 
 ## Tecnologías
 
@@ -82,7 +78,7 @@ Crea únicamente las carpetas que el proyecto realmente necesite.
 
 [Árbol de carpetas y función de cada componente.]
 
-## Ejecución local
+## Ejecución
 
 [Pasos reproducibles.]
 
@@ -92,23 +88,48 @@ Crea únicamente las carpetas que el proyecto realmente necesite.
 
 ## Seguridad y privacidad
 
-[Qué datos o credenciales fueron excluidos.]
+[Datos, credenciales y variables excluidas.]
 
 ## Próximos pasos
 
 [Mejoras pendientes reales.]
 ```
 
-## Módulo del portafolio
+## 3. Recursos dentro del portafolio
 
-Crear en la raíz:
+Guardar imágenes en:
 
 ```text
-project-<slug>.js
-project-<slug>.css
+assets/projects/<slug>/
 ```
 
-Estructura mínima del JavaScript:
+Crear el módulo visual en:
+
+```text
+js/projects/<slug>.js
+```
+
+Crear sus estilos en:
+
+```text
+css/projects/<slug>.css
+```
+
+## 4. Registro en `js/main.js`
+
+```javascript
+const projectStyles = [
+  'css/projects/mundial.css',
+  'css/projects/<slug>.css'
+];
+
+const projectModules = [
+  'js/projects/mundial.js',
+  'js/projects/<slug>.js'
+];
+```
+
+## 5. Estructura mínima del módulo visual
 
 ```javascript
 (() => {
@@ -117,26 +138,20 @@ Estructura mínima del JavaScript:
       <article class="card">
         <h3>Nombre del proyecto</h3>
         <p>Descripción breve.</p>
-        <button id="abrir-mi-proyecto" type="button">Ver proyecto</button>
+        <a href="https://github.com/Jchernand3z19/<slug>">Ver repositorio</a>
       </article>`;
   }
 
   function detail() {
     return `
-      <section id="mi-proyecto-detalle" hidden>
-        <button id="cerrar-mi-proyecto" type="button">Cerrar</button>
+      <section id="<slug>-detalle" hidden>
+        <button id="cerrar-<slug>" type="button">Cerrar</button>
         <h2>Nombre del proyecto</h2>
       </section>`;
   }
 
   function setup() {
-    const detailView = document.getElementById('mi-proyecto-detalle');
-    document.getElementById('abrir-mi-proyecto').onclick = () => {
-      detailView.hidden = false;
-    };
-    document.getElementById('cerrar-mi-proyecto').onclick = () => {
-      detailView.hidden = true;
-    };
+    // Eventos exclusivos de esta presentación.
   }
 
   window.PortfolioProjects.register({
@@ -148,23 +163,10 @@ Estructura mínima del JavaScript:
 })();
 ```
 
-Después agregar ambos archivos en `script.js`:
+## Checklist
 
-```javascript
-const projectStyles = [
-  'project-mundial.css',
-  'project-<slug>.css'
-];
-
-const projectModules = [
-  'project-mundial.js',
-  'project-<slug>.js'
-];
-```
-
-## Checklist antes de publicar
-
-- [ ] Nombre claro y consistente.
+- [ ] Repositorio independiente creado.
+- [ ] Nombre claro en minúsculas y guiones.
 - [ ] README completo.
 - [ ] Enlaces funcionales.
 - [ ] Datos privados excluidos.
@@ -172,5 +174,7 @@ const projectModules = [
 - [ ] Dependencias definidas.
 - [ ] Capturas optimizadas.
 - [ ] Tarjeta y detalle responsive.
-- [ ] Código específico dentro de su carpeta.
-- [ ] Workflow separado, cuando aplique.
+- [ ] JavaScript dentro de `js/projects/`.
+- [ ] CSS dentro de `css/projects/`.
+- [ ] Recursos dentro de `assets/projects/<slug>/`.
+- [ ] Código técnico fuera del repositorio `Portafolio`.

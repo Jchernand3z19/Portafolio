@@ -2,132 +2,84 @@
 
 ## Objetivo
 
-Mantener el portafolio preparado para crecer sin mezclar código, datos, automatizaciones ni documentación entre proyectos.
+Mantener el portafolio preparado para crecer sin mezclar la página pública con el código técnico de cada proyecto.
 
 ## Decisión de arquitectura
 
-El sitio publicado permanece en la raíz porque GitHub Pages utiliza esa ubicación. Los proyectos técnicos se almacenan como carpetas hermanas independientes.
+`Portafolio` funciona como sitio central de presentación. Los proyectos de datos, automatización o dashboards deben utilizar repositorios independientes.
+
+El sitio puede conservar módulos visuales de cada proyecto, pero no sus pipelines completos, datasets, notebooks ni dependencias.
+
+## Estructura del sitio
 
 ```text
 Portafolio/
 ├── index.html
-├── css/
 ├── script.js
-├── project-registry.js
-├── project-<slug>.js
-├── project-<slug>.css
+├── css/
+│   ├── base.css
+│   ├── detail.css
+│   ├── projects.css
+│   ├── responsive.css
+│   └── projects/
+│       └── <slug>.css
+├── js/
+│   ├── main.js
+│   └── projects/
+│       ├── registry.js
+│       └── <slug>.js
 ├── assets/
-│   ├── mundial/
-│   ├── code/
 │   └── projects/
 │       └── <slug>/
-├── mundial-2026-predicciones/
-├── <nuevo-proyecto>/
 ├── docs/
 ├── PROJECT_TEMPLATE.md
-└── .github/workflows/
-```
-
-## Qué pertenece a la raíz
-
-La raíz contiene únicamente archivos necesarios para publicar y administrar el portafolio:
-
-- Página HTML principal.
-- Estilos y comportamiento general.
-- Registro y módulos visuales de los proyectos.
-- Recursos que el navegador necesita cargar.
-- Documentación general del repositorio.
-
-No debe utilizarse como carpeta de trabajo para archivos temporales, notebooks sueltos, exportaciones o datasets completos.
-
-## Qué pertenece a cada proyecto
-
-Cada proyecto técnico debe tener su propia carpeta:
-
-```text
-<slug-del-proyecto>/
 ├── README.md
-├── requirements.txt       # Cuando utiliza Python
-├── .env.example           # Solo nombres y valores de ejemplo
-├── src/                   # Código reutilizable
-├── scripts/               # Procesos ejecutables
-├── notebooks/             # Solo si aportan al proyecto
-├── data/
-│   ├── samples/           # Datos pequeños y públicos
-│   └── README.md          # Origen y restricciones de los datos
-├── dashboard/             # PBIX, Looker, Apps Script u otros recursos
-├── docs/                  # Arquitectura y decisiones propias
-└── tests/                 # Validaciones automatizadas
+└── .gitignore
 ```
 
-No todas las carpetas son obligatorias. Deben crearse solo cuando tengan contenido real.
+## Qué permanece en la raíz
 
-## Convención de nombres
+- `index.html`: página publicada por GitHub Pages.
+- `script.js`: cargador pequeño de la aplicación principal.
+- `README.md`: explicación general del portafolio.
+- `PROJECT_TEMPLATE.md`: guía reutilizable.
+- `.gitignore`: exclusiones generales.
 
-Usar minúsculas y guiones:
+No deben colocarse en la raíz archivos como `project-algo.js`, `dashboard-final.pbix`, notebooks, exportaciones, scripts de extracción o datasets.
+
+## Código del sitio
+
+### JavaScript general
 
 ```text
-mundial-2026-predicciones
-precios-supermercados-sps
-automatizacion-reportes-comerciales
+js/main.js
 ```
 
-Evitar nombres como:
+Administra navegación, animaciones, progreso y carga de los módulos de proyectos.
+
+### Registro de proyectos
 
 ```text
-proyecto-nuevo
-prueba-final
-version-2
-carpeta-juan
+js/projects/registry.js
 ```
 
-El nombre debe explicar el problema o producto analítico.
+Evita que un módulo reemplace o elimine las tarjetas de los demás.
 
-## Publicación de proyectos en el sitio
-
-Cada proyecto visible utiliza dos recursos independientes:
+### Módulo visual de cada proyecto
 
 ```text
-project-<slug>.js
-project-<slug>.css
+js/projects/<slug>.js
+css/projects/<slug>.css
 ```
 
-El JavaScript genera:
+El módulo contiene solamente:
 
 - Tarjeta del proyecto.
 - Vista detallada.
-- Eventos y navegación propios.
-
-El módulo debe registrarse con `project-registry.js`:
-
-```javascript
-window.PortfolioProjects.register({
-  id: 'mi-proyecto',
-  cardHtml: card(),
-  detailHtml: detail(),
-  setup: setupProject
-});
-```
-
-Después se agrega a las listas de `script.js`:
-
-```javascript
-const projectStyles = [
-  'project-mundial.css',
-  'project-mi-proyecto.css'
-];
-
-const projectModules = [
-  'project-mundial.js',
-  'project-mi-proyecto.js'
-];
-```
-
-Esta estructura evita que un módulo use `innerHTML` para eliminar las tarjetas de los demás.
+- Enlaces al repositorio y demostración.
+- Eventos propios de la presentación.
 
 ## Recursos visuales
-
-Los recursos nuevos deben ubicarse en:
 
 ```text
 assets/projects/<slug>/
@@ -136,69 +88,72 @@ assets/projects/<slug>/
 Ejemplo:
 
 ```text
-assets/projects/precios-supermercados-sps/portada.webp
-assets/projects/precios-supermercados-sps/dashboard-01.webp
-assets/projects/precios-supermercados-sps/arquitectura.svg
+assets/projects/precios-supermercados-sps/
+├── portada.webp
+├── dashboard-01.webp
+└── arquitectura.svg
 ```
 
-Los recursos heredados del Mundial permanecen en `assets/mundial/` para conservar las rutas ya publicadas.
+## Repositorio técnico independiente
 
-## Automatizaciones
-
-Cada proyecto debe tener un workflow separado:
+Cada proyecto debe organizarse fuera de `Portafolio`:
 
 ```text
-.github/workflows/<slug>.yml
+<slug>/
+├── .github/workflows/
+├── config/
+├── data/
+│   ├── samples/
+│   └── schemas/
+├── docs/
+├── src/
+├── tests/
+├── README.md
+├── requirements.txt
+└── .gitignore
 ```
 
-Un workflow debe:
+Se crean únicamente las carpetas que el proyecto realmente necesita.
 
-- Definir su `working-directory`.
-- Instalar únicamente sus dependencias.
-- Referenciar secretos por nombre.
-- Validar los archivos requeridos antes de ejecutar.
-- No imprimir llaves privadas ni tokens.
+## Convención de nombres
 
-## Documentación mínima
+Usar minúsculas y guiones:
 
-Cada README de proyecto debe responder:
+```text
+mundial-2026-analytics
+precios-supermercados-sps
+automatizacion-reportes
+```
 
-1. ¿Qué problema resuelve?
-2. ¿Quién utilizaría el resultado?
-3. ¿Qué fuentes utiliza?
-4. ¿Cómo transforma los datos?
-5. ¿Qué métricas o salidas genera?
-6. ¿Cómo se ejecuta?
-7. ¿Qué información sensible fue excluida?
-8. ¿Cuál es su estado actual?
+Evitar:
 
-## Reglas para datos y secretos
+```text
+Proyecto1
+prueba-final
+version-2
+carpeta-juan
+```
 
-- No confirmar `.env`, cuentas de servicio, tokens ni contraseñas.
-- No publicar información empresarial o personal sin autorización.
-- Preferir datos de muestra pequeños.
-- Documentar el origen y la fecha de actualización.
-- Usar GitHub Secrets para automatizaciones.
-- Incluir `.env.example` sin valores reales.
+## Flujo para agregar un proyecto
 
-## Flujo para crear el siguiente proyecto
+1. Crear su repositorio independiente.
+2. Completar su README y estructura técnica.
+3. Publicar una demostración o capturas verificables.
+4. Guardar las imágenes del portafolio en `assets/projects/<slug>/`.
+5. Crear `js/projects/<slug>.js`.
+6. Crear `css/projects/<slug>.css`.
+7. Registrar ambos recursos en `js/main.js`.
+8. Verificar enlaces, responsive y accesibilidad.
 
-1. Copiar la estructura de `PROJECT_TEMPLATE.md`.
-2. Crear una carpeta hermana de `mundial-2026-predicciones/`.
-3. Desarrollar y documentar el proyecto dentro de esa carpeta.
-4. Crear recursos en `assets/projects/<slug>/`.
-5. Crear `project-<slug>.js` y `project-<slug>.css`.
-6. Registrar el módulo en `script.js`.
-7. Crear un workflow separado cuando necesite automatización.
-8. Verificar enlaces, vista móvil, datos sensibles y README.
+## Estado transitorio del Mundial
 
-## Estado de proyectos
+`mundial-2026-predicciones/` todavía permanece en este repositorio para evitar pérdida de código o ruptura de rutas existentes. Su migración debe realizarse hacia `mundial-2026-analytics` antes de eliminar la carpeta heredada.
 
-Solo deben mostrarse en la página proyectos que tengan al menos:
+## Reglas
 
-- Descripción completa.
-- Evidencia visual o dashboard.
-- Código o explicación técnica verificable.
-- Enlaces funcionales.
-
-Los proyectos incompletos pueden permanecer en una rama de trabajo, pero no deben aparecer como tarjetas activas en el portafolio principal.
+- No guardar credenciales, tokens ni llaves privadas.
+- No mezclar código técnico de varios proyectos.
+- No subir archivos temporales o duplicados.
+- No utilizar nombres ambiguos.
+- Mantener un README completo por proyecto.
+- Eliminar ramas temporales después de fusionarlas.
