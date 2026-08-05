@@ -9,10 +9,10 @@ location:
   evidence: Catálogo público en línea sin selección obligatoria de ciudad o sucursal.
   confidence: null
 source:
-  type: vtex_store_framework_graphql
+  type: vtex_store_framework_graphql_explicit
   endpoint: https://www.lacolonia.com/_v/segment/graphql/v1
   operation: productSearchV3
-  persisted_query_hash: c351315ecde7f473587b710ac8b97f147ac0ac0cd3060c27c695843a72fd3903
+  query_origin: vtex.store-resources/QueryProductSearchV3
   category_query: supermercado
   category_map: category-1
 limits:
