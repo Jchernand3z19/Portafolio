@@ -32,7 +32,7 @@ BASE_URL = "https://www.lacolonia.com"
 CATALOG_URL = f"{BASE_URL}/supermercado"
 GRAPHQL_URL = GRAPHQL_ENDPOINT
 ROBOTS_URL = f"{BASE_URL}/robots.txt"
-EXTRACTOR_VERSION = "0.3.0"
+EXTRACTOR_VERSION = "0.3.1"
 SCHEMA_VERSION = "1.0.0"
 USER_AGENT = (
     "PreciosSupermercadosSPS-LaColonia/0.3 "
@@ -214,13 +214,19 @@ class LaColoniaExtractor:
             products_requested=page_size,
             source_url=source_url,
         )
+        product_page_complete = metrics.products_returned == expected_products
         if metrics.products_returned < expected_products:
             events.append("quality:partial_product_page")
+        elif metrics.products_returned > expected_products:
+            metrics.structural_events += 1
+            events.append("structure:unexpected_product_count")
 
         accepted = (
             metrics.skus_with_price > 0
-            and metrics.structural_events == 0
             and metrics.skus_extracted > 0
+            and metrics.structural_events == 0
+            and metrics.errors == 0
+            and product_page_complete
         )
         return ExtractionResult(
             products=tuple(raw_products),
