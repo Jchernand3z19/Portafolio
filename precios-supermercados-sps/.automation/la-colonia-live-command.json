@@ -1,12 +1,8 @@
 {
-  "request_id": "la-colonia-baseline-products-500-002",
+  "request_id": "la-colonia-window-diagnostic-380-399-001",
   "supermarket": "la_colonia",
-  "mode": "staged",
-  "page_size": 20,
-  "max_pages": 0,
-  "max_products": 500,
+  "mode": "diagnostic_overlap",
+  "diagnostic_plan": "frontier_380_399_v1",
   "delay_seconds": 1.5,
-  "profile": "baseline",
-  "thresholds": null,
   "allow_full": false
 }
