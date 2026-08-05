@@ -1,0 +1,104 @@
+name: La Colonia - Despachador seguro por comentario
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+  actions: write
+
+jobs:
+  dispatch-command:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Descargar código confiable desde main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Obtener metadatos verificados del Pull Request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const target = 'dispatcher-pr.json';
+            if (!context.payload.issue?.pull_request) {
+              fs.writeFileSync(target, 'null', 'utf8');
+              return;
+            }
+            const { data: pull } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.issue.number,
+            });
+            const selected = {
+              state: pull.state,
+              base: { repo: { full_name: pull.base?.repo?.full_name } },
+              head: {
+                ref: pull.head?.ref,
+                repo: {
+                  full_name: pull.head?.repo?.full_name,
+                  fork: Boolean(pull.head?.repo?.fork),
+                },
+              },
+            };
+            fs.writeFileSync(target, JSON.stringify(selected), 'utf8');
+
+      - name: Validar identidad, Pull Request y comando
+        env:
+          PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+        run: >-
+          python precios-supermercados-sps/scripts/procesar_comando_la_colonia.py
+          --event "$GITHUB_EVENT_PATH"
+          --pr dispatcher-pr.json
+          --output dispatcher-decision.json
+
+      - name: Despachar o responder de forma segura
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const decision = JSON.parse(fs.readFileSync('dispatcher-decision.json', 'utf8'));
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = context.payload.issue.number;
+
+            if (decision.accepted) {
+              try {
+                await github.rest.actions.createWorkflowDispatch({
+                  owner,
+                  repo,
+                  workflow_id: decision.workflow,
+                  ref: decision.ref,
+                  inputs: decision.inputs,
+                });
+              } catch (error) {
+                const marker = `<!-- la-colonia-dispatch-request:${context.payload.comment.id} -->`;
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body: `No fue posible enviar la solicitud del workflow. No se ejecutó ningún recorrido.\n\n${marker}`,
+                });
+                throw error;
+              }
+            }
+
+            if (decision.should_comment) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: decision.comment,
+              });
+            }
