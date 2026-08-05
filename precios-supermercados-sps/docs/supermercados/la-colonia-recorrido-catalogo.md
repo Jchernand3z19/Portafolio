@@ -4,7 +4,7 @@
 
 Esta fase valida el recorrido secuencial del catálogo público de La Colonia sin persistir productos, precios ni historial.
 
-Se conserva la fuente ya aprobada:
+Fuente aprobada:
 
 ```text
 https://www.lacolonia.com/_v/segment/graphql/v1
@@ -12,7 +12,7 @@ https://www.lacolonia.com/_v/segment/graphql/v1
 
 La operación continúa siendo `productSearchV3`, con `hideUnavailableItems = false` y `skusFilter = ALL`.
 
-La ubicación no cambia:
+Ubicación provisional:
 
 ```text
 location_id = la_colonia_online
@@ -21,199 +21,179 @@ location_evidence = "Catálogo público en línea sin selección obligatoria de 
 location_confidence = null
 ```
 
-## Arquitectura
+## Arquitectura y seguridad
 
-`LaColoniaCatalogRunner` orquesta el recorrido, pero no duplica el parser.
+`LaColoniaCatalogRunner` orquesta el recorrido sin duplicar el parser existente:
 
 ```text
 LaColoniaCatalogRunner
-  -> construye URL pública GraphQL
-  -> realiza una solicitud secuencial
+  -> construye la URL pública GraphQL
+  -> realiza solicitudes secuenciales
   -> mide respuesta y reintentos
   -> llama LaColoniaExtractor.parse_payload()
   -> valida continuidad global
   -> deduplica transversalmente por llave fuente
   -> calcula métricas y aceptación
   -> mantiene RawProduct en memoria
-  -> genera solamente un resumen sanitizado
+  -> genera solamente resúmenes sanitizados
 ```
 
-La concurrencia permanece fija en `1`.
+Controles vigentes:
 
-## Configuración
+- concurrencia fija en `1`;
+- pausa de `1.5` segundos entre solicitudes;
+- workflow live exclusivamente bajo `workflow_dispatch`;
+- controlador por archivo ejecutado desde código confiable de `main`;
+- observador de solo lectura para recuperar identificadores cuando GitHub bloquea comentarios;
+- ningún producto, nombre comercial, URL de producto o precio individual se publica en los informes;
+- `full` requiere confirmación, perfil validation, umbrales explícitos y preflight aceptado.
+
+## Evaluación live del tamaño de página
+
+Los cuatro smokes utilizaron dos páginas, perfil `baseline`, concurrencia `1`, pausa de `1.5` segundos y `allow_full = false`.
+
+| Page size | Request ID | Commit | Controller run | Live run | Artifact | Productos | Bytes | Duración (s) | Promedio respuesta (s) | Resultado |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 10 | `la-colonia-smoke-10-004` | `16216fcd55336b5626796e56a853edf95a4e9cbc` | `31029403314` | `31029426216` | `8940008559` | 20 | 21695 | 1.733578 | 0.114573 | aceptado |
+| 20 | `la-colonia-smoke-20-001` | `747b950c0b048b2e3f1993dd8a7cf16ad72f578d` | `31029708366` | `31029728345` | `8940131295` | 40 | 42520 | 2.784899 | 0.639207 | aceptado |
+| 30 | `la-colonia-smoke-30-001` | `e19b4170d2072a4cd51cc95b5d34a9bbabcd7668` | `31030837848` | `31030854363` | `8940583167` | 60 | 62137 | 3.312173 | 0.901944 | aceptado |
+| 50 | `la-colonia-smoke-50-001` | `b9fee4d49f27e957f191c1ccd21ebf6b0b0cd308` | `31031105558` | `31031119831` | `8940690642` | 100 | 106217 | 2.994802 | 0.740312 | aceptado |
+
+En los cuatro smokes hubo cobertura completa, cero errores, cero eventos estructurales, cero duplicados, cero reintentos y cero bloqueos HTTP. El total permaneció en `9291`.
+
+Se recomienda `page_size = 20`: es el menor tamaño probado que reduce las solicitudes estimadas un 50 % frente a tamaño 10, de 930 a 465 páginas, sin aumentar el riesgo observado. Los tamaños 30 y 50 también fueron aceptados, pero incrementan el payload por petición.
+
+## Staged baseline de diez páginas
+
+Solicitud operacional:
+
+```json
+{
+  "request_id": "la-colonia-staged-pages-20-001",
+  "supermarket": "la_colonia",
+  "mode": "staged",
+  "page_size": 20,
+  "max_pages": 10,
+  "max_products": 0,
+  "delay_seconds": 1.5,
+  "profile": "baseline",
+  "thresholds": null,
+  "allow_full": false
+}
+```
+
+Trazabilidad:
 
 ```text
-page_size
-max_pages
-max_products
-delay_seconds
-max_retries
-stop_on_error
-order_by
-max_duration_seconds
+commit_sha = 6185ac4671694784d5d0c0becabfaae340f0dd7d
+controller_run_id = 31032502746
+live_run_id = 31032519694
+artifact_id = 8941246437
+exit_code = 0
 ```
 
-`max_products` debe ser múltiplo de `page_size`. Esto evita cambiar el tamaño de página durante una ejecución.
+Resultado global:
 
-Los tamaños live permitidos y ya evaluados son:
+| Métrica | Valor |
+|---|---:|
+| `accepted` | `true` |
+| `page_size` | 20 |
+| `pages_expected` | 10 |
+| `pages_attempted` | 10 |
+| `pages_completed` | 10 |
+| `page_coverage` | 1.0 |
+| `products_reported_initial` | 9291 |
+| `products_reported_final` | 9291 |
+| `catalog_pages_reported` | 465 |
+| `products_returned` | 200 |
+| `products_processed` | 200 |
+| `skus_returned` | 200 |
+| `skus_extracted` | 200 |
+| `skus_with_price` | 200 |
+| `skus_without_price` | 0 |
+| `skus_pending_review` | 200 |
+| `promotional_skus` | 17 |
+| `weighted_skus` | 0 |
+| `duplicate_skus` | 0 |
+| `duplicate_products` | 0 |
+| `response_bytes` | 226635 |
+| `duration_seconds` | 20.344055 |
+| `average_response_seconds` | 0.6815969079 |
+| `average_response_bytes` | 22663.5 |
+| `delay_seconds_applied` | 13.5 |
+| `http_403` | 0 |
+| `http_429` | 0 |
+| `persistent_http_429` | 0 |
+| `http_5xx` | 0 |
+| `retries` | 0 |
+| `errors` | 0 |
+| `structural_events` | 0 |
+| `total_change_absolute` | 0 |
+| `total_change_ratio` | 0.0 |
+| `missing_price_ratio` | 0.0 |
+| `duplicate_sku_ratio` | 0.0 |
+| `duplicate_product_ratio` | 0.0 |
+| `warnings` | `["ordering_is_not_strictly_unique"]` |
+| `rejection_reasons` | `[]` |
+| `full_started` | `false` |
+
+Resultado por página:
+
+| Página | Rango | Esperados | Devueltos | SKU devueltos | SKU extraídos | SKU con precio | Bytes | Respuesta (s) | Accepted | Eventos de calidad |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|
+| 1 | 0–19 | 20 | 20 | 20 | 20 | 20 | 21631 | 0.164400 | true | disponibilidad/precio con cantidad cero |
+| 2 | 20–39 | 20 | 20 | 20 | 20 | 20 | 20889 | 0.031345 | true | disponibilidad/precio con cantidad cero |
+| 3 | 40–59 | 20 | 20 | 20 | 20 | 20 | 19681 | 0.442693 | true | disponibilidad/precio con cantidad cero |
+| 4 | 60–79 | 20 | 20 | 20 | 20 | 20 | 22947 | 0.659116 | true | disponibilidad/precio con cantidad cero |
+| 5 | 80–99 | 20 | 20 | 20 | 20 | 20 | 21261 | 0.511892 | true | disponibilidad/precio con cantidad cero |
+| 6 | 100–119 | 20 | 20 | 20 | 20 | 20 | 22037 | 0.844520 | true | disponibilidad/precio con cantidad cero |
+| 7 | 120–139 | 20 | 20 | 20 | 20 | 20 | 19879 | 0.480741 | true | disponibilidad/precio con cantidad cero |
+| 8 | 140–159 | 20 | 20 | 20 | 20 | 20 | 24620 | 2.231997 | true | disponibilidad/precio con cantidad cero |
+| 9 | 160–179 | 20 | 20 | 20 | 20 | 20 | 27509 | 0.818855 | true | disponibilidad/precio con cantidad cero |
+| 10 | 180–199 | 20 | 20 | 20 | 20 | 20 | 26181 | 0.630410 | true | disponibilidad/precio con cantidad cero |
+
+El desglose por página no incluye un campo independiente `skus_with_price`; el valor 20 por página se deriva necesariamente de 20 SKU extraídos en cada página y `200/200` SKU con precio en el agregado.
+
+## Continuidad y ordenamiento
+
+La ejecución staged confirmó:
+
+- rangos consecutivos desde `0–19` hasta `180–199`;
+- ausencia de saltos y solapamientos;
+- diez tamaños de página completos y constantes;
+- orden constante `OrderByNameASC`;
+- diez firmas de página diferentes;
+- ninguna página repetida;
+- ninguna detención anticipada;
+- total inicial y final iguales a `9291`;
+- cero duplicados globales de SKU y producto.
+
+La advertencia `ordering_is_not_strictly_unique` continúa documentada porque el orden público no incluye una llave secundaria única. En este staged no hubo evidencia observable de movimiento entre páginas, repetición, ausencia, solapamiento ni cambio del total relacionado con el ordenamiento.
+
+## Disponibilidad
+
+Las diez páginas registraron:
 
 ```text
-10
-20
-30
-50
+quality:availability_conflict_price_with_zero_quantity
 ```
 
-## Resultados live del tamaño de página
+Los `200` SKU quedaron pendientes de revisión: proporción `200 / 200 = 1.0` o `100 %`.
 
-Las cuatro pruebas se ejecutaron en modo `smoke`, con dos páginas, perfil `baseline`, concurrencia `1`, pausa de `1.5` segundos y `allow_full = false`.
+La proporción no cambió respecto a los smokes, donde también todos los SKU de cada muestra quedaron pendientes. Continúa siendo una advertencia de calidad no estructural: no provocó rechazo, pérdida de precios, errores, duplicados ni interrupción del recorrido. Esta ejecución por sí sola no justifica modificar la regla de disponibilidad.
 
-### Trazabilidad
+## Baseline y umbrales
 
-| Page size | Request ID | Commit | Controller run | Live run | Artifact |
-|---:|---|---|---:|---:|---:|
-| 10 | `la-colonia-smoke-10-004` | `16216fcd55336b5626796e56a853edf95a4e9cbc` | `31029403314` | `31029426216` | `8940008559` |
-| 20 | `la-colonia-smoke-20-001` | `747b950c0b048b2e3f1993dd8a7cf16ad72f578d` | `31029708366` | `31029728345` | `8940131295` |
-| 30 | `la-colonia-smoke-30-001` | `e19b4170d2072a4cd51cc95b5d34a9bbabcd7668` | `31030837848` | `31030854363` | `8940583167` |
-| 50 | `la-colonia-smoke-50-001` | `b9fee4d49f27e957f191c1ccd21ebf6b0b0cd308` | `31031105558` | `31031119831` | `8940690642` |
-
-### Comparación
-
-| Métrica | 10 | 20 | 30 | 50 |
-|---|---:|---:|---:|---:|
-| `accepted` | `true` | `true` | `true` | `true` |
-| `pages_attempted` | 2 | 2 | 2 | 2 |
-| `pages_completed` | 2 | 2 | 2 | 2 |
-| `page_coverage` | 1.0 | 1.0 | 1.0 | 1.0 |
-| `products_reported_initial` | 9291 | 9291 | 9291 | 9291 |
-| `products_reported_final` | 9291 | 9291 | 9291 | 9291 |
-| `catalog_pages_reported` | 930 | 465 | 310 | 186 |
-| `products_returned` | 20 | 40 | 60 | 100 |
-| `skus_extracted` | 20 | 40 | 60 | 100 |
-| `response_bytes` | 21695 | 42520 | 62137 | 106217 |
-| `duration_seconds` | 1.733578 | 2.784899 | 3.312173 | 2.994802 |
-| `average_response_seconds` | 0.114572803 | 0.639206639 | 0.901944185 | 0.740312122 |
-| `average_response_bytes` | 10847.5 | 21260.0 | 31068.5 | 53108.5 |
-| `http_403` | 0 | 0 | 0 | 0 |
-| `http_429` | 0 | 0 | 0 | 0 |
-| `persistent_http_429` | 0 | 0 | 0 | 0 |
-| `http_5xx` | 0 | 0 | 0 | 0 |
-| `retries` | 0 | 0 | 0 | 0 |
-| `errors` | 0 | 0 | 0 | 0 |
-| `structural_events` | 0 | 0 | 0 | 0 |
-| `duplicate_skus` | 0 | 0 | 0 | 0 |
-| `duplicate_products` | 0 | 0 | 0 | 0 |
-| `total_change_ratio` | 0.0 | 0.0 | 0.0 | 0.0 |
-| `rejection_reasons` | `[]` | `[]` | `[]` | `[]` |
-
-Los tamaños 10, 20 y 30 registraron `ordering_is_not_strictly_unique` y `baseline_too_small_for_thresholds`. El tamaño 50 registró únicamente `ordering_is_not_strictly_unique`, porque sus dos páginas alcanzaron cien SKU y permitieron proponer umbrales.
-
-Todas las páginas registraron `quality:availability_conflict_price_with_zero_quantity`. El evento no fue estructural, no produjo rechazo y no alteró las métricas globales de aceptación.
-
-### Tamaño recomendado
-
-Se recomienda `page_size = 20` para la siguiente etapa.
-
-Es el menor tamaño probado que reduce significativamente las solicitudes estimadas: disminuye de 930 a 465 páginas frente a `page_size = 10`, una reducción del 50 %, sin introducir errores, páginas parciales, cambios del total, duplicados, bloqueos HTTP ni eventos estructurales.
-
-También mantiene un payload medio moderado de 21,260 bytes y un tiempo medio de respuesta de 0.639 segundos. Los tamaños 30 y 50 fueron aceptados, pero aumentan el payload por petición. El tamaño 50 es técnicamente prometedor y alcanzó la muestra mínima para proponer umbrales, pero no se selecciona automáticamente por ser el mayor; primero se prioriza una etapa staged conservadora con el menor tamaño que ya produce una reducción sustancial.
-
-El siguiente paso es un recorrido `staged` de diez páginas con `page_size = 20`, `delay_seconds = 1.5`, perfil `baseline` y concurrencia `1`. Esa ejecución no forma parte de esta etapa de decisión y debe revisarse antes de avanzar.
-
-## Ordenamiento
-
-`OrderByReleaseDateDESC` mueve posiciones cuando se publican productos nuevos durante el recorrido. Para las muestras de esta fase se añade `OrderByNameASC` como alternativa pública menos sensible a nuevas altas al inicio del catálogo.
-
-Ninguno de los órdenes públicos ofrece una llave secundaria única. Por tanto:
-
-- se registra el criterio en cada página;
-- se exige que no cambie durante la ejecución;
-- se detectan páginas repetidas, solapamientos y saltos;
-- se deduplica por SKU;
-- se mide duplicación de productos;
-- no se interpreta una ausencia como `not_listed`.
-
-## Continuidad
-
-El runner exige:
-
-- primera página con `from = 0`;
-- rangos consecutivos e inclusivos;
-- `from` siguiente igual a `to` anterior más uno;
-- tamaño constante;
-- orden constante;
-- página intermedia completa;
-- última página con exactamente los productos restantes;
-- total inicial y final registrados;
-- ninguna página repetida.
-
-La primera página define el total y el número de páginas del alcance solicitado. Un cambio posterior de `recordsFiltered` se registra, pero no se inventan páginas ni se corrigen ausencias.
-
-## Detención segura
-
-La ejecución se detiene después del primer error crítico:
-
-- HTTP 403 o CAPTCHA;
-- HTTP 429 persistente;
-- error HTTP 5xx no recuperado;
-- página vacía inesperada;
-- página parcial;
-- cambio estructural;
-- pérdida total de precios;
-- total inválido;
-- página repetida;
-- solapamiento o salto;
-- orden o tamaño de página diferente;
-- duración máxima excedida;
-- más productos que los esperados.
-
-## Métricas
-
-El resumen separa páginas, productos y SKU. Incluye como mínimo:
+Ratios observados en el staged:
 
 ```text
-run_id
-started_at_utc
-finished_at_utc
-duration_seconds
-page_size
-products_reported_initial
-products_reported_final
-pages_expected
-pages_attempted
-pages_completed
-page_coverage
-products_returned
-skus_returned
-skus_extracted
-skus_with_price
-skus_without_price
-skus_pending_review
-weighted_skus
-promotional_skus
-duplicate_skus
-duplicate_products
-errors
-structural_events
-http_403
-http_429
-http_5xx
-retries
-accepted
-rejection_reasons
+missing_price_ratio = 0.0
+duplicate_sku_ratio = 0.0
+duplicate_product_ratio = 0.0
+total_change_ratio = 0.0
 ```
 
-También registra duración y bytes aproximados por página, pausas aplicadas y ratios observacionales.
-
-## Baseline y validación
-
-### Baseline
-
-Una muestra baseline puede aceptarse cuando completa íntegramente su alcance y no presenta errores críticos.
-
-Los ratios de precios faltantes, duplicados y cambio del total se observan, pero no se activan automáticamente como límites. Solo se proponen umbrales cuando la muestra contiene al menos cien SKU y dos páginas completas.
-
-El smoke de `page_size = 50` produjo esta propuesta observacional, todavía no activada:
+Umbrales propuestos:
 
 ```json
 {
@@ -224,44 +204,68 @@ El smoke de `page_size = 50` produjo esta propuesta observacional, todavía no a
 }
 ```
 
-### Validación
+La propuesta coincide exactamente con el smoke de `page_size = 50`.
 
-Una ejecución con perfil `validation` requiere los cuatro umbrales explícitos:
+Márgenes sobre los ratios observados:
 
-```text
-max_missing_price_ratio
-max_duplicate_sku_ratio
-max_duplicate_product_ratio
-max_total_change_ratio
+- precios faltantes: `+0.01`, equivalente a 1 punto porcentual;
+- SKU duplicados: `+0.005`, equivalente a 0.5 puntos porcentuales;
+- productos duplicados: `+0.005`, equivalente a 0.5 puntos porcentuales;
+- cambio del total: `+0.002`, equivalente a 0.2 puntos porcentuales.
+
+La muestra staged de 200 SKU puede funcionar como baseline principal para definir estos cuatro umbrales porque duplica la muestra mínima y confirma los mismos valores observados en el smoke de 100 SKU. Los umbrales siguen sin activarse automáticamente y no cubren el conflicto de disponibilidad ni demuestran todavía estabilidad en recorridos de 500 productos o del catálogo completo.
+
+## Siguiente ejecución propuesta
+
+La siguiente etapa, todavía no ejecutada, debe repetir las mismas diez páginas con perfil `validation` y umbrales explícitos:
+
+```json
+{
+  "request_id": "la-colonia-validation-pages-20-001",
+  "supermarket": "la_colonia",
+  "mode": "staged",
+  "page_size": 20,
+  "max_pages": 10,
+  "max_products": 0,
+  "delay_seconds": 1.5,
+  "profile": "validation",
+  "thresholds": {
+    "max_missing_price_ratio": 0.01,
+    "max_duplicate_sku_ratio": 0.005,
+    "max_duplicate_product_ratio": 0.005,
+    "max_total_change_ratio": 0.002
+  },
+  "allow_full": false
+}
 ```
 
-La propuesta baseline no se activa sola. Debe copiarse y revisarse en una ejecución posterior.
+Esta solicitud no debe iniciarse hasta revisar y aprobar formalmente el staged baseline.
 
-El modo `full` exige:
-
-- confirmación manual adicional;
-- perfil `validation`;
-- los cuatro umbrales;
-- preflight aceptado;
-- número de páginas inferior al límite de seguridad.
-
-Si el preflight estima demasiadas solicitudes, el recorrido completo no inicia y se recomienda dividir por categorías o sesiones.
-
-## Etapas live
+## Estado de etapas live
 
 ```text
 Smoke       -> 2 páginas: completado para 10, 20, 30 y 50
-Staged 1    -> 10 páginas con page_size 20: siguiente paso, no ejecutado
-Staged 2    -> 100 productos
-Staged 3    -> 500 productos
-Full        -> solo después de baseline y validación aceptados
+Staged 1    -> 10 páginas con page_size 20, baseline: completado y aceptado
+Validation  -> 10 páginas con page_size 20 y umbrales explícitos: pendiente
+500 SKU     -> baseline y validation: pendiente
+Full        -> no ejecutado; solo después de todas las etapas y preflight seguro
 ```
 
-Cada etapa debe finalizar con `accepted = true` antes de continuar.
+## Pruebas offline
+
+Estado anterior al staged:
+
+```text
+Python 3.12.13
+compilación correcta
+149 passed in 0.49s
+```
+
+La solicitud staged y esta actualización documental no modifican código ejecutable.
 
 ## Informes
 
-El script genera temporalmente:
+El workflow genera temporalmente:
 
 ```text
 run-artifacts/run-summary.json
@@ -270,7 +274,9 @@ run-artifacts/run-summary.md
 
 Los informes contienen métricas, hashes limitados y resúmenes de página. No contienen el catálogo completo.
 
-## Fuera de alcance
+## Limpieza y fuera de alcance
+
+El archivo operacional conserva la última solicitud procesada y se limpiará antes de una futura fusión del PR.
 
 No se implementan en esta fase:
 
@@ -282,8 +288,7 @@ No se implementan en esta fase:
 - `not_listed` definitivo;
 - workflow diario;
 - comparación entre supermercados;
-- Power BI.
+- Power BI;
+- segundo supermercado.
 
-## robots.txt
-
-El recorrido usa únicamente el endpoint GraphQL ya validado. El cliente conserva el bloqueo de rutas excluidas y de hosts distintos de `www.lacolonia.com`, incluido `mobile.lacolonia.com`.
+El PR debe permanecer abierto, en borrador y sin fusionar hasta completar las etapas de validación autorizadas.
