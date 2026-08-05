@@ -7,9 +7,8 @@ from typing import Any, Mapping
 from urllib.parse import urlencode
 
 GRAPHQL_ENDPOINT = "https://www.lacolonia.com/_v/segment/graphql/v1"
+MAX_CONTROLLED_PRODUCTS = 10
 MAX_CATALOG_PAGE_SIZE = 50
-# Alias conservado para no romper importaciones existentes de la fase anterior.
-MAX_CONTROLLED_PRODUCTS = MAX_CATALOG_PAGE_SIZE
 ALLOWED_ORDER_BY = frozenset(
     {
         "OrderByReleaseDateDESC",
@@ -98,18 +97,32 @@ def build_product_search_url(
     query: str = "supermercado",
     category_map: str = "category-1",
     full_text: str = "",
-    order_by: str = "OrderByReleaseDateDESC",
+    order_by: str | None = None,
 ) -> str:
-    """Construye una consulta GET pública para una página consecutiva."""
+    """Construye una consulta GET pública para una página consecutiva.
+
+    Las llamadas controladas heredadas que no especifican ``order_by`` mantienen
+    el límite histórico de diez productos. El runner de catálogo declara el
+    orden explícitamente y puede evaluar, de forma progresiva, hasta cincuenta.
+    """
 
     if page < 1:
         raise ValueError("page debe ser mayor o igual que 1")
-    if not 1 <= page_size <= MAX_CATALOG_PAGE_SIZE:
+    explicit_catalog_request = order_by is not None
+    max_page_size = (
+        MAX_CATALOG_PAGE_SIZE if explicit_catalog_request else MAX_CONTROLLED_PRODUCTS
+    )
+    if not 1 <= page_size <= max_page_size:
+        if explicit_catalog_request:
+            raise ValueError(
+                f"page_size debe estar entre 1 y {MAX_CATALOG_PAGE_SIZE} productos"
+            )
         raise ValueError(
-            f"page_size debe estar entre 1 y {MAX_CATALOG_PAGE_SIZE} productos"
+            f"La prueba controlada admite entre 1 y {MAX_CONTROLLED_PRODUCTS} productos"
         )
-    if order_by not in ALLOWED_ORDER_BY:
-        raise ValueError(f"order_by no permitido: {order_by}")
+    effective_order_by = order_by or "OrderByReleaseDateDESC"
+    if effective_order_by not in ALLOWED_ORDER_BY:
+        raise ValueError(f"order_by no permitido: {effective_order_by}")
     if full_text.strip():
         query_value = ""
         selected_facets: list[dict[str, str]] = []
@@ -124,7 +137,7 @@ def build_product_search_url(
         "query": query_value,
         "fullText": full_text.strip(),
         "selectedFacets": selected_facets,
-        "orderBy": order_by,
+        "orderBy": effective_order_by,
         "from": from_index,
         "to": from_index + page_size - 1,
         "hideUnavailableItems": False,
