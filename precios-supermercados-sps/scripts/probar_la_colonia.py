@@ -8,12 +8,35 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from precios_supermercados.scrapers.base import ScraperError  # noqa: E402
 from precios_supermercados.scrapers.la_colonia import LaColoniaExtractor  # noqa: E402
+
+
+def _sanitized_graphql_diagnostic(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Expone solo estructura y mensajes de error, nunca el cuerpo completo."""
+
+    errors = payload.get("errors")
+    sanitized_errors: list[dict[str, Any]] = []
+    if isinstance(errors, list):
+        for item in errors[:5]:
+            if isinstance(item, Mapping):
+                sanitized_errors.append(
+                    {
+                        "message": item.get("message"),
+                        "extensions": item.get("extensions"),
+                    }
+                )
+            else:
+                sanitized_errors.append({"message": str(item)})
+    return {
+        "top_level_keys": sorted(str(key) for key in payload.keys()),
+        "errors": sanitized_errors,
+    }
 
 
 def main() -> int:
@@ -23,10 +46,27 @@ def main() -> int:
     args = parser.parse_args()
 
     run_id = datetime.now(timezone.utc).strftime("live_la_colonia_%Y%m%dT%H%M%SZ")
+    extractor = LaColoniaExtractor()
+    source_url = extractor.build_page_url(page=args.page, page_size=args.limit)
     try:
-        result = LaColoniaExtractor().extract_page(
+        payload = extractor.client.get_json(source_url)
+        if not isinstance(payload.get("data"), Mapping):
+            print(
+                json.dumps(
+                    {
+                        "accepted": False,
+                        "error": "La respuesta GraphQL no contiene data.",
+                        "diagnostic": _sanitized_graphql_diagnostic(payload),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 2
+        result = extractor.parse_payload(
+            payload,
             scrape_run_id=run_id,
-            page=args.page,
+            source_url=source_url,
             page_size=args.limit,
         )
     except ScraperError as exc:
