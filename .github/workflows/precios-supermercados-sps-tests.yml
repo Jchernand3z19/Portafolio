@@ -1,0 +1,42 @@
+name: Precios Supermercados SPS - Pruebas base
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "precios-supermercados-sps/**"
+      - ".github/workflows/precios-supermercados-sps-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: precios-supermercados-sps
+
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: precios-supermercados-sps/requirements.txt
+
+      - name: Instalar dependencias
+        run: python -m pip install -r requirements.txt
+
+      - name: Compilar módulos
+        run: python -m compileall src
+
+      - name: Ejecutar pruebas
+        run: pytest tests
