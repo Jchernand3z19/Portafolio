@@ -172,14 +172,29 @@ jobs:
             const decision = JSON.parse(fs.readFileSync('dispatcher-decision.json', 'utf8'));
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const expectedWorkflowPath = '.github/workflows/precios-supermercados-sps-la-colonia-live.yml';
-            const liveWorkflowFile = 'precios-supermercados-sps-la-colonia-live.yml';
+            const allowedWorkflows = new Map([
+              [
+                '.github/workflows/precios-supermercados-sps-la-colonia-live.yml',
+                'precios-supermercados-sps-la-colonia-live.yml',
+              ],
+              [
+                '.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml',
+                'precios-supermercados-sps-la-colonia-diagnostic.yml',
+              ],
+            ]);
+            const expectedModes = new Map([
+              ['.github/workflows/precios-supermercados-sps-la-colonia-live.yml', new Set(['smoke', 'staged'])],
+              ['.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml', new Set(['diagnostic_overlap'])],
+            ]);
+            const selectedWorkflowFile = allowedWorkflows.get(decision.workflow) || null;
             const apiVersion = '2026-03-10';
             const controllerUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
             const warnings = [];
             const result = {
               accepted: Boolean(decision.accepted),
               request_id: decision.request_id || null,
+              mode: decision.mode || null,
+              workflow: decision.workflow || null,
               pr_number: decision.pr_number || null,
               head_sha: decision.head_sha || null,
               ref: decision.ref || null,
@@ -205,6 +220,8 @@ jobs:
                 '',
                 `- accepted: \`${result.accepted}\``,
                 `- request_id: \`${result.request_id || ''}\``,
+                `- mode: \`${result.mode || ''}\``,
+                `- workflow: \`${result.workflow || ''}\``,
                 `- dispatch_sent: \`${result.dispatch_sent}\``,
                 `- live_run_id: \`${result.live_run_id || ''}\``,
                 `- comment_published: \`${result.comment_published}\``,
@@ -259,8 +276,9 @@ jobs:
             }
 
             if (decision.accepted) {
-              if (decision.workflow !== expectedWorkflowPath) {
-                result.reason = 'La decisión confiable señaló un workflow inesperado.';
+              const allowedModes = expectedModes.get(decision.workflow);
+              if (!selectedWorkflowFile || !allowedModes || !allowedModes.has(decision.mode)) {
+                result.reason = 'La decisión confiable señaló un workflow o modo inesperado.';
                 persistResult();
                 core.setFailed(result.reason);
                 return;
@@ -280,7 +298,7 @@ jobs:
                   {
                     owner,
                     repo,
-                    workflow_id: liveWorkflowFile,
+                    workflow_id: selectedWorkflowFile,
                     ref: decision.ref,
                     inputs: decision.inputs,
                     return_run_details: true,
