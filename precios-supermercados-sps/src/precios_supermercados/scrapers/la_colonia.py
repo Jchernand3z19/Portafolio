@@ -32,10 +32,10 @@ BASE_URL = "https://www.lacolonia.com"
 CATALOG_URL = f"{BASE_URL}/supermercado"
 GRAPHQL_URL = GRAPHQL_ENDPOINT
 ROBOTS_URL = f"{BASE_URL}/robots.txt"
-EXTRACTOR_VERSION = "0.2.0"
+EXTRACTOR_VERSION = "0.3.0"
 SCHEMA_VERSION = "1.0.0"
 USER_AGENT = (
-    "PreciosSupermercadosSPS-LaColonia/0.2 "
+    "PreciosSupermercadosSPS-LaColonia/0.3 "
     "(+https://github.com/Jchernand3z19/Portafolio)"
 )
 FORBIDDEN_PATH_PREFIXES = (
@@ -60,7 +60,7 @@ _PRESENTATION_PATTERN = re.compile(
 
 
 class LaColoniaExtractor:
-    """Obtiene una sola página pública y produce el contrato ``RawProduct``."""
+    """Obtiene una página de productos y produce un ``RawProduct`` por SKU."""
 
     def __init__(
         self,
@@ -82,12 +82,14 @@ class LaColoniaExtractor:
         page_size: int = 5,
         query: str = "supermercado",
         category_map: str = "category-1",
+        full_text: str = "",
     ) -> str:
         return build_product_search_url(
             page=page,
             page_size=page_size,
             query=query,
             category_map=category_map,
+            full_text=full_text,
         )
 
     def extract_page(
@@ -98,12 +100,14 @@ class LaColoniaExtractor:
         page_size: int = 5,
         query: str = "supermercado",
         category_map: str = "category-1",
+        full_text: str = "",
     ) -> ExtractionResult:
         source_url = self.build_page_url(
             page=page,
             page_size=page_size,
             query=query,
             category_map=category_map,
+            full_text=full_text,
         )
         payload = self.client.get_json(source_url)
         return self.parse_payload(
@@ -121,13 +125,15 @@ class LaColoniaExtractor:
         source_url: str,
         page_size: int = 5,
     ) -> ExtractionResult:
-        products_payload, total = _read_product_search(payload)
+        products_payload, total_products = _read_product_search(payload)
         if not products_payload:
             raise EmptyResponseError("La página controlada no devolvió productos")
 
         metrics = ExtractionMetrics(
-            products_discovered=total,
-            pages_discovered=max(math.ceil(total / page_size), 1),
+            products_discovered=total_products,
+            products_requested=page_size,
+            products_returned=len(products_payload),
+            pages_discovered=max(math.ceil(total_products / page_size), 1),
             pages_processed=1,
         )
         metrics.page_coverage = metrics.pages_processed / metrics.pages_discovered
@@ -145,6 +151,7 @@ class LaColoniaExtractor:
                 metrics.errors += 1
                 events.append("quality:product_not_mapping")
                 continue
+
             items = product.get("items")
             if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
                 metrics.errors += 1
@@ -152,9 +159,8 @@ class LaColoniaExtractor:
                 events.append("structure:missing_items")
                 continue
 
+            metrics.skus_returned += len(items)
             for item in items:
-                if len(raw_products) >= page_size:
-                    break
                 if not isinstance(item, Mapping):
                     metrics.errors += 1
                     events.append("quality:item_not_mapping")
@@ -174,7 +180,7 @@ class LaColoniaExtractor:
 
                 identity = (raw.source_key_type.value, raw.source_key)
                 if identity in seen_keys:
-                    metrics.duplicate_products += 1
+                    metrics.duplicate_skus += 1
                     events.append("quality:duplicate_source_key")
                     continue
                 seen_keys.add(identity)
@@ -182,7 +188,7 @@ class LaColoniaExtractor:
 
                 values = raw.raw_values
                 if values.get("current_price") is not None:
-                    metrics.products_with_price += 1
+                    metrics.skus_with_price += 1
                 if values.get("availability_evidence") == "price_positive_quantity_zero":
                     events.append("quality:availability_conflict_price_with_zero_quantity")
                 if any(
@@ -194,24 +200,27 @@ class LaColoniaExtractor:
                         "presentation",
                     )
                 ) or values.get("availability") == AvailabilityStatus.UNKNOWN.value:
-                    metrics.products_pending_review += 1
+                    metrics.skus_pending_review += 1
 
-            if len(raw_products) >= page_size:
-                break
-
-        metrics.products_extracted = len(raw_products)
+        metrics.skus_extracted = len(raw_products)
         if not raw_products:
             raise StructureChangedError("No se pudo interpretar ningún SKU de la respuesta")
 
-        if metrics.products_with_price == 0:
+        if metrics.skus_with_price == 0:
             events.append("quality:missing_all_prices")
-        if metrics.products_extracted < min(page_size, len(products_payload)):
-            events.append("quality:partial_page")
+
+        expected_products = _expected_products_for_page(
+            total_products=total_products,
+            products_requested=page_size,
+            source_url=source_url,
+        )
+        if metrics.products_returned < expected_products:
+            events.append("quality:partial_product_page")
 
         accepted = (
-            metrics.products_with_price > 0
+            metrics.skus_with_price > 0
             and metrics.structural_events == 0
-            and metrics.products_extracted > 0
+            and metrics.skus_extracted > 0
         )
         return ExtractionResult(
             products=tuple(raw_products),
@@ -230,9 +239,10 @@ class LaColoniaExtractor:
         scrape_run_id: str,
         source_url: str,
     ) -> RawProduct:
-        product_name = _text(product.get("productName")) or _text(item.get("nameComplete"))
-        if product_name is None:
-            raise ValueError("Producto sin nombre")
+        product_name = _text(product.get("productName"))
+        source_name = _text(item.get("nameComplete")) or product_name
+        if source_name is None:
+            raise ValueError("SKU sin nombre")
 
         product_url = _product_url(_text(product.get("linkText")))
         product_id = _text(product.get("productId"))
@@ -311,7 +321,10 @@ class LaColoniaExtractor:
 
         raw_values = {
             "product_id": product_id,
+            "product_name": product_name,
             "item_id": item_id,
+            "item_name": _text(item.get("name")),
+            "item_name_complete": _text(item.get("nameComplete")),
             "reference": source_sku,
             "ean": barcode,
             "brand": source_brand,
@@ -331,7 +344,7 @@ class LaColoniaExtractor:
             "seller_id": _text(selected_seller.get("sellerId")) if selected_seller else None,
             "measurement_unit": measurement_unit,
             "unit_multiplier": _decimal_text(unit_multiplier),
-            "weighted_product": _is_weighted(product_name, measurement_unit),
+            "weighted_product": _is_weighted(source_name, measurement_unit),
         }
 
         return RawProduct(
@@ -339,7 +352,7 @@ class LaColoniaExtractor:
             location_id=LOCATION_ID,
             source_key_type=source_key_type,
             source_key=source_key,
-            source_name=product_name,
+            source_name=source_name,
             product_url=product_url,
             observed_at_utc=observed_at,
             scrape_run_id=scrape_run_id,
@@ -392,6 +405,21 @@ def _read_product_search(payload: Mapping[str, Any]) -> tuple[Sequence[Any], int
     except (TypeError, ValueError):
         total = len(products)
     return products, total
+
+
+def _expected_products_for_page(
+    *,
+    total_products: int,
+    products_requested: int,
+    source_url: str,
+) -> int:
+    try:
+        variables = decode_search_variables(source_url)
+        from_index = max(int(variables.get("from", 0)), 0)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        from_index = 0
+    remaining = max(total_products - from_index, 0)
+    return min(products_requested, remaining)
 
 
 def _mapping_sequence(value: Any) -> list[Mapping[str, Any]]:
