@@ -2,70 +2,86 @@
 
 ## DT-001 — Monorepositorio
 
-El proyecto vive en `precios-supermercados-sps/` dentro de `Portafolio`. Solo el workflow queda en `.github/workflows/` por requisito de GitHub.
+El proyecto vive en `precios-supermercados-sps/`. Solo el workflow está en `.github/workflows/`.
 
 ## DT-002 — Contratos con biblioteca estándar
 
-Se usan `dataclass`, `Enum`, `Decimal`, `datetime` y validaciones propias. Esto reduce dependencias antes de conocer las necesidades reales del primer extractor.
+Se usan `dataclass`, `StrEnum`, `Decimal`, `datetime` y validaciones propias. La única dependencia externa continúa siendo `pytest`.
 
-## DT-003 — Dependencias mínimas
+## DT-003 — Nomenclatura única
 
-La única dependencia externa es `pytest`, utilizada por las pruebas. No se agregan librerías de scraping, Google Sheets, Power BI, BigQuery ni servidor web.
+Los nombres oficiales son `current_price`, `reported_regular_price`, `scrape_run_id`, `availability` y `run_status`. No se mantienen alias paralelos.
 
 ## DT-004 — Tres etapas explícitas
 
-- `RawProduct` protege la fidelidad de la fuente.
-- `NormalizedOffer` entrega el formato común.
-- `ValidatedOffer` agrega hash y eventos de calidad antes de persistir.
+- `RawProduct`: fidelidad de la fuente.
+- `NormalizedOffer`: formato común, incluso con interpretación parcial.
+- `ValidatedOffer`: hash, estado de revisión y eventos de calidad.
 
-Esta separación evita que un scraper mezcle extracción, interpretación y escritura.
+## DT-005 — Observaciones parciales legítimas
 
-## DT-005 — Identidad independiente del precio
+Marca, categoría, subcategoría y componentes de presentación pueden quedar nulos. El contrato conserva el producto con `pending_fields`, `review_status = needs_review` y eventos `pending_normalization`. No se inventan datos.
 
-`source_product_id` depende del supermercado y de una llave fuente estable. `offer_id` agrega la ubicación. Precio, promoción, disponibilidad y fecha nunca forman parte de esas identidades.
+## DT-006 — Regla de precio por disponibilidad
 
-Prioridad de llave:
+`in_stock` requiere `current_price > 0`. `out_of_stock`, `not_listed` y `unknown` permiten `current_price = null`.
 
-1. ID interno del sitio.
-2. SKU.
-3. Código de barras.
-4. ID de API.
-5. URL estable sin rastreo.
+## DT-007 — Identidad independiente del precio
 
-## DT-006 — Producto normalizado y producto fuente no son equivalentes
+Precio, promoción, disponibilidad y fecha no participan en `source_product_id`, `product_id` ni `offer_id`.
 
-`source_product_id` identifica el registro del supermercado. `product_id` agrupa el producto normalizado para comparación entre supermercados. El mapeo futuro queda en `map_source_products` y debe poder revisarse.
+## DT-008 — Sensibilidad de llaves fuente
 
-## DT-007 — Oferta por ubicación
+ID interno, SKU, barcode e ID de API conservan mayúsculas y minúsculas y solo eliminan espacios externos. La normalización específica de un supermercado deberá documentarse en su adaptador y pruebas.
 
-`offer_id` combina supermercado, ubicación y producto fuente. Esto permite que el mismo artículo tenga precio o disponibilidad diferente por sucursal.
+## DT-009 — URL conservadora
 
-## DT-008 — Promoción declarada versus reducción real
+La URL estable elimina fragmentos y solo parámetros inequívocos de tracking: `utm_*`, `gclid`, `fbclid`, `msclkid`, `mc_cid`, `mc_eid`. `ref` y cualquier parámetro potencialmente funcional se conservan.
 
-`is_promotion` registra la condición observada o normalizada. `reported_regular_price` conserva el valor informado por el supermercado, pero no demuestra ahorro. La reducción real se calculará después contra el último `current_price` histórico comparable.
+## DT-010 — Componentes obligatorios no vacíos
 
-No se crea una columna `promotion_text`.
+`supermarket_id`, `location_id`, `source_product_id` y `source_key` se validan antes de crear identificadores.
 
-## DT-009 — Ausencia no equivale a agotado
+## DT-011 — Producto fuente y normalizado
 
-Los estados permitidos son `in_stock`, `out_of_stock`, `not_listed` y `unknown`. Un producto desaparecido se clasifica como `not_listed` o `unknown` salvo evidencia explícita de agotamiento.
+`source_product_id` identifica el registro del supermercado. `product_id` agrupa productos comparables. El mapeo puede permanecer `pending` sin eliminar la observación.
 
-## DT-010 — Ubicación auditable
+## DT-012 — Oferta por ubicación
 
-La ubicación puede ser `confirmed`, `inferred` o `unknown`. Los dos primeros estados requieren evidencia y una confianza entre 0 y 1.
+`offer_id` combina supermercado, ubicación y producto fuente.
 
-## DT-011 — Hash de estado
+## DT-013 — Promoción declarada versus reducción real
 
-El `state_hash` incluye precio actual, precio regular informado, promoción, disponibilidad, marca normalizada, unidades, contenido total y unidad de medida. Normaliza diferencias cosméticas y no incluye URLs.
+`is_promotion` conserva la condición observada. `reported_regular_price` no demuestra ahorro. La reducción real se calculará contra el último `current_price` histórico aceptado. No existe `promotion_text`.
 
-## DT-012 — Persistencia idempotente
+## DT-014 — Ubicación auditable
 
-La capa futura de almacenamiento deberá impedir duplicados por reintentos y garantizar un único periodo actual por `offer_id`.
+`location_status` puede ser `confirmed`, `inferred` o `unknown`. Confirmed/inferred requieren `location_evidence` y `location_confidence` entre 0 y 1.
 
-## DT-013 — Google Sheets es un contrato, no una integración
+## DT-015 — Hash con nulos deterministas
 
-Esta fase documenta las tabs y relaciones, pero no solicita credenciales ni realiza llamadas a Google Sheets.
+`state_hash` incluye precios, promoción, disponibilidad y atributos normalizados relevantes, incluso cuando sean nulos. Cambios cosméticos no alteran el hash.
 
-## DT-014 — Sitio público fuera de alcance
+## DT-016 — Estados de ejecución
 
-No se modifica `js/main.js`, el registro de proyectos ni la página pública hasta que exista contenido real para presentar.
+`run_status` usa `running`, `success`, `warning`, `rejected`, `failed`, `abandoned`. Una ejecución incompleta se marca `rejected`; no actualiza precios, disponibilidad ni periodos.
+
+## DT-017 — Métricas de completitud
+
+Cada ejecución registra cobertura de páginas, productos, ofertas y precios, comparación con la última ejecución aceptada, rechazos y eventos estructurales. Los umbrales viven en `cfg_supermarkets`.
+
+## DT-018 — Historial trazable
+
+Cada periodo registra `change_type`, `changed_fields`, ejecución de apertura/cierre, precios originales, versiones, ubicación y auditoría. Un reintento no duplica historial.
+
+## DT-019 — Trazabilidad GitHub
+
+`fact_scrape_runs` conserva workflow, run ID, intento, commit SHA y ref ejecutada.
+
+## DT-020 — Google Sheets es un contrato
+
+Esta fase documenta las ocho tabs, pero no conecta Google Sheets ni solicita credenciales.
+
+## DT-021 — Sitio público fuera de alcance
+
+No se modifica Mundial 2026, `js/main.js`, el registro de proyectos ni la página pública.
