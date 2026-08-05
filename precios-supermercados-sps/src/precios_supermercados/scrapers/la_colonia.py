@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import math
 import re
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Mapping, Sequence
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from precios_supermercados.enums import AvailabilityStatus, LocationStatus
 from precios_supermercados.identifiers import select_source_key
@@ -22,6 +21,7 @@ from .base import (
     SafeHttpClient,
     StructureChangedError,
 )
+from .la_colonia_graphql import GRAPHQL_ENDPOINT, build_product_search_url
 
 SUPERMARKET_ID = "la_colonia"
 LOCATION_ID = "la_colonia_online"
@@ -30,15 +30,12 @@ LOCATION_EVIDENCE = (
 )
 BASE_URL = "https://www.lacolonia.com"
 CATALOG_URL = f"{BASE_URL}/supermercado"
-GRAPHQL_URL = f"{BASE_URL}/_v/segment/graphql/v1"
+GRAPHQL_URL = GRAPHQL_ENDPOINT
 ROBOTS_URL = f"{BASE_URL}/robots.txt"
-EXTRACTOR_VERSION = "0.1.0"
+EXTRACTOR_VERSION = "0.2.0"
 SCHEMA_VERSION = "1.0.0"
-PERSISTED_QUERY_HASH = (
-    "c351315ecde7f473587b710ac8b97f147ac0ac0cd3060c27c695843a72fd3903"
-)
 USER_AGENT = (
-    "PreciosSupermercadosSPS-LaColonia/0.1 "
+    "PreciosSupermercadosSPS-LaColonia/0.2 "
     "(+https://github.com/Jchernand3z19/Portafolio)"
 )
 FORBIDDEN_PATH_PREFIXES = (
@@ -63,14 +60,13 @@ _PRESENTATION_PATTERN = re.compile(
 
 
 class LaColoniaExtractor:
-    """Obtiene una única página pública y produce el contrato ``RawProduct``."""
+    """Obtiene una sola página pública y produce el contrato ``RawProduct``."""
 
     def __init__(
         self,
         client: SafeHttpClient | None = None,
         *,
         clock: Callable[[], datetime] | None = None,
-        persisted_query_hash: str = PERSISTED_QUERY_HASH,
     ) -> None:
         self.client = client or SafeHttpClient(
             allowed_hosts={"www.lacolonia.com"},
@@ -78,9 +74,6 @@ class LaColoniaExtractor:
             user_agent=USER_AGENT,
         )
         self.clock = clock or (lambda: datetime.now(timezone.utc))
-        if not re.fullmatch(r"[0-9a-f]{64}", persisted_query_hash):
-            raise ValueError("persisted_query_hash debe ser SHA-256 hexadecimal")
-        self.persisted_query_hash = persisted_query_hash
 
     def build_page_url(
         self,
@@ -90,54 +83,12 @@ class LaColoniaExtractor:
         query: str = "supermercado",
         category_map: str = "category-1",
     ) -> str:
-        if page < 1:
-            raise ValueError("page debe ser mayor o igual que 1")
-        if not 1 <= page_size <= 5:
-            raise ValueError("La prueba controlada admite entre 1 y 5 productos")
-        if not query.strip() or not category_map.strip():
-            raise ValueError("query y category_map no pueden estar vacíos")
-
-        from_index = (page - 1) * page_size
-        variables = {
-            "hideUnavailableItems": False,
-            "skusFilter": "ALL",
-            "simulationBehavior": "default",
-            "installmentCriteria": "MAX_WITHOUT_INTEREST",
-            "productOriginVtex": False,
-            "map": category_map,
-            "query": query,
-            "orderBy": "OrderByReleaseDateDESC",
-            "from": from_index,
-            "to": from_index + page_size - 1,
-            "selectedFacets": [{"key": category_map, "value": query}],
-            "fullText": "",
-            "facetsBehavior": "Static",
-            "categoryTreeBehavior": "default",
-            "withFacets": False,
-        }
-        encoded_variables = base64.b64encode(
-            json.dumps(variables, separators=(",", ":")).encode("utf-8")
-        ).decode("ascii")
-        extensions = {
-            "persistedQuery": {
-                "version": 1,
-                "sha256Hash": self.persisted_query_hash,
-                "sender": "vtex.store-resources@0.x",
-                "provider": "vtex.search-graphql@0.x",
-            },
-            "variables": encoded_variables,
-        }
-        params = {
-            "workspace": "master",
-            "maxAge": "short",
-            "appsEtag": "remove",
-            "domain": "store",
-            "locale": "es-HN",
-            "operationName": "productSearchV3",
-            "variables": "{}",
-            "extensions": json.dumps(extensions, separators=(",", ":")),
-        }
-        return f"{GRAPHQL_URL}?{urlencode(params)}"
+        return build_product_search_url(
+            page=page,
+            page_size=page_size,
+            query=query,
+            category_map=category_map,
+        )
 
     def extract_page(
         self,
@@ -232,6 +183,8 @@ class LaColoniaExtractor:
                 values = raw.raw_values
                 if values.get("current_price") is not None:
                     metrics.products_with_price += 1
+                if values.get("availability_evidence") == "price_positive_quantity_zero":
+                    events.append("quality:availability_conflict_price_with_zero_quantity")
                 if any(
                     values.get(field_name) is None
                     for field_name in (
@@ -240,7 +193,7 @@ class LaColoniaExtractor:
                         "category",
                         "presentation",
                     )
-                ):
+                ) or values.get("availability") == AvailabilityStatus.UNKNOWN.value:
                     metrics.products_pending_review += 1
 
             if len(raw_products) >= page_size:
@@ -254,6 +207,7 @@ class LaColoniaExtractor:
             events.append("quality:missing_all_prices")
         if metrics.products_extracted < min(page_size, len(products_payload)):
             events.append("quality:partial_page")
+
         accepted = (
             metrics.products_with_price > 0
             and metrics.structural_events == 0
@@ -280,8 +234,7 @@ class LaColoniaExtractor:
         if product_name is None:
             raise ValueError("Producto sin nombre")
 
-        link_text = _text(product.get("linkText"))
-        product_url = _product_url(link_text)
+        product_url = _product_url(_text(product.get("linkText")))
         product_id = _text(product.get("productId"))
         item_id = _text(item.get("itemId"))
         source_sku = _reference_value(item.get("referenceId")) or _text(
@@ -306,7 +259,11 @@ class LaColoniaExtractor:
             for seller in sellers
         ]
         quantities = [value for value in quantities if value is not None]
-        availability = _availability(current_price, sellers, quantities)
+        availability, availability_evidence = _availability(
+            current_price,
+            sellers,
+            quantities,
+        )
         promotion_evidence = _promotion_evidence(offer)
         is_promotion = bool(
             (current_price is not None and list_price is not None and list_price > current_price)
@@ -329,7 +286,9 @@ class LaColoniaExtractor:
         source_category = " > ".join(category_names) or _first_category(
             product.get("categories")
         )
-        subcategory = category_names[-1] if len(category_names) > 1 else None
+        subcategory = category_names[-1] if len(category_names) > 1 else _last_category(
+            source_category
+        )
         source_brand = _text(product.get("brand"))
         presentation_source = (
             _text(item.get("nameComplete"))
@@ -342,7 +301,7 @@ class LaColoniaExtractor:
             (
                 value
                 for image in images
-                if (value := _text(image.get("imageUrl") or image.get("imageTag")))
+                if (value := _text(image.get("imageUrl")))
                 and value.startswith("https://")
             ),
             None,
@@ -367,6 +326,7 @@ class LaColoniaExtractor:
             "is_promotion": is_promotion,
             "promotion_evidence": promotion_evidence,
             "availability": availability.value,
+            "availability_evidence": availability_evidence,
             "available_quantity": _decimal_text(quantities[0]) if quantities else None,
             "seller_id": _text(selected_seller.get("sellerId")) if selected_seller else None,
             "measurement_unit": measurement_unit,
@@ -399,16 +359,13 @@ class LaColoniaExtractor:
 
 
 def decode_search_variables(url: str) -> Mapping[str, Any]:
-    """Decodifica variables de una URL creada por el extractor; útil en pruebas."""
+    """Decodifica las variables de una URL creada por el extractor."""
 
     parsed = urlsplit(url)
-    extensions_raw = parse_qs(parsed.query).get("extensions")
-    if not extensions_raw:
-        raise ValueError("La URL no contiene extensions")
-    extensions = json.loads(extensions_raw[0])
-    encoded = extensions["variables"]
-    decoded = base64.b64decode(encoded).decode("utf-8")
-    value = json.loads(decoded)
+    variables_raw = parse_qs(parsed.query).get("variables")
+    if not variables_raw:
+        raise ValueError("La URL no contiene variables")
+    value = json.loads(variables_raw[0])
     if not isinstance(value, Mapping):
         raise ValueError("Las variables no son un objeto")
     return value
@@ -417,12 +374,12 @@ def decode_search_variables(url: str) -> Mapping[str, Any]:
 def _read_product_search(payload: Mapping[str, Any]) -> tuple[Sequence[Any], int]:
     data = payload.get("data")
     if not isinstance(data, Mapping):
-        raise StructureChangedError("Falta data en la respuesta GraphQL")
-    product_search = data.get("productSearch")
-    if not isinstance(product_search, Mapping):
         errors = payload.get("errors")
         if errors:
             raise StructureChangedError(f"GraphQL devolvió errores: {errors}")
+        raise StructureChangedError("Falta data en la respuesta GraphQL")
+    product_search = data.get("productSearch")
+    if not isinstance(product_search, Mapping):
         raise StructureChangedError("Falta data.productSearch")
     products = product_search.get("products")
     if not isinstance(products, Sequence) or isinstance(products, (str, bytes)):
@@ -495,7 +452,9 @@ def _select_seller(sellers: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
 
 
 def _commercial_offer(seller: Mapping[str, Any]) -> Mapping[str, Any]:
-    offer = seller.get("commercialOffer") if seller else None
+    if not seller:
+        return {}
+    offer = seller.get("commercialOffer") or seller.get("commertialOffer")
     return offer if isinstance(offer, Mapping) else {}
 
 
@@ -503,24 +462,24 @@ def _availability(
     current_price: Decimal | None,
     sellers: Sequence[Mapping[str, Any]],
     quantities: Sequence[Decimal],
-) -> AvailabilityStatus:
+) -> tuple[AvailabilityStatus, str]:
     if current_price is not None and any(quantity > 0 for quantity in quantities):
-        return AvailabilityStatus.IN_STOCK
-    if sellers and quantities and all(quantity == 0 for quantity in quantities):
-        return AvailabilityStatus.OUT_OF_STOCK
-    return AvailabilityStatus.UNKNOWN
+        return AvailabilityStatus.IN_STOCK, "price_positive_quantity_positive"
+    if current_price is not None and quantities and all(quantity == 0 for quantity in quantities):
+        return AvailabilityStatus.UNKNOWN, "price_positive_quantity_zero"
+    if current_price is None and sellers and quantities and all(
+        quantity == 0 for quantity in quantities
+    ):
+        return AvailabilityStatus.OUT_OF_STOCK, "price_absent_quantity_zero"
+    return AvailabilityStatus.UNKNOWN, "insufficient_evidence"
 
 
 def _promotion_evidence(offer: Mapping[str, Any]) -> list[str]:
     evidence: list[str] = []
     for field_name in ("discountHighlights", "teasers"):
-        entries = offer.get(field_name)
-        for entry in _mapping_sequence(entries):
-            text = _text(entry.get("name") or entry.get("Name") or entry.get("<Name>k__BackingField"))
-            if text:
-                evidence.append(text)
-            elif entry:
-                evidence.append(field_name)
+        for entry in _mapping_sequence(offer.get(field_name)):
+            text = _text(entry.get("name") or entry.get("Name"))
+            evidence.append(text or field_name)
     return list(dict.fromkeys(evidence))
 
 
@@ -533,6 +492,13 @@ def _first_category(value: Any) -> str | None:
             parts = [part.strip() for part in text.split("/") if part.strip()]
             return " > ".join(parts) if parts else text
     return None
+
+
+def _last_category(value: str | None) -> str | None:
+    if value is None:
+        return None
+    parts = [part.strip() for part in value.split(">") if part.strip()]
+    return parts[-1] if len(parts) > 1 else None
 
 
 def _presentation(value: str | None) -> str | None:
