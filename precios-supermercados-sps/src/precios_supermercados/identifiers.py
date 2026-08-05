@@ -14,20 +14,18 @@ from .enums import SourceKeyType
 from .models import NormalizedOffer
 
 _TRACKING_KEYS = {
-    "fbclid",
     "gclid",
+    "fbclid",
     "msclkid",
     "mc_cid",
     "mc_eid",
-    "ref",
-    "referrer",
 }
 _TRACKING_PREFIXES = ("utm_",)
 _WHITESPACE = re.compile(r"\s+")
 
 
 def canonicalize_text(value: str | None) -> str | None:
-    """Normaliza Unicode, espacios y mayúsculas sin alterar el significado."""
+    """Normaliza Unicode, espacios y mayúsculas para comparación cosmética."""
 
     if value is None:
         return None
@@ -36,17 +34,26 @@ def canonicalize_text(value: str | None) -> str | None:
     return collapsed or None
 
 
-def canonicalize_url(value: str) -> str:
-    """Quita fragmentos y parámetros de seguimiento de una URL estable."""
+def _required_component(value: str, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} no puede estar vacío")
+    return value.strip()
 
-    parsed = urlsplit(value.strip())
+
+def canonicalize_url(value: str) -> str:
+    """Quita solo tracking inequívoco; conserva parámetros funcionales."""
+
+    cleaned = _required_component(value, "stable_url")
+    parsed = urlsplit(cleaned)
+    if parsed.scheme.casefold() not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("stable_url debe ser una URL absoluta http/https")
+
     filtered_query = [
         (key, item_value)
         for key, item_value in parse_qsl(parsed.query, keep_blank_values=True)
         if key.casefold() not in _TRACKING_KEYS
         and not key.casefold().startswith(_TRACKING_PREFIXES)
     ]
-    filtered_query.sort(key=lambda item: (item[0].casefold(), item[1]))
     path = parsed.path.rstrip("/") or "/"
     return urlunsplit(
         (
@@ -98,21 +105,22 @@ def generate_source_product_id(
 ) -> str:
     """Genera identidad fuente sin usar precio, promoción ni disponibilidad."""
 
-    key_type = source_key_type if isinstance(source_key_type, SourceKeyType) else SourceKeyType(source_key_type)
-    normalized_key = source_key.strip()
-    if not normalized_key:
-        raise ValueError("source_key no puede estar vacío")
+    supermarket = _required_component(supermarket_id, "supermarket_id")
+    selected_key = _required_component(source_key, "source_key")
+    try:
+        key_type = source_key_type if isinstance(source_key_type, SourceKeyType) else SourceKeyType(source_key_type)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("source_key_type no es válido") from exc
+
     if key_type is SourceKeyType.STABLE_URL:
-        normalized_key = canonicalize_url(normalized_key)
-    else:
-        normalized_key = canonicalize_text(normalized_key) or ""
+        selected_key = canonicalize_url(selected_key)
 
     return _stable_digest(
         "sp_",
         {
-            "supermarket_id": canonicalize_text(supermarket_id),
+            "supermarket_id": canonicalize_text(supermarket),
             "source_key_type": key_type.value,
-            "source_key": normalized_key,
+            "source_key": selected_key,
         },
     )
 
@@ -120,12 +128,15 @@ def generate_source_product_id(
 def generate_offer_id(supermarket_id: str, location_id: str, source_product_id: str) -> str:
     """Genera la identidad de una oferta por supermercado, ubicación y producto fuente."""
 
+    supermarket = _required_component(supermarket_id, "supermarket_id")
+    location = _required_component(location_id, "location_id")
+    source_product = _required_component(source_product_id, "source_product_id")
     return _stable_digest(
         "of_",
         {
-            "supermarket_id": canonicalize_text(supermarket_id),
-            "location_id": canonicalize_text(location_id),
-            "source_product_id": canonicalize_text(source_product_id),
+            "supermarket_id": canonicalize_text(supermarket),
+            "location_id": canonicalize_text(location),
+            "source_product_id": canonicalize_text(source_product),
         },
     )
 
@@ -139,6 +150,20 @@ def _decimal_string(value: Any) -> str | None:
     return "0" if rendered in {"-0", ""} else rendered
 
 
+def _integer_value(value: Any) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _boolean_value(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise ValueError("is_promotion debe ser booleano")
+    return value
+
+
 def _value(source: NormalizedOffer | Mapping[str, Any], field_name: str) -> Any:
     if isinstance(source, NormalizedOffer):
         return getattr(source, field_name)
@@ -146,7 +171,7 @@ def _value(source: NormalizedOffer | Mapping[str, Any], field_name: str) -> Any:
 
 
 def generate_state_hash(offer: NormalizedOffer | Mapping[str, Any]) -> str:
-    """Resume únicamente atributos que abren o cierran periodos históricos."""
+    """Resume atributos comerciales y normalizados que abren o cierran periodos."""
 
     availability = _value(offer, "availability")
     if hasattr(availability, "value"):
@@ -155,12 +180,16 @@ def generate_state_hash(offer: NormalizedOffer | Mapping[str, Any]) -> str:
     state = {
         "current_price": _decimal_string(_value(offer, "current_price")),
         "reported_regular_price": _decimal_string(_value(offer, "reported_regular_price")),
-        "is_promotion": bool(_value(offer, "is_promotion")),
+        "is_promotion": _boolean_value(_value(offer, "is_promotion")),
         "availability": canonicalize_text(availability),
         "normalized_brand": canonicalize_text(_value(offer, "normalized_brand")),
-        "unit_count": int(_value(offer, "unit_count")),
-        "total_content": _decimal_string(_value(offer, "total_content")),
+        "category": canonicalize_text(_value(offer, "category")),
+        "subcategory": canonicalize_text(_value(offer, "subcategory")),
+        "variant": canonicalize_text(_value(offer, "variant")),
+        "unit_count": _integer_value(_value(offer, "unit_count")),
+        "content_per_unit": _decimal_string(_value(offer, "content_per_unit")),
         "measurement_unit": canonicalize_text(_value(offer, "measurement_unit")),
+        "total_content": _decimal_string(_value(offer, "total_content")),
     }
     serialized = json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
