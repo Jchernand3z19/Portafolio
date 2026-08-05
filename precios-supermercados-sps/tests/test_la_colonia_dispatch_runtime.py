@@ -8,20 +8,25 @@ def _workflow_text() -> str:
     ).read_text(encoding="utf-8")
 
 
-def test_dispatch_usa_nombre_de_archivo_y_api_actual():
+def test_dispatch_usa_allow_list_y_api_actual():
     workflow = _workflow_text()
 
-    assert "const liveWorkflowFile = 'precios-supermercados-sps-la-colonia-live.yml';" in workflow
-    assert "workflow_id: liveWorkflowFile" in workflow
+    assert "const allowedWorkflows = new Map([" in workflow
+    assert "precios-supermercados-sps-la-colonia-live.yml" in workflow
+    assert "precios-supermercados-sps-la-colonia-diagnostic.yml" in workflow
+    assert "workflow_id: selectedWorkflowFile" in workflow
+    assert "workflow_id: decision.workflow" not in workflow
     assert "return_run_details: true" in workflow
     assert "'X-GitHub-Api-Version': apiVersion" in workflow
     assert "const apiVersion = '2026-03-10';" in workflow
 
 
-def test_resultado_expone_run_live_sin_datos_comerciales():
+def test_resultado_expone_run_modo_y_workflow_sin_datos_comerciales():
     workflow = _workflow_text()
 
     assert "dispatcher-result.json" in workflow
+    assert "mode: decision.mode || null" in workflow
+    assert "workflow: decision.workflow || null" in workflow
     assert "live_run_id" in workflow
     assert "live_run_url" in workflow
     assert "retention-days: 1" in workflow
@@ -46,3 +51,4 @@ def test_no_ejecuta_datos_del_pr_en_shell():
     assert "eval " not in workflow
     assert "github.event.pull_request.head" not in workflow
     assert "workflow_id: decision.workflow" not in workflow
+    assert "ref: decision.ref" in workflow
