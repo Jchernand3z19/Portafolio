@@ -164,6 +164,7 @@ jobs:
           --output dispatcher-decision.json
 
       - name: Despachar o rechazar de forma segura
+        id: dispatch
         uses: actions/github-script@v7
         with:
           script: |
@@ -171,32 +172,183 @@ jobs:
             const decision = JSON.parse(fs.readFileSync('dispatcher-decision.json', 'utf8'));
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const expectedWorkflowPath = '.github/workflows/precios-supermercados-sps-la-colonia-live.yml';
+            const liveWorkflowFile = 'precios-supermercados-sps-la-colonia-live.yml';
+            const apiVersion = '2026-03-10';
+            const controllerUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const warnings = [];
+            const result = {
+              accepted: Boolean(decision.accepted),
+              request_id: decision.request_id || null,
+              pr_number: decision.pr_number || null,
+              head_sha: decision.head_sha || null,
+              ref: decision.ref || null,
+              dispatch_sent: false,
+              live_run_id: null,
+              live_run_url: null,
+              comment_published: false,
+              comment_method: null,
+              controller_run_id: String(context.runId),
+              controller_url: controllerUrl,
+              reason: decision.accepted ? '' : decision.reason,
+              warnings,
+            };
 
-            if (decision.accepted) {
+            function persistResult() {
+              fs.writeFileSync(
+                'dispatcher-result.json',
+                JSON.stringify(result, null, 2),
+                'utf8',
+              );
+              const summary = [
+                '## Resultado del controlador de La Colonia',
+                '',
+                `- accepted: \`${result.accepted}\``,
+                `- request_id: \`${result.request_id || ''}\``,
+                `- dispatch_sent: \`${result.dispatch_sent}\``,
+                `- live_run_id: \`${result.live_run_id || ''}\``,
+                `- comment_published: \`${result.comment_published}\``,
+                `- controller_run_id: \`${result.controller_run_id}\``,
+              ].join('\n');
+              if (process.env.GITHUB_STEP_SUMMARY) {
+                fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`, 'utf8');
+              }
+            }
+
+            async function publishComment(body) {
+              let pullNodeId = null;
               try {
-                await github.rest.actions.createWorkflowDispatch({
+                const { data: pull } = await github.rest.pulls.get({
                   owner,
                   repo,
-                  workflow_id: decision.workflow,
-                  ref: decision.ref,
-                  inputs: decision.inputs,
+                  pull_number: decision.pr_number,
                 });
+                pullNodeId = pull.node_id || null;
               } catch (error) {
+                warnings.push(`No fue posible resolver el nodo del PR: HTTP ${error.status || 'desconocido'}.`);
+              }
+
+              if (pullNodeId) {
+                try {
+                  await github.graphql(
+                    `mutation($subjectId: ID!, $body: String!) {
+                      addComment(input: {subjectId: $subjectId, body: $body}) {
+                        commentEdge { node { id } }
+                      }
+                    }`,
+                    { subjectId: pullNodeId, body },
+                  );
+                  return { published: true, method: 'graphql' };
+                } catch (error) {
+                  warnings.push(`GraphQL addComment rechazó la escritura: HTTP ${error.status || 'desconocido'}.`);
+                }
+              }
+
+              try {
                 await github.rest.issues.createComment({
                   owner,
                   repo,
                   issue_number: decision.pr_number,
-                  body: '## Solicitud rechazada\n\n- Razón: no fue posible enviar workflow_dispatch.\n- Estado: **no se confirmó ninguna ejecución**',
+                  body,
                 });
-                throw error;
+                return { published: true, method: 'rest' };
+              } catch (error) {
+                warnings.push(`REST createComment rechazó la escritura: HTTP ${error.status || 'desconocido'}.`);
+                return { published: false, method: null };
               }
             }
 
-            if (decision.should_comment) {
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: decision.pr_number,
-                body: decision.comment,
-              });
+            if (decision.accepted) {
+              if (decision.workflow !== expectedWorkflowPath) {
+                result.reason = 'La decisión confiable señaló un workflow inesperado.';
+                persistResult();
+                core.setFailed(result.reason);
+                return;
+              }
+
+              const marker = `<!-- la-colonia-file-dispatch:${decision.request_id} -->`;
+              if (!decision.comment.includes(marker)) {
+                result.reason = 'El comentario confiable no contiene la marca idempotente esperada.';
+                persistResult();
+                core.setFailed(result.reason);
+                return;
+              }
+
+              try {
+                const dispatch = await github.request(
+                  'POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches',
+                  {
+                    owner,
+                    repo,
+                    workflow_id: liveWorkflowFile,
+                    ref: decision.ref,
+                    inputs: decision.inputs,
+                    return_run_details: true,
+                    headers: {
+                      'X-GitHub-Api-Version': apiVersion,
+                    },
+                  },
+                );
+                result.dispatch_sent = true;
+                result.live_run_id = dispatch.data?.workflow_run_id
+                  ? String(dispatch.data.workflow_run_id)
+                  : null;
+                result.live_run_url = dispatch.data?.html_url || null;
+                core.setOutput('live_run_id', result.live_run_id || '');
+                core.setOutput('live_run_url', result.live_run_url || '');
+              } catch (error) {
+                result.reason = 'No fue posible enviar workflow_dispatch.';
+                warnings.push(`El endpoint de dispatch respondió HTTP ${error.status || 'desconocido'}.`);
+                const rejectionBody = [
+                  '## Solicitud rechazada',
+                  '',
+                  '- Razón: no fue posible enviar workflow_dispatch.',
+                  '- Estado: **no se confirmó ninguna ejecución**',
+                ].join('\n');
+                const published = await publishComment(rejectionBody);
+                result.comment_published = published.published;
+                result.comment_method = published.method;
+                persistResult();
+                core.setFailed(result.reason);
+                return;
+              }
+
+              const liveDetails = [
+                result.live_run_id ? `- Run ID live: \`${result.live_run_id}\`` : '- Run ID live: no devuelto por la API',
+                result.live_run_url ? `- Enlace live: ${result.live_run_url}` : '- Enlace live: no devuelto por la API',
+              ].join('\n');
+              const acceptanceBody = decision.comment.replace(
+                `\n\n${marker}`,
+                `\n${liveDetails}\n\n${marker}`,
+              );
+              const published = await publishComment(acceptanceBody);
+              result.comment_published = published.published;
+              result.comment_method = published.method;
+              if (!published.published) {
+                warnings.push('El dispatch fue enviado, pero GitHub no permitió publicar el comentario con GITHUB_TOKEN.');
+                core.warning('workflow_dispatch enviado; comentario pendiente de recuperación por el conector.');
+              }
+              persistResult();
+              return;
             }
+
+            if (decision.should_comment) {
+              const published = await publishComment(decision.comment);
+              result.comment_published = published.published;
+              result.comment_method = published.method;
+              if (!published.published) {
+                persistResult();
+                core.setFailed('La solicitud fue rechazada, pero no fue posible publicar la razón en el PR.');
+                return;
+              }
+            }
+            persistResult();
+
+      - name: Conservar resultado operacional del controlador
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: la-colonia-file-dispatch-${{ github.run_id }}
+          path: dispatcher-result.json
+          if-no-files-found: warn
+          retention-days: 1
