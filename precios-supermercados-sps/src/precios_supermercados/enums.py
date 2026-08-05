@@ -28,3 +28,49 @@ class LocationStatus(StrEnum):
     CONFIRMED = "confirmed"
     INFERRED = "inferred"
     UNKNOWN = "unknown"
+
+
+class ReviewStatus(StrEnum):
+    """Estado de revisión de la interpretación normalizada."""
+
+    READY = "ready"
+    NEEDS_REVIEW = "needs_review"
+
+
+class RunStatus(StrEnum):
+    """Estado permitido para una ejecución de extracción."""
+
+    RUNNING = "running"
+    SUCCESS = "success"
+    WARNING = "warning"
+    REJECTED = "rejected"
+    FAILED = "failed"
+    ABANDONED = "abandoned"
+
+
+class ChangeType(StrEnum):
+    """Clasificación resumida del cambio que abre un periodo."""
+
+    INITIAL = "initial"
+    PRICE = "price"
+    REGULAR_PRICE = "regular_price"
+    PROMOTION = "promotion"
+    AVAILABILITY = "availability"
+    PRODUCT_ATTRIBUTE = "product_attribute"
+    MULTIPLE = "multiple"
+
+
+class QualityEventCategory(StrEnum):
+    """Familia del evento registrado durante extracción o validación."""
+
+    QUALITY = "quality"
+    STRUCTURE = "structure"
+
+
+class QualityEventSeverity(StrEnum):
+    """Severidad operativa de un evento."""
+
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
