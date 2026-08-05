@@ -1,0 +1,31 @@
+name: La Colonia - Prueba live controlada
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-controlled:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    defaults:
+      run:
+        working-directory: precios-supermercados-sps
+
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ejecutar muestra pública de diez productos y búsquedas dirigidas
+        run: python scripts/probar_la_colonia.py --products 10 --directed-limit 3
