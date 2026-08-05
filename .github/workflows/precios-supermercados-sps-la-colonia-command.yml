@@ -1,14 +1,20 @@
-name: La Colonia - Despachador seguro por comentario
+name: La Colonia - Despachador seguro por archivo
 
 on:
-  issue_comment:
-    types: [created]
+  pull_request_target:
+    types: [synchronize]
+    paths:
+      - precios-supermercados-sps/.automation/la-colonia-live-command.json
 
 permissions:
   contents: read
   pull-requests: read
   issues: write
   actions: write
+
+concurrency:
+  group: la-colonia-file-dispatch-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   dispatch-command:
@@ -20,50 +26,144 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
+          persist-credentials: false
 
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Obtener metadatos verificados del Pull Request
+      - name: Verificar commit y leer el archivo como datos
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const target = 'dispatcher-pr.json';
-            if (!context.payload.issue?.pull_request) {
-              fs.writeFileSync(target, 'null', 'utf8');
+            const { TextDecoder } = require('util');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const expectedRepository = 'Jchernand3z19/Portafolio';
+            const commandPath = 'precios-supermercados-sps/.automation/la-colonia-live-command.json';
+            const payloadPull = context.payload.pull_request;
+            const eventHeadSha = context.payload.after || payloadPull?.head?.sha || '';
+            const selected = {
+              repository_owner: owner,
+              repository_full_name: `${owner}/${repo}`,
+              pr_number: payloadPull?.number || null,
+              state: payloadPull?.state || null,
+              base_repo_full_name: payloadPull?.base?.repo?.full_name || null,
+              head_repo_full_name: payloadPull?.head?.repo?.full_name || null,
+              head_repo_fork: Boolean(payloadPull?.head?.repo?.fork),
+              head_ref: payloadPull?.head?.ref || null,
+              head_sha: eventHeadSha,
+              command_file_changed: false,
+              command_file_status: 'unverified',
+            };
+
+            fs.writeFileSync('dispatcher-comments.json', '[]', 'utf8');
+
+            if (!payloadPull?.number) {
+              fs.writeFileSync('dispatcher-context.json', JSON.stringify(selected), 'utf8');
               return;
             }
-            const { data: pull } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.issue.number,
-            });
-            const selected = {
-              state: pull.state,
-              base: { repo: { full_name: pull.base?.repo?.full_name } },
-              head: {
-                ref: pull.head?.ref,
-                repo: {
-                  full_name: pull.head?.repo?.full_name,
-                  fork: Boolean(pull.head?.repo?.fork),
-                },
-              },
-            };
-            fs.writeFileSync(target, JSON.stringify(selected), 'utf8');
 
-      - name: Validar identidad, Pull Request y comando
+            const { data: pull } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: payloadPull.number,
+            });
+            selected.pr_number = pull.number;
+            selected.state = pull.state;
+            selected.base_repo_full_name = pull.base?.repo?.full_name || null;
+            selected.head_repo_full_name = pull.head?.repo?.full_name || null;
+            selected.head_repo_fork = Boolean(pull.head?.repo?.fork);
+            selected.head_ref = pull.head?.ref || null;
+
+            if (pull.head?.sha !== eventHeadSha) {
+              selected.command_file_status = 'superseded';
+              fs.writeFileSync('dispatcher-context.json', JSON.stringify(selected), 'utf8');
+              return;
+            }
+
+            let page = 1;
+            while (page <= 10 && !selected.command_file_changed) {
+              const { data: commit } = await github.rest.repos.getCommit({
+                owner,
+                repo,
+                ref: eventHeadSha,
+                per_page: 100,
+                page,
+              });
+              const files = Array.isArray(commit.files) ? commit.files : [];
+              selected.command_file_changed = files.some((file) => file.filename === commandPath);
+              if (files.length < 100) break;
+              page += 1;
+            }
+
+            if (!selected.command_file_changed) {
+              selected.command_file_status = 'not_modified';
+              fs.writeFileSync('dispatcher-context.json', JSON.stringify(selected), 'utf8');
+              return;
+            }
+
+            try {
+              const { data: commandFile } = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path: commandPath,
+                ref: eventHeadSha,
+              });
+              if (Array.isArray(commandFile) || commandFile.type !== 'file' || commandFile.encoding !== 'base64') {
+                selected.command_file_status = 'invalid_type';
+              } else if (commandFile.size > 16384) {
+                selected.command_file_status = 'too_large';
+              } else {
+                try {
+                  const bytes = Buffer.from(commandFile.content.replace(/\n/g, ''), 'base64');
+                  const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+                  fs.writeFileSync('dispatcher-command.json', decoded, 'utf8');
+                  selected.command_file_status = 'ok';
+                } catch (error) {
+                  selected.command_file_status = 'invalid_encoding';
+                }
+              }
+            } catch (error) {
+              if (error.status === 404) {
+                selected.command_file_status = 'missing';
+              } else {
+                throw error;
+              }
+            }
+
+            if (`${owner}/${repo}` === expectedRepository) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: pull.number,
+                per_page: 100,
+              });
+              const markerPattern = /<!-- la-colonia-file-dispatch:[A-Za-z0-9._-]{1,80} -->/g;
+              const markers = [];
+              for (const comment of comments) {
+                const body = typeof comment.body === 'string' ? comment.body : '';
+                const found = body.match(markerPattern);
+                if (found) markers.push(...found);
+              }
+              fs.writeFileSync('dispatcher-comments.json', JSON.stringify(markers), 'utf8');
+            }
+
+            fs.writeFileSync('dispatcher-context.json', JSON.stringify(selected), 'utf8');
+
+      - name: Validar solicitud con código confiable
         env:
           PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
         run: >-
-          python precios-supermercados-sps/scripts/procesar_comando_la_colonia.py
-          --event "$GITHUB_EVENT_PATH"
-          --pr dispatcher-pr.json
+          python precios-supermercados-sps/scripts/procesar_solicitud_archivo_la_colonia.py
+          --context dispatcher-context.json
+          --command dispatcher-command.json
+          --comments dispatcher-comments.json
           --output dispatcher-decision.json
 
-      - name: Despachar o responder de forma segura
+      - name: Despachar o rechazar de forma segura
         uses: actions/github-script@v7
         with:
           script: |
@@ -71,7 +171,6 @@ jobs:
             const decision = JSON.parse(fs.readFileSync('dispatcher-decision.json', 'utf8'));
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const issueNumber = context.payload.issue.number;
 
             if (decision.accepted) {
               try {
@@ -83,12 +182,11 @@ jobs:
                   inputs: decision.inputs,
                 });
               } catch (error) {
-                const marker = `<!-- la-colonia-dispatch-request:${context.payload.comment.id} -->`;
                 await github.rest.issues.createComment({
                   owner,
                   repo,
-                  issue_number: issueNumber,
-                  body: `No fue posible enviar la solicitud del workflow. No se ejecutó ningún recorrido.\n\n${marker}`,
+                  issue_number: decision.pr_number,
+                  body: '## Solicitud rechazada\n\n- Razón: no fue posible enviar workflow_dispatch.\n- Estado: **no se confirmó ninguna ejecución**',
                 });
                 throw error;
               }
@@ -98,7 +196,7 @@ jobs:
               await github.rest.issues.createComment({
                 owner,
                 repo,
-                issue_number: issueNumber,
+                issue_number: decision.pr_number,
                 body: decision.comment,
               });
             }
