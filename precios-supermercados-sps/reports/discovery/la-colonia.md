@@ -4,14 +4,27 @@
 
 Prueba controlada del catálogo público de La Colonia. No incluye extracción completa, persistencia, carrito, cuenta ni pedidos.
 
-## Estado inicial
+## Fuente confirmada
 
 - Plataforma: VTEX Store Framework.
 - Catálogo público: `https://www.lacolonia.com/supermercado`.
-- Operación utilizada por el componente oficial de búsqueda: `QueryProductSearchV3` / `productSearchV3`.
-- Ruta pública candidata: `https://www.lacolonia.com/_v/segment/graphql/v1`.
-- `robots.txt` excluye `/api*`, `/busca*` y `/buscapagina*`; no excluye `/_v/`.
-- La consulta se limita a cinco resultados.
+- Operación: `productSearchV3`, derivada de `QueryProductSearchV3` del paquete oficial `vtex.store-resources`.
+- Ruta pública: `https://www.lacolonia.com/_v/segment/graphql/v1`.
+- Método: consulta GraphQL GET explícita, limitada a una página y cinco SKU.
+- No utiliza cookies, tokens, cuentas ni datos personales.
+
+Un hash persistido candidato fue descartado después de que La Colonia respondiera `PERSISTED_QUERY_NOT_FOUND`. No se probaron hashes adicionales. La consulta explícita mínima fue aceptada por la misma ruta pública y devolvió productos y precios.
+
+## Cumplimiento de robots.txt
+
+`robots.txt` excluye, entre otras, las rutas `/api*`, `/busca*` y `/buscapagina*`. No excluye `/_v/`.
+
+El cliente bloquea antes de enviar cualquier petición a:
+
+- rutas excluidas configuradas;
+- `mobile.lacolonia.com`;
+- hosts diferentes de `www.lacolonia.com`;
+- URLs que no utilicen HTTPS.
 
 ## Ubicación provisional aprobada
 
@@ -22,12 +35,96 @@ location_evidence = Catálogo público en línea sin selección obligatoria de c
 location_confidence = null
 ```
 
-## Consulta controlada pendiente de validación
+No se asocia el catálogo con Plaza Pedregal, una tienda física, un seller regional o un `regionId`.
 
-La URL siguiente contiene únicamente una consulta GET pública de cinco productos, sin cookies, tokens ni datos personales. El hash persistido corresponde a `QueryProductSearchV3` de `vtex.store-resources` y debe validarse contra la instalación de La Colonia antes de considerarlo fuente definitiva.
+## Resultado live controlado
 
-[Ejecutar consulta pública limitada de cinco productos](https://www.lacolonia.com/_v/segment/graphql/v1?workspace=master&maxAge=short&appsEtag=remove&domain=store&locale=es-HN&operationName=productSearchV3&variables=%7B%7D&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%22c351315ecde7f473587b710ac8b97f147ac0ac0cd3060c27c695843a72fd3903%22%2C%22sender%22%3A%22vtex.store-resources%400.x%22%2C%22provider%22%3A%22vtex.search-graphql%400.x%22%7D%2C%22variables%22%3A%22eyJoaWRlVW5hdmFpbGFibGVJdGVtcyI6ZmFsc2UsInNrdXNGaWx0ZXIiOiJBTEwiLCJzaW11bGF0aW9uQmVoYXZpb3IiOiJkZWZhdWx0IiwiaW5zdGFsbG1lbnRDcml0ZXJpYSI6Ik1BWF9XSVRIT1VUX0lOVEVSRVNUIiwicHJvZHVjdE9yaWdpblZ0ZXgiOmZhbHNlLCJtYXAiOiJjYXRlZ29yeS0xIiwicXVlcnkiOiJzdXBlcm1lcmNhZG8iLCJvcmRlckJ5IjoiT3JkZXJCeVJlbGVhc2VEYXRlREVTQyIsImZyb20iOjAsInRvIjo0LCJzZWxlY3RlZEZhY2V0cyI6W3sia2V5IjoiY2F0ZWdvcnktMSIsInZhbHVlIjoic3VwZXJtZXJjYWRvIn1dLCJmdWxsVGV4dCI6IiIsImZhY2V0c0JlaGF2aW9yIjoiU3RhdGljIiwiY2F0ZWdvcnlUcmVlQmVoYXZpb3IiOiJkZWZhdWx0Iiwid2l0aEZhY2V0cyI6ZmFsc2V9%22%7D)
+Fecha UTC de validación: 2026-08-05.
 
-## Regla de detención
+```text
+productos informados por la fuente: 9291
+páginas procesadas: 1
+productos solicitados: 5
+productos extraídos: 5
+productos con precio: 5
+duplicados: 0
+errores: 0
+eventos estructurales: 0
+bloqueos: 0
+```
 
-Si esta fuente o una consulta equivalente observada en los activos públicos no devuelve precios, el desarrollo se detendrá. No se utilizarán rutas excluidas ni se inventarán precios.
+### Muestra sanitizada
+
+| ID interno | Producto | Marca | Presentación | Precio actual | Precio regular informado | Promoción |
+|---|---|---|---|---:|---:|---|
+| `18346` | Alimento Líquido Pediasure 10+ Vainilla 220 Ml | Pediasure | 220 Ml | 108.15 | — | No |
+| `18347` | Alimento En Polvo Enterex Kids Vainilla 400 Gr | Enterex | 400 Gr | 638.35 | — | No |
+| `18348` | Alimento En Polvo Enterex Kids Vainilla 800 Gr | Enterex | 800 Gr | 1346.35 | — | No |
+| `18349` | Alimento En Polvo Enterex Total Vainilla 800G | Enterex | 800G | 1057.95 | — | No |
+| `18350` | Arena Para Gatos Biomaa 6 Kg | Biomaa | 6 Kg | 274.95 | — | No |
+
+Los cinco productos incluyeron URL individual y categoría jerárquica.
+
+## Disponibilidad
+
+La respuesta live devolvió simultáneamente precio positivo y cantidad `0` para los cinco productos. Esa combinación no se considera prueba inequívoca de agotado porque la consulta no posee contexto regional confirmado.
+
+Regla adoptada:
+
+```text
+precio positivo + cantidad positiva
+→ in_stock
+
+precio ausente + cantidad explícita cero
+→ out_of_stock
+
+precio positivo + cantidad cero
+→ unknown + quality:availability_conflict_price_with_zero_quantity
+```
+
+La extracción de precios fue aceptada, pero los cinco productos quedaron pendientes de revisión de disponibilidad.
+
+## Paginación
+
+La fuente informó 9,291 productos. Con el límite de cinco usado exclusivamente en la prueba se calculan 1,859 páginas. Esto no representa la estrategia futura de extracción completa; antes de ampliarla deberá validarse un tamaño de página mayor permitido y umbrales de cobertura.
+
+La paginación usa índices inclusivos `from` y `to`:
+
+```text
+página 1: 0–4
+página 2: 5–9
+```
+
+## Campos confirmados
+
+- ID interno del SKU;
+- ID interno del producto;
+- referencia/SKU cuando existe;
+- EAN cuando existe;
+- nombre;
+- marca;
+- categoría y subcategoría derivadas de la ruta original;
+- presentación;
+- imagen;
+- URL individual;
+- precio actual;
+- precio regular informado cuando supera el actual;
+- evidencia estructurada de promoción;
+- seller original en auditoría;
+- unidad comercial;
+- multiplicador;
+- cantidad publicada;
+- valores originales de auditoría.
+
+## Riesgos y limitaciones
+
+- La disponibilidad pública sin región puede ser ambigua.
+- La muestra live no incluyó un producto promocional ni pesable; ambos casos están cubiertos por fixtures offline, pero requieren muestra live dirigida antes de una extracción completa.
+- El total del catálogo es dinámico.
+- La consulta explícita depende del esquema público de `vtex.search-graphql` y debe detectar cambios estructurales.
+- No se validó todavía un tamaño de página superior a cinco.
+- No se validó recorrido completo, persistencia ni comparación entre ejecuciones.
+
+## Decisión
+
+La prueba demuestra que es posible obtener productos, precios, IDs y URLs desde una fuente pública permitida. El scraper puede continuar a una siguiente fase controlada, con la condición de mantener `availability = unknown` cuando exista conflicto entre precio y cantidad y de validar después productos promocionales y pesables en vivo.
