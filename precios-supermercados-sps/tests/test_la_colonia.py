@@ -38,11 +38,47 @@ def build_extractor() -> LaColoniaExtractor:
 
 
 def parse_fixture(name: str = "product_search_page.json"):
-    return build_extractor().parse_payload(
+    extractor = build_extractor()
+    return extractor.parse_payload(
         load_fixture(name),
         scrape_run_id="run_la_colonia_test",
-        source_url=build_extractor().build_page_url(),
+        source_url=extractor.build_page_url(),
         page_size=5,
+    )
+
+
+def add_sku(
+    payload,
+    *,
+    item_id: str,
+    name_complete: str,
+    price,
+    list_price,
+    quantity,
+):
+    item = deepcopy(payload["data"]["productSearch"]["products"][0]["items"][0])
+    item["itemId"] = item_id
+    item["name"] = name_complete
+    item["nameComplete"] = name_complete
+    item["ean"] = f"742100000{item_id}"
+    item["referenceId"] = [{"Key": "RefId", "Value": f"SKU-{item_id}"}]
+    offer = item["sellers"][0]["commercialOffer"]
+    offer["Price"] = price
+    offer["ListPrice"] = list_price
+    offer["AvailableQuantity"] = quantity
+    offer["discountHighlights"] = []
+    offer["teasers"] = []
+    payload["data"]["productSearch"]["products"][0]["items"].append(item)
+    return item
+
+
+def parse_payload(payload, *, page_size: int = 5):
+    extractor = build_extractor()
+    return extractor.parse_payload(
+        payload,
+        scrape_run_id="run_custom",
+        source_url=extractor.build_page_url(page_size=page_size),
+        page_size=page_size,
     )
 
 
@@ -50,9 +86,111 @@ def test_parses_five_products_and_uses_raw_product_contract():
     result = parse_fixture()
     assert result.accepted is True
     assert len(result.products) == 5
-    assert result.metrics.products_extracted == 5
-    assert result.metrics.products_with_price == 3
+    assert result.metrics.products_requested == 5
+    assert result.metrics.products_returned == 5
+    assert result.metrics.skus_returned == 5
+    assert result.metrics.skus_extracted == 5
+    assert result.metrics.skus_with_price == 3
     assert all(product.supermarket_id == "la_colonia" for product in result.products)
+
+
+def test_product_with_one_sku_produces_one_raw_product():
+    result = parse_fixture()
+    product_skus = [
+        product for product in result.products if product.raw_values["product_id"] == "1001"
+    ]
+    assert len(product_skus) == 1
+    assert product_skus[0].source_key == "2001"
+
+
+def test_product_with_multiple_skus_produces_one_raw_product_per_sku():
+    payload = load_fixture("product_search_page.json")
+    add_sku(
+        payload,
+        item_id="2010",
+        name_complete="Malteada Sula Chocosula 946 Ml",
+        price=34.9,
+        list_price=34.9,
+        quantity=8,
+    )
+    add_sku(
+        payload,
+        item_id="2011",
+        name_complete="Malteada Sula Chocosula Sin Existencia 1 Lt",
+        price=0,
+        list_price=0,
+        quantity=0,
+    )
+
+    result = parse_payload(payload)
+    product_skus = [
+        product for product in result.products if product.raw_values["product_id"] == "1001"
+    ]
+
+    assert len(product_skus) == 3
+    assert {product.source_key for product in product_skus} == {"2001", "2010", "2011"}
+    assert result.metrics.products_returned == 5
+    assert result.metrics.skus_returned == 7
+    assert result.metrics.skus_extracted == 7
+
+
+def test_five_products_with_first_multisku_do_not_omit_later_products():
+    payload = load_fixture("product_search_page.json")
+    add_sku(
+        payload,
+        item_id="2010",
+        name_complete="Malteada Sula Chocosula 946 Ml",
+        price=34.9,
+        list_price=34.9,
+        quantity=8,
+    )
+    add_sku(
+        payload,
+        item_id="2011",
+        name_complete="Malteada Sula Chocosula Sin Precio 1 Lt",
+        price=0,
+        list_price=0,
+        quantity=None,
+    )
+
+    result = parse_payload(payload)
+    product_ids = {product.raw_values["product_id"] for product in result.products}
+
+    assert product_ids == {"1001", "1002", "1003", "1004", "1005"}
+    assert result.products[-1].raw_values["product_id"] == "1005"
+    assert len(result.products) == 7
+
+
+def test_available_no_price_and_exhausted_skus_are_all_preserved():
+    payload = load_fixture("product_search_page.json")
+    add_sku(
+        payload,
+        item_id="2010",
+        name_complete="Malteada Sula Chocosula Sin Precio 946 Ml",
+        price=0,
+        list_price=0,
+        quantity=None,
+    )
+    add_sku(
+        payload,
+        item_id="2011",
+        name_complete="Malteada Sula Chocosula Agotada 1 Lt",
+        price=0,
+        list_price=0,
+        quantity=0,
+    )
+
+    result = parse_payload(payload)
+    by_key = {product.source_key: product for product in result.products}
+
+    assert by_key["2001"].raw_values["availability"] == AvailabilityStatus.IN_STOCK.value
+    assert by_key["2010"].raw_values["current_price"] is None
+    assert by_key["2010"].raw_values["availability"] == AvailabilityStatus.UNKNOWN.value
+    assert by_key["2011"].raw_values["current_price"] is None
+    assert by_key["2011"].raw_values["availability"] == AvailabilityStatus.OUT_OF_STOCK.value
+    assert AvailabilityStatus.NOT_LISTED.value not in {
+        product.raw_values["availability"] for product in result.products
+    }
 
 
 def test_packaged_product_has_price_brand_category_and_presentation():
@@ -131,34 +269,60 @@ def test_uses_approved_unknown_online_location_values():
     assert product.location_confidence is None
 
 
-def test_pagination_uses_non_overlapping_from_and_to_indices():
+def test_pagination_uses_non_overlapping_product_indices():
     extractor = build_extractor()
-    first = decode_search_variables(extractor.build_page_url(page=1, page_size=5))
-    second = decode_search_variables(extractor.build_page_url(page=2, page_size=5))
-    assert (first["from"], first["to"]) == (0, 4)
-    assert (second["from"], second["to"]) == (5, 9)
+    first = decode_search_variables(extractor.build_page_url(page=1, page_size=10))
+    second = decode_search_variables(extractor.build_page_url(page=2, page_size=10))
+    assert (first["from"], first["to"]) == (0, 9)
+    assert (second["from"], second["to"]) == (10, 19)
 
 
-def test_metrics_discover_pages_from_records_filtered():
-    result = parse_fixture()
-    assert result.metrics.products_discovered == 25
-    assert result.metrics.pages_discovered == 5
-    assert result.metrics.pages_processed == 1
-    assert result.metrics.page_coverage == pytest.approx(0.2)
-
-
-def test_duplicate_item_id_is_deduplicated():
+def test_metrics_separate_products_and_skus():
     payload = load_fixture("product_search_page.json")
-    duplicate = deepcopy(payload["data"]["productSearch"]["products"][0])
-    payload["data"]["productSearch"]["products"].insert(1, duplicate)
-    result = build_extractor().parse_payload(
+    add_sku(
         payload,
-        scrape_run_id="run_duplicate",
-        source_url=build_extractor().build_page_url(),
-        page_size=5,
+        item_id="2010",
+        name_complete="Malteada Sula Chocosula 946 Ml",
+        price=34.9,
+        list_price=34.9,
+        quantity=8,
     )
+    add_sku(
+        payload,
+        item_id="2011",
+        name_complete="Malteada Sula Chocosula Agotada 1 Lt",
+        price=0,
+        list_price=0,
+        quantity=0,
+    )
+
+    result = parse_payload(payload)
+    metrics = result.metrics
+
+    assert metrics.products_discovered == 25
+    assert metrics.products_requested == 5
+    assert metrics.products_returned == 5
+    assert metrics.skus_returned == 7
+    assert metrics.skus_extracted == 7
+    assert metrics.skus_with_price == 4
+    assert metrics.skus_pending_review == 3
+    assert metrics.duplicate_skus == 0
+    assert metrics.pages_discovered == 5
+    assert metrics.pages_processed == 1
+    assert metrics.page_coverage == pytest.approx(0.2)
+
+
+def test_duplicate_sku_is_deduplicated_by_stable_source_key():
+    payload = load_fixture("product_search_page.json")
+    duplicate = deepcopy(payload["data"]["productSearch"]["products"][0]["items"][0])
+    payload["data"]["productSearch"]["products"][0]["items"].append(duplicate)
+    result = parse_payload(payload)
+
     assert len(result.products) == 5
-    assert result.metrics.duplicate_products == 1
+    assert result.metrics.products_returned == 5
+    assert result.metrics.skus_returned == 6
+    assert result.metrics.skus_extracted == 5
+    assert result.metrics.duplicate_skus == 1
     assert "quality:duplicate_source_key" in result.quality_events
 
 
@@ -175,12 +339,7 @@ def test_structural_change_is_rejected():
 def test_graphql_errors_are_reported_as_structural_change():
     payload = {"data": {}, "errors": [{"message": "PersistedQueryNotFound"}]}
     with pytest.raises(StructureChangedError, match="GraphQL"):
-        build_extractor().parse_payload(
-            payload,
-            scrape_run_id="run_error",
-            source_url=build_extractor().build_page_url(),
-            page_size=5,
-        )
+        parse_payload(payload)
 
 
 def test_page_without_any_price_is_not_accepted():
@@ -191,14 +350,9 @@ def test_page_without_any_price_is_not_accepted():
                 seller["commercialOffer"]["Price"] = 0
                 seller["commercialOffer"]["ListPrice"] = 0
                 seller["commercialOffer"]["AvailableQuantity"] = 0
-    result = build_extractor().parse_payload(
-        payload,
-        scrape_run_id="run_no_prices",
-        source_url=build_extractor().build_page_url(),
-        page_size=5,
-    )
+    result = parse_payload(payload)
     assert result.accepted is False
-    assert result.metrics.products_with_price == 0
+    assert result.metrics.skus_with_price == 0
     assert "quality:missing_all_prices" in result.quality_events
 
 
@@ -295,6 +449,6 @@ def test_client_respects_429_and_then_stops():
     assert 2.0 in sleeps
 
 
-def test_live_limit_cannot_exceed_five_products():
-    with pytest.raises(ValueError, match="entre 1 y 5"):
-        build_extractor().build_page_url(page_size=6)
+def test_live_limit_cannot_exceed_ten_products():
+    with pytest.raises(ValueError, match="entre 1 y 10"):
+        build_extractor().build_page_url(page_size=11)
