@@ -1,6 +1,15 @@
 """Fundación común del proyecto Precios de Supermercados de SPS."""
 
-from .enums import AvailabilityStatus, LocationStatus, SourceKeyType
+from .enums import (
+    AvailabilityStatus,
+    ChangeType,
+    LocationStatus,
+    QualityEventCategory,
+    QualityEventSeverity,
+    ReviewStatus,
+    RunStatus,
+    SourceKeyType,
+)
 from .identifiers import (
     canonicalize_text,
     canonicalize_url,
@@ -13,7 +22,12 @@ from .models import NormalizedOffer, RawProduct, ValidatedOffer
 
 __all__ = [
     "AvailabilityStatus",
+    "ChangeType",
     "LocationStatus",
+    "QualityEventCategory",
+    "QualityEventSeverity",
+    "ReviewStatus",
+    "RunStatus",
     "SourceKeyType",
     "RawProduct",
     "NormalizedOffer",
