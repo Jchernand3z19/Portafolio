@@ -9,9 +9,24 @@ from types import MappingProxyType
 from typing import Any, Mapping, TypeVar
 from urllib.parse import urlsplit
 
-from .enums import AvailabilityStatus, LocationStatus, SourceKeyType
+from .enums import (
+    AvailabilityStatus,
+    LocationStatus,
+    ReviewStatus,
+    SourceKeyType,
+)
 
 EnumT = TypeVar("EnumT", SourceKeyType, AvailabilityStatus, LocationStatus)
+
+_REVIEWABLE_NORMALIZED_FIELDS = (
+    "normalized_brand",
+    "category",
+    "subcategory",
+    "unit_count",
+    "content_per_unit",
+    "measurement_unit",
+    "total_content",
+)
 
 
 def _non_empty(value: str, field_name: str) -> str:
@@ -57,6 +72,14 @@ def _decimal_value(
         comparator = "mayor o igual que cero" if allow_zero else "mayor que cero"
         raise ValueError(f"{field_name} debe ser {comparator}")
     return decimal_value
+
+
+def _optional_positive_int(value: int | None, field_name: str) -> int | None:
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{field_name} debe ser un entero mayor que cero")
+    return value
 
 
 def _utc_datetime(value: datetime, field_name: str) -> datetime:
@@ -149,7 +172,7 @@ class RawProduct:
 
 @dataclass(frozen=True, slots=True)
 class NormalizedOffer:
-    """Oferta estandarizada que todos los extractores deben producir."""
+    """Oferta común; puede conservar interpretación parcial con revisión pendiente."""
 
     supermarket_id: str
     location_id: str
@@ -161,15 +184,7 @@ class NormalizedOffer:
     source_name: str
     product_url: str
     normalized_name: str
-    normalized_brand: str
-    category: str
-    subcategory: str
-    unit_count: int
-    content_per_unit: Decimal | int | float | str
-    measurement_unit: str
-    total_content: Decimal | int | float | str
     currency: str
-    current_price: Decimal | int | float | str
     is_promotion: bool
     availability: AvailabilityStatus | str
     location_status: LocationStatus | str
@@ -178,12 +193,20 @@ class NormalizedOffer:
     extractor_version: str
     schema_version: str
     source_url: str
+    normalized_brand: str | None = None
+    category: str | None = None
+    subcategory: str | None = None
+    variant: str | None = None
+    unit_count: int | None = None
+    content_per_unit: Decimal | int | float | str | None = None
+    measurement_unit: str | None = None
+    total_content: Decimal | int | float | str | None = None
+    current_price: Decimal | int | float | str | None = None
     source_sku: str | None = None
     source_brand: str | None = None
     source_presentation: str | None = None
     source_category: str | None = None
     image_url: str | None = None
-    variant: str | None = None
     barcode: str | None = None
     reported_regular_price: Decimal | int | float | str | None = None
     unit_price: Decimal | int | float | str | None = None
@@ -191,6 +214,8 @@ class NormalizedOffer:
     location_evidence: str | None = None
     location_confidence: Decimal | int | float | str | None = None
     raw_values: Mapping[str, Any] = field(default_factory=dict)
+    review_status: ReviewStatus = field(init=False)
+    pending_fields: tuple[str, ...] = field(init=False)
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -202,10 +227,6 @@ class NormalizedOffer:
             "offer_id",
             "source_name",
             "normalized_name",
-            "normalized_brand",
-            "category",
-            "subcategory",
-            "measurement_unit",
             "scrape_run_id",
             "extractor_version",
             "schema_version",
@@ -220,16 +241,18 @@ class NormalizedOffer:
         object.__setattr__(self, "image_url", _absolute_url(self.image_url, "image_url"))
         object.__setattr__(self, "observed_at_utc", _utc_datetime(self.observed_at_utc, "observed_at_utc"))
 
-        if not isinstance(self.unit_count, int) or isinstance(self.unit_count, bool) or self.unit_count <= 0:
-            raise ValueError("unit_count debe ser un entero mayor que cero")
         if not isinstance(self.is_promotion, bool):
             raise ValueError("is_promotion debe ser booleano")
 
-        object.__setattr__(self, "content_per_unit", _decimal_value(self.content_per_unit, "content_per_unit", required=True))
-        object.__setattr__(self, "total_content", _decimal_value(self.total_content, "total_content", required=True))
-        object.__setattr__(self, "current_price", _decimal_value(self.current_price, "current_price", required=True))
+        object.__setattr__(self, "unit_count", _optional_positive_int(self.unit_count, "unit_count"))
+        object.__setattr__(self, "content_per_unit", _decimal_value(self.content_per_unit, "content_per_unit"))
+        object.__setattr__(self, "total_content", _decimal_value(self.total_content, "total_content"))
+        object.__setattr__(self, "current_price", _decimal_value(self.current_price, "current_price"))
         object.__setattr__(self, "reported_regular_price", _decimal_value(self.reported_regular_price, "reported_regular_price"))
         object.__setattr__(self, "unit_price", _decimal_value(self.unit_price, "unit_price"))
+
+        if self.availability is AvailabilityStatus.IN_STOCK and self.current_price is None:
+            raise ValueError("current_price es obligatorio y mayor que cero cuando availability es in_stock")
 
         currency = _non_empty(self.currency, "currency").upper()
         if len(currency) != 3 or not currency.isalpha():
@@ -237,11 +260,15 @@ class NormalizedOffer:
         object.__setattr__(self, "currency", currency)
 
         for field_name in (
+            "normalized_brand",
+            "category",
+            "subcategory",
+            "variant",
+            "measurement_unit",
             "source_sku",
             "source_brand",
             "source_presentation",
             "source_category",
-            "variant",
             "barcode",
             "unit_price_basis",
             "location_evidence",
@@ -255,15 +282,28 @@ class NormalizedOffer:
             if self.location_evidence is None or self.location_confidence is None:
                 raise ValueError("Una ubicación confirmed o inferred requiere evidencia y confianza")
 
+        pending_fields = tuple(
+            field_name
+            for field_name in _REVIEWABLE_NORMALIZED_FIELDS
+            if getattr(self, field_name) is None
+        )
+        object.__setattr__(self, "pending_fields", pending_fields)
+        object.__setattr__(
+            self,
+            "review_status",
+            ReviewStatus.NEEDS_REVIEW if pending_fields else ReviewStatus.READY,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ValidatedOffer:
-    """Oferta normalizada que superó validaciones y está lista para persistencia."""
+    """Oferta validada estructuralmente, con trazabilidad de revisión y calidad."""
 
     offer: NormalizedOffer
     state_hash: str
     validated_at_utc: datetime
     quality_events: tuple[str, ...] = ()
+    review_status: ReviewStatus = field(init=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.offer, NormalizedOffer):
@@ -274,5 +314,11 @@ class ValidatedOffer:
         object.__setattr__(self, "state_hash", state_hash)
         object.__setattr__(self, "validated_at_utc", _utc_datetime(self.validated_at_utc, "validated_at_utc"))
 
-        cleaned_events = tuple(_non_empty(event, "quality_event") for event in self.quality_events)
-        object.__setattr__(self, "quality_events", cleaned_events)
+        supplied_events = tuple(_non_empty(event, "quality_event") for event in self.quality_events)
+        generated_events = tuple(
+            f"pending_normalization:{field_name}"
+            for field_name in self.offer.pending_fields
+        )
+        merged_events = tuple(dict.fromkeys((*supplied_events, *generated_events)))
+        object.__setattr__(self, "quality_events", merged_events)
+        object.__setattr__(self, "review_status", self.offer.review_status)
