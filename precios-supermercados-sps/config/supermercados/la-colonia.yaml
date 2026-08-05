@@ -1,0 +1,39 @@
+supermarket_id: la_colonia
+name: Supermercados La Colonia
+base_url: https://www.lacolonia.com
+catalog_url: https://www.lacolonia.com/supermercado
+robots_url: https://www.lacolonia.com/robots.txt
+location:
+  id: la_colonia_online
+  status: unknown
+  evidence: Catálogo público en línea sin selección obligatoria de ciudad o sucursal.
+  confidence: null
+source:
+  type: vtex_store_framework_graphql
+  endpoint: https://www.lacolonia.com/_v/segment/graphql/v1
+  operation: productSearchV3
+  persisted_query_hash: c351315ecde7f473587b710ac8b97f147ac0ac0cd3060c27c695843a72fd3903
+  category_query: supermercado
+  category_map: category-1
+limits:
+  live_products_min: 3
+  live_products_max: 5
+  concurrency: 1
+  timeout_seconds: 20
+  max_retries: 2
+  retry_delay_seconds: 1.5
+robots:
+  forbidden_path_prefixes:
+    - /img
+    - /account
+    - /login
+    - /checkout
+    - /busca
+    - /quick-view
+    - /espiar
+    - /buscapagina
+    - /Site/Track.aspx
+    - /api
+    - /register.js
+  forbidden_hosts:
+    - mobile.lacolonia.com
