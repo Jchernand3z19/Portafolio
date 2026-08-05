@@ -1,15 +1,87 @@
-name: La Colonia - Prueba live controlada
+name: La Colonia - Recorrido live manual
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Etapa segura del recorrido
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - staged
+          - full
+      page_size:
+        description: Productos solicitados por página
+        required: true
+        default: "10"
+        type: choice
+        options:
+          - "10"
+          - "20"
+          - "30"
+          - "50"
+      max_pages:
+        description: Límite de páginas; 0 usa el valor del modo
+        required: true
+        default: "2"
+        type: string
+      max_products:
+        description: Límite de productos; 0 desactiva este límite
+        required: true
+        default: "0"
+        type: string
+      delay_seconds:
+        description: Pausa secuencial entre peticiones
+        required: true
+        default: "1.5"
+        type: string
+      profile:
+        description: Baseline observa; validation aplica umbrales
+        required: true
+        default: baseline
+        type: choice
+        options:
+          - baseline
+          - validation
+      max_missing_price_ratio:
+        description: Umbral validado; vacío en baseline
+        required: false
+        default: ""
+        type: string
+      max_duplicate_sku_ratio:
+        description: Umbral validado; vacío en baseline
+        required: false
+        default: ""
+        type: string
+      max_duplicate_product_ratio:
+        description: Umbral validado; vacío en baseline
+        required: false
+        default: ""
+        type: string
+      max_total_change_ratio:
+        description: Umbral validado; vacío en baseline
+        required: false
+        default: ""
+        type: string
+      allow_full:
+        description: Confirmación manual adicional para el recorrido completo
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
+concurrency:
+  group: la-colonia-live-catalog-crawl
+  cancel-in-progress: false
+
 jobs:
-  live-controlled:
+  live-crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 45
 
     defaults:
       run:
@@ -27,5 +99,67 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Ejecutar muestra pública de diez productos y búsquedas dirigidas
-        run: python scripts/probar_la_colonia.py --products 10 --directed-limit 3
+      - name: Ejecutar recorrido secuencial controlado
+        id: crawl
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_PAGE_SIZE: ${{ inputs.page_size }}
+          INPUT_MAX_PAGES: ${{ inputs.max_pages }}
+          INPUT_MAX_PRODUCTS: ${{ inputs.max_products }}
+          INPUT_DELAY_SECONDS: ${{ inputs.delay_seconds }}
+          INPUT_PROFILE: ${{ inputs.profile }}
+          INPUT_MAX_MISSING_PRICE_RATIO: ${{ inputs.max_missing_price_ratio }}
+          INPUT_MAX_DUPLICATE_SKU_RATIO: ${{ inputs.max_duplicate_sku_ratio }}
+          INPUT_MAX_DUPLICATE_PRODUCT_RATIO: ${{ inputs.max_duplicate_product_ratio }}
+          INPUT_MAX_TOTAL_CHANGE_RATIO: ${{ inputs.max_total_change_ratio }}
+          INPUT_ALLOW_FULL: ${{ inputs.allow_full }}
+        run: |
+          set +e
+          args=(
+            --mode "$INPUT_MODE"
+            --page-size "$INPUT_PAGE_SIZE"
+            --delay-seconds "$INPUT_DELAY_SECONDS"
+            --profile "$INPUT_PROFILE"
+            --output-dir run-artifacts
+          )
+
+          if [[ "$INPUT_MAX_PAGES" != "0" ]]; then
+            args+=(--max-pages "$INPUT_MAX_PAGES")
+          fi
+          if [[ "$INPUT_MAX_PRODUCTS" != "0" ]]; then
+            args+=(--max-products "$INPUT_MAX_PRODUCTS")
+          fi
+          if [[ -n "$INPUT_MAX_MISSING_PRICE_RATIO" ]]; then
+            args+=(--max-missing-price-ratio "$INPUT_MAX_MISSING_PRICE_RATIO")
+          fi
+          if [[ -n "$INPUT_MAX_DUPLICATE_SKU_RATIO" ]]; then
+            args+=(--max-duplicate-sku-ratio "$INPUT_MAX_DUPLICATE_SKU_RATIO")
+          fi
+          if [[ -n "$INPUT_MAX_DUPLICATE_PRODUCT_RATIO" ]]; then
+            args+=(--max-duplicate-product-ratio "$INPUT_MAX_DUPLICATE_PRODUCT_RATIO")
+          fi
+          if [[ -n "$INPUT_MAX_TOTAL_CHANGE_RATIO" ]]; then
+            args+=(--max-total-change-ratio "$INPUT_MAX_TOTAL_CHANGE_RATIO")
+          fi
+          if [[ "$INPUT_ALLOW_FULL" == "true" ]]; then
+            args+=(--allow-full)
+          fi
+
+          python scripts/probar_la_colonia.py "${args[@]}"
+          exit_code=$?
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Publicar informe sanitizado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: la-colonia-${{ inputs.mode }}-summary
+          path: precios-supermercados-sps/run-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Reflejar aceptación del recorrido
+        if: steps.crawl.outputs.exit_code != '0'
+        run: exit "${{ steps.crawl.outputs.exit_code }}"
