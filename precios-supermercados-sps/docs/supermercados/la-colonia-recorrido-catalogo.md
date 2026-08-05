@@ -1,264 +1,144 @@
-# La Colonia — recorrido y diagnóstico de paginación
+# La Colonia — recorrido y modo diagnóstico de ventanas
 
-## Estado verificado
+## Estado de la fase
 
-La investigación se realizó sobre el PR `#7`, rama `feature/la-colonia-full-crawl-validation`.
+La fase vive en el PR `#7`, rama `feature/la-colonia-full-crawl-validation`.
 
 - PR abierto, en borrador y no fusionado.
-- Head inicial verificado: `2da8af8fea2816f4970629d4082f02d0baca3abc`.
-- No existía una tercera repetición del baseline de 500.
-- La validation de 500 no se había ejecutado.
-- `full` no se había ejecutado.
-- El workflow live continuaba únicamente bajo `workflow_dispatch`.
-- El archivo operacional conservaba `la-colonia-baseline-products-500-002` y no fue modificado durante el diagnóstico.
+- Baseline de 200 aceptado.
+- Validation de 200 aceptada.
+- Baseline de 500 rechazado dos veces.
+- La ventana `380–399` devolvió 19 de 20 productos de forma reproducible.
+- No se autorizó una tercera repetición normal.
+- Validation de 500 continúa bloqueada.
+- `full` no se ejecutó.
+- No existe persistencia, historial, ejecución diaria, Google Sheets, BigQuery ni Power BI.
+- El archivo operacional no se modificó.
 
-La fase continúa sin persistencia, historial, ejecución diaria, Google Sheets, BigQuery ni Power BI. Ninguna página parcial es aceptable.
+## Diagnóstico previo
 
-## Ejecuciones existentes inspeccionadas
-
-| Intento | Live run | Job | Artefacto | Resultado |
-|---|---:|---:|---:|---|
-| Baseline 500 #1 | `31035091894` | `92405070961` | `8942244270` | rechazado, exit code 2 |
-| Baseline 500 #2 | `31037207732` | `92412185299` | `8943081061` | rechazado, exit code 2 |
-
-En ambos runs:
+Los dos runs de 500 coincidieron en las páginas `1–19`. La página `20` volvió a producir:
 
 ```text
-pages_expected = 25
-pages_attempted = 20
-pages_completed = 19
-page_coverage = 0.76
-products_reported_initial = 9291
-products_reported_final = 9291
-products_returned = 399
-products_processed = 380
-skus_returned = 399
-skus_extracted = 380
-errors = 1
-structural_events = 0
-http_403 = 0
-http_429 = 0
-persistent_http_429 = 0
-http_5xx = 0
-retries = 0
-duplicate_skus = 0
-duplicate_products = 0
-total_change_ratio = 0.0
-```
-
-Las páginas `1–19` coincidieron exactamente en rangos, conteos, bytes, firmas sanitizadas y total del catálogo. La página `20`, rango `380–399`, coincidió exactamente en ambos artefactos:
-
-```text
+from = 380
+to = 399
 productos esperados = 20
 productos entregados por GraphQL = 19
 productos observados por el runner = 19
 SKU entregados = 19
 SKU extraídos = 19
+recordsFiltered = 9291
 bytes = 20957
 firma = c86ae16a7b54543c8c7e68422b70fb7dbe5eb06a27395f0f76b1c65f0e3ef5ca
-accepted = false
 ```
 
-Solo cambiaron tiempos e identificadores de ejecución. Los archivos `run-summary.json` difieren únicamente en tiempos, timestamps e IDs; el contenido diagnóstico restante es idéntico.
+No está demostrado un error del parser, del runner ni del cálculo de `from/to`. La hipótesis más fuerte continúa siendo un desajuste determinista entre el total/índice reportado por VTEX y la lista materializada para esa frontera. La causa interna exacta no está demostrada.
 
-## Contrato comprobado en el código
+## Arquitectura separada
 
-### Ventanas
+### Capa A — dominio
 
-`build_product_search_url` calcula:
+Archivo:
 
 ```text
-from = (page - 1) * page_size
-to = from + page_size - 1
+src/precios_supermercados/scrapers/la_colonia_window_diagnostic.py
 ```
 
-Para página `20` y `page_size = 20`:
+Responsabilidades:
+
+- representar ventanas inclusivas;
+- construir consultas exactas;
+- observar productos antes del parsing comercial;
+- mantener identidades únicamente en memoria;
+- calcular firmas completas de ventana;
+- calcular solapamientos, unión y duplicados;
+- serializar únicamente métricas agregadas;
+- bloquear identificadores, hashes individuales y datos comerciales.
+
+No conoce GitHub Actions ni el controlador.
+
+### Capa B — runtime y CLI
+
+Archivos:
 
 ```text
-from = 380
-to = 399
-ancho = to - from + 1 = 20
+src/precios_supermercados/scrapers/la_colonia_window_diagnostic_runtime.py
+scripts/diagnosticar_ventanas_la_colonia.py
 ```
 
-El código trata `to` como inclusivo. Las primeras 19 páginas completas también son coherentes con esa semántica.
+Responsabilidades:
 
-### Tamaño esperado
+- aceptar únicamente el plan `frontier_380_399_v1`;
+- ejecutar ventanas en orden y con concurrencia `1`;
+- usar pausa fija de `1.5` segundos;
+- limitar el plan a 12 solicitudes lógicas y usar `max_retries=0`;
+- detenerse ante errores HTTP, estructura inválida, total cambiante o duración excedida;
+- permitir que una ventana parcial se registre como `quality:partial_window`;
+- escribir únicamente `diagnostic-summary.json` y `diagnostic-summary.md`;
+- devolver códigos de salida explícitos.
 
-El extractor calcula el esperado con el total reportado y el índice `from`:
+El runtime no modifica el runner normal. La página parcial del recorrido normal continúa siendo rechazada.
+
+### Capa C — infraestructura confiable
+
+El controlador actual se ejecuta mediante `pull_request_target`, hace checkout de `main` y valida el archivo de comando con código confiable.
+
+Archivos relevantes en `main`:
 
 ```text
-remaining = recordsFiltered - from
-expected = min(page_size, remaining)
+.github/workflows/precios-supermercados-sps-la-colonia-command.yml
+precios-supermercados-sps/src/precios_supermercados/automation/la_colonia_file_dispatcher.py
+precios-supermercados-sps/scripts/procesar_solicitud_archivo_la_colonia.py
+precios-supermercados-sps/tests/test_la_colonia_file_dispatcher.py
+precios-supermercados-sps/tests/test_la_colonia_dispatch_runtime.py
+precios-supermercados-sps/tests/test_la_colonia_dispatch_recovery.py
 ```
 
-Con `recordsFiltered = 9291` y `from = 380`, el esperado es `20`.
+El dispatcher confiable actual:
 
-### `recordsFiltered`
+- exige un esquema fijo de diez campos;
+- solo acepta `smoke` y `staged`;
+- prohíbe `full`;
+- fija el workflow normal;
+- rechaza campos desconocidos.
 
-Se obtiene directamente de `data.productSearch.recordsFiltered`. El runner exige que sea un entero válido y no lo deriva del tamaño de `products`.
+Por tanto, **el diagnóstico seguro no puede habilitarse sin cambiar `main`**. Agregar soporte únicamente en el PR #7 no convierte ese código en confiable para `pull_request_target`.
 
-### Conteos y filtros locales
+## Contrato propuesto
 
-- `productos entregados por GraphQL`: longitud de `data.productSearch.products` antes del parser.
-- `productos observados por el runner`: longitud de la misma lista validada por `_read_raw_page`.
-- `productos aceptados para el agregado`: productos de páginas válidas únicamente.
-- `SKU entregados`: suma de los elementos de `items` entregados por GraphQL.
-- `SKU extraídos`: objetos que el extractor pudo convertir en contratos `RawProduct`.
+Se seleccionó un esquema discriminado por `mode`, porque elimina campos irrelevantes y evita combinaciones inválidas.
 
-El parser puede omitir SKU con estructura inválida, pero `products_returned` se cuenta antes de ese procesamiento. `_read_raw_page` no elimina silenciosamente productos no mapeables: una estructura no válida produce un evento estructural.
+```json
+{
+  "request_id": "la-colonia-window-diagnostic-380-399-001",
+  "supermarket": "la_colonia",
+  "mode": "diagnostic_overlap",
+  "diagnostic_plan": "frontier_380_399_v1",
+  "delay_seconds": 1.5,
+  "allow_full": false
+}
+```
 
-En los dos runs, GraphQL entregó 19 productos y el runner observó 19. No existe evidencia de que el parser o el runner hayan perdido el vigésimo producto.
-
-### Página parcial y agregado
-
-Una página es parcial cuando:
+El comando no puede recibir:
 
 ```text
-products_returned < products_expected
+from
+to
+lista de ventanas
+orderBy
+max_requests
+URL
+query
+selectedFacets
 ```
 
-La página parcial queda rechazada. Con `stop_on_error = true`, el recorrido se detiene. Los 19 SKU observados en la página rechazada no se incorporan al agregado final; por eso `products_processed` y `skus_extracted` permanecen en `380`.
+Todos esos valores salen de allow-lists de código.
 
-### Firma de página e identidad
+## Plan cerrado `frontier_380_399_v1`
 
-La firma es SHA-256 de la lista ordenada de claves de producto observadas en la respuesta GraphQL. La identidad de producto usa, en orden:
+### Fase 1 obligatoria
 
-```text
-productId
-productReference
-linkText
-productName
-marcador sintético por posición si todos faltan
-```
-
-La identidad de SKU del extractor usa las fuentes deterministas existentes del contrato, priorizando identificadores internos, referencias, EAN y URL estable según disponibilidad. La investigación no publicó ninguna identidad individual.
-
-### Ordenamiento
-
-El código permite:
-
-```text
-OrderByReleaseDateDESC
-OrderByNameASC
-OrderByNameDESC
-OrderByPriceASC
-OrderByPriceDESC
-```
-
-La consulta acepta un único valor `orderBy`. No existe una segunda llave de ordenamiento en el contrato utilizado ni en el código actual.
-
-### Disponibilidad y SKU
-
-```text
-hideUnavailableItems = false
-skusFilter = ALL
-```
-
-`hideUnavailableItems = false` evita pedir que la búsqueda oculte productos por disponibilidad. `skusFilter = ALL` solicita todos los SKU asociados a cada producto; no agrega productos ausentes de la lista `products`.
-
-## Contrato oficial de VTEX revisado
-
-Fuentes primarias revisadas: documentación oficial de `vtex.search-graphql`, `vtex.search-result` y la guía oficial de ordenamiento.
-
-- `from`: inicio de paginación; valor predeterminado `0`.
-- `to`: final de paginación; valor predeterminado `9`.
-- La combinación predeterminada `0–9` y el comportamiento documentado por página son consistentes con un extremo final inclusivo.
-- Máximo documentado por página: `50`.
-- `recordsFiltered`: total de productos del resultado de búsqueda.
-- `products`: lista de productos filtrada y ordenada.
-- `OrderByNameASC`: orden alfabético ascendente por nombre.
-- Solo se admite un parámetro de ordenamiento a la vez; no se documenta una llave secundaria.
-- `ItemsFilter.ALL`: devuelve todos los items, equivalente a no filtrar items.
-- `hideUnavailableItems = true` activa filtrado por disponibilidad; con `false` no se solicita ese ocultamiento.
-
-La documentación oficial no garantiza que `OrderByNameASC` sea estrictamente único, no define cómo resuelve empates, no documenta filtrado posterior a la ventana y no documenta una incidencia específica que explique una respuesta determinista de 19 elementos para una ventana de 20. Esos puntos permanecen como datos no disponibles.
-
-## Matriz de hipótesis
-
-| Hipótesis | Evidencia a favor | Evidencia en contra | Qué explica | Qué no explica | Confianza | Evidencia necesaria |
-|---|---|---|---|---|---|---|
-| H1 — `recordsFiltered` incluye un registro que no puede materializarse | total 9291 estable y lista raw de 19 | no se conoce el registro ni la regla interna | inconsistencia conteo/lista | por qué ocurre justo en esa frontera | media | ventanas solapadas y traza interna de VTEX |
-| H2 — el backend filtra después de aplicar `from/to` | la lista GraphQL ya llega con 19 | VTEX no documenta ese orden de operaciones; `hideUnavailableItems=false` | ventana parcial sin pérdida local | mecanismo exacto | media-baja | comparar C, D, F, G y H |
-| H3 — `OrderByNameASC` no es único y crea frontera ambigua | un solo criterio y sin llave secundaria | ambas respuestas fueron idénticas, no fluctuantes | desplazamiento o duplicación entre ventanas | ausencia determinista sin solapamientos medidos | media | solapamientos y segunda pasada controlada con otro orden permitido |
-| H4 — cálculo incorrecto de `from/to` | ninguna | fórmula correcta; páginas 1–19 completas y consecutivas | nada observado | respuesta raw de 19 | muy baja | no requiere nueva prueba salvo regresión offline |
-| H5 — el parser elimina un producto | ninguna | GraphQL y runner ya observan 19 | nada | origen del faltante | descartada para este conteo | no aplica |
-| H6 — el runner pierde un producto antes del agregado | explica por qué el agregado no suma 19, pero eso es intencional | el runner observa 19 y rechaza la página según diseño | `380` aceptados | origen del vigésimo faltante | descartada como causa | no aplica |
-| H7 — producto con estructura especial no aparece en `products` | compatible con diferencia entre total y lista | no existe payload ni traza del elemento ausente | 19 materializados | tipo de estructura y etapa de exclusión | media-baja | solapamientos y evidencia de backend |
-| H8 — inconsistencia determinista entre índice/conteo y materialización en la capa VTEX | mismos bytes, firma, total y conteos; sin errores HTTP ni reintentos | no existe acceso a trazas internas | reproducibilidad completa y frontera estable | mecanismo interno preciso | media-alta | diagnóstico de ventanas solapadas; soporte o traza primaria de VTEX |
-
-## Conclusión técnica
-
-1. No está demostrado un error del parser.
-2. No está demostrado un error del runner; el rechazo y la detención son correctos.
-3. No está demostrado un error en la construcción de `from/to`.
-4. No está demostrado que `OrderByNameASC` sea la causa.
-5. No está demostrado que VTEX filtre después de paginar.
-6. La hipótesis más fuerte es una inconsistencia determinista dentro de la capa VTEX entre el total/índice de búsqueda y la lista de productos materializados para la frontera `380–399`.
-7. Falta observar identidades de forma privada entre ventanas solapadas y disponer de una explicación o traza primaria del backend.
-8. La arquitectura normal no debe flexibilizarse. Debe instrumentarse de forma aislada y sanitizada para obtener evidencia discriminante.
-
-La causa raíz no está demostrada.
-
-## Instrumentación implementada
-
-Se agregó un módulo aislado de diagnóstico de ventanas. No modifica el runner normal, no acepta páginas parciales y no está conectado a ningún trigger live.
-
-Capacidades:
-
-- valida ventanas inclusivas de hasta 50 posiciones;
-- construye consultas exactas por `from/to`;
-- observa conteos antes del parser de SKU;
-- calcula firma completa de ventana;
-- mantiene identidades únicamente en memoria;
-- calcula solapamiento esperado y observado;
-- calcula productos únicos en la unión;
-- detecta faltantes, duplicados, desplazamientos y cambios de total;
-- serializa solo agregados sanitizados;
-- bloquea identificadores directos y hashes individuales;
-- limita el artefacto diagnóstico a 64 KiB.
-
-No se modificaron:
-
-- `la_colonia_runner.py`;
-- `probar_la_colonia.py`;
-- workflow live;
-- controlador operacional;
-- archivo `.automation/la-colonia-live-command.json`.
-
-## Pruebas offline
-
-Estado inicial verificado:
-
-```text
-149 passed
-```
-
-Instrumentación nueva:
-
-```text
-22 pruebas sintéticas
-```
-
-CI final verificado:
-
-```text
-python -m compileall src        éxito
-pytest tests                    171 passed in 0.40s
-workflow run                    31040296699
-job                            92422688396
-```
-
-Las pruebas demuestran que la instrumentación distingue escenarios sintéticos; no afirman cuál fue la causa en producción.
-
-## Próxima prueba diagnóstica
-
-```text
-NO AUTORIZADA TODAVÍA
-```
-
-Objetivo: distinguir entre registro no materializable, filtrado posterior a ventana, desplazamiento por orden no único y anomalía exclusiva de la ventana exacta.
-
-Primera fase, `OrderByNameASC`:
+`OrderByNameASC`:
 
 ```text
 A = 360–379
@@ -271,54 +151,223 @@ G = 390–399
 H = 350–399
 ```
 
-Segunda fase opcional, únicamente si la primera mantiene total estable y resultado ambiguo:
+Total: 8 solicitudes.
+
+### Fase 2 opcional
+
+`OrderByReleaseDateDESC`:
 
 ```text
-C, F, G y H con OrderByReleaseDateDESC
+C = 380–399
+F = 380–389
+G = 390–399
+H = 350–399
 ```
 
-Límite máximo: 12 solicitudes. Concurrencia: 1. Pausa: 1.5 segundos.
+La fase 2 no es activable desde el archivo de comando. El runtime solo continúa cuando la fase 1 terminó sin fallo técnico, el total permaneció estable y el resultado sigue siendo ambiguo según reglas deterministas.
 
-Criterios de detención:
+Máximo total: 12 solicitudes. Concurrencia: 1. Pausa: 1.5 segundos.
 
-- cualquier HTTP 403, 429 persistente o 5xx;
-- cambio del total;
-- evento estructural;
-- tamaño de artefacto superior al límite;
-- intento de publicar datos prohibidos.
+## Detención
 
-Métricas permitidas:
+El diagnóstico se detiene ante:
+
+- HTTP 403 o CAPTCHA;
+- HTTP 429;
+- HTTP 5xx;
+- error GraphQL o estructura inválida;
+- cambio de `recordsFiltered`;
+- más de 12 ventanas;
+- duración máxima de 300 segundos;
+- fallo de sanitización;
+- artefacto superior a 64 KiB.
+
+El cliente diagnóstico usa `max_retries=0`. Así, el límite de 12 coincide también con el máximo de solicitudes HTTP y no queda oculto por reintentos.
+
+Una ventana con 19 productos no detiene el diagnóstico por sí sola. Se registra como:
 
 ```text
-ventana
+quality:partial_window
+```
+
+## Códigos de salida
+
+```text
+0 = diagnóstico completado sin anomalía
+2 = diagnóstico completado con anomalía, sin fallo técnico
+3 = diagnóstico inconcluso porque cambió el catálogo
+4 = detención por HTTP, estructura o duración
+5 = fallo de sanitización, seguridad o artefacto
+```
+
+El workflow considera `0` y `2` como éxito técnico. Los códigos `3`, `4` y `5` fallan el job. No se reutiliza `accepted=true/false` del runner normal; el informe usa:
+
+```text
+completed
+diagnostic_outcome
+anomalies_detected
+stop_reason
+```
+
+## Interpretación determinista
+
+Resultados posibles:
+
+- `window_size_dependent`: C es parcial, F y G están completas, su unión contiene 20 identidades y H está completa.
+- `localized_missing_position`: exactamente una de F o G es parcial.
+- `unexpected_overlap`: algún solapamiento observado difiere del esperado.
+- `union_below_expected`: la unión única queda por debajo de las posiciones esperadas.
+- `order_dependent`: la condición parcial o el conteo cambia entre NameASC y ReleaseDateDESC para C, F, G o H.
+- `catalog_changed`: `recordsFiltered` cambia durante la secuencia.
+- `inconclusive`: hay anomalía, pero las reglas anteriores no distinguen una explicación.
+- `no_anomaly_observed`: todas las ventanas completan el patrón esperado.
+
+El runtime no declara una causa raíz de VTEX.
+
+## Artefactos sanitizados
+
+Campos de ventana permitidos:
+
+```text
+window
 from
 to
-productos esperados
-productos devueltos
-SKU devueltos
-recordsFiltered
-bytes
-firma de ventana
-solapamiento esperado
-solapamiento observado
-productos únicos en la unión
-duplicados agregados
-total inicial
-total final
-eventos de calidad
+order_by
+products_expected
+products_returned
+skus_returned
+records_filtered
+response_bytes
+signature
+quality_events
 ```
 
-Request ID propuesto:
+Campos prohibidos:
 
 ```text
-la-colonia-window-diagnostic-380-399-001
+productId
+productReference
+productName
+linkText
+itemId
+SKU
+EAN
+nombre
+marca
+precio
+URL
+payload
+identidades individuales
+hashes individuales
 ```
 
-Antes de autorizarla se requieren cambios separados y revisados en el controlador y workflow para aceptar únicamente el modo diagnóstico, una lista fija de ventanas, máximo 12 solicitudes y artefactos sanitizados. El archivo operacional vigente no debe cambiar hasta que la prueba sea autorizada expresamente.
+La firma completa de una ventana sí se publica porque representa el conjunto ordenado completo y no una identidad individual.
+
+## Workflow seleccionado
+
+Se seleccionó un workflow separado:
+
+```text
+.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml
+```
+
+Razones:
+
+- permisos e inputs mínimos;
+- artefacto y códigos de salida propios;
+- ninguna mezcla con `smoke`, `staged`, `validation` o `full`;
+- menor riesgo para el recorrido normal;
+- revisión estática sencilla;
+- único trigger: `workflow_dispatch`.
+
+El workflow preparado no contiene `schedule`, `push`, `pull_request` ni `issue_comment`. No se ejecutó.
+
+## PR técnico
+
+```text
+PR TÉCNICO REQUERIDO — PENDIENTE DE AUTORIZACIÓN
+```
+
+Es indispensable porque el controlador de `pull_request_target` usa código de `main`, y el PR #7 no puede convertir su propio dispatcher en código confiable antes de fusionarse. Además, el PR #7 continúa bloqueado por la validación incompleta del catálogo.
+
+Rama sugerida:
+
+```text
+chore/la-colonia-diagnostic-trusted-dispatch
+```
+
+Título sugerido:
+
+```text
+Habilita el despacho confiable del diagnóstico de ventanas de La Colonia
+```
+
+Alcance mínimo del PR técnico:
+
+1. `la_colonia_file_dispatcher.py`:
+   - esquema discriminado por `mode`;
+   - allow-list `diagnostic_overlap` + `frontier_380_399_v1`;
+   - `delay_seconds=1.5` y `allow_full=false` obligatorios;
+   - selección explícita del workflow diagnóstico;
+   - rechazo de ventanas, órdenes y URLs arbitrarias.
+2. Workflow controlador:
+   - allow-list de los dos paths de workflow;
+   - dispatch únicamente al workflow indicado por la decisión confiable;
+   - nunca ejecutar código del PR dentro de `pull_request_target`.
+3. Workflow diagnóstico:
+   - incorporar la definición preparada y revisada;
+   - `workflow_dispatch` únicamente.
+4. Tests confiables:
+   - esquema normal sin regresión;
+   - esquema diagnóstico aceptado solo con valores exactos;
+   - campos arbitrarios rechazados;
+   - idempotencia;
+   - workflow correcto;
+   - `full` prohibido.
+
+`procesar_solicitud_archivo_la_colonia.py` no requiere cambio funcional si `DispatchDecision.as_dict()` continúa entregando el workflow seleccionado. Debe incluirse en las pruebas de regresión.
+
+Orden correcto:
+
+1. completar y revisar offline la parte de dominio/runtime en PR #7;
+2. autorizar y fusionar el PR técnico a `main`;
+3. rebasar o actualizar PR #7 con `main`;
+4. revisar nuevamente contrato, workflow y CI;
+5. solicitar autorización expresa para una ejecución diagnóstica;
+6. actualizar el archivo operacional solo después de esa autorización.
+
+## Pruebas offline
+
+Estado previo:
+
+```text
+171 passed
+```
+
+Se agregaron pruebas de runtime, seguridad, artefactos, workflow y frontera de confianza. La CI ejecuta exactamente:
+
+```bash
+python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
+pytest precios-supermercados-sps/tests
+```
+
+Resultado verificado:
+
+```text
+workflow run = 31043403471
+job = 92432972945
+compilación de src y scripts = éxito
+pruebas = 196 passed in 0.64s
+errores = 0
+warnings de pytest = 0
+warning de infraestructura = acciones Node.js 20 forzadas a Node.js 24
+```
 
 ## Bloqueos vigentes
 
-- Tercera repetición normal de 500: bloqueada.
-- Validation de 500: bloqueada.
-- `full`: no ejecutado y bloqueado.
-- PR: debe permanecer abierto, en borrador, sin auto-merge y sin fusionar.
+- Ninguna ejecución live autorizada.
+- Archivo operacional sin cambios.
+- Tercera repetición normal de 500 bloqueada.
+- Validation de 500 bloqueada.
+- `full` bloqueado y no ejecutado.
+- PR #7 debe permanecer abierto, en borrador y sin auto-merge.
