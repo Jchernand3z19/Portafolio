@@ -1,0 +1,77 @@
+name: La Colonia - Diagnóstico manual de ventanas
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Identificador validado por el controlador
+        required: true
+        type: string
+      diagnostic_plan:
+        description: Plan diagnóstico cerrado
+        required: true
+        default: frontier_380_399_v1
+        type: choice
+        options:
+          - frontier_380_399_v1
+      delay_seconds:
+        description: Pausa fija entre solicitudes
+        required: true
+        default: "1.5"
+        type: choice
+        options:
+          - "1.5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: la-colonia-window-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ejecutar diagnóstico cerrado
+        id: diagnostic
+        shell: bash
+        run: |
+          set +e
+          python precios-supermercados-sps/scripts/diagnosticar_ventanas_la_colonia.py \
+            --request-id "${{ inputs.request_id }}" \
+            --plan "${{ inputs.diagnostic_plan }}" \
+            --delay-seconds "${{ inputs.delay_seconds }}" \
+            --output-dir precios-supermercados-sps/diagnostic-artifacts
+          exit_code=$?
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Publicar artefacto sanitizado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: la-colonia-window-diagnostic-${{ github.run_id }}
+          path: |
+            precios-supermercados-sps/diagnostic-artifacts/diagnostic-summary.json
+            precios-supermercados-sps/diagnostic-artifacts/diagnostic-summary.md
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Reflejar conclusión técnica
+        if: always()
+        shell: bash
+        run: |
+          exit_code="${{ steps.diagnostic.outputs.exit_code }}"
+          case "$exit_code" in
+            "0"|"2") exit 0 ;;
+            "3"|"4"|"5") exit "$exit_code" ;;
+            *) exit 5 ;;
+          esac
