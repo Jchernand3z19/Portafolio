@@ -8,37 +8,31 @@ Fundación técnica para recolectar, normalizar, validar y conservar cambios rel
 
 Esta entrega define contratos, identificadores, reglas históricas, documentación y pruebas. No contiene un scraper real ni datos de supermercados.
 
-## Problema
+## Contratos
 
-Los supermercados publican nombres, presentaciones, precios, promociones, disponibilidad y ubicaciones con estructuras distintas. Compararlos requiere separar fielmente la observación fuente de la normalización y mantener historial sin duplicar periodos idénticos.
+- `RawProduct`: observación fiel a la fuente.
+- `NormalizedOffer`: formato común que permite campos normalizados pendientes sin inventar datos.
+- `ValidatedOffer`: hash, revisión y eventos de calidad antes de persistir.
 
-## Objetivo
+Una oferta `in_stock` exige `current_price > 0`. Los estados `out_of_stock`, `not_listed` y `unknown` pueden conservar precio nulo. Marca, categoría, subcategoría y presentación pueden quedar pendientes con `review_status = needs_review`.
 
-Establecer una base común que todos los extractores futuros deberán respetar y que pueda alimentar inicialmente Google Sheets y, cuando el proceso sea estable, BigQuery y Cloud Run. Power BI será el único dashboard.
+## Nomenclatura oficial
 
-## Alcance de esta fase
+Se utilizan consistentemente:
 
-Incluye:
+- `current_price`
+- `reported_regular_price`
+- `scrape_run_id`
+- `availability`
+- `run_status`
 
-- contratos `RawProduct`, `NormalizedOffer` y `ValidatedOffer`;
-- enums para disponibilidad, ubicación y tipo de llave fuente;
-- identificadores deterministas;
-- `state_hash` para detectar cambios históricos relevantes;
-- contrato documental de ocho tabs futuras de Google Sheets;
-- pruebas locales y GitHub Actions.
+## Identidad
 
-No incluye análisis de un supermercado, scraping, conexión a Google Sheets, ejecución diaria, BigQuery, Cloud Run, Power BI ni publicación de una tarjeta en el portafolio.
+ID interno, SKU, barcode e ID de API conservan el caso exacto y solo eliminan espacios externos. Las URLs eliminan únicamente tracking inequívoco. El precio nunca forma parte de la identidad.
 
-## Arquitectura aprobada
+## Seguridad comercial
 
-1. GitHub conserva código, documentación y cambios mediante Pull Request.
-2. GitHub Actions ejecuta pruebas y, en fases futuras, los procesos programados.
-3. Python realiza extracción, estandarización, validación y detección de cambios.
-4. Google Sheets será almacenamiento temporal estructurado.
-5. Power BI será el único dashboard.
-6. BigQuery y Cloud Run se incorporarán después de estabilizar el proceso.
-
-La IA puede ayudar a diagnosticar cambios estructurales, pero no modifica producción automáticamente.
+Una extracción incompleta no se interpreta como un nuevo estado de mercado. Las ejecuciones `rejected`, `failed` o `abandoned` registran métricas y eventos, pero no actualizan precios, disponibilidad ni historial.
 
 ## Estructura
 
@@ -63,32 +57,6 @@ precios-supermercados-sps/
     └── test_models.py
 ```
 
-El workflow ejecutable vive en `.github/workflows/precios-supermercados-sps-tests.yml` por requisito de GitHub Actions.
-
-## Contratos
-
-- `RawProduct`: captura original y evidencia de ubicación sin normalizar.
-- `NormalizedOffer`: identidad, producto normalizado, precio, disponibilidad y auditoría bajo un esquema común.
-- `ValidatedOffer`: oferta normalizada, hash de estado y eventos de calidad, lista para persistencia.
-
-Los detalles completos están en [`docs/modelo-datos.md`](docs/modelo-datos.md).
-
-## Instalación y ejecución
-
-Requiere Python 3.12 o superior.
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r precios-supermercados-sps/requirements.txt
-```
-
-En Windows PowerShell, activa el entorno con:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
 ## Pruebas
 
 Desde la raíz del monorepositorio:
@@ -98,17 +66,14 @@ python -m compileall precios-supermercados-sps/src
 pytest precios-supermercados-sps/tests
 ```
 
-## Seguridad y privacidad
+## Fuera de alcance
 
-- `.env.example` contiene únicamente nombres de variables.
-- `.env`, cuentas de servicio, llaves, cookies y credenciales están excluidas o prohibidas por la política del proyecto.
-- No se incluyen datos personales ni empresariales privados.
-- Los valores fuente de productos futuros deberán limitarse a datos públicos necesarios para auditoría.
+- análisis de un supermercado;
+- scraper real;
+- conexión a Google Sheets;
+- scraping diario;
+- Power BI;
+- BigQuery o Cloud Run;
+- tarjeta pública del proyecto.
 
-## Resultados de esta fase
-
-Se entrega la fundación técnica reproducible. No se reportan precios, supermercados cubiertos, métricas de extracción ni resultados de negocio porque todavía no existen.
-
-## Limitaciones y próximos pasos
-
-El siguiente chat deberá seleccionar un único supermercado, analizar técnicamente su sitio y decidir si la extracción automatizada es viable antes de programar el primer adaptador.
+Los contratos completos están en [`docs/modelo-datos.md`](docs/modelo-datos.md).
