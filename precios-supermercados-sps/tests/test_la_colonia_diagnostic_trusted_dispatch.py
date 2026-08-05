@@ -87,6 +87,12 @@ def test_contrato_diagnostico_exacto_es_aceptado():
     }
 
 
+def test_request_id_diagnostico_invalido_se_rechaza():
+    decision = decide(diagnostic_command(request_id="INVALID REQUEST"))
+    assert decision.accepted is False
+    assert "request_id" in decision.reason
+
+
 def test_comentario_diagnostico_es_sanitizado_e_idempotente():
     decision = decide(diagnostic_command())
     comment = build_controller_comment(
@@ -126,8 +132,11 @@ def test_valores_diagnosticos_no_autorizados_se_rechazan(override, reason):
         "to",
         "windows",
         "order_by",
+        "orderBy",
         "URL",
+        "url",
         "query",
+        "selectedFacets",
         "max_requests",
         "page_size",
         "max_pages",
@@ -135,6 +144,7 @@ def test_valores_diagnosticos_no_autorizados_se_rechazan(override, reason):
         "profile",
         "thresholds",
         "workflow",
+        "full",
     ],
 )
 def test_campos_arbitrarios_en_diagnostico_se_rechazan(field):
@@ -246,6 +256,10 @@ def test_controlador_tiene_allow_list_estatica_y_checkout_confiable():
     assert "const allowedWorkflows = new Map([" in text
     assert LIVE_WORKFLOW in text
     assert DIAGNOSTIC_WORKFLOW in text
+    map_section = text.split("const allowedWorkflows = new Map([", 1)[1].split(
+        "const expectedModes", 1
+    )[0]
+    assert map_section.count("'.github/workflows/") == 2
     assert "workflow_id: selectedWorkflowFile" in text
     assert "workflow_id: decision.workflow" not in text
     assert "ref: main" in text
