@@ -27,5 +27,5 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Ejecutar muestra pública de cinco productos
-        run: python scripts/probar_la_colonia.py --limit 5
+      - name: Ejecutar muestra pública de diez productos y búsquedas dirigidas
+        run: python scripts/probar_la_colonia.py --products 10 --directed-limit 3
