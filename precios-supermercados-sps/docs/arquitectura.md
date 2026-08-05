@@ -3,79 +3,72 @@
 ## Principios
 
 - Un supermercado se incorpora a la vez.
-- Cada extractor entrega el mismo contrato común.
-- La observación fuente se conserva separada de la normalización.
-- Una ausencia puntual no equivale automáticamente a `out_of_stock`.
+- Cada extractor entrega los mismos contratos y nombres de campos.
+- La observación fuente se conserva separada de la interpretación.
+- Una oferta parcial legítima se conserva y genera revisión; no se descarta ni se completa con datos inventados.
+- Una ejecución incompleta se rechaza como ejecución y no se convierte en un nuevo estado comercial.
+- La desaparición puntual no equivale automáticamente a `out_of_stock`.
 - El precio regular informado no prueba una reducción real.
-- La reducción real se calculará contra el último `current_price` histórico de la misma oferta.
-- La IA asesora ante cambios estructurales; una persona revisa y aprueba cualquier modificación de producción.
+- La reducción real se calculará contra el último `current_price` histórico aceptado de la misma oferta.
+- La IA asesora ante cambios estructurales; una persona aprueba cualquier modificación de producción.
 
 ## Flujo previsto
 
 ```text
 Sitio público
-  -> extractor específico del supermercado
+  -> extractor específico
   -> RawProduct
-  -> normalización e identidad
-  -> NormalizedOffer
-  -> validaciones y eventos de calidad
+  -> normalización parcial o completa
+  -> NormalizedOffer + review_status + pending_fields
+  -> validación y quality_events
   -> ValidatedOffer + state_hash
-  -> comparación con estado actual
+  -> validación de completitud de la ejecución
+  -> fact_scrape_runs
+       -> accepted: comparar y persistir oferta/historial
+       -> rejected/failed/abandoned: conservar métricas y eventos, no actualizar comercio
   -> Google Sheets temporal
   -> Power BI
 ```
 
-BigQuery y Cloud Run quedan fuera de la fase inicial y solo se incorporarán cuando exista estabilidad operativa y volumen que lo justifique.
+## Observaciones incompletas legítimas
 
-## Componentes de esta entrega
+La falta de marca, categoría, subcategoría o presentación interpretable no elimina el producto. Estos campos se guardan como nulos, se enumeran en `pending_fields` y producen `review_status = needs_review` y eventos `pending_normalization`.
 
-### `enums.py`
+La regla de precio depende de `availability`:
 
-Vocabulario cerrado para disponibilidad, ubicación y tipo de llave fuente. Evita que cada scraper invente valores distintos.
+- `in_stock`: `current_price` es obligatorio y mayor que cero;
+- `out_of_stock`, `not_listed`, `unknown`: `current_price` puede ser nulo.
 
-### `models.py`
+## Puerta de actualización comercial
 
-Contratos inmutables con validaciones de campos obligatorios, decimales, URLs, zona horaria, evidencia de ubicación y enums.
+La persistencia futura evalúa la ejecución completa antes de modificar `fact_offers_current` o `fact_offer_history`.
 
-### `identifiers.py`
+- `success`: actualización permitida.
+- `warning`: permitida solo cuando los eventos no son bloqueantes.
+- `rejected`: extracción técnicamente terminada pero incompleta o inconsistente; no actualiza.
+- `failed`: error técnico; no actualiza.
+- `abandoned`: ejecución inconclusa; no actualiza.
+- `running`: no actualiza.
 
-- selección de llave estable por prioridad;
-- `source_product_id` por supermercado y llave fuente;
-- `offer_id` por supermercado, ubicación y producto fuente;
-- `state_hash` por atributos relevantes del periodo.
+Esto evita interpretar una caída de cobertura, una página faltante o un cambio de estructura como agotado, producto eliminado o reducción de precio.
 
-### Pruebas
+## Identidad
 
-Validan estabilidad, rechazo de valores inválidos y comportamiento histórico esperado.
+Las llaves no URL conservan el valor exacto con trim. La URL estable elimina solo tracking inequívoco. Todos los componentes obligatorios se validan antes de generar hashes.
 
-## Límites de responsabilidad
+## Persistencia histórica
 
-### Extractor específico
-
-Debe localizar el producto, obtener valores fuente, registrar evidencia y producir `RawProduct`. No debe decidir por sí solo que una oferta es real ni escribir directamente en almacenamiento.
-
-### Normalizador
-
-Debe estandarizar nombre, marca, categoría, presentación, cantidades y unidades sin perder los valores originales.
-
-### Validador
-
-Debe comprobar el contrato, generar `state_hash` y producir eventos de calidad. Los errores no deben descartarse silenciosamente.
-
-### Persistencia futura
-
-Debe ser idempotente: un reintento con el mismo `scrape_run_id`, `offer_id` y estado no puede duplicar historial.
+Solo ejecuciones aceptadas pueden abrir o cerrar periodos. El proceso será idempotente por `scrape_run_id`, `offer_id` y `state_hash`. `change_type` resume el cambio y `changed_fields` conserva el detalle exacto.
 
 ## Riesgos y controles
 
-| Riesgo | Control inicial |
+| Riesgo | Control |
 |---|---|
-| Identidad cambia por precio | El precio no participa en `source_product_id` ni `offer_id`. |
-| URL contiene campañas | La llave URL elimina parámetros de seguimiento y fragmentos. |
-| Doble periodo actual | Regla de unicidad por `offer_id` en persistencia. |
-| Falso agotado por desaparición | Usar `not_listed` o `unknown` hasta confirmar. |
-| Fechas ambiguas | Todos los timestamps de auditoría deben ser UTC y conscientes de zona. |
-| Redondeo monetario | Uso de `Decimal`, no `float`, en los contratos. |
-| Cambio cosmético abre historial | El hash normaliza espacios y mayúsculas y excluye URLs. |
-| IA altera producción | Solo recomendaciones; cambio humano mediante rama, pruebas y PR. |
-| Impacto en Mundial o sitio | Proyecto encapsulado; no se registrará tarjeta en esta fase. |
+| SKU cambia por mayúsculas | Se conserva el caso exacto; no se aplica `casefold` a llaves fuente no URL. |
+| URL funcional se altera | Solo se eliminan `utm_*`, `gclid`, `fbclid`, `msclkid`, `mc_cid`, `mc_eid`. |
+| Producto parcial se pierde | Campos opcionales, `pending_fields`, `review_status` y eventos de calidad. |
+| `in_stock` sin precio | Rechazo de la oferta individual y evento bloqueante. |
+| Extracción incompleta altera precios | Puerta de completitud; ejecución `rejected` sin actualización comercial. |
+| Doble periodo | Un solo periodo abierto por `offer_id` e idempotencia de reintentos. |
+| Falso agotado | `not_listed` o `unknown` solo desde una ejecución aceptada y reglas del adaptador. |
+| IA altera producción | Cambios humanos mediante rama, pruebas y PR. |
