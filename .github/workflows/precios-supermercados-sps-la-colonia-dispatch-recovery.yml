@@ -1,0 +1,118 @@
+name: La Colonia - Recuperación observable del controlador
+
+on:
+  workflow_run:
+    workflows:
+      - La Colonia - Despachador seguro por archivo
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  expose-controller-result:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Descargar resultado sanitizado del controlador
+        uses: actions/download-artifact@v4
+        with:
+          name: la-colonia-file-dispatch-${{ github.event.workflow_run.id }}
+          path: controller-result
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Validar y exponer recuperación necesaria
+        uses: actions/github-script@v7
+        env:
+          RESULT_PATH: controller-result/dispatcher-result.json
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = process.env.RESULT_PATH;
+            const sourceRunId = String(process.env.SOURCE_RUN_ID || '');
+            const numericId = /^[0-9]+$/;
+            const requestId = /^[a-z0-9](?:[a-z0-9._-]{0,78}[a-z0-9])?$/;
+
+            if (!numericId.test(sourceRunId)) {
+              core.setFailed('El run de origen no tiene un identificador válido.');
+              return;
+            }
+            if (!fs.existsSync(path)) {
+              core.setFailed('No existe el resultado operacional del controlador.');
+              return;
+            }
+
+            let result;
+            try {
+              result = JSON.parse(fs.readFileSync(path, 'utf8'));
+            } catch (error) {
+              core.setFailed('El resultado operacional no contiene JSON válido.');
+              return;
+            }
+
+            const allowedKeys = new Set([
+              'accepted',
+              'request_id',
+              'pr_number',
+              'head_sha',
+              'ref',
+              'dispatch_sent',
+              'live_run_id',
+              'live_run_url',
+              'comment_published',
+              'comment_method',
+              'controller_run_id',
+              'controller_url',
+              'reason',
+              'warnings',
+            ]);
+            if (!result || typeof result !== 'object' || Array.isArray(result)) {
+              core.setFailed('El resultado operacional debe ser un objeto.');
+              return;
+            }
+            if (Object.keys(result).some((key) => !allowedKeys.has(key))) {
+              core.setFailed('El resultado operacional contiene campos inesperados.');
+              return;
+            }
+            if (String(result.controller_run_id || '') !== sourceRunId) {
+              core.setFailed('El resultado no corresponde al run controlador observado.');
+              return;
+            }
+
+            const accepted = result.accepted === true;
+            const dispatchSent = result.dispatch_sent === true;
+            const commentPublished = result.comment_published === true;
+            const safeRequestId = typeof result.request_id === 'string' && requestId.test(result.request_id)
+              ? result.request_id
+              : '';
+            const liveRunId = typeof result.live_run_id === 'string' && numericId.test(result.live_run_id)
+              ? result.live_run_id
+              : '';
+
+            const summary = [
+              '## Recuperación del controlador de La Colonia',
+              '',
+              `- controller_run_id: \`${sourceRunId}\``,
+              `- request_id: \`${safeRequestId}\``,
+              `- accepted: \`${accepted}\``,
+              `- dispatch_sent: \`${dispatchSent}\``,
+              `- live_run_id: \`${liveRunId}\``,
+              `- comment_published: \`${commentPublished}\``,
+            ].join('\n');
+            await core.summary.addRaw(summary).write();
+
+            if (accepted && dispatchSent && !commentPublished) {
+              if (!safeRequestId || !liveRunId) {
+                core.setFailed('El dispatch requiere recuperación, pero faltan identificadores válidos.');
+                return;
+              }
+              core.error(
+                `RECOVERY_REQUIRED request_id=${safeRequestId} controller_run_id=${sourceRunId} live_run_id=${liveRunId}`,
+              );
+              core.setFailed('El dispatch fue enviado, pero el comentario requiere recuperación controlada.');
+            }
