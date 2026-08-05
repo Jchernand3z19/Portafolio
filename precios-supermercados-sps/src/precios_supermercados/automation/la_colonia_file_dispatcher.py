@@ -1,4 +1,4 @@
-"""Valida solicitudes de recorrido live de La Colonia recibidas como JSON."""
+"""Valida solicitudes de recorrido y diagnóstico live de La Colonia."""
 
 from __future__ import annotations
 
@@ -13,19 +13,36 @@ EXPECTED_OWNER = "Jchernand3z19"
 EXPECTED_REPOSITORY = "Jchernand3z19/Portafolio"
 COMMAND_PATH = "precios-supermercados-sps/.automation/la-colonia-live-command.json"
 LIVE_WORKFLOW = ".github/workflows/precios-supermercados-sps-la-colonia-live.yml"
+DIAGNOSTIC_WORKFLOW = (
+    ".github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml"
+)
+ALLOWED_WORKFLOWS = frozenset({LIVE_WORKFLOW, DIAGNOSTIC_WORKFLOW})
+DIAGNOSTIC_PLAN = "frontier_380_399_v1"
 ALLOWED_PAGE_SIZES = {10, 20, 30, 50}
-COMMAND_FIELDS = {
-    "request_id",
-    "supermarket",
-    "mode",
-    "page_size",
-    "max_pages",
-    "max_products",
-    "delay_seconds",
-    "profile",
-    "thresholds",
-    "allow_full",
-}
+NORMAL_COMMAND_FIELDS = frozenset(
+    {
+        "request_id",
+        "supermarket",
+        "mode",
+        "page_size",
+        "max_pages",
+        "max_products",
+        "delay_seconds",
+        "profile",
+        "thresholds",
+        "allow_full",
+    }
+)
+DIAGNOSTIC_COMMAND_FIELDS = frozenset(
+    {
+        "request_id",
+        "supermarket",
+        "mode",
+        "diagnostic_plan",
+        "delay_seconds",
+        "allow_full",
+    }
+)
 THRESHOLD_KEYS = (
     "max_missing_price_ratio",
     "max_duplicate_sku_ratio",
@@ -44,8 +61,10 @@ class DispatchDecision:
     reason: str
     pr_number: int | None = None
     request_id: str | None = None
+    mode: str | None = None
     ref: str | None = None
     head_sha: str | None = None
+    workflow: str | None = None
     inputs: dict[str, Any] | None = None
 
     def as_dict(self, *, comment: str) -> dict[str, Any]:
@@ -55,10 +74,11 @@ class DispatchDecision:
             "reason": self.reason,
             "pr_number": self.pr_number,
             "request_id": self.request_id,
+            "mode": self.mode,
             "ref": self.ref,
             "head_sha": self.head_sha,
             "inputs": self.inputs,
-            "workflow": LIVE_WORKFLOW,
+            "workflow": self.workflow,
             "comment": comment,
         }
 
@@ -186,10 +206,15 @@ def _parse_command(raw_command: str | None) -> tuple[dict[str, Any] | None, str 
     if not isinstance(command, dict):
         return None, "El JSON de comando debe ser un objeto."
 
-    unknown = sorted(set(command) - COMMAND_FIELDS)
+    expected_fields = (
+        DIAGNOSTIC_COMMAND_FIELDS
+        if command.get("mode") == "diagnostic_overlap"
+        else NORMAL_COMMAND_FIELDS
+    )
+    unknown = sorted(set(command) - expected_fields)
     if unknown:
         return None, "El JSON contiene un campo desconocido."
-    missing = sorted(COMMAND_FIELDS - set(command))
+    missing = sorted(expected_fields - set(command))
     if missing:
         return None, "El JSON no contiene todos los campos obligatorios."
     return command, None
@@ -210,33 +235,50 @@ def _validate_thresholds(value: Any) -> tuple[dict[str, str] | None, str | None]
     return normalized, None
 
 
-def _normalize_command(command: Mapping[str, Any]) -> tuple[str | None, dict[str, Any] | None, str | None]:
+def _normalize_command(
+    command: Mapping[str, Any],
+) -> tuple[str | None, str | None, str | None, dict[str, Any] | None, str | None]:
     request_id = command.get("request_id")
     if not isinstance(request_id, str) or not REQUEST_ID_RE.fullmatch(request_id):
-        return None, None, "request_id no cumple el formato permitido."
+        return None, None, None, None, "request_id no cumple el formato permitido."
     if command.get("supermarket") != "la_colonia":
-        return request_id, None, "El supermercado solicitado no está autorizado."
+        return request_id, None, None, None, "El supermercado solicitado no está autorizado."
 
     mode = command.get("mode")
+    delay = _decimal(command.get("delay_seconds"))
+    if delay != Decimal("1.5"):
+        return request_id, str(mode), None, None, "delay_seconds debe ser exactamente 1.5."
+    if command.get("allow_full") is not False:
+        return request_id, str(mode), None, None, "allow_full debe ser false."
+
+    if mode == "diagnostic_overlap":
+        if command.get("diagnostic_plan") != DIAGNOSTIC_PLAN:
+            return request_id, mode, None, None, "El plan diagnóstico no está autorizado."
+        return (
+            request_id,
+            mode,
+            DIAGNOSTIC_WORKFLOW,
+            {
+                "request_id": request_id,
+                "diagnostic_plan": DIAGNOSTIC_PLAN,
+                "delay_seconds": "1.5",
+            },
+            None,
+        )
+
     if mode == "full":
-        return request_id, None, "El modo full está prohibido."
+        return request_id, mode, None, None, "El modo full está prohibido."
     if mode not in {"smoke", "staged"}:
-        return request_id, None, "El modo debe ser smoke o staged."
+        return request_id, str(mode), None, None, "El modo debe ser smoke o staged."
 
     page_size = command.get("page_size")
     if not _is_integer(page_size) or page_size not in ALLOWED_PAGE_SIZES:
-        return request_id, None, "page_size debe ser 10, 20, 30 o 50."
-
-    delay = _decimal(command.get("delay_seconds"))
-    if delay != Decimal("1.5"):
-        return request_id, None, "delay_seconds debe ser exactamente 1.5."
-    if command.get("allow_full") is not False:
-        return request_id, None, "allow_full debe ser false."
+        return request_id, mode, None, None, "page_size debe ser 10, 20, 30 o 50."
 
     max_pages = command.get("max_pages")
     max_products = command.get("max_products")
     if not _is_integer(max_pages) or not _is_integer(max_products):
-        return request_id, None, "max_pages y max_products deben ser enteros."
+        return request_id, mode, None, None, "max_pages y max_products deben ser enteros."
 
     profile = command.get("profile")
     thresholds = command.get("thresholds")
@@ -248,42 +290,42 @@ def _normalize_command(command: Mapping[str, Any]) -> tuple[str | None, dict[str
             or profile != "baseline"
             or thresholds is not None
         ):
-            return request_id, None, "Smoke exige los valores fijos autorizados."
+            return request_id, mode, None, None, "Smoke exige los valores fijos autorizados."
         inputs = _base_inputs(mode="smoke", page_size=page_size, profile="baseline")
         inputs["max_pages"] = "2"
-        return request_id, inputs, None
+        return request_id, mode, LIVE_WORKFLOW, inputs, None
 
     if profile not in {"baseline", "validation"}:
-        return request_id, None, "Staged requiere profile baseline o validation."
+        return request_id, mode, None, None, "Staged requiere profile baseline o validation."
 
     has_pages = max_pages != 0
     has_products = max_products != 0
     if has_pages == has_products:
-        return request_id, None, "Staged requiere exactamente un límite activo."
+        return request_id, mode, None, None, "Staged requiere exactamente un límite activo."
 
     inputs = _base_inputs(mode="staged", page_size=page_size, profile=profile)
     if has_pages:
         if not 1 <= max_pages <= 10 or max_products != 0:
-            return request_id, None, "max_pages debe estar entre 1 y 10."
+            return request_id, mode, None, None, "max_pages debe estar entre 1 y 10."
         inputs["max_pages"] = str(max_pages)
     else:
         if not 100 <= max_products <= 500 or max_pages != 0:
-            return request_id, None, "max_products debe estar entre 100 y 500."
+            return request_id, mode, None, None, "max_products debe estar entre 100 y 500."
         if max_products % page_size != 0:
-            return request_id, None, "max_products debe ser múltiplo de page_size."
+            return request_id, mode, None, None, "max_products debe ser múltiplo de page_size."
         inputs["max_products"] = str(max_products)
 
     if profile == "baseline":
         if thresholds is not None:
-            return request_id, None, "Baseline exige thresholds=null."
+            return request_id, mode, None, None, "Baseline exige thresholds=null."
     else:
         normalized_thresholds, threshold_error = _validate_thresholds(thresholds)
         if threshold_error:
-            return request_id, None, threshold_error
+            return request_id, mode, None, None, threshold_error
         assert normalized_thresholds is not None
         inputs.update(normalized_thresholds)
 
-    return request_id, inputs, None
+    return request_id, mode, LIVE_WORKFLOW, inputs, None
 
 
 def request_marker(request_id: str) -> str:
@@ -297,7 +339,7 @@ def evaluate_file_request(
     raw_command: str | None,
     existing_comment_markers: Iterable[str] = (),
 ) -> DispatchDecision:
-    """Evalúa contexto, archivo no confiable e idempotencia sin ejecutar su contenido."""
+    """Evalúa contexto, archivo no confiable e idempotencia sin ejecutarlo."""
 
     context_error = _validate_context(context)
     if context_error is not None:
@@ -309,10 +351,11 @@ def evaluate_file_request(
         return _rejected(parse_error, pr_number=pr_number)
     assert command is not None
 
-    request_id, inputs, validation_error = _normalize_command(command)
+    request_id, mode, workflow, inputs, validation_error = _normalize_command(command)
     if validation_error:
         return _rejected(validation_error, pr_number=pr_number)
-    assert request_id is not None and inputs is not None
+    assert request_id is not None and mode is not None
+    assert workflow in ALLOWED_WORKFLOWS and inputs is not None
 
     marker = request_marker(request_id)
     if any(marker in body for body in existing_comment_markers if isinstance(body, str)):
@@ -328,8 +371,10 @@ def evaluate_file_request(
         "",
         pr_number=pr_number,
         request_id=request_id,
+        mode=mode,
         ref=str(context["head_ref"]),
         head_sha=str(context["head_sha"]),
+        workflow=workflow,
         inputs=inputs,
     )
 
@@ -350,12 +395,16 @@ def build_controller_comment(
         )
 
     assert decision.request_id is not None
+    assert decision.mode is not None
+    assert decision.workflow in ALLOWED_WORKFLOWS
     assert decision.head_sha is not None
     assert decision.ref is not None
     normalized = json.dumps(decision.inputs, ensure_ascii=False, indent=2, sort_keys=True)
     return (
         "## Solicitud aceptada\n\n"
         f"- request_id: `{decision.request_id}`\n"
+        f"- Modo: `{decision.mode}`\n"
+        f"- Workflow: `{decision.workflow}`\n"
         f"- Commit SHA: `{decision.head_sha}`\n"
         f"- Rama: `{decision.ref}`\n"
         f"- Run ID del controlador: `{controller_run_id}`\n"
