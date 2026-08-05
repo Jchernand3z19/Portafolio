@@ -15,9 +15,12 @@ source:
   query_origin: vtex.store-resources/QueryProductSearchV3
   category_query: supermercado
   category_map: category-1
+  hide_unavailable_items: false
+  skus_filter: ALL
 limits:
-  live_products_min: 3
-  live_products_max: 5
+  live_products_min: 1
+  live_products_max: 10
+  directed_probe_products_max: 3
   concurrency: 1
   timeout_seconds: 20
   max_retries: 2
