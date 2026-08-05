@@ -72,16 +72,19 @@ class HttpResponse:
 
 @dataclass(slots=True)
 class ExtractionMetrics:
-    """Métricas mínimas exigidas para aceptar o rechazar una ejecución."""
+    """Métricas separadas de páginas, productos y SKU."""
 
     pages_discovered: int = 0
     pages_processed: int = 0
     page_coverage: float = 0.0
     products_discovered: int = 0
-    products_extracted: int = 0
-    products_with_price: int = 0
-    products_pending_review: int = 0
-    duplicate_products: int = 0
+    products_requested: int = 0
+    products_returned: int = 0
+    skus_returned: int = 0
+    skus_extracted: int = 0
+    duplicate_skus: int = 0
+    skus_with_price: int = 0
+    skus_pending_review: int = 0
     errors: int = 0
     structural_events: int = 0
 
