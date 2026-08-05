@@ -369,7 +369,9 @@ def test_synthetic_live_pattern_reproduces_overlap_union_and_runtime_outcome():
     assert windows["D"]["signature"] == windows["E"]["signature"]
 
     overlaps = {
-        (item["left"], item["right"]): (item["expected"], item["observed"])
+        (item["left"].split(":")[-1], item["right"].split(":")[-1]): (
+            item["expected"], item["observed"]
+        )
         for item in summary["overlaps"]
     }
     assert overlaps[("A", "B")] == (10, 0)
