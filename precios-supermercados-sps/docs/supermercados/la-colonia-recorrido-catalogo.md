@@ -1,23 +1,23 @@
-# La Colonia — recorrido y modo diagnóstico de ventanas
+# La Colonia — recorrido y diagnóstico de ventanas
 
-## Estado de la fase
+## Estado verificado
 
-La fase vive en el PR `#7`, rama `feature/la-colonia-full-crawl-validation`.
+El trabajo funcional permanece en el PR `#7`, rama `feature/la-colonia-full-crawl-validation`.
 
 - PR abierto, en borrador y no fusionado.
 - Baseline de 200 aceptado.
 - Validation de 200 aceptada.
-- Baseline de 500 rechazado dos veces.
-- La ventana `380–399` devolvió 19 de 20 productos de forma reproducible.
-- No se autorizó una tercera repetición normal.
-- Validation de 500 continúa bloqueada.
-- `full` no se ejecutó.
-- No existe persistencia, historial, ejecución diaria, Google Sheets, BigQuery ni Power BI.
-- El archivo operacional no se modificó.
+- Baseline de 500 rechazado dos veces en la ventana `380–399`.
+- Tercera repetición de 500 no ejecutada.
+- Validation de 500 no ejecutada.
+- `full` no ejecutado.
+- Diagnóstico de ventanas no ejecutado.
+- Sin persistencia, historial, ejecución diaria, Google Sheets, BigQuery ni Power BI.
+- Archivo operacional sin cambios.
 
-## Diagnóstico previo
+## Evidencia del problema
 
-Los dos runs de 500 coincidieron en las páginas `1–19`. La página `20` volvió a producir:
+Los dos recorridos de 500 coincidieron en las páginas `1–19`. En ambos, la página `20` produjo:
 
 ```text
 from = 380
@@ -32,81 +32,88 @@ bytes = 20957
 firma = c86ae16a7b54543c8c7e68422b70fb7dbe5eb06a27395f0f76b1c65f0e3ef5ca
 ```
 
-No está demostrado un error del parser, del runner ni del cálculo de `from/to`. La hipótesis más fuerte continúa siendo un desajuste determinista entre el total/índice reportado por VTEX y la lista materializada para esa frontera. La causa interna exacta no está demostrada.
+No está demostrado un error del parser, del runner ni del cálculo de `from/to`. La hipótesis más fuerte sigue siendo un desajuste determinista entre el total o índice reportado por VTEX y la lista materializada para esa frontera. La causa interna exacta no está demostrada.
 
 ## Arquitectura separada
 
 ### Capa A — dominio
 
-Archivo:
-
 ```text
 src/precios_supermercados/scrapers/la_colonia_window_diagnostic.py
 ```
 
-Responsabilidades:
-
-- representar ventanas inclusivas;
-- construir consultas exactas;
-- observar productos antes del parsing comercial;
-- mantener identidades únicamente en memoria;
-- calcular firmas completas de ventana;
-- calcular solapamientos, unión y duplicados;
-- serializar únicamente métricas agregadas;
-- bloquear identificadores, hashes individuales y datos comerciales.
-
-No conoce GitHub Actions ni el controlador.
+Construye ventanas, observa productos raw, mantiene identidades únicamente en memoria, calcula firmas, solapamientos, unión y duplicados, y serializa solo métricas agregadas sanitizadas.
 
 ### Capa B — runtime y CLI
-
-Archivos:
 
 ```text
 src/precios_supermercados/scrapers/la_colonia_window_diagnostic_runtime.py
 scripts/diagnosticar_ventanas_la_colonia.py
 ```
 
-Responsabilidades:
+El runtime:
 
-- aceptar únicamente el plan `frontier_380_399_v1`;
-- ejecutar ventanas en orden y con concurrencia `1`;
-- usar pausa fija de `1.5` segundos;
-- limitar el plan a 12 solicitudes lógicas y usar `max_retries=0`;
-- detenerse ante errores HTTP, estructura inválida, total cambiante o duración excedida;
-- permitir que una ventana parcial se registre como `quality:partial_window`;
-- escribir únicamente `diagnostic-summary.json` y `diagnostic-summary.md`;
-- devolver códigos de salida explícitos.
+- acepta únicamente `frontier_380_399_v1`;
+- ejecuta concurrencia `1`;
+- aplica pausa fija de `1.5` segundos;
+- limita el plan a 12 solicitudes y usa `max_retries=0`;
+- registra una ventana parcial como `quality:partial_window` sin detener el diagnóstico;
+- detiene errores HTTP, estructura inválida, total cambiante, duración o sanitización;
+- escribe solo `diagnostic-summary.json` y `diagnostic-summary.md`;
+- limita los artefactos a 64 KiB;
+- no modifica el runner normal.
 
-El runtime no modifica el runner normal. La página parcial del recorrido normal continúa siendo rechazada.
+La página parcial del recorrido normal continúa siendo rechazada.
 
 ### Capa C — infraestructura confiable
 
-El controlador actual se ejecuta mediante `pull_request_target`, hace checkout de `main` y valida el archivo de comando con código confiable.
-
-Archivos relevantes en `main`:
+La infraestructura confiable fue implementada y fusionada mediante:
 
 ```text
-.github/workflows/precios-supermercados-sps-la-colonia-command.yml
-precios-supermercados-sps/src/precios_supermercados/automation/la_colonia_file_dispatcher.py
-precios-supermercados-sps/scripts/procesar_solicitud_archivo_la_colonia.py
-precios-supermercados-sps/tests/test_la_colonia_file_dispatcher.py
-precios-supermercados-sps/tests/test_la_colonia_dispatch_runtime.py
-precios-supermercados-sps/tests/test_la_colonia_dispatch_recovery.py
+PR técnico: #14
+Título: Habilita el despacho confiable del diagnóstico de ventanas de La Colonia
+Rama: chore/la-colonia-diagnostic-trusted-dispatch
+Head técnico: 76be29d7ffbdcf40a6091d31d006979b1ea1635e
+Método: squash
+Merge SHA: 12bff9918815fe2dc6768f45c54e47281948de66
+Fecha de fusión: 2026-08-05T20:39:23Z
 ```
 
-El dispatcher confiable actual:
+El controlador continúa bajo `pull_request_target`, hace checkout explícito de `main` y nunca ejecuta código del PR dentro del contexto privilegiado.
 
-- exige un esquema fijo de diez campos;
-- solo acepta `smoke` y `staged`;
-- prohíbe `full`;
-- fija el workflow normal;
-- rechaza campos desconocidos.
+## Esquema discriminado
 
-Por tanto, **el diagnóstico seguro no puede habilitarse sin cambiar `main`**. Agregar soporte únicamente en el PR #7 no convierte ese código en confiable para `pull_request_target`.
+### Recorridos normales
 
-## Contrato propuesto
+`smoke` y `staged` conservan exactamente los campos y reglas anteriores:
 
-Se seleccionó un esquema discriminado por `mode`, porque elimina campos irrelevantes y evita combinaciones inválidas.
+```text
+request_id
+supermarket
+mode
+page_size
+max_pages
+max_products
+delay_seconds
+profile
+thresholds
+allow_full
+```
+
+### Diagnóstico
+
+El modo `diagnostic_overlap` exige exactamente:
+
+```text
+request_id
+supermarket
+mode
+diagnostic_plan
+delay_seconds
+allow_full
+```
+
+Contrato permitido:
 
 ```json
 {
@@ -119,26 +126,50 @@ Se seleccionó un esquema discriminado por `mode`, porque elimina campos irrelev
 }
 ```
 
-El comando no puede recibir:
+Se rechazan ventanas, `from`, `to`, `windows`, `orderBy`, URLs, queries, `selectedFacets`, `max_requests`, parámetros normales mezclados, campos adicionales, campos faltantes y cualquier workflow suministrado por el comando.
+
+## Selección confiable de workflow
+
+La allow-list contiene exactamente:
 
 ```text
-from
-to
-lista de ventanas
-orderBy
-max_requests
-URL
-query
-selectedFacets
+.github/workflows/precios-supermercados-sps-la-colonia-live.yml
+.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml
 ```
 
-Todos esos valores salen de allow-lists de código.
+La selección se deriva únicamente del modo validado:
+
+```text
+smoke o staged       → workflow normal
+diagnostic_overlap   → workflow diagnóstico
+```
+
+El controlador mapea la ruta confiable al nombre de archivo permitido, valida la correspondencia entre modo y workflow y despacha sobre la rama head verificada. El archivo operacional no puede indicar la ruta del workflow.
+
+## Workflow diagnóstico
+
+```text
+.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml
+```
+
+Controles:
+
+- único trigger: `workflow_dispatch`;
+- inputs: `request_id`, `diagnostic_plan`, `delay_seconds`;
+- único plan: `frontier_380_399_v1`;
+- única pausa: `1.5`;
+- permisos `contents: read`;
+- concurrencia única;
+- timeout de 15 minutos;
+- códigos `0` y `2` como éxito técnico;
+- códigos `3`, `4` y `5` como fallo;
+- sin `schedule`, `push`, `pull_request`, `pull_request_target` ni `issue_comment`.
+
+El workflow está disponible en `main`, pero no fue ejecutado.
 
 ## Plan cerrado `frontier_380_399_v1`
 
-### Fase 1 obligatoria
-
-`OrderByNameASC`:
+Fase 1, `OrderByNameASC`:
 
 ```text
 A = 360–379
@@ -151,11 +182,7 @@ G = 390–399
 H = 350–399
 ```
 
-Total: 8 solicitudes.
-
-### Fase 2 opcional
-
-`OrderByReleaseDateDESC`:
+Fase 2 opcional, `OrderByReleaseDateDESC`:
 
 ```text
 C = 380–399
@@ -164,85 +191,23 @@ G = 390–399
 H = 350–399
 ```
 
-La fase 2 no es activable desde el archivo de comando. El runtime solo continúa cuando la fase 1 terminó sin fallo técnico, el total permaneció estable y el resultado sigue siendo ambiguo según reglas deterministas.
-
-Máximo total: 12 solicitudes. Concurrencia: 1. Pausa: 1.5 segundos.
-
-## Detención
-
-El diagnóstico se detiene ante:
-
-- HTTP 403 o CAPTCHA;
-- HTTP 429;
-- HTTP 5xx;
-- error GraphQL o estructura inválida;
-- cambio de `recordsFiltered`;
-- más de 12 ventanas;
-- duración máxima de 300 segundos;
-- fallo de sanitización;
-- artefacto superior a 64 KiB.
-
-El cliente diagnóstico usa `max_retries=0`. Así, el límite de 12 coincide también con el máximo de solicitudes HTTP y no queda oculto por reintentos.
-
-Una ventana con 19 productos no detiene el diagnóstico por sí sola. Se registra como:
-
-```text
-quality:partial_window
-```
+La fase 2 no puede activarse desde el archivo operacional. El runtime decide continuar únicamente si la fase 1 termina técnicamente, el total permanece estable y el resultado sigue siendo ambiguo.
 
 ## Códigos de salida
 
 ```text
-0 = diagnóstico completado sin anomalía
-2 = diagnóstico completado con anomalía, sin fallo técnico
-3 = diagnóstico inconcluso porque cambió el catálogo
-4 = detención por HTTP, estructura o duración
-5 = fallo de sanitización, seguridad o artefacto
+0 = completado sin anomalía
+2 = completado con anomalía, sin fallo técnico
+3 = catálogo cambiante
+4 = HTTP, estructura o duración
+5 = sanitización, seguridad o artefacto
 ```
 
-El workflow considera `0` y `2` como éxito técnico. Los códigos `3`, `4` y `5` fallan el job. No se reutiliza `accepted=true/false` del runner normal; el informe usa:
+El informe utiliza `completed`, `diagnostic_outcome`, `anomalies_detected` y `stop_reason`; no reutiliza la semántica `accepted` del runner normal.
 
-```text
-completed
-diagnostic_outcome
-anomalies_detected
-stop_reason
-```
+## Sanitización
 
-## Interpretación determinista
-
-Resultados posibles:
-
-- `window_size_dependent`: C es parcial, F y G están completas, su unión contiene 20 identidades y H está completa.
-- `localized_missing_position`: exactamente una de F o G es parcial.
-- `unexpected_overlap`: algún solapamiento observado difiere del esperado.
-- `union_below_expected`: la unión única queda por debajo de las posiciones esperadas.
-- `order_dependent`: la condición parcial o el conteo cambia entre NameASC y ReleaseDateDESC para C, F, G o H.
-- `catalog_changed`: `recordsFiltered` cambia durante la secuencia.
-- `inconclusive`: hay anomalía, pero las reglas anteriores no distinguen una explicación.
-- `no_anomaly_observed`: todas las ventanas completan el patrón esperado.
-
-El runtime no declara una causa raíz de VTEX.
-
-## Artefactos sanitizados
-
-Campos de ventana permitidos:
-
-```text
-window
-from
-to
-order_by
-products_expected
-products_returned
-skus_returned
-records_filtered
-response_bytes
-signature
-quality_events
-```
-
-Campos prohibidos:
+El artefacto puede publicar firmas completas de ventana y métricas agregadas. No puede publicar:
 
 ```text
 productId
@@ -252,122 +217,96 @@ linkText
 itemId
 SKU
 EAN
-nombre
-marca
-precio
-URL
-payload
+nombres
+marcas
+precios
+URLs
+payloads
 identidades individuales
 hashes individuales
 ```
 
-La firma completa de una ventana sí se publica porque representa el conjunto ordenado completo y no una identidad individual.
+## Integración de main en PR #7
 
-## Workflow seleccionado
-
-Se seleccionó un workflow separado:
+La rama funcional se actualizó mediante un merge commit real de dos padres:
 
 ```text
-.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml
+Head anterior de PR #7: 9e481ceda6670aae009e56edbd195c3a27e24f81
+Main integrado: 12bff9918815fe2dc6768f45c54e47281948de66
+Merge commit funcional: f04f79bd35837ed638312bcf143edda701075785
 ```
 
-Razones:
+Se conservó el dominio, runtime, CLI, pruebas funcionales y documentación de PR #7. La única resolución específica fue actualizar una prueba antigua que esperaba que el dispatcher todavía rechazara `diagnostic_overlap`; ahora comprueba la aceptación del contrato exacto y la selección del workflow confiable.
 
-- permisos e inputs mínimos;
-- artefacto y códigos de salida propios;
-- ninguna mezcla con `smoke`, `staged`, `validation` o `full`;
-- menor riesgo para el recorrido normal;
-- revisión estática sencilla;
-- único trigger: `workflow_dispatch`.
-
-El workflow preparado no contiene `schedule`, `push`, `pull_request` ni `issue_comment`. No se ejecutó.
-
-## PR técnico
+CI posterior al merge:
 
 ```text
-PR TÉCNICO REQUERIDO — PENDIENTE DE AUTORIZACIÓN
-```
-
-Es indispensable porque el controlador de `pull_request_target` usa código de `main`, y el PR #7 no puede convertir su propio dispatcher en código confiable antes de fusionarse. Además, el PR #7 continúa bloqueado por la validación incompleta del catálogo.
-
-Rama sugerida:
-
-```text
-chore/la-colonia-diagnostic-trusted-dispatch
-```
-
-Título sugerido:
-
-```text
-Habilita el despacho confiable del diagnóstico de ventanas de La Colonia
-```
-
-Alcance mínimo del PR técnico:
-
-1. `la_colonia_file_dispatcher.py`:
-   - esquema discriminado por `mode`;
-   - allow-list `diagnostic_overlap` + `frontier_380_399_v1`;
-   - `delay_seconds=1.5` y `allow_full=false` obligatorios;
-   - selección explícita del workflow diagnóstico;
-   - rechazo de ventanas, órdenes y URLs arbitrarias.
-2. Workflow controlador:
-   - allow-list de los dos paths de workflow;
-   - dispatch únicamente al workflow indicado por la decisión confiable;
-   - nunca ejecutar código del PR dentro de `pull_request_target`.
-3. Workflow diagnóstico:
-   - incorporar la definición preparada y revisada;
-   - `workflow_dispatch` únicamente.
-4. Tests confiables:
-   - esquema normal sin regresión;
-   - esquema diagnóstico aceptado solo con valores exactos;
-   - campos arbitrarios rechazados;
-   - idempotencia;
-   - workflow correcto;
-   - `full` prohibido.
-
-`procesar_solicitud_archivo_la_colonia.py` no requiere cambio funcional si `DispatchDecision.as_dict()` continúa entregando el workflow seleccionado. Debe incluirse en las pruebas de regresión.
-
-Orden correcto:
-
-1. completar y revisar offline la parte de dominio/runtime en PR #7;
-2. autorizar y fusionar el PR técnico a `main`;
-3. rebasar o actualizar PR #7 con `main`;
-4. revisar nuevamente contrato, workflow y CI;
-5. solicitar autorización expresa para una ejecución diagnóstica;
-6. actualizar el archivo operacional solo después de esa autorización.
-
-## Pruebas offline
-
-Estado previo:
-
-```text
-171 passed
-```
-
-Se agregaron pruebas de runtime, seguridad, artefactos, workflow y frontera de confianza. La CI ejecuta exactamente:
-
-```bash
-python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
-pytest precios-supermercados-sps/tests
-```
-
-Resultado verificado:
-
-```text
-workflow run = 31043403471
-job = 92432972945
-compilación de src y scripts = éxito
-pruebas = 196 passed in 0.64s
+workflow run = 31045490588
+job = 92439859239
+compilación src y scripts = éxito
+pruebas = 238 passed in 0.69s
 errores = 0
 warnings de pytest = 0
-warning de infraestructura = acciones Node.js 20 forzadas a Node.js 24
+```
+
+La compilación incluyó 14 módulos de `src` y cuatro scripts:
+
+```text
+diagnosticar_ventanas_la_colonia.py
+probar_la_colonia.py
+procesar_solicitud_archivo_la_colonia.py
+publicar_resultado_la_colonia.py
+```
+
+El único warning fue de infraestructura: GitHub forzó a Node.js 24 acciones que todavía declaran Node.js 20.
+
+## Archivo operacional
+
+Permanece exactamente:
+
+```json
+{
+  "request_id": "la-colonia-baseline-products-500-002",
+  "supermarket": "la_colonia",
+  "mode": "staged",
+  "page_size": 20,
+  "max_pages": 0,
+  "max_products": 500,
+  "delay_seconds": 1.5,
+  "profile": "baseline",
+  "thresholds": null,
+  "allow_full": false
+}
+```
+
+Blob SHA verificado:
+
+```text
+37e527c191141dc321c7b347b9526db7bb70c4e7
 ```
 
 ## Bloqueos vigentes
 
-- Ninguna ejecución live autorizada.
-- Archivo operacional sin cambios.
-- Tercera repetición normal de 500 bloqueada.
-- Validation de 500 bloqueada.
-- `full` bloqueado y no ejecutado.
-- PR #7 debe permanecer abierto, en borrador y sin auto-merge.
+- Diagnóstico live: no ejecutado y pendiente de autorización expresa.
+- Tercera repetición normal de 500: bloqueada.
+- Validation de 500: bloqueada.
+- `full`: bloqueado y no ejecutado.
+- PR #7: debe permanecer abierto, en borrador, sin fusionar y sin auto-merge.
+- Archivo operacional: no debe modificarse antes de una autorización live separada.
+
+## Próxima solicitud conceptual
+
+```json
+{
+  "request_id": "la-colonia-window-diagnostic-380-399-001",
+  "supermarket": "la_colonia",
+  "mode": "diagnostic_overlap",
+  "diagnostic_plan": "frontier_380_399_v1",
+  "delay_seconds": 1.5,
+  "allow_full": false
+}
+```
+
+```text
+NO AUTORIZADA TODAVÍA
+```
