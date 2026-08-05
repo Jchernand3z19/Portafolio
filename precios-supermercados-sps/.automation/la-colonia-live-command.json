@@ -1,8 +1,8 @@
 {
-  "request_id": "la-colonia-smoke-20-001",
+  "request_id": "la-colonia-smoke-30-001",
   "supermarket": "la_colonia",
   "mode": "smoke",
-  "page_size": 20,
+  "page_size": 30,
   "max_pages": 2,
   "max_products": 0,
   "delay_seconds": 1.5,
