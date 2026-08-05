@@ -7,10 +7,15 @@ from typing import Any, Mapping
 from urllib.parse import urlencode
 
 GRAPHQL_ENDPOINT = "https://www.lacolonia.com/_v/segment/graphql/v1"
+MAX_CONTROLLED_PRODUCTS = 10
 
 # Basada en QueryProductSearchV3 de vtex.store-resources. Se solicitan solo
 # los campos necesarios para la prueba controlada y se aliasa el nombre
 # histórico `commertialOffer` al nombre correcto usado internamente.
+#
+# `hideUnavailableItems = false` evita que la búsqueda oculte productos por
+# disponibilidad. `skusFilter = ALL` controla, por separado, que todos los SKU
+# asociados a cada producto sean devueltos para auditoría.
 PRODUCT_SEARCH_QUERY = """
 query productSearchV3(
   $query: String
@@ -20,7 +25,7 @@ query productSearchV3(
   $from: Int
   $to: Int
   $hideUnavailableItems: Boolean
-  $skusFilter: ItemsFilter = ALL_AVAILABLE
+  $skusFilter: ItemsFilter = ALL
 ) {
   productSearch(
     query: $query
@@ -81,26 +86,35 @@ def build_product_search_url(
     page_size: int = 5,
     query: str = "supermercado",
     category_map: str = "category-1",
+    full_text: str = "",
 ) -> str:
     """Construye una consulta GET pública limitada a una sola página."""
 
     if page < 1:
         raise ValueError("page debe ser mayor o igual que 1")
-    if not 1 <= page_size <= 5:
-        raise ValueError("La prueba controlada admite entre 1 y 5 productos")
-    if not query.strip() or not category_map.strip():
-        raise ValueError("query y category_map no pueden estar vacíos")
+    if not 1 <= page_size <= MAX_CONTROLLED_PRODUCTS:
+        raise ValueError(
+            f"La prueba controlada admite entre 1 y {MAX_CONTROLLED_PRODUCTS} productos"
+        )
+    if full_text.strip():
+        query_value = ""
+        selected_facets: list[dict[str, str]] = []
+    else:
+        if not query.strip() or not category_map.strip():
+            raise ValueError("query y category_map no pueden estar vacíos")
+        query_value = query
+        selected_facets = [{"key": category_map, "value": query}]
 
     from_index = (page - 1) * page_size
     variables: Mapping[str, Any] = {
-        "query": query,
-        "fullText": "",
-        "selectedFacets": [{"key": category_map, "value": query}],
+        "query": query_value,
+        "fullText": full_text.strip(),
+        "selectedFacets": selected_facets,
         "orderBy": "OrderByReleaseDateDESC",
         "from": from_index,
         "to": from_index + page_size - 1,
         "hideUnavailableItems": False,
-        "skusFilter": "ALL_AVAILABLE",
+        "skusFilter": "ALL",
     }
     params = {
         "workspace": "master",
