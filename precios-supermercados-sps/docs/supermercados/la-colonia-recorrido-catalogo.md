@@ -9,30 +9,54 @@ Controles vigentes:
 - `page_size = 20`;
 - concurrencia fija en `1`;
 - pausa de `1.5` segundos;
-- productos mantenidos solo en memoria;
+- recorrido desde el índice inicial, sin omitir páginas anteriores;
+- productos mantenidos únicamente en memoria;
 - workflow live exclusivamente bajo `workflow_dispatch`;
 - controlador por archivo ejecutado desde código confiable de `main`;
 - observador de solo lectura para recuperar identificadores;
 - artefactos sanitizados `run-summary.json` y `run-summary.md`;
 - `allow_full = false`;
-- ningún producto, SKU individual, nombre comercial, URL o precio publicado.
+- ninguna página parcial es aceptable;
+- no se publican productos, SKU individuales, nombres comerciales, marcas, URLs ni precios.
 
-## Etapas anteriores aprobadas
+## Etapas anteriores
 
-| Etapa | Live run | Artefacto | Productos | Perfil | Resultado |
-|---|---:|---:|---:|---|---|
-| Baseline de diez páginas | `31032519694` | `8941246437` | 200 | baseline | aceptado |
-| Validation de diez páginas | `31033885905` | `8941767177` | 200 | validation | aceptada |
+| Etapa | Live run | Artefacto | Resultado |
+|---|---:|---:|---|
+| Baseline de 200 productos | `31032519694` | `8941246437` | aceptado |
+| Validation de 200 productos | `31033885905` | `8941767177` | aceptada |
+| Primer baseline de 500 | `31035091894` | `8942244270` | rechazado en página 20 |
 
-Ambas ejecuciones completaron diez páginas, 200 productos y 200 SKU con precio; registraron cero duplicados, errores, eventos estructurales, HTTP 403 del sitio, HTTP 429, HTTP 5xx y reintentos. Los cuatro ratios observados fueron `0.0`.
+Los recorridos de 200 productos completaron diez páginas y observaron cero faltantes de precio, duplicados, cambio del total, errores, eventos estructurales, HTTP 403 del sitio, HTTP 429, HTTP 5xx y reintentos.
 
-## Baseline solicitado de 500 productos
+## Primer baseline de 500 rechazado
 
-Solicitud operacional:
+```text
+request_id = la-colonia-baseline-products-500-001
+commit_sha = 2ec8d4c0a9bfebf88a3402281b3129f3ebdbf696
+controller_run_id = 31035067808
+observer_run_id = 31035101626
+live_run_id = 31035091894
+artifact_id = 8942244270
+exit_code = 2
+accepted = false
+pages_attempted = 20
+pages_completed = 19
+products_returned = 399
+products_processed = 380
+```
+
+La página 20, rango `380–399`, devolvió 19 de 20 productos. El catálogo permaneció en 9291 productos. La hipótesis previa fue una respuesta parcial transitoria o una inestabilidad de paginación.
+
+## Única repetición diagnóstica autorizada
+
+Objetivo: determinar si la página parcial era transitoria, reproducible en el mismo rango o una inestabilidad general en otro rango. No se modificó código, regla de página completa, ordenamiento, pausa ni reintentos antes de ejecutar.
+
+Solicitud exacta:
 
 ```json
 {
-  "request_id": "la-colonia-baseline-products-500-001",
+  "request_id": "la-colonia-baseline-products-500-002",
   "supermarket": "la_colonia",
   "mode": "staged",
   "page_size": 20,
@@ -45,27 +69,34 @@ Solicitud operacional:
 }
 ```
 
-Trazabilidad:
+### Trazabilidad
 
 ```text
-commit_sha = 2ec8d4c0a9bfebf88a3402281b3129f3ebdbf696
-controller_run_id = 31035067808
-controller_job_id = 92404979751
-controller_artifact_id = 8942217742
-controller_artifact_digest = sha256:b168bc235371057d0c0f44305fff1300b366cb58e095fd48fe33a352e7c19d03
-observer_run_id = 31035101626
-observer_job_id = 92405095589
-live_run_id = 31035091894
-live_job_id = 92405070961
-run_number = 29
-live_artifact_id = 8942244270
-live_artifact_digest = sha256:9f4592d15b73be641125fde7675078eaced07da6ac5a6feac2798fed130ddc14
+commit_sha = 5c1ecb81eb8efb1c4f9043ee65614b8b93136861
+controller_run_id = 31037185265
+controller_job_id = 92412095565
+controller_conclusion = success
+controller_artifact_id = 8943052236
+controller_artifact_name = la-colonia-file-dispatch-31037185265
+controller_artifact_digest = sha256:d1a3e9d18c498dac24ded4777d39ccd7b9312d5ae52f822568fd759d55215fb1
+observer_run_id = 31037217937
+observer_job_id = 92412214724
+observer_conclusion = failure controlado de recuperación
+live_run_id = 31037207732
+live_job_id = 92412185299
+live_conclusion = failure
+run_number = 30
+internal_run_id = live_la_colonia_staged_20260805T185814Z
+artifact_id = 8943081061
+artifact_name = la-colonia-staged-summary
+artifact_digest = sha256:a8a8a8cca0a511323be8997d2a07f422087759a547709637a50416925228607d
+artifact_size = 3173 bytes
 exit_code = 2
 ```
 
-El controlador terminó correctamente y despachó una sola ejecución. El observador falló de forma intencional para exponer los identificadores después de que GitHub bloqueara el comentario del `GITHUB_TOKEN`. Ese HTTP 403 fue operacional de GitHub, no del sitio de La Colonia.
+El controlador despachó una sola ejecución sobre `feature/la-colonia-full-crawl-validation` y el commit exacto `5c1ecb81...`. El observador falló intencionalmente para exponer los IDs porque GitHub bloqueó los comentarios del `GITHUB_TOKEN`. Ese HTTP 403 pertenece a GitHub; el sitio de La Colonia registró `http_403 = 0`.
 
-## Resultado global
+## Resultado global de la repetición
 
 | Métrica | Valor |
 |---|---:|
@@ -92,8 +123,8 @@ El controlador terminó correctamente y despachó una sola ejecución. El observ
 | `duplicate_skus` | 0 |
 | `duplicate_products` | 0 |
 | `response_bytes` | 456044 |
-| `duration_seconds` | 43.700291 |
-| `average_response_seconds` | 0.7571339955500005 |
+| `duration_seconds` | 38.478367 |
+| `average_response_seconds` | 0.49567525860000006 |
 | `average_response_bytes` | 22802.2 |
 | `delay_seconds_applied` | 28.5 |
 | `http_403` | 0 |
@@ -122,194 +153,137 @@ page_coverage_below_100_percent
 errors_present
 ```
 
-## Resultado por página
+## Comparación página por página
 
-| Página | Rango | Esperados | Devueltos | SKU devueltos | SKU extraídos | Bytes | Respuesta (s) | Accepted | Eventos de calidad | Firma repetida |
-|---:|---|---:|---:|---:|---:|---:|---:|---|---|---|
-| 1 | 0–19 | 20 | 20 | 20 | 20 | 21631 | 0.847033 | true | disponibilidad/precio con cantidad cero | no |
-| 2 | 20–39 | 20 | 20 | 20 | 20 | 20889 | 0.328329 | true | disponibilidad/precio con cantidad cero | no |
-| 3 | 40–59 | 20 | 20 | 20 | 20 | 19681 | 0.104574 | true | disponibilidad/precio con cantidad cero | no |
-| 4 | 60–79 | 20 | 20 | 20 | 20 | 22947 | 1.122780 | true | disponibilidad/precio con cantidad cero | no |
-| 5 | 80–99 | 20 | 20 | 20 | 20 | 21261 | 0.324365 | true | disponibilidad/precio con cantidad cero | no |
-| 6 | 100–119 | 20 | 20 | 20 | 20 | 22037 | 0.305892 | true | disponibilidad/precio con cantidad cero | no |
-| 7 | 120–139 | 20 | 20 | 20 | 20 | 19879 | 1.126288 | true | disponibilidad/precio con cantidad cero | no |
-| 8 | 140–159 | 20 | 20 | 20 | 20 | 24620 | 0.319887 | true | disponibilidad/precio con cantidad cero | no |
-| 9 | 160–179 | 20 | 20 | 20 | 20 | 27509 | 0.070862 | true | disponibilidad/precio con cantidad cero | no |
-| 10 | 180–199 | 20 | 20 | 20 | 20 | 26181 | 0.297943 | true | disponibilidad/precio con cantidad cero | no |
-| 11 | 200–219 | 20 | 20 | 20 | 20 | 24163 | 0.945739 | true | disponibilidad/precio con cantidad cero | no |
-| 12 | 220–239 | 20 | 20 | 20 | 20 | 22810 | 0.576145 | true | disponibilidad/precio con cantidad cero | no |
-| 13 | 240–259 | 20 | 20 | 20 | 20 | 22416 | 0.699540 | true | disponibilidad/precio con cantidad cero | no |
-| 14 | 260–279 | 20 | 20 | 20 | 20 | 24736 | 1.408019 | true | disponibilidad/precio con cantidad cero | no |
-| 15 | 280–299 | 20 | 20 | 20 | 20 | 25020 | 1.283125 | true | disponibilidad/precio con cantidad cero | no |
-| 16 | 300–319 | 20 | 20 | 20 | 20 | 20448 | 0.846833 | true | disponibilidad/precio con cantidad cero | no |
-| 17 | 320–339 | 20 | 20 | 20 | 20 | 22082 | 0.722370 | true | disponibilidad/precio con cantidad cero | no |
-| 18 | 340–359 | 20 | 20 | 20 | 20 | 21929 | 0.654179 | true | disponibilidad/precio con cantidad cero | no |
-| 19 | 360–379 | 20 | 20 | 20 | 20 | 24848 | 0.796609 | true | disponibilidad/precio con cantidad cero | no |
-| 20 | 380–399 | 20 | 19 | 19 | 19 | 20957 | 2.362169 | false | disponibilidad/precio con cantidad cero; página parcial local y global | no |
-| 21 | 400–419 | 20 | No intentada | No intentada | No intentada | No disponible | No disponible | No evaluada | detención tras página parcial | No evaluada |
-| 22 | 420–439 | 20 | No intentada | No intentada | No intentada | No disponible | No disponible | No evaluada | detención tras página parcial | No evaluada |
-| 23 | 440–459 | 20 | No intentada | No intentada | No intentada | No disponible | No disponible | No evaluada | detención tras página parcial | No evaluada |
-| 24 | 460–479 | 20 | No intentada | No intentada | No intentada | No disponible | No disponible | No evaluada | detención tras página parcial | No evaluada |
-| 25 | 480–499 | 20 | No intentada | No intentada | No intentada | No disponible | No disponible | No evaluada | detención tras página parcial | No evaluada |
+| Página | Rango | Intentada | Esperados | Devueltos | SKU devueltos | SKU extraídos | Bytes | Tiempo (s) | Accepted | Eventos de calidad | Firma repetida en el run | Comparación con primer intento |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|
+| 1 | 0–19 | sí | 20 | 20 | 20 | 20 | 21631 | 0.725924 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 2 | 20–39 | sí | 20 | 20 | 20 | 20 | 20889 | 0.369187 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 3 | 40–59 | sí | 20 | 20 | 20 | 20 | 19681 | 0.339813 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 4 | 60–79 | sí | 20 | 20 | 20 | 20 | 22947 | 0.336677 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 5 | 80–99 | sí | 20 | 20 | 20 | 20 | 21261 | 0.336303 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 6 | 100–119 | sí | 20 | 20 | 20 | 20 | 22037 | 0.334386 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 7 | 120–139 | sí | 20 | 20 | 20 | 20 | 19879 | 0.363469 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 8 | 140–159 | sí | 20 | 20 | 20 | 20 | 24620 | 1.156876 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 9 | 160–179 | sí | 20 | 20 | 20 | 20 | 27509 | 0.477060 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 10 | 180–199 | sí | 20 | 20 | 20 | 20 | 26181 | 0.516007 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 11 | 200–219 | sí | 20 | 20 | 20 | 20 | 24163 | 0.363555 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 12 | 220–239 | sí | 20 | 20 | 20 | 20 | 22810 | 0.574707 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 13 | 240–259 | sí | 20 | 20 | 20 | 20 | 22416 | 0.352841 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 14 | 260–279 | sí | 20 | 20 | 20 | 20 | 24736 | 0.344121 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 15 | 280–299 | sí | 20 | 20 | 20 | 20 | 25020 | 1.173714 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 16 | 300–319 | sí | 20 | 20 | 20 | 20 | 20448 | 0.357352 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 17 | 320–339 | sí | 20 | 20 | 20 | 20 | 22082 | 0.711416 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 18 | 340–359 | sí | 20 | 20 | 20 | 20 | 21929 | 0.364226 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 19 | 360–379 | sí | 20 | 20 | 20 | 20 | 24848 | 0.358129 | true | availability_conflict_price_with_zero_quantity | no | conteo igual, bytes iguales, firma igual |
+| 20 | 380–399 | sí | 20 | 19 | 19 | 19 | 20957 | 0.357741 | false | availability_conflict_price_with_zero_quantity; partial_product_page; partial_product_page_global | no | conteo igual, bytes iguales, firma igual |
+| 21 | 400–419 | no | 20 | — | — | — | — | — | — | detención tras rechazo reproducido en página 20 | — | no comparable; no intentada en ambos runs |
+| 22 | 420–439 | no | 20 | — | — | — | — | — | — | detención tras rechazo reproducido en página 20 | — | no comparable; no intentada en ambos runs |
+| 23 | 440–459 | no | 20 | — | — | — | — | — | — | detención tras rechazo reproducido en página 20 | — | no comparable; no intentada en ambos runs |
+| 24 | 460–479 | no | 20 | — | — | — | — | — | — | detención tras rechazo reproducido en página 20 | — | no comparable; no intentada en ambos runs |
+| 25 | 480–499 | no | 20 | — | — | — | — | — | — | detención tras rechazo reproducido en página 20 | — | no comparable; no intentada en ambos runs |
 
-Las primeras 19 páginas fueron completas y aceptadas. La página 20, rango `380–399`, devolvió 19 productos en vez de 20. Las páginas 21–25 no fueron intentadas porque el runner detuvo correctamente la ejecución después del rechazo.
+## Comparación diagnóstica
 
-## Causa y clasificación
+### Páginas 1–19
 
-La página parcial no era una última página legítima:
+- mismos rangos consecutivos `0–19` a `360–379`;
+- 20 productos y 20 SKU en cada página;
+- bytes exactamente iguales en las 19 páginas;
+- firmas sanitizadas exactamente iguales en las 19 páginas;
+- total reportado de 9291 en todas las páginas;
+- sin saltos, solapamientos, páginas vacías, páginas repetidas ni duplicados globales;
+- los tiempos de respuesta variaron, sin alterar el contenido sanitizado.
 
-```text
-products_reported_initial = 9291
-products_reported_final = 9291
-rango parcial = 380–399
-productos esperados = 20
-productos devueltos = 19
-```
+### Página 20 — rango 380–399
 
-La respuesta fuente contenía 19 productos y 19 SKU. No hubo pérdida adicional durante el parseo. El extractor detectó la diferencia y rechazó la página, por lo que la evidencia disponible indica:
+| Métrica | Primer intento | Repetición | Comparación |
+|---|---:|---:|---|
+| esperados | 20 | 20 | igual |
+| devueltos | 19 | 19 | igual |
+| SKU devueltos | 19 | 19 | igual |
+| SKU observados por extractor | 19 | 19 | igual |
+| bytes | 20957 | 20957 | igual |
+| tiempo de respuesta | 2.362169 s | 0.357741 s | distinto, contenido igual |
+| accepted | false | false | igual |
+| firma | `c86ae16...ef5ca` | `c86ae16...ef5ca` | exactamente igual |
+| eventos | disponibilidad + página parcial local/global | disponibilidad + página parcial local/global | igual |
 
+## Clasificación
+
+**Resultado B — inestabilidad reproducible del rango o de la paginación bajo estas condiciones.**
+
+La página parcial no fue una anomalía transitoria: se reprodujo en el mismo rango con el mismo conteo, bytes y firma sanitizada. La evidencia no demuestra pérdida del parser ni un problema de red. El runner y la regla de aceptación funcionaron correctamente al rechazar y detener el recorrido.
+
+Clasificación por componente:
+
+- sitio/API o paginación pública: causa observable reproducible;
 - controlador: correcto;
 - observador: recuperación controlada correcta;
-- workflow live: reflejó correctamente el código de salida `2`;
-- red: sin HTTP 403 del sitio, HTTP 429, HTTP 5xx o reintentos;
-- parser: sin evidencia de pérdida, pues productos y SKU retornados fueron 19;
-- runner y regla de aceptación: comportamiento correcto;
-- causa observable: respuesta parcial o inestabilidad de paginación del sitio/API pública;
-- relación posible con `ordering_is_not_strictly_unique`: no demostrada, pero permanece como riesgo.
-
-No se modifica código ni se flexibiliza la regla.
-
-## Continuidad y ordenamiento
-
-Para las páginas completas 1–19 se observó:
-
-- rangos consecutivos desde `0–19` hasta `360–379`;
-- tamaño constante de 20;
-- ninguna página vacía;
-- ningún salto ni solapamiento;
-- 19 firmas distintas;
-- cero duplicados globales;
-- orden constante `OrderByNameASC`.
-
-La página 20 tuvo una firma distinta, pero fue parcial. En total se observaron 20 firmas diferentes y ninguna repetida. No puede confirmarse continuidad de las 25 páginas porque el recorrido se detuvo antes de `400–419`.
-
-No se declara que `OrderByNameASC` sea estrictamente estable.
-
-## Pausa aplicada
-
-Se intentaron 20 páginas. La pausa esperada antes de detenerse era:
-
-```text
-19 intervalos × 1.5 segundos = 28.5 segundos
-```
-
-El artefacto reportó exactamente `delay_seconds_applied = 28.5`. Los 36 segundos previstos para 25 páginas no se aplicaron porque las páginas 21–25 no se intentaron.
+- workflow live: correcto, reflejó código de salida 2;
+- red/HTTP: sin 403 del sitio, 429, 5xx ni reintentos;
+- parser: sin evidencia de pérdida, porque respuesta y extractor observaron 19;
+- continuidad: válida hasta `360–379`, rechazada en `380–399`;
+- duplicados: cero globales;
+- cambio del total: cero;
+- regla de aceptación: correcta y no se flexibiliza.
 
 ## Disponibilidad
 
-Las 20 respuestas intentadas registraron:
+Las 20 páginas intentadas registraron `quality:availability_conflict_price_with_zero_quantity`.
 
 ```text
-quality:availability_conflict_price_with_zero_quantity
-```
-
-```text
-páginas afectadas = 20 de 20 intentadas
+páginas afectadas = 20/20
 skus_pending_review = 380
 skus_extracted = 380
-proporción pendiente = 100 %
+proporción = 100 %
 baseline 200 = 100 %
 validation 200 = 100 %
+primer baseline 500 procesado = 100 %
+repetición diagnóstica = 100 %
 diferencia = 0 puntos porcentuales
 ```
 
-La regla de disponibilidad no se modifica. Los cuatro ratios actuales no cubren este conflicto.
+Este conflicto no causó la página parcial. La regla permanece sin cambios y los cuatro ratios actuales no lo cubren.
 
 ## Ratios y umbrales propuestos
 
-| Ratio | Baseline 200 | Validation 200 | Baseline 500 rechazado | Umbral anterior | Propuesta del run | Decisión |
-|---|---:|---:|---:|---:|---:|---|
-| `missing_price_ratio` | 0.0 | 0.0 | 0.0 | 0.01 | 0.01 | sin cambio, pero no autoriza validation |
-| `duplicate_sku_ratio` | 0.0 | 0.0 | 0.0 | 0.005 | 0.005 | sin cambio, pero no autoriza validation |
-| `duplicate_product_ratio` | 0.0 | 0.0 | 0.0 | 0.005 | 0.005 | sin cambio, pero no autoriza validation |
-| `total_change_ratio` | 0.0 | 0.0 | 0.0 | 0.002 | 0.002 | sin cambio, pero no autoriza validation |
+| Ratio | Baseline 200 | Validation 200 | Primer intento 500 | Repetición 500 | Umbral anterior | Propuesta | Decisión |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `missing_price_ratio` | 0.0 | 0.0 | 0.0 | 0.0 | 0.01 | 0.01 | sin cambio; no autoriza validation |
+| `duplicate_sku_ratio` | 0.0 | 0.0 | 0.0 | 0.0 | 0.005 | 0.005 | sin cambio; no autoriza validation |
+| `duplicate_product_ratio` | 0.0 | 0.0 | 0.0 | 0.0 | 0.005 | 0.005 | sin cambio; no autoriza validation |
+| `total_change_ratio` | 0.0 | 0.0 | 0.0 | 0.0 | 0.002 | 0.002 | sin cambio; no autoriza validation |
 
-Los umbrales propuestos coinciden con los anteriores. No se activan ni se ejecuta validation de 500 porque el baseline no completó la muestra.
+Umbrales propuestos, no activados:
 
-## Comparación de ejecuciones
-
-| Métrica | Baseline 200 | Validation 200 | Baseline 500 rechazado | Diferencia 500 vs baseline 200 | Decisión |
-|---|---:|---:|---:|---:|---|
-| `products_reported_initial` | 9291 | 9291 | 9291 | 0 | total estable |
-| `products_reported_final` | 9291 | 9291 | 9291 | 0 | total estable |
-| `products_returned` | 200 | 200 | 399 | +199 | ejecución incompleta |
-| `products_processed` | 200 | 200 | 380 | +180 | ejecución incompleta |
-| `skus_returned` | 200 | 200 | 399 | +199 | ejecución incompleta |
-| `skus_extracted` | 200 | 200 | 380 | +180 | ejecución incompleta |
-| `skus_with_price` | 200 | 200 | 380 | +180 | 100 % de lo procesado |
-| `skus_without_price` | 0 | 0 | 0 | 0 | sin faltantes |
-| `skus_pending_review` | 200 | 200 | 380 | +180 | 100 % de lo procesado |
-| `promotional_skus` | 17 | 17 | 42 | +25 | muestra mayor e incompleta |
-| `weighted_skus` | 0 | 0 | 0 | 0 | sin cambio |
-| `duplicate_skus` | 0 | 0 | 0 | 0 | sin duplicados |
-| `duplicate_products` | 0 | 0 | 0 | 0 | sin duplicados |
-| `response_bytes` | 226635 | 226635 | 456044 | +229409 | muestra mayor e incompleta |
-| `duration_seconds` | 20.344055 | 14.081743 | 43.700291 | +23.356236 | incluye 20 intentos |
-| `average_response_seconds` | 0.6815969079 | 0.0552162360 | 0.7571339956 | +0.0755370877 | mayor promedio |
-| `average_response_bytes` | 22663.5 | 22663.5 | 22802.2 | +138.7 | diferencia menor |
-| `missing_price_ratio` | 0.0 | 0.0 | 0.0 | 0.0 | sin cambio |
-| `duplicate_sku_ratio` | 0.0 | 0.0 | 0.0 | 0.0 | sin cambio |
-| `duplicate_product_ratio` | 0.0 | 0.0 | 0.0 | 0.0 | sin cambio |
-| `total_change_ratio` | 0.0 | 0.0 | 0.0 | 0.0 | sin cambio |
-| `errors` | 0 | 0 | 1 | +1 | rechazo |
-| `structural_events` | 0 | 0 | 0 | 0 | sin cambio |
-| `http_403` | 0 | 0 | 0 | 0 | sin bloqueo del sitio |
-| `http_429` | 0 | 0 | 0 | 0 | sin bloqueo |
-| `persistent_http_429` | 0 | 0 | 0 | 0 | sin bloqueo |
-| `http_5xx` | 0 | 0 | 0 | 0 | sin fallo de servidor |
-| `retries` | 0 | 0 | 0 | 0 | sin reintentos |
-| `warnings` | orden no único | orden no único | orden no único | sin cambio | riesgo permanece |
-| `rejection_reasons` | [] | [] | 5 razones | +5 | baseline rechazado |
-
-Ratios normalizados:
-
-```text
-promociones por 100 SKU:
-- baseline 200 = 8.5
-- baseline 500 incompleto = 11.0526
-
-bytes por SKU extraído:
-- baseline 200 = 1133.175
-- baseline 500 incompleto = 1200.1158
-
-pendientes por 100 SKU:
-- baseline 200 = 100
-- validation 200 = 100
-- baseline 500 incompleto = 100
+```json
+{
+  "max_missing_price_ratio": 0.01,
+  "max_duplicate_sku_ratio": 0.005,
+  "max_duplicate_product_ratio": 0.005,
+  "max_total_change_ratio": 0.002
+}
 ```
 
-La diferencia promocional no se interpreta como error.
+## Decisión y siguiente trabajo
 
-## Decisión
+- Baseline de 500: rechazado por segunda vez.
+- Anomalía: reproducible en el mismo rango.
+- Tercera repetición: prohibida y no ejecutada.
+- Validation de 500: no ejecutada.
+- `full`: no ejecutado.
+- Código ejecutable: sin modificaciones.
+- Regla de página completa: sin flexibilizar.
+- Ordenamiento: sin cambios; `ordering_is_not_strictly_unique` permanece como advertencia.
+- Siguiente trabajo: revisión de estrategia de paginación con una hipótesis técnica concreta y pruebas de regresión antes de autorizar otra ejecución live.
 
-El baseline de 500 productos queda rechazado.
-
-No se ejecutan:
-
-- una repetición automática;
-- validation de 500;
-- `full`.
-
-No existe evidencia de defecto de código que justifique modificar runner, parser, workflows, controlador, observador, contratos, modelos o pruebas. Antes de cualquier repetición debe revisarse y documentarse una estrategia explícita para confirmar si la página parcial fue una anomalía transitoria del sitio o un efecto reproducible de la paginación no estrictamente única.
+Hipótesis a estudiar, sin implementar todavía: el endpoint puede construir la página ordenada por un campo no estrictamente único y omitir de forma determinista un elemento alrededor del límite `380–399`. La revisión debe inspeccionar el contrato de paginación, los parámetros `from/to`, el criterio secundario de orden y la posibilidad de validar continuidad mediante identificadores sanitizados, sin aceptar páginas parciales.
 
 ## Estado del PR y restricciones
 
-- PR #7 abierto.
-- PR #7 en borrador.
-- PR #7 no fusionado.
+- PR #7 abierto, en borrador, fusionable y no fusionado.
 - Auto-merge deshabilitado.
-- `full` no ejecutado.
-- Validation de 500 no ejecutada.
-- Archivo operacional conservado.
+- Archivo operacional conservado con `la-colonia-baseline-products-500-002`.
 - Limpieza operacional pendiente antes de una futura fusión.
 - Sin persistencia, historial, ejecución diaria, Google Sheets, BigQuery, Power BI ni segundo supermercado.
