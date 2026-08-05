@@ -1,17 +1,12 @@
 {
-  "request_id": "la-colonia-validation-pages-20-001",
+  "request_id": "la-colonia-baseline-products-500-001",
   "supermarket": "la_colonia",
   "mode": "staged",
   "page_size": 20,
-  "max_pages": 10,
-  "max_products": 0,
+  "max_pages": 0,
+  "max_products": 500,
   "delay_seconds": 1.5,
-  "profile": "validation",
-  "thresholds": {
-    "max_missing_price_ratio": 0.01,
-    "max_duplicate_sku_ratio": 0.005,
-    "max_duplicate_product_ratio": 0.005,
-    "max_total_change_ratio": 0.002
-  },
+  "profile": "baseline",
+  "thresholds": null,
   "allow_full": false
 }
