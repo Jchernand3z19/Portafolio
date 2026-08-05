@@ -15,9 +15,6 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from precios_supermercados.scrapers.base import ScraperError  # noqa: E402
 from precios_supermercados.scrapers.la_colonia import LaColoniaExtractor  # noqa: E402
-from precios_supermercados.scrapers.la_colonia_graphql import (  # noqa: E402
-    build_product_search_url,
-)
 
 
 def _sanitized_graphql_diagnostic(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -50,7 +47,7 @@ def main() -> int:
 
     run_id = datetime.now(timezone.utc).strftime("live_la_colonia_%Y%m%dT%H%M%SZ")
     extractor = LaColoniaExtractor()
-    source_url = build_product_search_url(page=args.page, page_size=args.limit)
+    source_url = extractor.build_page_url(page=args.page, page_size=args.limit)
     try:
         payload = extractor.client.get_json(source_url)
         if not isinstance(payload.get("data"), Mapping):
