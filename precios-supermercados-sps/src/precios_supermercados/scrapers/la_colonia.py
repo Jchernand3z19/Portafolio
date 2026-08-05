@@ -372,14 +372,16 @@ def decode_search_variables(url: str) -> Mapping[str, Any]:
 
 
 def _read_product_search(payload: Mapping[str, Any]) -> tuple[Sequence[Any], int]:
+    errors = payload.get("errors")
     data = payload.get("data")
     if not isinstance(data, Mapping):
-        errors = payload.get("errors")
         if errors:
             raise StructureChangedError(f"GraphQL devolvió errores: {errors}")
         raise StructureChangedError("Falta data en la respuesta GraphQL")
     product_search = data.get("productSearch")
     if not isinstance(product_search, Mapping):
+        if errors:
+            raise StructureChangedError(f"GraphQL devolvió errores: {errors}")
         raise StructureChangedError("Falta data.productSearch")
     products = product_search.get("products")
     if not isinstance(products, Sequence) or isinstance(products, (str, bytes)):
