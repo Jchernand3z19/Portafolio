@@ -2,12 +2,16 @@ name: La Colonia - Prueba live controlada
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/precios-supermercados-sps-la-colonia-live.yml"
 
 permissions:
   contents: read
 
 jobs:
   live-controlled:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feature/la-colonia-scraper'
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
