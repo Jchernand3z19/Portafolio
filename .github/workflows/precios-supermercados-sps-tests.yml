@@ -6,6 +6,8 @@ on:
     paths:
       - "precios-supermercados-sps/**"
       - ".github/workflows/precios-supermercados-sps-tests.yml"
+      - ".github/workflows/precios-supermercados-sps-la-colonia-command.yml"
+      - ".github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml"
 
 permissions:
   contents: read

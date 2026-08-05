@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from precios_supermercados.automation.la_colonia_file_dispatcher import evaluate_file_request
+from precios_supermercados.automation.la_colonia_file_dispatcher import (
+    DIAGNOSTIC_WORKFLOW,
+    evaluate_file_request,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = (
@@ -44,7 +47,13 @@ def diagnostic_command():
 def test_diagnostic_workflow_is_manual_only():
     text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "workflow_dispatch:" in text
-    for forbidden_trigger in ("schedule:", "push:", "pull_request:", "issue_comment:"):
+    for forbidden_trigger in (
+        "schedule:",
+        "push:",
+        "pull_request:",
+        "pull_request_target:",
+        "issue_comment:",
+    ):
         assert forbidden_trigger not in text
 
 
@@ -67,6 +76,7 @@ def test_workflow_has_only_closed_inputs():
         "max_pages:",
         "max_products:",
         "profile:",
+        "thresholds:",
     ):
         assert forbidden_input not in text
 
@@ -82,14 +92,20 @@ def test_workflow_calls_dedicated_script_and_artifact_names():
 def test_exit_code_two_is_technical_success_but_three_to_five_fail():
     text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert '"0"|"2"' in text
-    assert "exit \"$exit_code\"" in text
+    assert '"3"|"4"|"5"' in text
 
 
-def test_current_trusted_dispatcher_still_rejects_diagnostic_mode():
+def test_trusted_dispatcher_accepts_exact_diagnostic_contract():
     decision = evaluate_file_request(
         valid_context(),
         json.dumps(diagnostic_command()),
         existing_comment_markers=(),
     )
-    assert decision.accepted is False
-    assert "campo desconocido" in decision.reason or "campos obligatorios" in decision.reason
+    assert decision.accepted is True
+    assert decision.mode == "diagnostic_overlap"
+    assert decision.workflow == DIAGNOSTIC_WORKFLOW
+    assert decision.inputs == {
+        "request_id": "la-colonia-window-diagnostic-380-399-001",
+        "diagnostic_plan": "frontier_380_399_v1",
+        "delay_seconds": "1.5",
+    }
