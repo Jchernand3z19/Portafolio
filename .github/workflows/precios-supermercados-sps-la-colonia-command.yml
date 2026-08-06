@@ -58,12 +58,12 @@ jobs:
 # ]);
 # const expectedModes
 # workflow_id: selectedWorkflowFile
-# nunca workflow_id: decision.workflow
 # return_run_details: true
 # const apiVersion = '2026-03-10';
 # 'X-GitHub-Api-Version': apiVersion
 # mode: decision.mode || null
 # workflow: decision.workflow || null
+# dispatch_sent: false
 # live_run_id
 # live_run_url
 # addComment(input: {subjectId: $subjectId, body: $body})
