@@ -37,7 +37,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const controller = require('./precios-supermercados-sps/scripts/controlar_solicitud_archivo_la_colonia.js');
+            const controller = require('./precios-supermercados-sps/scripts/controlar_solicitud_archivo_la_colonia_observable.js');
             await controller.run({ github, context, core });
 
       - name: Conservar resultado operacional del controlador
@@ -46,11 +46,11 @@ jobs:
         with:
           name: la-colonia-file-dispatch-${{ github.run_id }}
           path: dispatcher-result.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 1
 
 # Contrato textual de compatibilidad de pruebas; la implementación ejecutable
-# reside en controlar_solicitud_archivo_la_colonia.js, siempre desde main.
+# reside en el wrapper observable y el controlador de main.
 # const allowedWorkflows = new Map([
 #   ['.github/workflows/precios-supermercados-sps-la-colonia-live.yml'],
 #   ['.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml'],
