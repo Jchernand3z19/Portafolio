@@ -1,8 +1,8 @@
 {
-  "request_id": "la-colonia-window-diagnostic-380-399-001",
+  "request_id": "la-colonia-facet-discovery-001",
   "supermarket": "la_colonia",
-  "mode": "diagnostic_overlap",
-  "diagnostic_plan": "frontier_380_399_v1",
+  "mode": "facet_discovery",
+  "discovery_plan": "catalog_categories_v1",
   "delay_seconds": 1.5,
   "allow_full": false
 }
