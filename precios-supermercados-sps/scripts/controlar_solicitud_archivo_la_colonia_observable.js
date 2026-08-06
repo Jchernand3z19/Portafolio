@@ -59,6 +59,24 @@ function initialResult(context) {
   };
 }
 
+function normalizePersistedResult() {
+  if (!fs.existsSync("dispatcher-result.json")) return;
+  const persisted = JSON.parse(
+    fs.readFileSync("dispatcher-result.json", "utf8"),
+  );
+  if (
+    persisted &&
+    typeof persisted === "object" &&
+    !Array.isArray(persisted) &&
+    persisted.mode === null &&
+    persisted.workflow === null
+  ) {
+    delete persisted.mode;
+    delete persisted.workflow;
+    writeResult(persisted);
+  }
+}
+
 function validateExpectedEvent(context) {
   const payload = context.payload || {};
   const pull = payload.pull_request || {};
@@ -183,6 +201,7 @@ async function runWithController(args, controllerModule) {
 
   try {
     await controllerModule.run({ github: observableGithub, context, core });
+    normalizePersistedResult();
   } catch (error) {
     result.reason = result.dispatch_sent
       ? "El controlador falló después de confirmar workflow_dispatch."
@@ -201,4 +220,9 @@ async function run(args) {
   return runWithController(args, controller);
 }
 
-module.exports = { run, runWithController, validateExpectedEvent };
+module.exports = {
+  run,
+  runWithController,
+  validateExpectedEvent,
+  normalizePersistedResult,
+};
