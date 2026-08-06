@@ -31,10 +31,13 @@ class PartitionRequestPlan:
 def discover_leaf_category_partitions(
     facets: Sequence[Mapping[str, Any]],
     *,
+    sampling: bool = False,
     max_partitions: int = DEFAULT_MAX_PARTITIONS,
 ) -> tuple[PartitionSpec, ...]:
     """Extrae categorías hoja con cantidad positiva de un fixture de facets."""
 
+    if sampling:
+        raise ValueError("Facets muestreadas no demuestran todas las particiones")
     if max_partitions <= 0:
         raise ValueError("max_partitions debe ser mayor que cero")
 
