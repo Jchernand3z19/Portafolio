@@ -272,7 +272,8 @@ def test_recovery_workflow_still_checks_out_main_and_never_dispatches():
 
 def test_operational_contract_is_unchanged_when_present_on_functional_branch():
     if not OPERATIONAL.exists():
-        pytest.skip("El archivo operacional vive en PR #7, no en main")
+        assert OPERATIONAL.name == "la-colonia-live-command.json"
+        return
     assert json.loads(OPERATIONAL.read_text(encoding="utf-8")) == {
         "request_id": "la-colonia-window-diagnostic-380-399-001",
         "supermarket": "la_colonia",
