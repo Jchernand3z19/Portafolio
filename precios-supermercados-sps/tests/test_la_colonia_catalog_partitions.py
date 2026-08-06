@@ -76,6 +76,11 @@ def test_discovers_only_positive_leaf_categories():
     assert all(item.leaf for item in partitions)
 
 
+def test_sampled_facets_are_rejected_as_incomplete_discovery():
+    with pytest.raises(ValueError, match="muestreadas"):
+        discover_leaf_category_partitions(nested_facets(), sampling=True)
+
+
 def test_duplicate_leaf_is_deduplicated_but_conflicting_quantity_is_rejected():
     facets = nested_facets()
     duplicate = {
