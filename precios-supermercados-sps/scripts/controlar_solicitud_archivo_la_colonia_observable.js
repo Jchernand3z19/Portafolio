@@ -4,6 +4,8 @@
 const fs = require("fs");
 const controller = require("./controlar_solicitud_archivo_la_colonia.js");
 
+const EXPECTED_REPOSITORY = "Jchernand3z19/Portafolio";
+const EXPECTED_PR_NUMBER = 7;
 const DISPATCH_ENDPOINT =
   "POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches";
 const LIVE_WORKFLOW_FILE = "precios-supermercados-sps-la-colonia-live.yml";
@@ -19,6 +21,7 @@ const FACET_WORKFLOW =
   ".github/workflows/precios-supermercados-sps-la-colonia-facet-discovery.yml";
 const REQUEST_ID = /^[a-z0-9](?:[a-z0-9._-]{0,78}[a-z0-9])?$/;
 const NUMERIC_ID = /^[0-9]+$/;
+const HEAD_SHA = /^[0-9a-f]{40}$/;
 
 function writeResult(result) {
   fs.writeFileSync(
@@ -54,6 +57,33 @@ function initialResult(context) {
       "Resultado inicial de observabilidad; debe ser reemplazado al completar el controlador.",
     ],
   };
+}
+
+function validateExpectedEvent(context) {
+  const payload = context.payload || {};
+  const pull = payload.pull_request || {};
+  const headSha = payload.after || pull.head?.sha || "";
+  const headRepo = pull.head?.repo || {};
+
+  if (context.eventName && context.eventName !== "pull_request_target") {
+    return "El evento del controlador no está autorizado.";
+  }
+  if (payload.action !== "synchronize") {
+    return "La acción del Pull Request no está autorizada.";
+  }
+  if (pull.number !== EXPECTED_PR_NUMBER) {
+    return "El Pull Request no está autorizado para este controlador.";
+  }
+  if (
+    headRepo.fork === true ||
+    (headRepo.full_name && headRepo.full_name !== EXPECTED_REPOSITORY)
+  ) {
+    return "Los Pull Requests provenientes de forks no están autorizados.";
+  }
+  if (!HEAD_SHA.test(headSha)) {
+    return "El SHA head del evento no es válido.";
+  }
+  return null;
 }
 
 function trustedDispatchDetails(workflowId, ref, inputs) {
@@ -129,6 +159,15 @@ async function runWithController(args, controllerModule) {
   const result = initialResult(context);
   writeResult(result);
 
+  const eventError = validateExpectedEvent(context);
+  if (eventError) {
+    result.reason = eventError;
+    result.warnings = [];
+    writeResult(result);
+    core.setFailed(result.reason);
+    return;
+  }
+
   const observableGithub = new Proxy(github, {
     get(target, property, receiver) {
       if (property !== "request") {
@@ -162,4 +201,4 @@ async function run(args) {
   return runWithController(args, controller);
 }
 
-module.exports = { run, runWithController };
+module.exports = { run, runWithController, validateExpectedEvent };
