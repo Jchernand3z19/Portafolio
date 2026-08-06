@@ -1,4 +1,4 @@
-"""Contrato offline y sanitizado de cobertura para el catálogo de La Colonia.
+"""Contrato offline y sanitizado de cobertura para La Colonia.
 
 Este módulo no realiza solicitudes HTTP, no modifica el runner normal y no
 persiste datos comerciales. Las identidades de producto se mantienen únicamente
@@ -135,9 +135,9 @@ class CatalogCoverageReport:
     def sanitized_summary(self) -> dict[str, Any]:
         value = asdict(self)
         value.pop("_reasons", None)
-        value = {"schema_version": COVERAGE_SCHEMA_VERSION, **value}
-        validate_sanitized_coverage_summary(value)
-        return value
+        summary = {"schema_version": COVERAGE_SCHEMA_VERSION, **value}
+        validate_sanitized_coverage_summary(summary)
+        return summary
 
 
 def observe_coverage_page(
@@ -258,8 +258,6 @@ def evaluate_partition_coverage(
             _append_unique(reasons, "order_reconciliation_failed")
 
     coverage_demonstrated = primary.coverage_demonstrated and reconciled
-    if len(traversals) == 1:
-        reconciled = True
     reason = "coverage_demonstrated" if coverage_demonstrated else ";".join(reasons)
 
     return PartitionCoverageResult(
@@ -326,13 +324,14 @@ def evaluate_catalog_coverage(
     if pages_attempted > request_limit:
         _append_unique(reasons, "request_limit_exceeded")
 
-    _extend_unique(
-        reasons,
+    inherited_reasons = (
         reason
         for item in values
         for reason in item._reasons
-        if reason not in {"coverage_demonstrated"}
+        if reason != "coverage_demonstrated"
     )
+    _extend_unique(reasons, inherited_reasons)
+
     coverage_demonstrated = not reasons
     return CatalogCoverageReport(
         partitions_discovered=partitions_discovered,
@@ -406,17 +405,20 @@ def _evaluate_traversal(
     if total != partition.expected_products:
         _append_unique(reasons, "partition_total_differs_from_discovery")
 
+    page_width = max(item.width for item in ordered)
+    pages_expected = math.ceil(total / page_width) if total else 0
     pages_completed = 0
     all_keys: list[str] = []
     positions: set[int] = set()
     for item in ordered:
         all_keys.extend(item._product_keys)
-        positions.update(
-            range(
-                max(item.from_index, 0),
-                min(item.to_index, max(total - 1, -1)) + 1,
+        if total:
+            positions.update(
+                range(
+                    max(item.from_index, 0),
+                    min(item.to_index, total - 1) + 1,
+                )
             )
-        )
         if item.complete and item.membership_valid and not item.quality_events:
             pages_completed += 1
         _extend_unique(reasons, item.quality_events)
@@ -443,6 +445,8 @@ def _evaluate_traversal(
         _append_unique(reasons, "unexpected_overlap")
     if len(positions) != total:
         _append_unique(reasons, "logical_positions_not_fully_covered")
+    if pages_completed < pages_expected:
+        _append_unique(reasons, "pages_incomplete")
 
     unique_keys = frozenset(all_keys)
     if len(unique_keys) < total:
@@ -453,7 +457,7 @@ def _evaluate_traversal(
     duplicate_occurrences = len(all_keys) - len(unique_keys)
     coverage_demonstrated = not reasons
     return _TraversalResult(
-        pages_expected=len(ordered),
+        pages_expected=pages_expected,
         pages_attempted=len(ordered),
         pages_completed=pages_completed,
         products_reported=total,
@@ -487,6 +491,6 @@ def _append_unique(values: list[str], value: str) -> None:
         values.append(value)
 
 
-def _extend_unique(values: list[str], additions: Sequence[str] | Any) -> None:
+def _extend_unique(values: list[str], additions: Any) -> None:
     for value in additions:
         _append_unique(values, str(value))
