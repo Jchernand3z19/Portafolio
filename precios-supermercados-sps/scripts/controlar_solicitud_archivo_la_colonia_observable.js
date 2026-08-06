@@ -172,6 +172,64 @@ function checkpointDispatch(result, endpoint, options, response) {
   writeResult(result);
 }
 
+function checkpointComment(result, method) {
+  result.comment_published = true;
+  result.comment_method = method;
+  writeResult(result);
+}
+
+function observableGithubClient(github, result) {
+  return new Proxy(github, {
+    get(target, property, receiver) {
+      if (property === "request") {
+        return async (endpoint, options) => {
+          const response = await target.request(endpoint, options);
+          checkpointDispatch(result, endpoint, options, response);
+          return response;
+        };
+      }
+      if (property === "graphql") {
+        return async (...args) => {
+          const response = await target.graphql.apply(target, args);
+          if (typeof args[0] === "string" && args[0].includes("addComment")) {
+            checkpointComment(result, "graphql");
+          }
+          return response;
+        };
+      }
+      if (property === "rest" && target.rest) {
+        return new Proxy(target.rest, {
+          get(restTarget, restProperty, restReceiver) {
+            if (restProperty !== "issues" || !restTarget.issues) {
+              return Reflect.get(restTarget, restProperty, restReceiver);
+            }
+            return new Proxy(restTarget.issues, {
+              get(issuesTarget, issuesProperty, issuesReceiver) {
+                if (issuesProperty !== "createComment") {
+                  return Reflect.get(
+                    issuesTarget,
+                    issuesProperty,
+                    issuesReceiver,
+                  );
+                }
+                return async (...args) => {
+                  const response = await issuesTarget.createComment.apply(
+                    issuesTarget,
+                    args,
+                  );
+                  checkpointComment(result, "rest");
+                  return response;
+                };
+              },
+            });
+          },
+        });
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
 async function runWithController(args, controllerModule) {
   const { github, context, core } = args;
   const result = initialResult(context);
@@ -186,18 +244,7 @@ async function runWithController(args, controllerModule) {
     return;
   }
 
-  const observableGithub = new Proxy(github, {
-    get(target, property, receiver) {
-      if (property !== "request") {
-        return Reflect.get(target, property, receiver);
-      }
-      return async (endpoint, options) => {
-        const response = await target.request(endpoint, options);
-        checkpointDispatch(result, endpoint, options, response);
-        return response;
-      };
-    },
-  });
+  const observableGithub = observableGithubClient(github, result);
 
   try {
     await controllerModule.run({ github: observableGithub, context, core });
@@ -225,4 +272,5 @@ module.exports = {
   runWithController,
   validateExpectedEvent,
   normalizePersistedResult,
+  observableGithubClient,
 };
