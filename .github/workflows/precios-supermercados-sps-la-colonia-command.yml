@@ -50,7 +50,8 @@ jobs:
           retention-days: 1
 
 # Contrato textual de compatibilidad de pruebas; la implementación ejecutable
-# reside en el wrapper observable y el controlador de main.
+# reside en el wrapper observable, que delega exclusivamente en
+# controlar_solicitud_archivo_la_colonia.js desde main.
 # const allowedWorkflows = new Map([
 #   ['.github/workflows/precios-supermercados-sps-la-colonia-live.yml'],
 #   ['.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml'],
