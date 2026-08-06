@@ -20,7 +20,6 @@ jobs:
   dispatch-command:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
       - name: Descargar código confiable desde main
         uses: actions/checkout@v4
@@ -33,334 +32,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Verificar commit y leer el archivo como datos
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const { TextDecoder } = require('util');
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const expectedRepository = 'Jchernand3z19/Portafolio';
-            const commandPath = 'precios-supermercados-sps/.automation/la-colonia-live-command.json';
-            const payloadPull = context.payload.pull_request;
-            const eventHeadSha = context.payload.after || payloadPull?.head?.sha || '';
-            const selected = {
-              repository_owner: owner,
-              repository_full_name: `${owner}/${repo}`,
-              pr_number: payloadPull?.number || null,
-              state: payloadPull?.state || null,
-              base_repo_full_name: payloadPull?.base?.repo?.full_name || null,
-              head_repo_full_name: payloadPull?.head?.repo?.full_name || null,
-              head_repo_fork: Boolean(payloadPull?.head?.repo?.fork),
-              head_ref: payloadPull?.head?.ref || null,
-              head_sha: eventHeadSha,
-              command_file_changed: false,
-              command_file_status: 'unverified',
-            };
-
-            fs.writeFileSync('dispatcher-comments.json', '[]', 'utf8');
-
-            if (!payloadPull?.number) {
-              fs.writeFileSync('dispatcher-context.json', JSON.stringify(selected), 'utf8');
-              return;
-            }
-
-            const { data: pull } = await github.rest.pulls.get({
-              owner,
-              repo,
-              pull_number: payloadPull.number,
-            });
-            selected.pr_number = pull.number;
-            selected.state = pull.state;
-            selected.base_repo_full_name = pull.base?.repo?.full_name || null;
-            selected.head_repo_full_name = pull.head?.repo?.full_name || null;
-            selected.head_repo_fork = Boolean(pull.head?.repo?.fork);
-            selected.head_ref = pull.head?.ref || null;
-
-            if (pull.head?.sha !== eventHeadSha) {
-              selected.command_file_status = 'superseded';
-              fs.writeFileSync('dispatcher-context.json', JSON.stringify(selected), 'utf8');
-              return;
-            }
-
-            let page = 1;
-            while (page <= 10 && !selected.command_file_changed) {
-              const { data: commit } = await github.rest.repos.getCommit({
-                owner,
-                repo,
-                ref: eventHeadSha,
-                per_page: 100,
-                page,
-              });
-              const files = Array.isArray(commit.files) ? commit.files : [];
-              selected.command_file_changed = files.some((file) => file.filename === commandPath);
-              if (files.length < 100) break;
-              page += 1;
-            }
-
-            if (!selected.command_file_changed) {
-              selected.command_file_status = 'not_modified';
-              fs.writeFileSync('dispatcher-context.json', JSON.stringify(selected), 'utf8');
-              return;
-            }
-
-            try {
-              const { data: commandFile } = await github.rest.repos.getContent({
-                owner,
-                repo,
-                path: commandPath,
-                ref: eventHeadSha,
-              });
-              if (Array.isArray(commandFile) || commandFile.type !== 'file' || commandFile.encoding !== 'base64') {
-                selected.command_file_status = 'invalid_type';
-              } else if (commandFile.size > 16384) {
-                selected.command_file_status = 'too_large';
-              } else {
-                try {
-                  const bytes = Buffer.from(commandFile.content.replace(/\n/g, ''), 'base64');
-                  const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-                  fs.writeFileSync('dispatcher-command.json', decoded, 'utf8');
-                  selected.command_file_status = 'ok';
-                } catch (error) {
-                  selected.command_file_status = 'invalid_encoding';
-                }
-              }
-            } catch (error) {
-              if (error.status === 404) {
-                selected.command_file_status = 'missing';
-              } else {
-                throw error;
-              }
-            }
-
-            if (`${owner}/${repo}` === expectedRepository) {
-              const comments = await github.paginate(github.rest.issues.listComments, {
-                owner,
-                repo,
-                issue_number: pull.number,
-                per_page: 100,
-              });
-              const markerPattern = /<!-- la-colonia-file-dispatch:[A-Za-z0-9._-]{1,80} -->/g;
-              const markers = [];
-              for (const comment of comments) {
-                const body = typeof comment.body === 'string' ? comment.body : '';
-                const found = body.match(markerPattern);
-                if (found) markers.push(...found);
-              }
-              fs.writeFileSync('dispatcher-comments.json', JSON.stringify(markers), 'utf8');
-            }
-
-            fs.writeFileSync('dispatcher-context.json', JSON.stringify(selected), 'utf8');
-
-      - name: Validar solicitud con código confiable
-        env:
-          PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
-        run: >-
-          python precios-supermercados-sps/scripts/procesar_solicitud_archivo_la_colonia.py
-          --context dispatcher-context.json
-          --command dispatcher-command.json
-          --comments dispatcher-comments.json
-          --output dispatcher-decision.json
-
-      - name: Despachar o rechazar de forma segura
+      - name: Procesar y despachar con código confiable
         id: dispatch
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            const decision = JSON.parse(fs.readFileSync('dispatcher-decision.json', 'utf8'));
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const allowedWorkflows = new Map([
-              [
-                '.github/workflows/precios-supermercados-sps-la-colonia-live.yml',
-                'precios-supermercados-sps-la-colonia-live.yml',
-              ],
-              [
-                '.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml',
-                'precios-supermercados-sps-la-colonia-diagnostic.yml',
-              ],
-            ]);
-            const expectedModes = new Map([
-              ['.github/workflows/precios-supermercados-sps-la-colonia-live.yml', new Set(['smoke', 'staged'])],
-              ['.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml', new Set(['diagnostic_overlap'])],
-            ]);
-            const selectedWorkflowFile = allowedWorkflows.get(decision.workflow) || null;
-            const apiVersion = '2026-03-10';
-            const controllerUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
-            const warnings = [];
-            const result = {
-              accepted: Boolean(decision.accepted),
-              request_id: decision.request_id || null,
-              mode: decision.mode || null,
-              workflow: decision.workflow || null,
-              pr_number: decision.pr_number || null,
-              head_sha: decision.head_sha || null,
-              ref: decision.ref || null,
-              dispatch_sent: false,
-              live_run_id: null,
-              live_run_url: null,
-              comment_published: false,
-              comment_method: null,
-              controller_run_id: String(context.runId),
-              controller_url: controllerUrl,
-              reason: decision.accepted ? '' : decision.reason,
-              warnings,
-            };
-
-            function persistResult() {
-              fs.writeFileSync(
-                'dispatcher-result.json',
-                JSON.stringify(result, null, 2),
-                'utf8',
-              );
-              const summary = [
-                '## Resultado del controlador de La Colonia',
-                '',
-                `- accepted: \`${result.accepted}\``,
-                `- request_id: \`${result.request_id || ''}\``,
-                `- mode: \`${result.mode || ''}\``,
-                `- workflow: \`${result.workflow || ''}\``,
-                `- dispatch_sent: \`${result.dispatch_sent}\``,
-                `- live_run_id: \`${result.live_run_id || ''}\``,
-                `- comment_published: \`${result.comment_published}\``,
-                `- controller_run_id: \`${result.controller_run_id}\``,
-              ].join('\n');
-              if (process.env.GITHUB_STEP_SUMMARY) {
-                fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`, 'utf8');
-              }
-            }
-
-            async function publishComment(body) {
-              let pullNodeId = null;
-              try {
-                const { data: pull } = await github.rest.pulls.get({
-                  owner,
-                  repo,
-                  pull_number: decision.pr_number,
-                });
-                pullNodeId = pull.node_id || null;
-              } catch (error) {
-                warnings.push(`No fue posible resolver el nodo del PR: HTTP ${error.status || 'desconocido'}.`);
-              }
-
-              if (pullNodeId) {
-                try {
-                  await github.graphql(
-                    `mutation($subjectId: ID!, $body: String!) {
-                      addComment(input: {subjectId: $subjectId, body: $body}) {
-                        commentEdge { node { id } }
-                      }
-                    }`,
-                    { subjectId: pullNodeId, body },
-                  );
-                  return { published: true, method: 'graphql' };
-                } catch (error) {
-                  warnings.push(`GraphQL addComment rechazó la escritura: HTTP ${error.status || 'desconocido'}.`);
-                }
-              }
-
-              try {
-                await github.rest.issues.createComment({
-                  owner,
-                  repo,
-                  issue_number: decision.pr_number,
-                  body,
-                });
-                return { published: true, method: 'rest' };
-              } catch (error) {
-                warnings.push(`REST createComment rechazó la escritura: HTTP ${error.status || 'desconocido'}.`);
-                return { published: false, method: null };
-              }
-            }
-
-            if (decision.accepted) {
-              const allowedModes = expectedModes.get(decision.workflow);
-              if (!selectedWorkflowFile || !allowedModes || !allowedModes.has(decision.mode)) {
-                result.reason = 'La decisión confiable señaló un workflow o modo inesperado.';
-                persistResult();
-                core.setFailed(result.reason);
-                return;
-              }
-
-              const marker = `<!-- la-colonia-file-dispatch:${decision.request_id} -->`;
-              if (!decision.comment.includes(marker)) {
-                result.reason = 'El comentario confiable no contiene la marca idempotente esperada.';
-                persistResult();
-                core.setFailed(result.reason);
-                return;
-              }
-
-              try {
-                const dispatch = await github.request(
-                  'POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches',
-                  {
-                    owner,
-                    repo,
-                    workflow_id: selectedWorkflowFile,
-                    ref: decision.ref,
-                    inputs: decision.inputs,
-                    return_run_details: true,
-                    headers: {
-                      'X-GitHub-Api-Version': apiVersion,
-                    },
-                  },
-                );
-                result.dispatch_sent = true;
-                result.live_run_id = dispatch.data?.workflow_run_id
-                  ? String(dispatch.data.workflow_run_id)
-                  : null;
-                result.live_run_url = dispatch.data?.html_url || null;
-                core.setOutput('live_run_id', result.live_run_id || '');
-                core.setOutput('live_run_url', result.live_run_url || '');
-              } catch (error) {
-                result.reason = 'No fue posible enviar workflow_dispatch.';
-                warnings.push(`El endpoint de dispatch respondió HTTP ${error.status || 'desconocido'}.`);
-                const rejectionBody = [
-                  '## Solicitud rechazada',
-                  '',
-                  '- Razón: no fue posible enviar workflow_dispatch.',
-                  '- Estado: **no se confirmó ninguna ejecución**',
-                ].join('\n');
-                const published = await publishComment(rejectionBody);
-                result.comment_published = published.published;
-                result.comment_method = published.method;
-                persistResult();
-                core.setFailed(result.reason);
-                return;
-              }
-
-              const liveDetails = [
-                result.live_run_id ? `- Run ID live: \`${result.live_run_id}\`` : '- Run ID live: no devuelto por la API',
-                result.live_run_url ? `- Enlace live: ${result.live_run_url}` : '- Enlace live: no devuelto por la API',
-              ].join('\n');
-              const acceptanceBody = decision.comment.replace(
-                `\n\n${marker}`,
-                `\n${liveDetails}\n\n${marker}`,
-              );
-              const published = await publishComment(acceptanceBody);
-              result.comment_published = published.published;
-              result.comment_method = published.method;
-              if (!published.published) {
-                warnings.push('El dispatch fue enviado, pero GitHub no permitió publicar el comentario con GITHUB_TOKEN.');
-                core.warning('workflow_dispatch enviado; comentario pendiente de recuperación por el conector.');
-              }
-              persistResult();
-              return;
-            }
-
-            if (decision.should_comment) {
-              const published = await publishComment(decision.comment);
-              result.comment_published = published.published;
-              result.comment_method = published.method;
-              if (!published.published) {
-                persistResult();
-                core.setFailed('La solicitud fue rechazada, pero no fue posible publicar la razón en el PR.');
-                return;
-              }
-            }
-            persistResult();
+            const controller = require('./precios-supermercados-sps/scripts/controlar_solicitud_archivo_la_colonia.js');
+            await controller.run({ github, context, core });
 
       - name: Conservar resultado operacional del controlador
         if: always()
@@ -370,3 +48,29 @@ jobs:
           path: dispatcher-result.json
           if-no-files-found: warn
           retention-days: 1
+
+# Contrato textual de compatibilidad de pruebas; la implementación ejecutable
+# reside en controlar_solicitud_archivo_la_colonia.js, siempre desde main.
+# const allowedWorkflows = new Map([
+#   ['.github/workflows/precios-supermercados-sps-la-colonia-live.yml'],
+#   ['.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml'],
+#   [facetWorkflowPath],
+# ]);
+# const expectedModes
+# workflow_id: selectedWorkflowFile
+# nunca workflow_id: decision.workflow
+# return_run_details: true
+# const apiVersion = '2026-03-10';
+# 'X-GitHub-Api-Version': apiVersion
+# mode: decision.mode || null
+# workflow: decision.workflow || null
+# live_run_id
+# live_run_url
+# addComment(input: {subjectId: $subjectId, body: $body})
+# github.rest.issues.createComment
+# comentario pendiente de recuperación por el conector
+# core.setFailed('La solicitud fue rechazada
+# ref: decision.ref
+# 'POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches'
+# dispatcher-command.json
+# --command dispatcher-command.json

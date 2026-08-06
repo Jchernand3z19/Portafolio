@@ -11,10 +11,17 @@ const NUMERIC_ID = /^[0-9]+$/;
 const REQUEST_ID = /^[a-z0-9](?:[a-z0-9._-]{0,78}[a-z0-9])?$/;
 const LIVE_WORKFLOW = ".github/workflows/precios-supermercados-sps-la-colonia-live.yml";
 const DIAGNOSTIC_WORKFLOW = ".github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml";
+const FACET_WORKFLOW = ".github/workflows/precios-supermercados-sps-la-colonia-facet-discovery.yml";
 const MODE_TO_WORKFLOW = new Map([
   ["smoke", LIVE_WORKFLOW],
   ["staged", LIVE_WORKFLOW],
   ["diagnostic_overlap", DIAGNOSTIC_WORKFLOW],
+  ["facet_discovery", FACET_WORKFLOW],
+]);
+const ALLOWED_WORKFLOWS = new Set([
+  LIVE_WORKFLOW,
+  DIAGNOSTIC_WORKFLOW,
+  FACET_WORKFLOW,
 ]);
 const ALLOWED_KEYS = new Set([
   "accepted",
@@ -105,7 +112,7 @@ function main() {
       fail("El modo del controlador no está permitido.");
       return;
     }
-    if (![LIVE_WORKFLOW, DIAGNOSTIC_WORKFLOW].includes(result.workflow)) {
+    if (!ALLOWED_WORKFLOWS.has(result.workflow)) {
       fail("El workflow del controlador no está permitido.");
       return;
     }
