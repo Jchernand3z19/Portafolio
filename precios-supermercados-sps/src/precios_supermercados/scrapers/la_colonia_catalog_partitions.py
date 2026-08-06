@@ -21,6 +21,7 @@ DEFAULT_MAX_PARTITION_REQUESTS = 500
 class PartitionRequestPlan:
     partitions: tuple[PartitionSpec, ...]
     primary_requests: int
+    probe_requests: int
     recovery_reserve: int
     reconciliation_requests: int
     requests_planned: int
@@ -70,11 +71,19 @@ def estimate_partition_request_plan(
     partitions: Sequence[PartitionSpec],
     *,
     page_size: int,
+    include_boundary_probes: bool = False,
     recovery_windows_per_partition: int = 0,
+    max_recovery_partitions: int | None = None,
     reconcile_with_second_order: bool = False,
+    max_reconciliation_partitions: int | None = None,
     request_limit: int = DEFAULT_MAX_PARTITION_REQUESTS,
 ) -> PartitionRequestPlan:
-    """Calcula un límite previo sin realizar solicitudes."""
+    """Calcula un límite previo sin realizar solicitudes.
+
+    Los defaults conservan el comportamiento histórico. Cuando se activan sondas,
+    se reserva una por cada frontera interna. La recuperación y reconciliación
+    pueden limitarse a un número cerrado de particiones anómalas.
+    """
 
     values = tuple(partitions)
     if not 1 <= page_size <= MAX_CATALOG_PAGE_SIZE:
@@ -83,20 +92,48 @@ def estimate_partition_request_plan(
         )
     if recovery_windows_per_partition < 0:
         raise ValueError("recovery_windows_per_partition no puede ser negativo")
+    if max_recovery_partitions is not None and max_recovery_partitions < 0:
+        raise ValueError("max_recovery_partitions no puede ser negativo")
+    if (
+        max_reconciliation_partitions is not None
+        and max_reconciliation_partitions < 0
+    ):
+        raise ValueError("max_reconciliation_partitions no puede ser negativo")
     if request_limit <= 0:
         raise ValueError("request_limit debe ser mayor que cero")
 
-    primary = sum(
+    page_counts = [
         math.ceil(partition.expected_products / page_size)
-        for partition in values
         if partition.expected_products
+        else 0
+        for partition in values
+    ]
+    primary = sum(page_counts)
+    probes = (
+        sum(max(pages - 1, 0) for pages in page_counts)
+        if include_boundary_probes
+        else 0
     )
-    recovery = len(values) * recovery_windows_per_partition
-    reconciliation = primary if reconcile_with_second_order else 0
-    planned = primary + recovery + reconciliation
+
+    recovery_partition_count = len(values)
+    if max_recovery_partitions is not None:
+        recovery_partition_count = min(
+            recovery_partition_count, max_recovery_partitions
+        )
+    recovery = recovery_partition_count * recovery_windows_per_partition
+
+    reconciliation = 0
+    if reconcile_with_second_order:
+        ordered_pages = sorted(page_counts, reverse=True)
+        if max_reconciliation_partitions is not None:
+            ordered_pages = ordered_pages[:max_reconciliation_partitions]
+        reconciliation = sum(ordered_pages)
+
+    planned = primary + probes + recovery + reconciliation
     return PartitionRequestPlan(
         partitions=values,
         primary_requests=primary,
+        probe_requests=probes,
         recovery_reserve=recovery,
         reconciliation_requests=reconciliation,
         requests_planned=planned,
