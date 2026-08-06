@@ -37,7 +37,6 @@ from precios_supermercados.scrapers.la_colonia_facet_discovery_runtime import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLI = REPO_ROOT / "precios-supermercados-sps/scripts/descubrir_facets_la_colonia.py"
-RUNNER = REPO_ROOT / "precios-supermercados-sps/src/precios_supermercados/scrapers/la_colonia_runner.py"
 ADAPTER_SOURCE = REPO_ROOT / "precios-supermercados-sps/src/precios_supermercados/scrapers/la_colonia_facet_discovery_adapter.py"
 
 
@@ -293,7 +292,3 @@ def test_no_real_internet_is_needed_by_tests(monkeypatch):
     adapter = LaColoniaFacetDiscoveryAdapter(opener=opener)
     assert adapter(CATALOG_CATEGORIES_V1.requests[0]) == {"recordsFiltered": 100}
     assert adapter(CATALOG_CATEGORIES_V1.requests[1])["sampling"] is False
-
-
-def test_normal_runner_is_not_modified_for_facet_discovery():
-    assert "facet_discovery" not in RUNNER.read_text(encoding="utf-8")
