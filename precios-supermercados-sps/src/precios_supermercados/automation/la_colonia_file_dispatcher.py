@@ -1,4 +1,4 @@
-"""Valida solicitudes de recorrido y diagnóstico live de La Colonia."""
+"""Valida solicitudes live cerradas de La Colonia desde un archivo no confiable."""
 
 from __future__ import annotations
 
@@ -13,11 +13,17 @@ EXPECTED_OWNER = "Jchernand3z19"
 EXPECTED_REPOSITORY = "Jchernand3z19/Portafolio"
 COMMAND_PATH = "precios-supermercados-sps/.automation/la-colonia-live-command.json"
 LIVE_WORKFLOW = ".github/workflows/precios-supermercados-sps-la-colonia-live.yml"
-DIAGNOSTIC_WORKFLOW = (
-    ".github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml"
-)
+DIAGNOSTIC_WORKFLOW = ".github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml"
+FACET_DISCOVERY_WORKFLOW = ".github/workflows/precios-supermercados-sps-la-colonia-facet-discovery.yml"
+# Compatibilidad pública con las pruebas y consumidores anteriores.
 ALLOWED_WORKFLOWS = frozenset({LIVE_WORKFLOW, DIAGNOSTIC_WORKFLOW})
+# Allow-list efectiva del controlador confiable.
+TRUSTED_WORKFLOWS = frozenset(
+    {LIVE_WORKFLOW, DIAGNOSTIC_WORKFLOW, FACET_DISCOVERY_WORKFLOW}
+)
 DIAGNOSTIC_PLAN = "frontier_380_399_v1"
+FACET_DISCOVERY_PLAN = "catalog_categories_v1"
+FACET_DISCOVERY_REQUEST_ID = "la-colonia-facet-discovery-001"
 ALLOWED_PAGE_SIZES = {10, 20, 30, 50}
 NORMAL_COMMAND_FIELDS = frozenset(
     {
@@ -39,6 +45,16 @@ DIAGNOSTIC_COMMAND_FIELDS = frozenset(
         "supermarket",
         "mode",
         "diagnostic_plan",
+        "delay_seconds",
+        "allow_full",
+    }
+)
+FACET_DISCOVERY_COMMAND_FIELDS = frozenset(
+    {
+        "request_id",
+        "supermarket",
+        "mode",
+        "discovery_plan",
         "delay_seconds",
         "allow_full",
     }
@@ -206,11 +222,13 @@ def _parse_command(raw_command: str | None) -> tuple[dict[str, Any] | None, str 
     if not isinstance(command, dict):
         return None, "El JSON de comando debe ser un objeto."
 
-    expected_fields = (
-        DIAGNOSTIC_COMMAND_FIELDS
-        if command.get("mode") == "diagnostic_overlap"
-        else NORMAL_COMMAND_FIELDS
-    )
+    mode = command.get("mode")
+    if mode == "diagnostic_overlap":
+        expected_fields = DIAGNOSTIC_COMMAND_FIELDS
+    elif mode == "facet_discovery":
+        expected_fields = FACET_DISCOVERY_COMMAND_FIELDS
+    else:
+        expected_fields = NORMAL_COMMAND_FIELDS
     unknown = sorted(set(command) - expected_fields)
     if unknown:
         return None, "El JSON contiene un campo desconocido."
@@ -261,6 +279,23 @@ def _normalize_command(
             {
                 "request_id": request_id,
                 "diagnostic_plan": DIAGNOSTIC_PLAN,
+                "delay_seconds": "1.5",
+            },
+            None,
+        )
+
+    if mode == "facet_discovery":
+        if request_id != FACET_DISCOVERY_REQUEST_ID:
+            return request_id, mode, None, None, "request_id de facet discovery no autorizado."
+        if command.get("discovery_plan") != FACET_DISCOVERY_PLAN:
+            return request_id, mode, None, None, "El plan de facet discovery no está autorizado."
+        return (
+            request_id,
+            mode,
+            FACET_DISCOVERY_WORKFLOW,
+            {
+                "request_id": FACET_DISCOVERY_REQUEST_ID,
+                "discovery_plan": FACET_DISCOVERY_PLAN,
                 "delay_seconds": "1.5",
             },
             None,
@@ -355,7 +390,7 @@ def evaluate_file_request(
     if validation_error:
         return _rejected(validation_error, pr_number=pr_number)
     assert request_id is not None and mode is not None
-    assert workflow in ALLOWED_WORKFLOWS and inputs is not None
+    assert workflow in TRUSTED_WORKFLOWS and inputs is not None
 
     marker = request_marker(request_id)
     if any(marker in body for body in existing_comment_markers if isinstance(body, str)):
@@ -396,7 +431,7 @@ def build_controller_comment(
 
     assert decision.request_id is not None
     assert decision.mode is not None
-    assert decision.workflow in ALLOWED_WORKFLOWS
+    assert decision.workflow in TRUSTED_WORKFLOWS
     assert decision.head_sha is not None
     assert decision.ref is not None
     normalized = json.dumps(decision.inputs, ensure_ascii=False, indent=2, sort_keys=True)
