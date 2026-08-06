@@ -1,634 +1,578 @@
-# La Colonia — recorrido completo, diagnóstico y contrato de cobertura
+# La Colonia — recorrido completo, cobertura y facet discovery
 
 ## Estado de la fase
 
-El trabajo funcional permanece en el PR `#7`, rama
+El trabajo funcional permanece en el Pull Request `#7`, rama
 `feature/la-colonia-full-crawl-validation`.
 
 ```text
+main = d748b6f6645d227429198694379a8146f1e5c939
 PR #7 = abierto
 borrador = sí
 fusionado = no
 auto-merge = deshabilitado
-main = d748b6f6645d227429198694379a8146f1e5c939
-head inicial de esta etapa = bc2ee7b5aed1344be08d3375f2ef34f346ab9df9
+head inicial de facet discovery = f613c7bc832161c8743d8c227223085663755fc4
 ```
 
-Esta etapa fue exclusivamente offline:
+Esta etapa es exclusivamente offline:
 
+- no se consultaron facets reales de La Colonia;
+- no se realizó ninguna solicitud HTTP a La Colonia;
 - no se ejecutó ningún workflow live;
 - no se modificó el archivo operacional;
 - no se ejecutó un segundo diagnóstico;
 - no se ejecutó `la-colonia-baseline-products-500-003`;
 - no se ejecutó `la-colonia-validation-products-500-001`;
 - no se ejecutó `full`;
-- no se modificó el runner normal;
-- no se cambió `OrderByNameASC`;
-- no se añadieron cache-busters;
-- no se cambió `maxAge`.
+- no se modificó `LaColoniaCatalogRunner`;
+- no se añadió persistencia, historial ni ejecución diaria.
 
-## Problema funcional
+## Problema funcional heredado
 
-Dos recorridos normales devolvieron 19 productos para el rango `380–399`, con
-`recordsFiltered=9291`, misma firma y mismos bytes. El diagnóstico posterior
-devolvió páginas completas, pero mostró bloques desplazados o repetidos:
+La paginación raíz presentó páginas parciales, bloques completos repetidos y
+solapamientos incompatibles con los rangos solicitados. El diagnóstico observó,
+entre otros casos:
 
 ```text
 B = 370–389
 C = 380–399
-B = C como conjunto completo de 20 productos
+B y C devolvieron el mismo conjunto completo
 
 D = 390–409
 E = 400–419
-D = E como conjunto completo de 20 productos
+D y E devolvieron el mismo conjunto completo
 ```
 
-Solapamientos observados:
-
-```text
-A ∩ B = 0; esperado = 10
-B ∩ C = 20; esperado = 10
-C ∩ D = 0; esperado = 10
-D ∩ E = 20; esperado = 10
-```
-
-La unión diagnóstica tuvo 70 productos únicos para 70 posiciones solicitadas,
-pero las identidades no se materializaron de forma estable en los rangos.
-
-La auditoría local descartó construcción errónea de URLs, variables `from/to`,
-reutilización de respuestas, caché local, mutación del plan, reintentos ocultos
-y errores en firmas, solapamientos o unión. La clasificación sigue siendo:
+La auditoría local descartó errores de construcción de `from/to`, reutilización
+de URLs, variables o respuestas, caché local, mutación del plan y errores en
+firmas, intersecciones o unión. La clasificación continúa siendo:
 
 ```text
 B — No se encontró defecto local
 causa raíz remota demostrada = no
 ```
 
-No se declara un bug interno exacto de VTEX.
+Deduplicar evita almacenar dos veces una identidad, pero no recupera las
+identidades omitidas por un bloque remoto repetido.
 
-## Por qué deduplicar no demuestra completitud
+## Estrategia híbrida vigente
 
-La deduplicación responde a esta pregunta:
+La estrategia funcional seleccionada continúa siendo:
 
-> ¿Cuántas identidades distintas fueron recibidas?
+1. descubrir categorías o facets hoja;
+2. rechazar facets muestreadas;
+3. calcular cantidades por partición solo en memoria;
+4. calcular el presupuesto antes del recorrido;
+5. recorrer cada partición;
+6. usar sondas de frontera;
+7. recuperar únicamente fronteras anómalas;
+8. reconciliar de forma selectiva;
+9. deduplicar globalmente;
+10. exigir que la unión coincida con el total raíz;
+11. rechazar cuando no pueda demostrarse cobertura.
 
-No responde a esta otra:
+Los módulos de cobertura y particiones permanecen separados del runner normal.
 
-> ¿Fueron recibidas todas las identidades que debían existir?
+# Facet discovery
 
-Si una página remota repite productos de una página anterior y omite otros, la
-deduplicación evita guardar dos veces los repetidos, pero no recupera los
-omitidos. Incluso `products_unique == recordsFiltered` es insuficiente cuando
-existen bloques repetidos, sondas con solapamientos incompatibles, membresía de
-partición inválida o posiciones lógicas sin evidencia.
+## Objetivo
 
-## Comportamiento del runner normal actual
+`facet_discovery` es un modo conceptual cerrado cuya única función futura será
+obtener métricas agregadas suficientes para decidir si el recorrido particionado
+puede planificarse responsablemente.
 
-`LaColoniaCatalogRunner`:
+No descarga ni publica productos. Solo necesita conocer:
 
-1. inicia en `page=1`;
-2. construye la URL con `page`, `page_size` y `OrderByNameASC`;
-3. deriva `from=(page-1)×page_size` y `to=from+page_size-1`;
-4. valida que la primera página empiece en cero;
-5. exige ancho constante, sin huecos ni solapamientos entre rangos normales;
-6. lee `recordsFiltered` y fija el número de páginas planificadas;
-7. rechaza páginas parciales o con más productos de los esperados;
-8. calcula una firma ordenada de identidades de producto;
-9. rechaza una firma de página completa ya vista;
-10. cuenta productos duplicados entre páginas;
-11. deduplica SKU antes de acumularlos;
-12. finaliza como aceptado cuando completó todas las páginas planificadas y no
-    existen errores o eventos estructurales obligatorios.
+- `recordsFiltered` raíz;
+- estado de `sampling`;
+- niveles `category-n` expuestos;
+- cantidad agregada de valores por nivel;
+- relaciones padre-hijo;
+- cantidad de hojas positivas y hojas de cantidad cero;
+- cantidades privadas por hoja;
+- presupuesto estimado;
+- resultado de viabilidad dentro de 500 solicitudes.
 
-Controles existentes que se conservan:
+## Contrato propuesto
 
-- páginas parciales rechazadas;
-- página completa idéntica rechazada;
-- continuidad de los rangos enviados;
-- `orderBy` estable;
-- métricas separadas de productos y SKU;
-- deduplicación de SKU;
-- total inicial y final registrados.
-
-Limitación principal:
-
-La continuidad de `from/to` prueba que el cliente pidió rangos consecutivos; no
-prueba que el backend materializó identidades consecutivas y estables dentro de
-esos rangos. El total cambiante es una advertencia en baseline, y los duplicados
-entre páginas no son por sí solos una condición obligatoria de rechazo.
-
-## Contrato explícito de completitud
-
-### Magnitudes distintas
-
-| Magnitud | Definición |
-|---|---|
-| `products_received` | Ocurrencias recibidas, incluyendo repetidas. |
-| `products_unique` | Identidades estables distintas después de deduplicar. |
-| posiciones solicitadas | Unión matemática de los rangos `from/to`. |
-| páginas completas | Respuestas con exactamente la cantidad esperada. |
-| bloques repetidos | Mismo conjunto completo devuelto para rangos diferentes. |
-| solapamiento esperado | Intersección matemática de dos rangos. |
-| solapamiento observado | Intersección de identidades privadas recibidas. |
-| `products_reported` | `recordsFiltered` de la partición o catálogo raíz. |
-| cobertura demostrada | Todas las invariantes se cumplen. |
-| cobertura no demostrada | Falta una invariante aunque el conteo coincida. |
-
-### Invariantes por página
-
-- rango válido y dentro del límite local;
-- cantidad recibida igual a la esperada;
-- ninguna identidad duplicada dentro de la página;
-- identidad de producto estable disponible;
-- todos los productos pertenecen a la partición solicitada;
-- total reportado compatible con la partición descubierta.
-
-### Invariantes por recorrido de una partición
-
-- total estable durante el recorrido;
-- todas las posiciones `0..recordsFiltered-1` tienen evidencia;
-- todas las páginas base están completas;
-- ningún conjunto completo se repite para rangos diferentes;
-- todo solapamiento observado coincide exactamente con el esperado;
-- ningún duplicado silencioso en rangos que debían ser disjuntos;
-- cantidad de identidades únicas igual al total de la partición;
-- si se usa otro `orderBy`, ambos recorridos completos producen el mismo conjunto;
-- el presupuesto de solicitudes no se excede.
-
-### Invariantes globales
-
-- respuesta de facets sin muestreo;
-- todas las categorías hoja descubiertas fueron intentadas;
-- todas las particiones fueron completadas;
-- la unión global deduplicada coincide con `recordsFiltered` raíz;
-- los productos presentes en varias categorías se cuentan una sola vez;
-- no quedan productos sin categoría o sin partición demostrada;
-- no hubo cambio del total raíz durante la operación;
-- no se excedió el límite global de solicitudes.
-
-### Regla de aceptación
-
-```text
-accepted = coverage_demonstrated = true
+```json
+{
+  "request_id": "la-colonia-facet-discovery-001",
+  "supermarket": "la_colonia",
+  "mode": "facet_discovery",
+  "discovery_plan": "catalog_categories_v1",
+  "delay_seconds": 1.5,
+  "allow_full": false
+}
 ```
 
-solo cuando todas las invariantes de página, partición y catálogo se cumplen.
-
-La igualdad aislada:
-
 ```text
-products_unique == recordsFiltered
+AUTORIZACIÓN LIVE = NO AUTORIZADO TODAVÍA
 ```
 
-no permite aceptar si existen `repeated_page_sets`, `unexpected_overlaps`,
-`missing_coverage_events`, totals cambiantes o particiones no demostradas.
+El parser exige exactamente esos seis campos y valores. No acepta:
 
-## Investigación oficial de VTEX
+- URL;
+- query;
+- `selectedFacets` arbitrarias;
+- niveles suministrados por el comando;
+- `from`;
+- `to`;
+- `orderBy`;
+- `page_size`;
+- `max_pages`;
+- `max_products`;
+- `max_requests`;
+- `profile`;
+- `thresholds`;
+- `full`;
+- `workflow`;
+- cualquier otro campo adicional.
 
-Fuentes primarias consultadas:
+El request ID queda cerrado como `la-colonia-facet-discovery-001` para la futura
+prueba mínima. El archivo operacional no fue actualizado con este contrato.
 
-- Search GraphQL, extensión oficial `vtex.search-graphql`;
-- Intelligent Search API v1;
-- guía oficial para listar facets;
-- documentación oficial de arquitectura del catálogo;
-- documentación oficial para agregar o editar productos.
+## Plan cerrado `catalog_categories_v1`
 
-### Hechos documentados
+El plan contiene exactamente dos solicitudes lógicas predeterminadas:
 
-- `productSearch` acepta `selectedFacets`, `orderBy`, `from` y `to`.
-- `from` es el inicio de paginación y su valor por defecto es `0`.
-- `to` es el final de paginación y su valor por defecto es `9`.
-- `recordsFiltered` en `ProductSearch` es el número total de productos.
-- `OrderByNameASC`, `OrderByNameDESC`, `OrderByPriceASC`,
-  `OrderByPriceDESC` y `OrderByReleaseDateDESC` están documentados, junto con
-  otros órdenes no habilitados por el proyecto.
-- `selectedFacets` reemplaza parámetros antiguos como `map` y `category`.
-- `category-1` representa departamento, `category-2` categoría,
-  `category-3` subcategoría y niveles posteriores continúan la jerarquía.
-- la API de facets devuelve `key`, `value`, `quantity` y puede devolver hijos.
-- un valor de facet se devuelve cuando al menos un producto de la búsqueda tiene
-  ese valor.
-- la respuesta de facets expone `sampling`.
-- la agregación GraphQL de facets puede usar solo los primeros 30 000 productos
-  cuando la búsqueda es muy grande.
-- un producto disponible debe estar asociado con una categoría y al menos un SKU.
-- VTEX recomienda asociar el producto con el nivel de categoría más específico.
-- desde julio de 2026, VTEX recomienda Intelligent Search API v1 para nuevas
-  integraciones headless y desaconseja Search GraphQL para nuevas integraciones.
-- la API v1 incorpora `Cache-Control`; VTEX indica leer ese encabezado y no fijar
-  duraciones de caché en el cliente.
+| Secuencia | Nombre lógico | Resultado requerido |
+|---:|---|---|
+| 1 | `root_total` | `recordsFiltered` raíz. |
+| 2 | `category_tree` | Total de control, `sampling` y árbol de categorías. |
 
-### Hechos observados
+El runtime offline no contiene URL ni query arbitraria. Exige que un transporte
+inyectado resuelva únicamente esos dos nombres lógicos. Un adaptador confiable
+futuro deberá traducirlos a consultas públicas fijas y revisadas.
 
-- dos páginas históricas parciales en `380–399`;
-- bloques completos B=C y D=E;
-- solapamientos 0 o 20 donde se esperaban 10;
-- total estable en 9291 durante el diagnóstico;
-- construcción local de requests correcta.
-
-### Inferencias
-
-- el origen del patrón está fuera de los componentes locales auditados;
-- particiones menores reducen el alcance de una frontera inestable;
-- sondas solapadas permiten detectar desplazamientos que una paginación disjunta
-  no detectaría;
-- una segunda ordenación sirve para reconciliar conjuntos, no para asumir que la
-  primera quedó corregida.
-
-### Hipótesis
-
-- el comportamiento puede depender de backend, caché remota, CDN o
-  materialización de resultados;
-- una categoría hoja podría tener fronteras más estables que la búsqueda raíz;
-- Intelligent Search API v1 podría ofrecer una integración futura más apropiada,
-  pero no existe evidencia de La Colonia en esta etapa.
-
-### Datos no disponibles
-
-No se encontró en la documentación oficial consultada:
-
-- garantía de orden estable ante productos con el mismo nombre;
-- garantía de desempate determinista para `OrderByNameASC`;
-- garantía de que páginas consecutivas nunca repiten u omiten productos;
-- límite máximo oficial de `from/to` para el campo GraphQL actual;
-- garantía de completitud de una búsqueda grande mediante una sola ordenación.
-
-La ausencia de estas garantías no demuestra un defecto de VTEX.
-
-## Estrategias evaluadas
-
-| Estrategia | Cómo funciona | Resuelve | No resuelve | Prueba de completitud | Solicitudes estimadas con total 9291 | Duplicados | Omisiones | Complejidad | Compatibilidad | Recomendación |
-|---|---|---|---|---|---:|---|---|---|---|---|
-| A — secuencial actual | Rangos disjuntos con `OrderByNameASC`. | Páginas parciales y repeticiones exactas dentro del mismo run. | Desplazamientos sin firma idéntica y omisiones compensadas. | Insuficiente. | 465 con tamaño 20; 186 con 50. | Medio | Alto | Baja | Sí | No aceptar como prueba completa. |
-| B — reducir tamaño | Páginas menores y más controles. | Localiza mejor una frontera. | No elimina inestabilidad; eleva carga. | Solo con sondas adicionales. | 930 con tamaño 10; 1859 con 5. | Medio | Medio/alto | Media | Sí | Solo recuperación local. |
-| C — dos `orderBy` | Recorre dos veces y une. | Descubre diferencias entre órdenes. | Ambos órdenes pueden omitir; unión grande no prueba posiciones. | Requiere ambos recorridos completos y conjuntos reconciliados. | 930 con tamaño 20; 372 con 50. | Alto | Medio | Media | Sí | Solo reconciliación selectiva. |
-| D — categorías/facets | Divide por filtros de categoría. | Reduce tamaño y aísla anomalías. | Categorías solapadas o discovery incompleto. | Cada partición completa + unión raíz. | `1 + Σceil(nᵢ/p)`. | Alto entre categorías | Bajo/medio | Media | Sí | Recomendable como base. |
-| E — cada categoría + dedupe | Recorre categorías y deduplica identidad. | Productos en varias categorías. | Dedupe no recupera omitidos. | Exige totales, posiciones y unión raíz. | `Σceil(nᵢ/p)`. | Controlable | Medio sin contrato | Media | Sí | Parte del híbrido. |
-| F — hojas recursivas | Usa el nivel más específico disponible. | Minimiza particiones grandes. | Facets muestreadas o árbol incompleto. | `sampling=false`, todas las hojas y unión raíz. | Depende del árbol; mayor por redondeos. | Controlable | Bajo si discovery completo | Alta | Sí | Recomendable. |
-| G — recuperación de frontera | Reconsulta solo límites anómalos con ventanas pequeñas. | Localiza bloque repetido/desplazado. | No garantiza el resto del catálogo. | Reconciliación con páginas vecinas. | Base + 2–6 por anomalía. | Bajo | Medio | Media | Sí | Recomendable y acotada. |
-| H — híbrida | Hojas + sondas + recuperación + reconciliación selectiva. | Detección, recuperación y prueba agregada. | No supera una fuente incapaz de materializar cobertura. | Contrato completo de partición y raíz. | Debe calcularse antes; límite de diseño 500. | Bajo después de dedupe | Bajo si acepta | Alta | Sí | Seleccionada. |
-| I — no recorrible | Rechaza cuando falta evidencia. | Evita publicar un catálogo falso. | No recupera productos. | `accepted=false` explícito. | Se detiene al agotar evidencia/presupuesto. | N/A | No oculta el riesgo | Baja | Sí | Obligatoria como salida segura. |
-
-Las cantidades son estimaciones matemáticas, no ejecuciones. La partición puede
-incrementar la suma por redondeos y por productos presentes en más de una
-categoría.
-
-## Estrategia recomendada
+El plan fija en código:
 
 ```text
-C — estrategia híbrida
+page_size para presupuesto = 50
+request_limit = 500
+concurrency = 1
+delay_seconds = 1.5
+max_retries = 0
+solicitudes de discovery = 2
+nivel máximo permitido = category-8
+máximo de particiones positivas = 250
 ```
 
-### Algoritmo propuesto
+No se hardcodea ningún nombre real de categoría.
 
-#### Fase 0 — preflight
+## Sampling
 
-1. Obtener en una futura ejecución autorizada el total raíz y facets de categoría.
-2. Rechazar si `sampling=true`.
-3. Extraer únicamente categorías hoja con cantidad positiva.
-4. Deduplicar `(facet_key, facet_value)` durante el discovery.
-5. Calcular antes del tráfico el presupuesto:
+La regla es estricta:
 
 ```text
-primary = Σ ceil(partition_total / page_size)
-frontier_probes = Σ max(primary_pages_in_partition - 1, 0)
-recovery_reserve = particiones × ventanas_acotadas
-secondary_order = solo particiones anómalas
+sampling = true
+→ discovery_outcome = sampling_detected
+→ discovery_completed = false
+→ within_request_limit = false
+→ presupuesto = 0
+→ recorrido particionado no autorizado
 ```
 
-6. Rechazar antes de iniciar si el máximo planificado supera el límite.
+Una muestra no se usa para construir un árbol definitivo ni para inferir que las
+categorías no observadas no existen.
 
-#### Fase 1 — recorrido primario por partición
+## Identificación de hojas
 
-- mantener `OrderByNameASC`;
-- usar una solicitud lógica a la vez;
-- usar hasta 50 productos por página para limitar carga;
-- exigir total igual a la cantidad descubierta para la partición;
-- comprobar páginas completas e identidades únicas;
-- validar que cada producto pertenece a la partición;
-- registrar firmas de secuencia y conjunto solo en memoria;
-- rechazar conjuntos completos repetidos para rangos diferentes.
+Una hoja representa la partición más específica expuesta por la respuesta.
 
-#### Fase 2 — sondas de frontera
+Reglas:
 
-Entre dos páginas base consecutivas, consultar una ventana pequeña que cruce la
-frontera. La intersección con cada vecino debe coincidir exactamente con la
-intersección matemática esperada.
+1. una raíz debe comenzar en `category-1`;
+2. cada hijo debe avanzar exactamente un nivel;
+3. se permiten niveles hasta `category-8`;
+4. cada nodo debe declarar `children`;
+5. `children=[]` identifica explícitamente una hoja;
+6. la ausencia de `children` se trata como árbol incompleto, no como hoja;
+7. una hoja positiva se transforma en una partición privada;
+8. una hoja con cantidad cero se cuenta, pero no genera requests de recorrido;
+9. las rutas y valores se conservan únicamente en memoria;
+10. el artefacto publica solo conteos agregados.
 
-Una sonda no se acepta como nueva cobertura; solo aporta evidencia de continuidad.
+El nodo padre y sus hijos no se convierten simultáneamente en particiones. Solo
+se conserva la ruta más específica disponible.
 
-#### Fase 3 — recuperación local
+## Validación de cantidades
 
-Si una frontera falla:
+Se rechaza:
 
-- detener el avance de esa partición;
-- dividir únicamente la frontera en ventanas menores predeterminadas;
-- no aceptar ventanas arbitrarias suministradas externamente;
-- mantener un máximo fijo de solicitudes de recuperación;
-- reconciliar la unión recuperada con ambos vecinos;
-- rechazar la partición si persiste la anomalía o se agota el presupuesto.
+- cantidad negativa;
+- cantidad no numérica;
+- hijo con cantidad mayor que su padre;
+- la misma ruta repetida con cantidades incompatibles;
+- total raíz negativo o inválido;
+- cambio de total entre las dos respuestas.
 
-#### Fase 4 — reconciliación por orden
-
-Un segundo `orderBy` no se ejecuta para todo el catálogo por defecto. Se reserva
-para una partición anómala o una muestra de validación.
-
-Para aceptarlo:
-
-- ambos recorridos deben demostrar cobertura independientemente;
-- sus conjuntos de identidades deben ser iguales;
-- diferencias de posición son admisibles entre órdenes;
-- diferencias de conjunto son rechazo.
-
-#### Fase 5 — unión global
-
-- unir identidades de producto de todas las particiones;
-- contar ocurrencias duplicadas entre categorías;
-- no materializar dos veces el mismo producto;
-- exigir que la unión única coincida con el total raíz;
-- exigir cero productos residuales sin categoría o partición;
-- aceptar solo si todas las particiones fueron demostradas.
-
-## Identidad y deduplicación
-
-### Identidad de producto para cobertura
-
-Orden recomendado:
-
-1. `productId`;
-2. `productReference`;
-3. `linkText` estable.
-
-Una identidad basada únicamente en nombre no debe demostrar cobertura porque los
-nombres no son necesariamente únicos. La ausencia de identidad estable es un
-evento de rechazo.
-
-### Identidad de SKU para materialización
-
-Se conserva la jerarquía existente de `source_key_type` y `source_key`.
-
-La deduplicación ocurre después de probar cobertura de producto. No debe
-convertir una partición incompleta en aceptada.
-
-## Categorías y productos compartidos
-
-Un producto puede aparecer en más de una partición navegable. La estrategia:
-
-- cuenta la ocurrencia en cada partición para validar esa partición;
-- deduplica globalmente por identidad de producto;
-- registra `duplicate_occurrences`;
-- no rechaza solo por aparecer en dos categorías si ambas membresías son válidas;
-- exige que la unión global final coincida con el total raíz.
-
-## Productos sin categoría
-
-La documentación indica que un producto disponible debe pertenecer a una
-categoría. Aun así, la implementación debe detectar un residual:
+La suma de hojas positivas se compara con el total raíz:
 
 ```text
-root_total - global_partition_union
+suma de hojas < total raíz
+→ incomplete_facet_tree
 ```
 
-Un residual no se etiqueta automáticamente como “producto sin categoría”; también
-puede significar facets incompletas o productos omitidos. Cualquiera de esas
-interpretaciones impide demostrar cobertura.
-
-## Catálogo cambiante
-
-La estrategia toma snapshots de:
-
-- total raíz inicial/final;
-- cantidad descubierta por partición;
-- total de cada página y sonda.
-
-Cualquier cambio invalida la demostración actual. No se mezclan resultados de
-dos estados distintos del catálogo. La ejecución se detiene y queda rechazada.
-
-## Límite responsable de solicitudes
-
-El modelo offline usa un límite de diseño de 500 solicitudes, no activado live.
-
-Con 9291 productos:
-
 ```text
-mínimo teórico a page_size=50 = ceil(9291 / 50) = 186
+suma de hojas > total raíz
+→ posible pertenencia múltiple entre particiones
+→ el discovery puede completarse
+→ se registra leaf_quantities_exceed_root_total
 ```
 
-Un recorrido raíz con una sonda por frontera sería aproximadamente 371
-solicitudes. La partición cambia el valor por redondeos y membresía múltiple. La
-reconciliación completa con un segundo orden puede superar el presupuesto.
+Una suma superior no demuestra por sí sola cuáles productos están compartidos.
+La deduplicación y el residual global se validarán durante el recorrido futuro.
 
-Por eso el plan se calcula después de descubrir facets y antes de iniciar. Si
-`requests_planned > request_limit`, el catálogo se declara no recorrible bajo ese
-plan, sin degradar controles.
+## Árbol incompleto
 
-## Modelo sanitizado de cobertura
+El resultado es `incomplete_facet_tree` cuando ocurre cualquiera de estos casos:
 
-El resumen expone únicamente:
+- no se devuelve una facet de categoría;
+- existe un salto entre niveles;
+- falta `children` en un nodo;
+- las hojas positivas no cubren el total raíz;
+- se supera el límite de 250 hojas positivas;
+- la jerarquía no puede distinguir hoja de corte.
+
+No se activa un recorrido con un árbol incompleto.
+
+# Presupuesto
+
+## Componentes
+
+El estimador existente fue ampliado sin cambiar sus defaults históricos. El modo
+cerrado activa cuatro componentes:
+
+### Solicitudes primarias
 
 ```text
-partitions_discovered
-partitions_attempted
-partitions_completed
-pages_expected
-pages_attempted
-pages_completed
-products_reported
-products_received
-products_unique
-duplicate_occurrences
-repeated_page_sets
-unexpected_overlaps
-missing_coverage_events
-total_changes
-uncategorized_products
+primary_requests = Σ ceil(quantity_partition / 50)
+```
+
+### Sondas de frontera
+
+Se reserva una sonda por cada frontera interna:
+
+```text
+probe_requests = Σ max(pages_partition - 1, 0)
+```
+
+### Reserva de recuperación
+
+Se reservan cuatro solicitudes para un máximo de cinco particiones anómalas:
+
+```text
+recovery_reserve = 4 × min(particiones_positivas, 5)
+```
+
+Si las anomalías exceden la reserva, el futuro recorrido deberá detenerse en vez
+de ampliar el límite dinámicamente.
+
+### Reconciliación
+
+Se reserva un segundo recorrido completo para las dos particiones con mayor
+cantidad de páginas:
+
+```text
+reconciliation_requests = páginas de las dos particiones mayores
+```
+
+La reconciliación continúa siendo selectiva; no se presupone un segundo recorrido
+de todo el catálogo.
+
+### Total
+
+```text
+estimated_total_requests =
+    primary_requests
+  + probe_requests
+  + recovery_reserve
+  + reconciliation_requests
+```
+
+Clasificación:
+
+```text
+estimated_total_requests <= 500 → within_budget
+estimated_total_requests > 500  → over_budget
+```
+
+`over_budget` completa el discovery, pero prohíbe iniciar el recorrido.
+
+## Presupuestos de fixtures
+
+Los valores siguientes proceden únicamente de fixtures sintéticos:
+
+| Páginas sintéticas por partición | Resultado |
+|---|---:|
+| `[10, 8, 1]` | Menor que 500. |
+| `[82, 81, 1]` | Exactamente 500. |
+| `[82, 81, 2]` | Mayor que 500. |
+
+No se calculó el presupuesto real de La Colonia porque no se consultaron sus
+facets.
+
+# Runtime offline
+
+Se añadieron:
+
+```text
+precios-supermercados-sps/src/precios_supermercados/scrapers/
+  la_colonia_facet_discovery.py
+  la_colonia_facet_discovery_runtime.py
+```
+
+Y se amplió:
+
+```text
+precios-supermercados-sps/src/precios_supermercados/scrapers/
+  la_colonia_catalog_partitions.py
+```
+
+El runtime:
+
+- acepta únicamente `catalog_categories_v1`;
+- exige un transporte inyectado;
+- no posee transporte HTTP predeterminado;
+- no importa `SafeHttpClient`;
+- no construye URL;
+- no conoce GitHub Actions;
+- mantiene concurrencia uno;
+- exige `max_retries=0`;
+- intenta como máximo dos solicitudes lógicas;
+- aplica una pausa de 1.5 segundos entre ellas;
+- detiene `sampling=true`;
+- detiene cambio de total;
+- detiene estructura inválida;
+- detiene cantidades inválidas;
+- produce JSON y Markdown sanitizados;
+- no modifica `LaColoniaCatalogRunner`.
+
+Resultados posibles:
+
+```text
+within_budget
+over_budget
+sampling_detected
+incomplete_facet_tree
+invalid_quantities
+no_positive_partitions
+inconclusive
+```
+
+Solo `within_budget` produce `accepted=true` como propiedad interna del resultado.
+`accepted` no se publica en el artefacto porque no forma parte del contrato
+sanitizado autorizado.
+
+# Sanitización
+
+## Campos permitidos
+
+El artefacto futuro puede contener únicamente:
+
+```text
+schema_version
+request_id
+discovery_plan
+started_at
+finished_at
+requests_planned
+requests_attempted
+requests_completed
+delay_seconds_applied
+root_total
+sampling_detected
+facet_levels_detected
+facet_values_count
+leaf_partitions_count
+positive_leaf_partitions
+zero_quantity_partitions
+estimated_primary_requests
+estimated_probe_requests
+estimated_recovery_reserve
+estimated_reconciliation_requests
+estimated_total_requests
 request_limit
-coverage_demonstrated
-coverage_reason
-accepted
+within_request_limit
+discovery_completed
+discovery_outcome
+stop_reason
+quality_events
 ```
 
-No publica:
+## Datos prohibidos
 
+No se serializan:
+
+- nombres de categorías;
+- valores de categories/facets;
+- rutas privadas de partición;
+- URLs;
+- consultas completas;
+- payloads;
 - productos;
 - SKU;
-- nombres;
 - marcas;
 - precios;
-- URLs;
-- categorías;
-- valores de facets;
-- identificadores individuales;
-- hashes individuales.
+- EAN;
+- identificadores individuales.
 
-## Implementación offline realizada
+El JSON y el Markdown están limitados a 64 KiB.
 
-Se añadieron módulos independientes del runner normal:
+# Pruebas offline
+
+Se añadió:
 
 ```text
-src/precios_supermercados/scrapers/la_colonia_catalog_coverage.py
-src/precios_supermercados/scrapers/la_colonia_catalog_partitions.py
+precios-supermercados-sps/tests/test_la_colonia_facet_discovery.py
 ```
 
-`la_colonia_catalog_coverage.py`:
+La CI recolectó 49 casos nuevos. Cubren:
 
-- modela páginas, particiones y cobertura global;
-- detecta páginas parciales;
-- detecta duplicados internos y entre rangos;
-- detecta conjuntos completos repetidos;
-- compara solapamientos esperados/observados;
-- exige posiciones lógicas cubiertas;
-- exige total estable;
-- reconcilia varios `orderBy`;
-- verifica la unión global;
-- produce resumen sanitizado.
+- contrato válido;
+- plan desconocido;
+- catorce campos arbitrarios rechazados;
+- total raíz válido;
+- `sampling=false`;
+- `sampling=true`;
+- `category-1`;
+- `category-2`;
+- `category-3`;
+- `category-4` adicional;
+- selección de la hoja más específica;
+- árbol incompleto por ausencia de `children`;
+- particiones de cantidad cero;
+- cantidades negativas;
+- cantidades no numéricas;
+- cantidades incompatibles en una ruta duplicada;
+- cambio del total;
+- presupuesto inferior a 500;
+- presupuesto exactamente 500;
+- presupuesto superior a 500;
+- clasificación runtime `over_budget`;
+- máximo de solicitudes;
+- concurrencia uno;
+- `max_retries=0`;
+- contrato cerrado del artefacto;
+- ausencia de nombres y valores privados en JSON y Markdown;
+- ausencia de productos y SKU;
+- límite de 64 KiB;
+- runner normal sin integración;
+- cobertura offline existente sin regresión;
+- prueba con sockets bloqueados;
+- cantidades de hojas superiores al total por pertenencia múltiple;
+- residual global;
+- límite de particiones;
+- `no_positive_partitions`;
+- clasificación de cantidades inválidas;
+- clasificación de árbol incompleto;
+- compatibilidad de los defaults históricos del presupuesto;
+- activación explícita de sondas y reservas cerradas.
 
-`la_colonia_catalog_partitions.py`:
-
-- extrae categorías hoja desde fixtures de facets;
-- ignora hojas con cantidad cero;
-- rechaza quantities incompatibles;
-- rechaza facets muestreadas;
-- limita el número de particiones;
-- calcula solicitudes primarias, reserva de recuperación y reconciliación;
-- no realiza solicitudes.
-
-El runner normal no importa estos módulos y no fue modificado.
-
-## Pruebas sintéticas
-
-Archivos:
-
-```text
-tests/test_la_colonia_catalog_coverage.py
-tests/test_la_colonia_catalog_partitions.py
-```
-
-Casos cubiertos:
-
-1. recorrido secuencial estable;
-2. página parcial;
-3. bloque B=C;
-4. bloque D=E;
-5. rangos diferentes con misma firma;
-6. duplicados dentro de página;
-7. duplicados entre páginas;
-8. productos omitidos con páginas completas;
-9. total estable con cobertura falsa;
-10. total cambiante;
-11. categoría hoja completa;
-12. producto en dos categorías;
-13. residual sin categoría;
-14. partición parcial;
-15. partición repetida;
-16. unión completa entre categorías;
-17. unión incompleta;
-18. reconciliación exitosa entre dos órdenes;
-19. reconciliación fallida;
-20. límite máximo de solicitudes;
-21. resumen sanitizado;
-22. runner normal sigue rechazando páginas parciales;
-23. membresía de partición inválida;
-24. partición descubierta no recorrida;
-25. tipo explícito del reporte global;
-26. discovery de categorías hoja;
-27. facets muestreadas;
-28. hojas duplicadas y quantities incompatibles;
-29. límite de particiones;
-30. presupuesto con recuperación y reconciliación;
-31. presupuesto excedido antes de tráfico.
-
-CI de implementación previa a documentación:
+CI de implementación antes de actualizar esta documentación:
 
 ```text
-workflow_run_id = 31059485312
-job_id = 92484074117
+workflow_run_id = 31063182758
+job_id = 92495258556
 conclusion = success
-308 passed in 3.73s
-compile src = success
-compile scripts = success
+358 passed in 1.43s
+errores = 0
+warnings de pytest = 0
 ```
 
-El único warning fue de infraestructura: acciones que declaran Node.js 20 fueron
-ejecutadas con Node.js 24.
+# Frontera confiable
 
-## Condiciones de aceptación futuras
-
-Una futura validación podrá aceptar únicamente cuando:
-
-- facets no muestreadas;
-- particiones dentro del límite;
-- presupuesto dentro del límite;
-- todas las páginas base completas;
-- todas las sondas de frontera reconciliadas;
-- cero bloques repetidos;
-- cero solapamientos inesperados;
-- cero totals cambiantes;
-- cada partición con únicos igual a su total;
-- todos los órdenes usados reconciliados;
-- unión global igual al total raíz;
-- cero residual sin partición;
-- resumen sanitizado válido.
-
-## Condiciones de rechazo futuras
-
-- página parcial o vacía;
-- más productos de los esperados;
-- identidad de producto inestable o ausente;
-- duplicado dentro de página;
-- bloque completo repetido en otro rango;
-- solapamiento inesperado;
-- posición lógica sin evidencia;
-- total cambiante;
-- facet muestreada;
-- categoría hoja no recorrida;
-- membresía inválida;
-- unión por debajo o por encima del total raíz;
-- reconciliación de órdenes fallida;
-- límite de solicitudes excedido;
-- sanitización fallida.
-
-## Viabilidad
+## Decisión
 
 ```text
-viabilidad técnica del diseño offline = demostrada
-viabilidad live en La Colonia = pendiente
-completitud del catálogo actual = no demostrada
+PR TÉCNICO REQUERIDO — PENDIENTE DE AUTORIZACIÓN
 ```
 
-La estrategia puede detectar y rechazar los patrones conocidos, y define cómo
-recuperar una frontera de forma acotada. Todavía no existe evidencia de que las
-facets públicas de La Colonia sean completas y no muestreadas, ni de que las
-particiones hoja materialicen páginas estables.
+Razones verificadas en `main`:
 
-## Decisión sobre PR #7
+1. el dispatcher solo reconoce comandos normales y `diagnostic_overlap`;
+2. `facet_discovery` sería interpretado con el contrato normal y rechazado;
+3. la allow-list de workflows contiene únicamente el workflow live normal y el
+   workflow diagnóstico;
+4. no existe un workflow manual separado para facet discovery;
+5. el observador solo relaciona `smoke`, `staged` y `diagnostic_overlap` con esos
+   dos workflows.
+
+La futura frontera confiable requeriría, en otro PR técnico:
+
+- ampliar el dispatcher con un tercer contrato cerrado;
+- añadir una constante y allow-list para el workflow de facets;
+- añadir un workflow manual separado y de mínimo privilegio;
+- añadir un script/adaptador que traduzca los dos requests lógicos a consultas
+  públicas fijas;
+- añadir publicación de artefacto sanitizado;
+- ampliar el observador con la relación cerrada
+  `facet_discovery → workflow de facets`;
+- añadir pruebas de seguridad, allow-list, legado y recuperación.
+
+Ese PR técnico no fue creado en esta etapa.
+
+# Futura prueba mínima
 
 ```text
-Decisión principal = 2 — dividir la activación del recorrido híbrido en otra fase
-Estado inmediato = bloqueado hasta nueva evidencia live autorizada
+ESTADO = NO AUTORIZADA TODAVÍA
+request_id = la-colonia-facet-discovery-001
+plan = catalog_categories_v1
+máximo de solicitudes = 2
+concurrencia = 1
+max_retries = 0
+pausa = 1.5 segundos
 ```
 
-PR #7 debe permanecer abierto y en borrador como investigación, diagnóstico y
-diseño offline. No debe marcarse listo ni fusionarse. La integración del nuevo
-recorrido en `LaColoniaCatalogRunner` debe ocurrir en una fase separada después
-de validar facets, presupuesto y al menos una partición controlada.
+Criterios de detención:
 
-## Evidencia live necesaria más adelante
+- `sampling=true`;
+- total raíz cambiante;
+- estructura de facets inválida;
+- cantidad negativa, no numérica o incompatible;
+- salto de nivel;
+- nodo sin `children`;
+- ausencia de hojas positivas;
+- residual entre hojas y total raíz;
+- más de 250 hojas positivas;
+- artefacto mayor de 64 KiB;
+- fallo de sanitización;
+- más de dos solicitudes lógicas.
 
-Sin proponer ni autorizar una ejecución ahora, una futura fase necesitaría:
+Datos sanitizados esperados:
 
-1. total raíz y facets con `sampling=false`;
-2. conteo de categorías hoja y presupuesto calculado;
-3. una partición pequeña completa;
-4. una partición con más de una página y sonda de frontera;
-5. evidencia de membresía de todos los productos de la partición;
-6. unión de particiones comparada con total raíz;
-7. reconciliación selectiva si aparece una anomalía;
-8. cero publicación de datos comerciales.
+- total raíz;
+- sampling;
+- niveles detectados;
+- conteos por nivel;
+- hojas positivas y cero;
+- cuatro componentes de presupuesto;
+- total estimado;
+- clasificación dentro/fuera de 500;
+- outcome y stop reason.
 
-## Archivo operacional
+Riesgos:
 
-Debe permanecer exactamente:
+- la API pública podría no devolver un árbol completo en una sola respuesta;
+- `sampling=true` impediría la planificación;
+- las cantidades podrían representar pertenencia múltiple;
+- el total podría cambiar entre las dos solicitudes;
+- el presupuesto podría exceder 500;
+- el adaptador futuro podría requerir revisión ante una estructura pública
+  diferente de la normalizada en fixtures.
+
+Resultado esperado:
+
+```text
+within_budget u over_budget
+```
+
+solo cuando `sampling=false`, el árbol es completo y las cantidades son válidas.
+
+# Archivo operacional
+
+Permanece exactamente:
 
 ```json
 {
@@ -645,22 +589,42 @@ Debe permanecer exactamente:
 blob SHA = 92146efe01b99ff0cea99fc51967e90807d5b5da
 ```
 
-## Restricciones vigentes
+# Decisión sobre PR #7
 
+PR #7 debe permanecer:
+
+```text
+open = true
+draft = true
+merged = false
+auto_merge = disabled
+```
+
+La implementación offline puede mantenerse en el PR como diseño y contrato. No
+se debe integrar el modo al runner normal ni activar tráfico hasta que exista una
+autorización separada para el PR técnico y, posteriormente, para la prueba mínima.
+
+# Restricciones vigentes
+
+- no ejecutar facets reales;
 - no ejecutar otro diagnóstico;
-- no crear `la-colonia-window-diagnostic-380-399-002`;
-- no ejecutar `la-colonia-baseline-products-500-003`;
-- no ejecutar `la-colonia-validation-products-500-001`;
-- no ejecutar `full`;
+- no baseline500-003;
+- no validation500;
+- no full;
 - no modificar el archivo operacional;
-- no cambiar automáticamente `OrderByNameASC`;
-- no agregar cache-busters;
-- no cambiar `maxAge` sin evidencia;
-- no admitir ventanas arbitrarias;
-- no aceptar páginas repetidas;
-- no asumir que deduplicar recupera omitidos;
 - no fusionar PR #7;
-- mantener PR #7 en borrador y sin auto-merge;
-- no agregar persistencia, historial, ejecución diaria, Google Sheets, BigQuery
-  ni Power BI;
-- toda nueva ejecución live requiere autorización expresa separada.
+- mantener draft;
+- no habilitar auto-merge;
+- no aceptar `sampling=true`;
+- no aceptar árbol incompleto;
+- no exceder 500 solicitudes;
+- no publicar nombres ni valores de categorías;
+- no publicar productos, SKU, marcas, precios o identificadores;
+- no integrar al runner normal;
+- no crear todavía el PR técnico;
+- no persistencia;
+- no historial;
+- no ejecución diaria;
+- no Google Sheets;
+- no BigQuery;
+- no Power BI.
