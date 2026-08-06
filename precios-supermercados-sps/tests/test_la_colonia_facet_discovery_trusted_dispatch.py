@@ -270,15 +270,68 @@ def test_recovery_workflow_still_checks_out_main_and_never_dispatches():
     assert "/dispatches" not in text
 
 
-def test_operational_contract_is_unchanged_when_present_on_functional_branch():
+def test_operational_contract_is_valid_when_present_on_functional_branch():
     if not OPERATIONAL.exists():
         assert OPERATIONAL.name == "la-colonia-live-command.json"
         return
-    assert json.loads(OPERATIONAL.read_text(encoding="utf-8")) == {
-        "request_id": "la-colonia-window-diagnostic-380-399-001",
-        "supermarket": "la_colonia",
-        "mode": "diagnostic_overlap",
-        "diagnostic_plan": "frontier_380_399_v1",
-        "delay_seconds": 1.5,
-        "allow_full": False,
+
+    raw = OPERATIONAL.read_text(encoding="utf-8")
+    parsed = json.loads(raw)
+    assert isinstance(parsed, dict)
+    assert parsed.get("allow_full") is False
+    assert "workflow" not in parsed
+
+    forbidden_fields = {
+        "URL",
+        "url",
+        "query",
+        "operationName",
+        "selectedFacets",
+        "headers",
+        "endpoint",
+        "host",
+        "max_requests",
     }
+    assert forbidden_fields.isdisjoint(parsed)
+
+    expected_fields = {
+        "smoke": {
+            "request_id", "supermarket", "mode", "page_size", "max_pages",
+            "max_products", "delay_seconds", "profile", "thresholds", "allow_full",
+        },
+        "staged": {
+            "request_id", "supermarket", "mode", "page_size", "max_pages",
+            "max_products", "delay_seconds", "profile", "thresholds", "allow_full",
+        },
+        "diagnostic_overlap": {
+            "request_id", "supermarket", "mode", "diagnostic_plan",
+            "delay_seconds", "allow_full",
+        },
+        "facet_discovery": {
+            "request_id", "supermarket", "mode", "discovery_plan",
+            "delay_seconds", "allow_full",
+        },
+    }
+    assert parsed.get("mode") in expected_fields
+    assert set(parsed) == expected_fields[parsed["mode"]]
+
+    decision = evaluate_file_request(context(), raw, ())
+    assert decision.accepted is True
+    assert decision.request_id == parsed["request_id"]
+    assert decision.mode == parsed["mode"]
+    assert decision.workflow == {
+        "smoke": LIVE_WORKFLOW,
+        "staged": LIVE_WORKFLOW,
+        "diagnostic_overlap": DIAGNOSTIC_WORKFLOW,
+        "facet_discovery": FACET_DISCOVERY_WORKFLOW,
+    }[decision.mode]
+    assert decision.workflow in TRUSTED_WORKFLOWS
+    assert decision.inputs is not None
+    assert "workflow" not in decision.inputs
+
+    if decision.mode == "facet_discovery":
+        assert decision.inputs == {
+            "request_id": FACET_DISCOVERY_REQUEST_ID,
+            "discovery_plan": FACET_DISCOVERY_PLAN,
+            "delay_seconds": "1.5",
+        }
