@@ -36,8 +36,6 @@ function initialResult(context) {
   return {
     accepted: false,
     request_id: null,
-    mode: null,
-    workflow: null,
     pr_number: Number.isInteger(pull.number) ? pull.number : null,
     head_sha: context.payload?.after || pull.head?.sha || null,
     ref: pull.head?.ref || null,
@@ -58,13 +56,14 @@ function initialResult(context) {
   };
 }
 
-function trustedDispatchDetails(workflowId, inputs) {
+function trustedDispatchDetails(workflowId, ref, inputs) {
   if (!inputs || typeof inputs !== "object" || Array.isArray(inputs)) return null;
   const requestId = inputs.request_id;
   if (typeof requestId !== "string" || !REQUEST_ID.test(requestId)) return null;
 
   if (
     workflowId === FACET_WORKFLOW_FILE &&
+    ref === "main" &&
     requestId === "la-colonia-facet-discovery-001" &&
     inputs.discovery_plan === "catalog_categories_v1" &&
     inputs.delay_seconds === "1.5"
@@ -101,7 +100,11 @@ function trustedDispatchDetails(workflowId, inputs) {
 
 function checkpointDispatch(result, endpoint, options, response) {
   if (endpoint !== DISPATCH_ENDPOINT) return;
-  const details = trustedDispatchDetails(options?.workflow_id, options?.inputs);
+  const details = trustedDispatchDetails(
+    options?.workflow_id,
+    options?.ref,
+    options?.inputs,
+  );
   if (!details) return;
 
   const runId = response?.data?.workflow_run_id
