@@ -1,18 +1,17 @@
 # La Colonia — auditoría offline del facet discovery
 
-## Estado
+## Estado final de la etapa
 
 ```text
-main inicial de la auditoría = 52152f2f5f13c9320f9cc32b22e3e2eacb2cf9a6
+main inicial = 52152f2f5f13c9320f9cc32b22e3e2eacb2cf9a6
+main final = 61b901973f869853cfd1060de1509ce9668ec782
 PR funcional = #7 — abierto, draft y no fusionado
+head funcional inicial = 0ec69d4d5290afe855bd03249aa8e11d584f840a
 intento live = inconcluso
 otra ejecución live = no autorizada
 ```
 
-La solicitud `la-colonia-facet-discovery-001` se escribió una sola vez en el
-archivo operacional. No se obtuvo `controller_run_id`, confirmación de dispatch,
-run de facets o artefactos sanitizados. No se presume que existieran solicitudes
-HTTP y no se inventan total raíz, sampling, niveles, hojas o presupuesto.
+El intento `la-colonia-facet-discovery-001` continúa clasificado como:
 
 ```text
 discovery_completed = false
@@ -20,9 +19,11 @@ discovery_outcome = inconclusive
 stop_reason = controller_and_facet_run_not_observable
 ```
 
-## Archivo operacional
+No se obtuvo `controller_run_id`, confirmación de dispatch, run de facets o
+artefactos. No se presume que existieran solicitudes HTTP y no se inventan total
+raíz, sampling, niveles, hojas o presupuesto.
 
-Permanece exactamente:
+## Archivo operacional intacto
 
 ```json
 {
@@ -37,12 +38,14 @@ Permanece exactamente:
 
 ```text
 commit operacional = 1a515913a514d3b246c3445eddfff8fcb0d951b4
-blob = 7b40b1dc9e12e4ded347c753b863b3fd3f8b8186
+blob inicial = 7b40b1dc9e12e4ded347c753b863b3fd3f8b8186
+blob final = 7b40b1dc9e12e4ded347c753b863b3fd3f8b8186
 ```
 
-La auditoría offline no modificó, restauró ni eliminó el archivo.
+La auditoría offline no modificó, restauró, eliminó ni volvió a confirmar este
+archivo mediante otro commit.
 
-## Regresión de pruebas
+## Regresión de pruebas corregida
 
 La CI del commit operacional fue:
 
@@ -54,31 +57,31 @@ pytest = 427 passed, 1 failed in 1.64s
 ```
 
 Falló `test_operational_contract_is_unchanged_when_present_on_functional_branch`
-porque comparaba el archivo real exclusivamente con el request diagnóstico
-`frontier_380_399_v1`. Esa aserción confundía una solicitud histórica con una
-propiedad permanente.
+porque fijaba el request diagnóstico `frontier_380_399_v1` como único contenido
+permitido. Esa prueba confundía una solicitud histórica con una propiedad
+permanente.
 
-La prueba fue sustituida por una validación semántica que:
+La nueva prueba:
 
-1. lee UTF-8 y exige un objeto JSON;
-2. comprueba el esquema exacto según `mode`;
-3. usa `evaluate_file_request()` con contexto autorizado y
-   `command_file_changed=true`;
-4. exige aceptación del contrato vigente;
-5. deriva el workflow desde código confiable;
-6. valida inputs normalizados;
-7. prohíbe workflow, URL, query, `selectedFacets`, headers y otros campos
-   arbitrarios;
-8. exige `allow_full=false`.
+1. lee el archivo como UTF-8;
+2. exige un objeto JSON;
+3. comprueba el esquema exacto correspondiente al `mode`;
+4. usa la interfaz pública `evaluate_file_request()`;
+5. emplea contexto autorizado con `command_file_changed=true`;
+6. exige aceptación del contrato vigente;
+7. deriva el workflow desde código confiable;
+8. valida los inputs normalizados;
+9. rechaza workflow, URL, query, `selectedFacets`, headers y campos arbitrarios;
+10. exige `allow_full=false`.
 
-También se añadieron fixtures independientes para smoke, staged,
-diagnostic_overlap y facet_discovery, junto con rechazos de modo, campos,
-pausa, request ID y permisos inválidos.
+Se mantienen fixtures independientes para smoke, staged, diagnostic_overlap y
+facet_discovery, además de rechazos de modo, campos, pausa, request ID y permisos
+inválidos.
 
-## Transición operacional
+## Transición diagnostic a facet
 
-La comparación del commit anterior con el commit operacional mostró un solo
-commit y un solo archivo modificado:
+La comparación del commit funcional anterior con `1a515913...` mostró un solo
+archivo modificado:
 
 ```text
 precios-supermercados-sps/.automation/la-colonia-live-command.json
@@ -86,17 +89,17 @@ precios-supermercados-sps/.automation/la-colonia-live-command.json
 
 Las pruebas sintéticas demuestran offline:
 
-- diagnostic_overlap y facet_discovery siguen siendo contratos cerrados válidos;
-- `command_file_changed=false` rechaza sin dispatch ni comentario;
+- ambos contratos históricos son válidos;
+- `command_file_changed=false` rechaza sin dispatch;
 - `command_file_changed=true` permite la evaluación;
-- un commit reemplazado se rechaza silenciosamente;
-- la marca `la-colonia-file-dispatch:la-colonia-facet-discovery-001` impide un
-  segundo procesamiento;
-- la ausencia de comentario solo indica elegibilidad y no demuestra que un run
-  haya existido;
-- ninguna prueba usa internet.
+- un evento reemplazado se rechaza silenciosamente;
+- el request ID vigente se normaliza correctamente;
+- el workflow facet procede de la allow-list confiable;
+- la marca idempotente impide un segundo procesamiento;
+- la ausencia de comentario no demuestra que existiera o no un run;
+- las pruebas no usan internet.
 
-## Auditoría del trigger
+## Auditoría del evento y del filtro paths
 
 El workflow de `main` declara:
 
@@ -108,72 +111,104 @@ on:
       - precios-supermercados-sps/.automation/la-colonia-live-command.json
 ```
 
-GitHub documenta que `pull_request_target` admite `synchronize` y filtros
-`paths`; los filtros de un Pull Request se evalúan sobre los archivos de su diff.
-El commit `1a515913...` realmente cambió la ruta filtrada. Por ello no existe una
-prueba que justifique retirar `paths`.
+La documentación oficial de GitHub confirma que `pull_request_target` admite
+`synchronize` y filtros `paths`, y que el filtro de un Pull Request se evalúa
+sobre los archivos de su diff. El commit operacional cambió exactamente la ruta
+filtrada. No existe evidencia suficiente para retirar `paths`.
 
-La causa histórica exacta continúa sin poder distinguirse entre:
+La causa histórica exacta permanece en el nivel:
 
 ```text
+E — evidencia insuficiente para distinguir:
 A = evento no creado
-B = evento filtrado antes de iniciar
+B = evento filtrado
 C = workflow iniciado y fallido antes de evidencia
-D = evidencia creada pero no recuperable por el conector
-E = evidencia insuficiente para distinguir
+D = evidencia creada pero no recuperable
 ```
 
-Para el intento histórico se conserva `E`: no existe run ID para clasificar C o
-D ni evidencia para atribuir el problema al parser, dispatcher o adaptador.
+Sin `controller_run_id` no se clasifica C o D ni se atribuye el intento al
+parser, dispatcher o adaptador.
 
-## Defecto demostrado en main
-
-La auditoría del código sí encontró un defecto independiente y demostrable:
-
-- `dispatcher-result.json` se creaba después de operaciones que podían lanzar
-  una excepción;
-- el checkpoint de dispatch se persistía después del intento de comentario;
-- el observador solo procesaba runs del controlador con conclusión `success`.
-
-Así, un run que hubiera iniciado podía terminar sin artefacto o con un artefacto
-de fallo no observado. La clasificación global de la auditoría es:
+## Clasificación global
 
 ```text
 B — existe un defecto demostrable en main
 ```
 
-## PR técnico
+El defecto independiente demostrado fue:
+
+- `dispatcher-result.json` se creaba después de operaciones susceptibles de
+  excepción;
+- el checkpoint del dispatch se persistía después del comentario;
+- el observador ignoraba conclusiones distintas de `success`;
+- rechazos con `mode:null` y `workflow:null` eran incompatibles con el esquema
+  del observador.
+
+## PR técnico #17
 
 ```text
 PR = #17 — Corrige la observabilidad del facet discovery de La Colonia
 rama = fix/la-colonia-facet-discovery-observability
 base = main
-estado = abierto; listo para revisión; no fusionado; auto-merge deshabilitado
+head = 4632be0e1aee23a1e2bd5a9bb81f28f0ae1ccbf8
+estado = abierto, draft, no fusionado
+auto-merge = deshabilitado
+archivos modificados = 9
+casos técnicos nuevos = 27
 ```
 
 La corrección técnica:
 
-- crea un artefacto sanitizado antes de invocar el controlador;
-- pre-valida evento, acción, PR #7, fork y SHA;
+- escribe un resultado sanitizado antes de invocar el controlador;
+- valida evento, acción, PR #7, fork y SHA;
 - delega en el controlador confiable existente;
 - registra inmediatamente un dispatch facet válido sobre `ref=main`;
 - conserva un único dispatch;
-- convierte la ausencia de artefacto en error visible;
-- hace que el observador procese todos los runs `completed`;
-- mantiene checkout de `main`, permisos mínimos, allow-list y observador de solo
-  lectura;
-- no cambia el filtro `paths`, el scraper, el runner normal, adaptador o runtime.
+- registra comentarios GraphQL o REST exitosos sin publicarlos por sí misma;
+- conserva evidencia cuando ambos comentarios son bloqueados;
+- normaliza rechazos al esquema legacy del observador;
+- convierte la ausencia del artefacto en error visible;
+- observa todos los runs `completed`, incluidos fallos;
+- mantiene checkout de `main`, permisos, allow-list y observador de solo lectura;
+- no cambia `paths`, scraper, runner normal, adaptador o runtime.
 
-La validación sintética local de fallos pre y post dispatch pasó. La CI de GitHub
-del PR técnico continúa pendiente de aparecer; no se fusionará sin checks verdes.
+La validación sintética local de los escenarios críticos pasó. GitHub no creó un
+run asociado al head técnico mediante las herramientas disponibles:
+
+```text
+workflow_run_id = No expuesto
+job_id = No expuesto
+suite completa = Pendiente de verificación
+fusión técnica = no realizada
+integración de main en PR #7 = no realizada
+```
+
+El PR técnico no se fusionará sin checks completamente verdes.
+
+## Incidencia administrativa en main
+
+Durante la operación con el conector se crearon por error dos archivos
+temporales y se eliminaron inmediatamente:
+
+```text
+e741f725546f17e3f931a1ce962fd3fe850c5102 — agrega noop
+ea8508e941f1ba1f8d2c421980fded970c5d8080 — elimina noop
+16d229a36ba8c9b0107f44abb65cab2ff63e506f — agrega marcador temporal
+61b901973f869853cfd1060de1509ce9668ec782 — elimina marcador temporal
+```
+
+La comparación `52152f2...61b9019` devuelve `files=[]`: el árbol final de
+`main` es idéntico al inicial, aunque el historial contiene esos cuatro commits
+administrativos. Ninguno tocó el archivo operacional o ejecutó código live.
 
 ## Documentación oficial consultada
 
-- Events that trigger workflows — `pull_request_target`, `synchronize` y `paths`.
-- Workflow syntax for GitHub Actions — filtros de ramas y rutas.
-- GITHUB_TOKEN — supresión y aprobación de eventos generados por automatización.
-- Securely using pull_request_target — checkout exclusivo de código confiable.
-- Workflow artifacts — persistencia y retención de artefactos.
+- Events that trigger workflows: `pull_request_target`, `synchronize` y `paths`.
+- Workflow syntax for GitHub Actions: filtros de rutas y ramas.
+- About pull request comparisons: diff de tres puntos para Pull Requests.
+- GITHUB_TOKEN: supresión o aprobación de eventos generados por automatización.
+- Secure use of `pull_request_target`: ejecutar solo código de la rama confiable.
+- Workflow artifacts: persistencia y retención configurable.
 
 ## Restricciones confirmadas
 
@@ -187,7 +222,20 @@ No se ejecutó:
 - full;
 - recorrido particionado.
 
-No se descargaron productos ni se consultaron facets reales. No se añadió
-persistencia, historial, ejecución diaria, Google Sheets, BigQuery o Power BI.
-PR #7 permanece abierto, draft y sin fusionar. La autorización live anterior
-está consumida y otra ejecución no está autorizada.
+```text
+productos descargados = 0
+facets reales consultadas = 0
+persistencia = no
+historial = no
+ejecución diaria = no
+Google Sheets = no
+BigQuery = no
+Power BI = no
+PR #7 = abierto, draft y no fusionado
+autorización live = consumida
+otra ejecución live = NO AUTORIZADA
+```
+
+El siguiente paso es obtener una CI automática verificable para PR #17. Solo
+con todos los checks verdes podrá fusionarse e integrarse `main` mediante merge
+normal en PR #7.
