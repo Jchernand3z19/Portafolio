@@ -6,12 +6,19 @@ Este documento es un plan. **No autoriza ninguna ejecución.**
 
 ```text
 radiografía = incompleta
-contexto SPS = no reproducible todavía
+SPS-context-and-root-facets-001 = consumida; D — bloqueada por limitación de herramienta
+diagnóstico de navegador SPS = preparado offline
+contexto SPS real = no reproducible todavía
 listo para implementar scraper completo = no
 listo para full crawl = no
 ```
 
 No se modifican scraper, runtime, contratos, workflows ni archivo operacional.
+
+La siguiente ejecución live requiere primero el diagnóstico de navegador descrito
+en `la-colonia-browser-context-diagnostic.md`, una autorización explícita nueva
+y un ID nuevo asignado fuera del código. `SPS-context-and-root-facets-002` no ha
+sido creado ni autorizado.
 
 ## 2. Objetivo
 
@@ -36,44 +43,63 @@ Construir un extractor verificable para el catálogo público de La Colonia que:
 
 ## 4. Fase 1 — Resolver el contexto público de San Pedro Sula
 
-### Prueba propuesta
+### Estado de la prueba anterior
 
 ```text
 Nombre: SPS-context-and-root-facets-001
-Estado: propuesta; no autorizada
+Estado: consumida
+Resultado: D — bloqueada por limitación de herramienta
+Stop reason: tool_cannot_interact_with_store_selector_or_inspect_session_context
+Repetición: no autorizada
 ```
 
-Pasos mínimos:
+La prueba 001 confirmó que la capacidad de navegación usada en esa etapa no
+podía interactuar con el selector dinámico de tienda ni inspeccionar
+cookies/localStorage/sessionStorage/XHR. Se detuvo antes de seleccionar SPS y
+antes de consultar raíz/facets.
 
-1. abrir una sesión pública limpia;
-2. registrar el estado por defecto sin guardar valores de cookies;
-3. abrir una PDP conocida y la raíz;
-4. seleccionar San Pedro Sula mediante la UI pública;
-5. identificar solamente nombres de mecanismos técnicos:
-   - cookie;
+### Diagnóstico de navegador requerido
+
+Se preparó offline:
+
+```text
+precios-supermercados-sps/src/precios_supermercados/diagnostics/
+  la_colonia_sps_context_diagnostic.py
+```
+
+Su objetivo futuro es:
+
+1. crear un browser context público limpio;
+2. registrar el estado por defecto sin publicar valores sensibles;
+3. localizar `Selecciona tu tienda` mediante selectores semánticos;
+4. seleccionar San Pedro Sula mediante UI pública;
+5. seleccionar Plaza Pedregal cuando la UI real lo requiera;
+6. observar únicamente nombres/presencia/cambio de:
+   - cookies;
    - localStorage;
    - sessionStorage;
    - query parameter;
    - header;
    - contexto GraphQL;
-   - sesión de checkout;
    - seller/tienda;
    - `regionId`;
    - sales channel/binding;
-6. repetir la raíz y la misma PDP;
-7. comparar total, product IDs de la muestra, seller, Price, ListPrice y disponibilidad;
-8. registrar valores públicos no sensibles indispensables; redactar sesiones/tokens;
-9. clasificar ubicación como `confirmed`, `inferred` o `unknown`.
+   - session/segment;
+7. capturar el request GraphQL real de catálogo sin inventar endpoint;
+8. reducir la ventana a `from=0`, `to<=4`;
+9. capturar raíz/facets;
+10. repetir una vez;
+11. persistir solo diagnóstico sanitizado;
+12. clasificar ubicación como `confirmed`, `ui_only` o `inconclusive`.
 
-### Límites
+### Límites de una futura autorización
 
 ```text
 concurrency = 1
 delay = >= 1.5 s
 retries = máximo 1
-root pages = 1 mínima
-PDP = 1 conocida
-facets = 1 respuesta
+max_logical_requests = 8
+root/facets = mínimo indispensable
 full crawl = no
 ```
 
@@ -107,7 +133,8 @@ Después de confirmar SPS:
 7. detener si `sampling=true`, faltan hijos esperados o las cantidades son inválidas;
 8. excluir valores corruptos como fórmulas `VLOOKUP(...)`.
 
-Criterio de salida: árbol estructural versionable con hojas candidatas, cantidades y evidencia de completitud.
+Criterio de salida: árbol estructural versionable con hojas candidatas,
+cantidades y evidencia de completitud.
 
 ## 6. Fase 3 — Validar listados y paginación
 
@@ -261,7 +288,8 @@ La raíz pública sin tienda mostró 9,291 productos. Con page size 50:
 ceil(9291 / 50) = 186 páginas
 ```
 
-Este valor es solo una referencia inferior de la raíz **sin ubicación verificada**. No es el total SPS ni una autorización.
+Este valor es solo una referencia de la raíz **sin ubicación verificada**.
+No es el total SPS ni una autorización.
 
 ### Fórmula final
 
@@ -284,7 +312,8 @@ requests_total = context + facets + root + leaves + probes + recovery
 - reservar PDP solo para validación y campos ausentes;
 - detener si el presupuesto excede el límite aprobado.
 
-El presupuesto definitivo permanece Pendiente hasta conocer total SPS, hojas, sampling y solapamientos.
+El presupuesto definitivo permanece Pendiente hasta conocer total SPS, hojas,
+sampling y solapamientos.
 
 ## 11. Fase 8 — Normalización y validación
 
@@ -352,11 +381,13 @@ No guardar catálogo completo en artefactos públicos ni cookies/tokens.
 
 ## 13. Orden de implementación recomendado
 
-1. detector/verificador de contexto SPS;
-2. captura sanitizada de sesión comercial pública;
+Estado actualizado:
+
+1. **diagnóstico de navegador/verificador de contexto SPS — preparado offline**;
+2. captura sanitizada de sesión comercial pública — preparada en el diagnóstico;
 3. cliente de facets con contrato cerrado;
 4. parser de árbol y clasificación de facets;
-5. fixtures sanitizados de respuestas ya capturadas;
+5. fixtures sanitizados de respuestas reales únicamente después de captura autorizada;
 6. pruebas offline de ubicación/facets/precios;
 7. validación mínima de paginación;
 8. validación representativa de SKU/ofertas;
@@ -391,6 +422,9 @@ Todos deben cumplirse:
 - límites de paginación confirmados;
 - presupuesto calculado.
 
+La existencia del diagnóstico de navegador no satisface por sí sola estos
+criterios; solo elimina la limitación de herramienta a nivel de implementación.
+
 ## 16. Criterios de listo para full crawl
 
 Además:
@@ -405,38 +439,35 @@ Además:
 - estrategia de recuperación probada offline;
 - autorización explícita nueva.
 
-## 17. Siguiente prueba exacta propuesta
+## 17. Próxima prueba live
+
+No existe una nueva prueba live autorizada.
 
 ```text
-Nombre: SPS-context-and-root-facets-001
-Objetivo: confirmar el contexto público de San Pedro Sula y capturar una sola respuesta raíz/facets
-Concurrencia: 1
-Pausa mínima: 1.5 segundos
-Reintentos: máximo 1
-Páginas de datos: mínimo indispensable
-PDP: una conocida antes/después
-Full crawl: no
-Persistencia: no
-Estado: propuesta, NO AUTORIZADA
+SPS-context-and-root-facets-001 = consumida; no repetir
+SPS-context-and-root-facets-002 = no creada; no autorizada
+siguiente ID = Pendiente
+prerrequisito = diagnóstico de navegador + autorización explícita nueva
 ```
 
-Resultado esperado de la prueba:
+Una futura autorización, si se concede, deberá usar el diagnóstico de navegador
+para:
 
-- nombre del mecanismo de ubicación, sin secretos;
-- identificador público de contexto cuando sea indispensable;
-- total raíz SPS;
-- `sampling`;
-- niveles de categoría y cantidades;
-- comparación de un SKU antes/después;
-- clasificación `confirmed/inferred/unknown`;
-- presupuesto preliminar actualizado.
+- seleccionar SPS exclusivamente por UI pública;
+- producir evidencia técnica sanitizada del contexto;
+- observar el request GraphQL real;
+- ejecutar raíz/facets mínimas;
+- repetir una vez;
+- detenerse dentro del presupuesto.
 
 ## 18. Decisión
 
 ```text
 estrategia recomendada = híbrida
-primer componente a implementar = verificador de contexto SPS
-siguiente prueba = SPS-context-and-root-facets-001
+primer componente = diagnóstico de navegador SPS, preparado offline
+siguiente prueba live = Pendiente
 autorización de siguiente prueba = inexistente
+SPS-context-and-root-facets-001 = consumida
+SPS-context-and-root-facets-002 = no creada
 full crawl = no autorizado
 ```
