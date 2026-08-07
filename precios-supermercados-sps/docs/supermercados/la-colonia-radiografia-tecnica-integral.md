@@ -2,47 +2,47 @@
 
 ## 1. Resumen ejecutivo
 
-Fecha de análisis: 2026-08-06 23:00–23:30 America/Tegucigalpa.
+Fecha de análisis: **2026-08-06**, sesión iniciada a las **22:55 America/Tegucigalpa**.
 
-Clasificación final de esta etapa: **incompleta**.
+Clasificación final: **radiografía incompleta / inconclusive para full crawl**.
 
-La tienda pública usa **VTEX IO** y expone listados mediante una búsqueda GraphQL de catálogo. Esto está confirmado por:
+Hallazgos principales:
 
-- nombres de clases y recursos `vtex-*` visibles en páginas públicas;
-- estructura pública `data.productSearch.products` y `recordsFiltered` ya consumida por el extractor existente;
-- URLs con `map`, `category-1`, `productClusterIds` y filtros de especificación;
-- assets públicos servidos desde `vtexassets.com`.
+- **observado:** la superficie pública actual está construida sobre tecnología VTEX; usa assets de `lacolonia.vtexassets.com`, URLs con `map` y una PLP facetada;
+- **confirmado en el código existente:** el extractor consume el endpoint público `/_v/segment/graphql/v1`, operación `productSearchV3`, proveedor `vtex.search-graphql`;
+- **observado:** `/supermercado` muestra **9,291 productos** bajo el estado por defecto **sin tienda seleccionada**;
+- **observado:** el sitio muestra `Selecciona tu tienda`; las fichas muestreadas, sin tienda, muestran `No disponible` y no presentan un precio pagadero;
+- **documentación oficial de La Colonia:** el primer paso de compra es seleccionar ciudad; la venta en línea atiende Tegucigalpa y San Pedro Sula, con pickup SPS en Plaza Pedregal; precios, promociones, productos y disponibilidad pueden variar entre canales y ciudades;
+- **conclusión:** no puede afirmarse que el total, precio o disponibilidad del contexto por defecto representen San Pedro Sula;
+- **regla obligatoria:** mientras no exista un contexto SPS reproducible, toda observación comercial debe conservar `location_status=unknown` y clasificarse como `location_not_verified`;
+- **observado:** la interfaz expone 15 categorías principales, al menos 81 valores visibles de `Sub-Categoría`, 34 landings, 1,475 marcas y 279 valores de la especificación `Subcategoria`; estos conteos proceden de botones `Mostrar N más` y no prueban que la respuesta técnica esté completa;
+- **observado:** el facet `Impuestos` contiene valores válidos `0`, `15`, `18` y numerosos valores corruptos tipo `VLOOKUP(...)`;
+- **no demostrado:** sampling, árbol completo, categorías hoja, solapamientos, productos sin hoja, límite efectivo de paginación, total SPS, estabilidad de páginas y presupuesto final;
+- **decisión:** no está listo para full crawl.
 
-El sitio no está listo para autorizar un recorrido completo porque siguen pendientes:
+No se ejecutó controlador operacional, GitHub Actions live, facet discovery, baseline500-003, validation500, recorrido particionado ni descarga masiva.
 
-1. confirmar el mecanismo técnico exacto de selección de ciudad/tienda;
-2. demostrar que una consulta pública representa San Pedro Sula;
-3. confirmar estabilidad del total raíz;
-4. medir solapamientos entre categorías hoja;
-5. demostrar ausencia de productos sin categoría hoja;
-6. confirmar límites y sampling de facets;
-7. validar precios y disponibilidad bajo un contexto de ubicación reproducible.
+## 2. Alcance, método y niveles de confianza
 
-No se ejecutó full crawl, GitHub Actions live, controlador operacional, baseline500-003 ni validation500.
-
-## 2. Alcance y método
-
-Se inspeccionaron superficies públicas mediante solicitudes controladas, concurrencia lógica 1, sin autenticación, sin carrito y sin compras.
+Se revisaron contratos y código de PR #7, páginas públicas, documentación oficial de La Colonia y documentación pública de VTEX. No se inició sesión, no se usaron credenciales, no se añadió al carrito y no se accedió a rutas desautorizadas.
 
 Clasificaciones usadas:
 
-- **observado**: visible directamente en una página pública;
-- **confirmado por red**: presente en una respuesta pública o código del extractor que refleja una respuesta capturada;
-- **documentación oficial**: preguntas frecuentes, robots o términos públicos;
-- **inferencia**: explicación razonable todavía no demostrada;
-- **hipótesis**: requiere una prueba futura;
-- **Pendiente**: no recuperado.
+- **observado directamente:** visible en HTML o interfaz pública;
+- **confirmado por red:** recuperado de una respuesta pública concreta;
+- **confirmado por código existente:** campo o endpoint ya implementado sobre capturas anteriores del proyecto, pero no necesariamente revalidado en red en esta sesión;
+- **documentación oficial:** afirmación publicada por La Colonia o VTEX;
+- **inferencia:** conclusión razonable apoyada por evidencia, todavía no demostrada en La Colonia;
+- **hipótesis:** requiere una prueba futura;
+- **Pendiente:** no recuperado.
 
-## 3. Contratos existentes
+La herramienta de navegación no expone un contador fiable de requests de navegador ni DevTools. Por ello el tráfico total exacto se marca **Pendiente**. No se realizaron consultas directas exitosas al endpoint GraphQL ni un recorrido de productos.
 
-### RawProduct
+## 3. Contratos existentes del proyecto
 
-Campos obligatorios ya esperados:
+### 3.1 RawProduct
+
+Campos obligatorios ya definidos:
 
 - `supermarket_id`, `location_id`;
 - `source_key_type`, `source_key`;
@@ -57,9 +57,21 @@ Campos fuente opcionales:
 - `location_status`, `location_evidence`, `location_confidence`;
 - `raw_values`.
 
-### NormalizedOffer
+### 3.2 NormalizedOffer
 
-El contrato espera identidad determinista de producto y oferta, moneda, promoción, disponibilidad, ubicación, precio actual y campos normalizados de marca, categoría, subcategoría y presentación. Los campos pendientes controlados son:
+El contrato espera:
+
+- identidad determinista de producto y oferta;
+- ubicación;
+- nombre, marca, categoría, subcategoría y variante;
+- precio actual, precio regular reportado y precio unitario opcional;
+- moneda;
+- promoción;
+- disponibilidad;
+- presentación descompuesta en cantidad, contenido y unidad;
+- trazabilidad de corrida y fuente.
+
+Campos que generan revisión pendiente cuando faltan:
 
 - `normalized_brand`;
 - `category`;
@@ -69,155 +81,251 @@ El contrato espera identidad determinista de producto y oferta, moneda, promoci�
 - `measurement_unit`;
 - `total_content`.
 
-### ValidatedOffer
+### 3.3 ValidatedOffer y state_hash
 
-Contiene la oferta normalizada, `state_hash` SHA-256, fecha UTC de validación y eventos de calidad.
+`ValidatedOffer` conserva la oferta, `state_hash` SHA-256, fecha UTC de validación y eventos de calidad.
 
-No se crearon contratos paralelos ni se modificaron los existentes.
+El hash de estado incluye:
 
-## 4. Mapa funcional del sitio
+- `current_price`;
+- `reported_regular_price`;
+- `is_promotion`;
+- `availability`;
+- marca, categoría, subcategoría y variante normalizadas;
+- cantidad, contenido, unidad y contenido total.
 
-| Superficie | URL conceptual | Evidencia | Dependencia de ubicación | Utilidad |
-|---|---|---|---|---|
-| Inicio | `/` | sitio público VTEX | selector visible | navegación y promociones |
-| Supermercado raíz | `/supermercado?map=departamento` | total y facets visibles | no confirmada | raíz candidata |
-| Categoría | `/supermercado/<slug>?map=c` | productos y facets | no confirmada | partición estructural candidata |
-| Búsqueda | `/<texto>/supermercado?map=ft` | productos cruzados | no confirmada | diagnóstico, no partición primaria |
-| Colección | `/supermercado/<id>?map=c,productClusterIds` | conjunto promocional/curado | no confirmada | landing, no categoría |
-| Marca/landing corta | `/<slug>` | uno o pocos productos | no confirmada | marca o landing; requiere clasificación |
-| Producto | `/<linkText>/p` | SKU, atributos, agotado | probablemente dependiente | detalle y validación |
-| Preguntas frecuentes | `/preguntas-frecuentes` | selección de ciudad y operación | sí, funcional | evidencia oficial |
-| Robots | `/robots.txt` | exclusiones públicas | no | límites operativos |
+### 3.4 Identificadores actuales
 
-No todos los enlaces del menú deben tratarse como categorías. Se observaron búsquedas textuales, colecciones y landings que atraviesan varias categorías.
+Prioridad de `select_source_key`:
+
+1. `internal_id`;
+2. `sku`;
+3. `barcode`;
+4. `api_id`;
+5. URL estable.
+
+En La Colonia, `internal_id` recibe `items[].itemId`; por ello cada `RawProduct` representa actualmente un **SKU**, aunque el nombre `source_product_id` del contrato normalizado puede inducir a pensar en el agregado `productId`.
+
+No se crearon contratos paralelos ni se modificaron contratos.
+
+## 4. Mapa funcional público
+
+| Superficie | URL conceptual | Tipo | Datos visibles | Dependencia de sesión/ubicación | Utilidad |
+|---|---|---|---|---|---|
+| Inicio | `/` | landing | menú, ofertas, promociones, campañas, selector | selector visible | descubrimiento editorial |
+| Supermercado raíz | `/supermercado` | PLP raíz | total, ordenamientos, facets | contexto no verificado | universo de referencia candidato |
+| Categoría | `/supermercado/<categoria>` | PLP estructural | total y facets | posible | partición candidata |
+| Subcategoría | `/supermercado/<categoria>/<subcategoria>` | PLP estructural | total y facets | posible | hoja candidata, no demostrada |
+| Búsqueda | `/<texto>/supermercado?map=ft,category-1` o equivalente | PLP full text | resultados cruzados | posible | diagnóstico, no cobertura primaria |
+| Marca | ruta con `map=...,brand` | PLP facetada | productos de marca | posible | validación secundaria |
+| Landing | ruta/facet `landing` | PLP editorial/promocional | conjuntos temporales | posible | no estructural |
+| Colección | `productClusterIds` o searchable cluster | PLP curada | conjunto de campaña | posible | no estructural |
+| Producto | `/<linkText>/p` | PDP | referencia, nombre, imágenes, especificaciones, disponibilidad | alta | detalle de SKU/producto |
+| Selector de tienda | botón global | UI dinámica | `Selecciona tu tienda` | sí | contexto comercial bloqueante |
+| Localizador | `/localizador-de-tiendas` | selector/listado | ciudad/departamento | no necesariamente sesión comercial | evidencia de sucursales |
+| FAQ | `/preguntas-frecuentes` | documento oficial | proceso de compra y SPS | n/a | reglas funcionales |
+| Términos | `/terminos-y-condiciones` | documento oficial | precios, promociones, disponibilidad por ciudad | n/a | límites y semántica |
+| Robots | `/robots.txt` | texto | sitemap y rutas desautorizadas | n/a | límite operativo |
+| Mobile legacy | `mobile.lacolonia.com` | storefront alterno | taxonomía histórica y `Sin ciudad` | sí | evidencia auxiliar; robots lo desautoriza |
+
+No se debe tratar todo enlace de menú como categoría: ofertas, promociones, recetas, campañas, landings y colecciones son superficies editoriales o promocionales.
 
 ## 5. Ubicación, tienda y San Pedro Sula
 
-### Observado/documentado
+### 5.1 Observado directamente
 
-La documentación pública indica que el primer paso de compra es seleccionar la ciudad del domicilio. También indica que existe entrega o recogida en Tegucigalpa y San Pedro Sula, y que el punto de recogida de SPS es Plaza Pedregal.
+- el encabezado actual muestra `Selecciona tu tienda`;
+- `/supermercado` devuelve el total sin mostrar una tienda seleccionada;
+- fichas de producto muestreadas muestran `No disponible` sin precio;
+- el localizador muestra `Elige ciudad o departamento`, pero los valores se cargan dinámicamente;
+- la versión móvil indexada muestra `Enviar a Sin ciudad`.
 
-### Confirmado técnicamente
+### 5.2 Documentación oficial de La Colonia
 
-Pendiente:
+- el primer paso de compra es seleccionar la ciudad del domicilio;
+- la venta en línea atiende Tegucigalpa y San Pedro Sula;
+- el pickup de SPS se realiza en Plaza Pedregal;
+- la disponibilidad puede variar por ciudad;
+- existen productos exclusivos por ciudad y mensajes como `AgotadoTGU` o `Agotado SPS`;
+- precios, productos y promociones web pueden diferir de tiendas físicas y otros canales.
 
-- nombre de cookie o storage;
-- identificador interno de ciudad;
-- identificador de tienda o seller;
-- región comercial;
-- binding o sales channel;
-- contexto de checkout;
-- efecto reproducible sobre precio y disponibilidad.
+### 5.3 Mecanismo técnico
 
-El extractor existente usa:
+No se observó directamente en La Colonia cuál de estos mecanismos conserva la selección:
+
+- cookie;
+- `localStorage`;
+- `sessionStorage`;
+- query parameter;
+- header;
+- contexto GraphQL;
+- sesión de checkout;
+- binding/sales channel;
+- `regionId`;
+- seller o tienda interna.
+
+La documentación de VTEX describe `vtex_session`, `vtex_segment`, `postalCode`, `country`, `regionId`, canal y tablas de precio como mecanismos posibles de regionalización. Esto es **documentación de plataforma**, no prueba de la configuración concreta de La Colonia.
+
+### 5.4 Conclusión de ubicación
 
 ```text
-location_id = la_colonia_online
+San Pedro Sula disponible funcionalmente = confirmado
+San Pedro Sula seleccionado en esta sesión = no
+identificador interno de tienda SPS = Pendiente
+identificador de región SPS = Pendiente
+consulta por defecto representa SPS = no demostrado
 location_status = unknown
+clasificación comercial = location_not_verified
 ```
 
-Esta decisión es correcta con la evidencia actual.
+No puede garantizarse que precios o disponibilidad pertenezcan a SPS.
 
-### Conclusión
+## 6. Plataforma y arquitectura técnica
 
-No se puede garantizar que una consulta sin selección represente San Pedro Sula. Hasta capturar y reproducir el mecanismo público, los precios deben clasificarse como:
+### 6.1 Plataforma
+
+Clasificación: **VTEX storefront / VTEX IO, confianza alta**.
+
+Evidencia:
+
+- assets públicos en `lacolonia.vtexassets.com`;
+- URLs VTEX con `map`, `category-1`, `category-2`, `brand`, `ft`, `productClusterIds` y filtros de especificación;
+- código existente sobre `vtex.search-graphql`;
+- endpoint implementado `https://www.lacolonia.com/_v/segment/graphql/v1`;
+- alias histórico `commertialOffer` propio del esquema VTEX.
+
+La respuesta GraphQL actual no fue re-observada directamente en esta sesión porque la herramienta de navegación no permitió abrir la URL dinámica completa. Su vigencia debe validarse en la siguiente prueba controlada.
+
+### 6.2 Listado técnico implementado
 
 ```text
-location_not_verified
-```
-
-## 6. Arquitectura y solicitudes
-
-Plataforma confirmada: VTEX IO.
-
-Catálogo confirmado por el extractor existente:
-
-```text
-protocolo = HTTPS
-formato = GraphQL JSON
-nodo principal = data.productSearch
+método = GET
+protocolo = HTTPS + GraphQL JSON
+endpoint = /_v/segment/graphql/v1
+operationName = productSearchV3
+provider = vtex.search-graphql
+nodo = data.productSearch
 productos = data.productSearch.products
 total = data.productSearch.recordsFiltered
 ```
 
-Variables observadas/esperadas por el código existente:
+Variables implementadas:
 
-- `from`, `to`;
+- `query`;
+- `fullText`;
+- `selectedFacets`;
 - `orderBy`;
-- consulta/ruta;
-- `map` o mapa de navegación;
-- texto completo cuando aplica.
+- `from`;
+- `to`;
+- `hideUnavailableItems=false`;
+- `skusFilter=ALL`.
 
-El extractor interpreta por producto:
+### 6.3 Menú, facets y producto
 
-- `productId`, `productReference`, `productName`, `linkText`;
-- `brand`, `categories`, `categoryTree`;
-- `items`.
-
-Por SKU:
-
-- `itemId`, `referenceId`, `ean`;
-- `name`, `nameComplete`;
-- `measurementUnit`, `unitMultiplier`;
-- `images`, `sellers`.
-
-Por oferta:
-
-- `Price`, `ListPrice`, `AvailableQuantity`;
-- evidencia promocional pública del `commertialOffer`.
-
-Endpoint exacto sanitizado: documentado en `la-colonia-catalogo-solicitudes.md`.
+- endpoint exacto actual del menú: **Pendiente**;
+- endpoint exacto actual de facets: **Pendiente**; el proyecto espera una respuesta con `recordsFiltered`, `sampling`, `facets`, `type`, `values`, `key`, `value`, `quantity`, `children`;
+- endpoint exacto dedicado de PDP: **Pendiente**; el extractor reutiliza búsqueda/listado para campos del producto;
+- imágenes: host público de assets VTEX.
 
 ## 7. Taxonomía observada
 
-Niveles visibles:
+### 7.1 Niveles
 
-1. Departamento: ejemplo `Supermercado`.
-2. Categoría: Abarrotes, Belleza y Cuidado Personal, Cuidado del Hogar, Bebidas y Jugos, etc.
-3. Sub-Categoría: Snacks, Limpieza del Hogar, Cuidado del Cabello, etc.
-4. `Subcategoria`: atributo de especificación más granular, por ejemplo Aceite de Canola o Detergente Líquido.
+| Nivel | Nombre visible/técnico | Clasificación | Estado |
+|---|---|---|---|
+| 1 | `category-1` / Departamento | estructural | confirmado por código y URLs |
+| 2 | Categoría | estructural | observado |
+| 3 | Sub-Categoría | estructural | observado |
+| 4+ | `category-4...category-8` | posible | permitido por analizador, no observado |
+| especificación | `Subcategoria` | filtro textual/especificación | observado; no asumir hoja |
 
-Clasificación:
+### 7.2 Categorías principales visibles
 
-- `category-1` / Departamento: estructural;
-- Categoría: estructural;
-- Sub-Categoría: estructural;
-- `Subcategoria`: filtro de especificación; puede parecer hoja, pero su cobertura estructural está pendiente;
-- Marca: facet no estructural;
-- Landing: promocional/editorial;
-- `productClusterIds`: colección;
-- `ft`: búsqueda textual;
-- `specificationFilter_*`: filtro técnico.
+La interfaz raíz muestra 10 y el botón `Mostrar 5 más`, es decir, **15 valores de Categoría visibles como mínimo**:
 
-Profundidad máxima confirmada: al menos tres niveles estructurales más una especificación granular. El árbol completo y los IDs internos permanecen pendientes.
+1. Abarrotes;
+2. Belleza y Cuidado Personal;
+3. Cuidado del Hogar;
+4. Bebidas y Jugos;
+5. Lácteos, no Lácteos, Derivados y Huevos;
+6. Cervezas Licores y Vinos;
+7. Bebé y Niños;
+8. Congelados y Refrigerados;
+9. Artículos para el Hogar y Útiles;
+10. Panadería y Tortillas;
+11–15. ocultas en el HTML resumido; la navegación histórica incluye Frutas y Verduras, Carnes y Aves, Pescados y Mariscos, Embutidos y Mascotas, pero su correspondencia actual debe verificarse.
 
-## 8. Facets y anomalías
+### 7.3 Subcategorías y otros facets
 
-Facets observadas:
+- `Sub-Categoría`: 10 visibles + `Mostrar 71 más` = al menos **81**;
+- `Landing`: 10 visibles + `Mostrar 24 más` = al menos **34**;
+- `Marca`: 10 visibles + `Mostrar 1465 más` = al menos **1,475**;
+- `Subcategoria`: 10 visibles + `Mostrar 269 más` = al menos **279**;
+- `Impuestos`: valores normales `0`, `15`, `18` más al menos 40 valores adicionales, varios corruptos.
 
-- Categoría;
-- Sub-Categoría;
-- Impuestos;
-- Landing;
-- Marca;
-- Subcategoria.
+Estos conteos son de interfaz y pueden cambiar por consulta, contexto o actualización del índice. No sustituyen una respuesta de facets completa.
 
-Se observaron valores anómalos en `Impuestos`, incluyendo fórmulas `VLOOKUP(...)`. Esto es evidencia de calidad deficiente en datos de catálogo y obliga a sanitizar valores y no confiar automáticamente en cada facet.
+### 7.4 Distinciones obligatorias
 
-El total de valores de marca visible supera 1,400 y el de `Subcategoria` supera 260 en páginas indexadas. No se confirmó si estas listas están completas o muestreadas.
+- **departamento:** raíz estructural `Supermercado`;
+- **categoría:** nivel estructural bajo departamento;
+- **subcategoría:** nivel estructural bajo categoría;
+- **categoría hoja:** nodo estructural sin hijos; todavía no identificada integralmente;
+- **marca:** facet de marca, no categoría;
+- **landing:** etiqueta editorial/promocional;
+- **colección:** cluster de productos;
+- **promoción:** condición comercial o conjunto temporal;
+- **búsqueda:** full text `ft`;
+- **filtro textual:** especificaciones como `Subcategoria`;
+- **página especial:** ofertas, campañas, recetas;
+- **desconocido:** cualquier ruta cuyo `map` no se haya interpretado.
 
-Indicadores `sampling`, `children`, `selected`, `quantity`, `type`, `key` y `value`: Pendiente de captura directa de la respuesta de facets.
+## 8. Facets y filtros
 
-## 9. Listados y paginación
+| Filtro | Tipo | Estructural | Puede particionar | Riesgo de solapamiento | Estado |
+|---|---|---:|---:|---:|---|
+| Departamento | categoría nivel 1 | sí | candidato | bajo/medio | partial |
+| Categoría | categoría nivel 2 | sí | candidato | alto con padre/hijos | observed |
+| Sub-Categoría | categoría nivel 3 | sí | hoja candidata | alto | observed |
+| Marca | brand | no | no primaria | alto | observed |
+| Precio | rango/orden | no | solo diagnóstico | medio | Pendiente como facet visible |
+| Impuestos | especificación | no | no | alto y datos corruptos | inconsistent |
+| Landing | especificación/editorial | no | no | muy alto | observed |
+| Promoción/Ofertas | especificación/cluster | no | no | muy alto | observed/partial |
+| Disponibilidad | contexto seller | no | no primaria | cambia por ubicación | Pendiente |
+| Vendedor | offer/seller | no | posible dimensión de oferta | sí | confirmado por código |
+| Tipo de producto | especificación | no | Pendiente | Pendiente | Pendiente |
+| `Subcategoria` | especificación textual | no demostrado | no primaria | alto | observed |
+| `productClusterIds` | colección | no | no | alto | observed en URLs |
+| `ft` | búsqueda | no | no | alto | observed en URLs |
 
-Totales raíz públicos observados en momentos distintos:
+Campos esperados de la respuesta técnica de facets: `sampling`, `quantity`, `children`, `selected`, `type`, `name`, `value`, `key`. Ninguno fue capturado directamente en esta sesión; quedan Pendiente.
+
+## 9. Listados muestreados
+
+| Superficie | Total observado/indexado | Clasificación |
+|---|---:|---|
+| raíz `/supermercado` | 9,291 | actual, sin tienda verificada |
+| categoría Abarrotes | 2,934 en captura indexada reciente | grande |
+| categoría Bebidas y Jugos | 574 | mediana |
+| subcategoría Jugos | 200 | estructural candidata |
+| filtro textual pequeño | 8–36 según ruta | pequeño, no necesariamente hoja |
+| búsqueda `bebidas` | conjunto transversal | búsqueda, no partición |
+| colección `productClusterIds` | 209 en una captura | colección |
+| página de marca | 9–13 en ejemplos indexados | marca |
+
+No se descargaron páginas de productos del listado ni se midieron IDs de unión.
+
+## 10. Paginación y orden
+
+Confirmado por código:
 
 ```text
-8936 productos
-9143 productos
+from = índice inicial inclusivo
+to = índice final inclusivo
+page_size = to - from + 1
+page_size máximo configurado = 50
 ```
-
-Esto demuestra que el total raíz no es estable entre capturas indexadas. Puede deberse a inventario, contexto, índice o actualización; la causa es Pendiente.
 
 Ordenamientos visibles:
 
@@ -228,215 +336,375 @@ Ordenamientos visibles:
 - precio ascendente/descendente;
 - nombre ascendente/descendente.
 
-El runner actual usa por defecto `OrderByNameASC` para mayor determinismo.
+El runner funcional usa `OrderByNameASC` como orden determinista y detecta:
 
-Paginación confirmada en el código:
+- discontinuidad `from/to`;
+- cambio de orden;
+- páginas parciales;
+- páginas repetidas mediante firma;
+- cambios de total;
+- duplicados de producto y SKU.
+
+Pendiente de observar en red:
+
+- tamaño de página real aceptado por el endpoint actual;
+- límite máximo del backend;
+- scroll infinito/carga diferida actual;
+- estabilidad al repetir;
+- páginas repetidas o parciales reales;
+- sampling;
+- comportamiento al superar fronteras.
+
+## 11. Detalle de producto
+
+Muestras públicas revisadas incluyen productos de cuidado personal, abarrotes y fruta. Sin tienda seleccionada mostraron:
+
+- marca visible como `La Colonia` en la ficha;
+- `Referencia`;
+- nombre;
+- imágenes;
+- pestañas de descripción/especificaciones/ingredientes;
+- `Subcategoria` e `Impuestos` cuando existen;
+- estado `No disponible`;
+- sin precio pagadero visible.
+
+Campos confirmados por el extractor existente:
+
+| Concepto | Campo fuente | Nivel |
+|---|---|---|
+| producto | `productId` | product |
+| referencia producto | `productReference` | product |
+| SKU | `items[].itemId` | SKU |
+| referencia SKU | `items[].referenceId` | SKU |
+| EAN/GTIN | `items[].ean` | SKU |
+| nombre | `productName`, `name`, `nameComplete` | product/SKU |
+| marca | `brand` | product |
+| categorías | `categories`, `categoryTree` | product |
+| slug | `linkText` | product |
+| imágenes | `items[].images[].imageUrl` | SKU |
+| vendedor | `items[].sellers[].sellerId` | offer |
+| precio actual | `commertialOffer.Price` | offer/SKU |
+| precio lista | `commertialOffer.ListPrice` | offer/SKU |
+| cantidad | `commertialOffer.AvailableQuantity` | offer/SKU |
+| promoción | `discountHighlights`, `teasers` | offer/SKU |
+| unidad | `measurementUnit` | SKU |
+| multiplicador | `unitMultiplier` | SKU |
+
+No se confirmó en esta sesión un producto con precio normal, promoción visible, varios SKU o EAN ausente bajo contexto SPS. Esos casos permanecen Pendiente.
+
+## 12. Precio, promoción y presentación
+
+### 12.1 Reglas respaldadas por el código existente
+
+| Campo objetivo | Fuente | Regla | Estado |
+|---|---|---|---|
+| `current_price` | `Price` | decimal positivo del seller seleccionado | confirmed by code |
+| `effective_price` | `Price` | precio actual mostrado/pagadero bajo contexto verificado | inferred semantic mapping |
+| `list_price` | `ListPrice` | conservar valor fuente | confirmed by code |
+| `reported_regular_price` | `ListPrice` | solo si `ListPrice > Price` | confirmed by code |
+| `is_promotion` | diferencia o teaser/highlight | no usar histórico para inventarla | confirmed by code |
+| `promotion_text` | teaser/highlight | sanitizar; contrato normalizado no tiene campo dedicado | pending contract gap |
+| `discount_percentage` | Price/ListPrice | derivar solo con ambos valores confirmados | inferred |
+| `currency` | contexto comercial | HNL esperado, campo explícito no capturado | pending |
+| `measurement_unit` | SKU | normalizar texto | confirmed by code |
+| `unit_multiplier` | SKU | decimal positivo | confirmed by code |
+| `presentation` | atributos SKU; fallback `nameComplete` | parser conservador | partial |
+| `package_quantity` | nombre/atributos | no confirmado | pending |
+
+`effective_price` significa el precio que el sitio presenta como pagadero en la observación actual. No es la diferencia contra el histórico del proyecto.
+
+### 12.2 Dependencia de ubicación
+
+La plataforma VTEX puede regionalizar sellers, precios y disponibilidad mediante sesión/región. Los términos de La Colonia confirman disponibilidad por ciudad, pero no se ejecutó una comparación TGU vs SPS. Por ello:
 
 ```text
-from = índice inicial inclusivo
-to = índice final inclusivo
-page_size = to - from + 1
+precio depende de ubicación = Pendiente / plausible, no demostrado
+promoción depende de ubicación = Pendiente
+disponibilidad depende de ubicación = confirmada funcionalmente; mecanismo pendiente
 ```
 
-El código detecta páginas parciales, páginas repetidas, discontinuidad y cambios de total. Límite máximo de VTEX y sampling: Pendiente de prueba controlada específica.
+## 13. Disponibilidad y agotado
 
-## 10. Página de producto y campos comerciales
+El extractor actual combina:
 
-Campos confirmados por la respuesta interpretada por el extractor:
+- existencia de seller;
+- `Price`;
+- `AvailableQuantity`.
 
-| Concepto | Fuente pública |
-|---|---|
-| product ID | `productId` |
-| referencia de producto | `productReference` |
-| SKU ID | `items[].itemId` |
-| referencia SKU | `items[].referenceId` |
-| EAN | `items[].ean` |
-| nombre | `productName`, `nameComplete` |
-| marca | `brand` |
-| categorías | `categories`, `categoryTree` |
-| slug | `linkText` |
-| imágenes | `items[].images[].imageUrl` |
-| vendedor | `items[].sellers[].sellerId` |
-| precio actual | `commertialOffer.Price` |
-| precio de lista | `commertialOffer.ListPrice` |
-| disponibilidad | seller + `AvailableQuantity` + precio |
-| unidad | `measurementUnit` |
-| multiplicador | `unitMultiplier` |
+La documentación pública de VTEX advierte que `AvailableQuantity` en búsquedas legacy puede representar rangos o cantidades aproximadas. Debe tratarse como señal pública de disponibilidad, no como inventario exacto.
 
-Se observaron páginas públicas con `SKU`, atributos de impuestos/subcategoría y mensaje `Produto Esgotado`/`No disponible`.
+Reglas recomendadas:
 
-## 11. Precio, promoción y presentación
+- `in_stock`: seller elegible, precio positivo y cantidad positiva;
+- `out_of_stock`: contexto de ubicación confirmado y evidencia explícita de cero/no disponible;
+- `unknown`: contexto no verificado, seller ausente o señales contradictorias;
+- `not_listed`: SKU previamente conocido que no aparece en una observación comparable.
 
-Reglas recomendadas con la evidencia actual:
+`No disponible` sin tienda seleccionada **no** demuestra agotado global.
 
-- `selling_price` / `current_price`: `Price` positivo del seller seleccionado;
-- `list_price`: `ListPrice` positivo;
-- `regular_price`: `ListPrice` solamente cuando es mayor que `Price` y el sitio presenta esa comparación;
-- `effective_price`: `Price`, porque es el importe actual ofrecido por el sitio;
-- `is_promotion`: `ListPrice > Price` o teaser/evidencia promocional pública;
-- `discount_percentage`: derivado solo cuando ambos precios están confirmados;
-- moneda: HNL, inferida por operación y precios en lempiras; el campo técnico explícito queda Pendiente;
-- presentación: primero SKU/atributos; fallback controlado desde `nameComplete`;
-- `measurement_unit`: `measurementUnit`;
-- `unit_multiplier`: `unitMultiplier`.
+## 14. Identidad, oferta y deduplicación
 
-No debe inventarse una promoción comparando únicamente con el histórico del proyecto.
+### Producto
 
-## 12. Identidad y deduplicación
+Usar `productId` para agrupar variantes/SKU del mismo producto VTEX.
 
-Prioridad existente de `select_source_key`:
+### SKU
 
-1. `itemId`;
-2. referencia SKU;
-3. EAN;
-4. `productId`;
-5. URL estable.
+Usar `itemId` como identidad primaria. Fallback existente:
 
-Recomendación:
+1. referencia SKU;
+2. EAN;
+3. `productId`;
+4. URL estable.
 
-- identidad de producto: `productId`;
-- identidad de SKU: `itemId` como clave primaria, con `referenceId` y EAN como evidencia secundaria;
-- identidad de oferta: supermercado + ubicación/contexto + seller + SKU;
-- estado observado: hash de identidad comercial y campos que cambian.
+### Oferta
 
-No usar `productName` como identidad.
+La oferta debe distinguir como mínimo:
 
-La deduplicación debe ocurrir por SKU, no por categoría ni por URL de landing. Un SKU puede aparecer en categoría padre, hija, búsqueda, marca y colección.
+- supermercado;
+- ubicación/región verificada;
+- SKU;
+- seller cuando exista más de uno.
 
-## 13. Cobertura y estabilidad
+El `offer_id` actual usa supermercado + ubicación + `source_product_id`. Como `source_product_id` es normalmente el `itemId`, funciona para un seller único, pero puede colisionar si el mismo SKU tiene ofertas simultáneas de sellers distintos. Se documenta como hueco potencial, sin cambiar contrato.
 
-Clasificación de taxonomía actual:
+### Deduplicación
+
+- deduplicar globalmente por `itemId`;
+- conservar relación `productId -> itemId[]`;
+- no deduplicar por nombre;
+- no sumar productos de padre, hija, marca, landing y colección;
+- registrar memberships múltiples por SKU;
+- comparar cambios comerciales mediante `state_hash`, sin cambiar identidad.
+
+## 15. Cobertura y solapamientos
+
+Clasificación actual:
 
 ```text
-sampled / inconclusive
+taxonomía = sampled / inconclusive
+cobertura = no demostrada
+solapamientos = no medidos
+productos sin categoría hoja = Pendiente
 ```
 
-No se ha demostrado:
+No son pruebas suficientes:
 
-- unión completa de categorías hoja;
-- residuales contra el total raíz;
-- solapamiento medido;
-- categorías con conjuntos idénticos;
-- productos sin hoja;
-- estabilidad temporal del orden y total.
+- `sum(quantity) >= root_total`;
+- `unique_products == recordsFiltered` en una sola captura;
+- que todas las categorías visibles tengan resultados.
 
-No es válido sumar cantidades de facets como prueba de cobertura.
+La demostración futura requiere:
 
-## 14. Riesgos
+1. contexto SPS fijo;
+2. total raíz estable;
+3. árbol sin sampling;
+4. IDs únicos de la raíz;
+5. unión de IDs de hojas;
+6. intersecciones entre hojas;
+7. residual `root - union(leaves)`;
+8. categorías con conjuntos idénticos;
+9. repetición mínima para estabilidad.
+
+## 16. Estabilidad
+
+Observado:
+
+- el total actual de raíz es 9,291 en contexto sin tienda;
+- capturas indexadas de categorías y colecciones muestran totales distintos según fecha/ruta;
+- los términos permiten cambios de precios, existencias y productos sin aviso.
+
+No se repitió una misma consulta técnica con iguales variables y contexto. Por tanto:
+
+```text
+raíz = inconclusa
+categoría pequeña = inconclusa
+categoría mediana = inconclusa
+búsqueda = inconclusa
+producto = estable solo en identidad visible; precio no observado
+```
+
+## 17. Matriz de riesgos
 
 | Riesgo | Probabilidad | Impacto | Evidencia | Mitigación | Bloquea full |
-|---|---:|---:|---|---|---|
-| ubicación no verificada | alta | alta | selector y documentación oficial | capturar contexto público SPS | sí |
-| total raíz variable | alta | alta | 8936 vs 9143 | repetir con mismo contexto/orden | sí |
-| solapamiento de categorías | alta | alta | jerarquía + landings + búsqueda | unión por SKU y residuales | sí |
-| facets sucias | alta | media | valores VLOOKUP en Impuestos | allow-list y eventos de calidad | no |
-| sampling/límite | media | alta | no confirmado | prueba de fronteras mínima | sí |
-| EAN ausente | media | media | contrato permite fallback | identidad por itemId | no |
-| presentación solo en nombre | alta | media | parser actual con regex | conservar fuente y revisión | no |
-| inventario dinámico | alta | media | total/disponibilidad variables | timestamp y repetición mínima | no |
-| 403/429 | baja-media | alta | runner preparado | concurrency 1, delay >=1.5, stop | sí si aparece |
+|---|---:|---:|---|---|---:|
+| contexto SPS no reproducible | alta | crítica | selector y default sin tienda | capturar mecanismo público | sí |
+| precio sin ubicación | alta | crítica | PDP sin precio | no normalizar como SPS | sí |
+| total raíz contextual | alta | alta | 9,291 sin tienda | repetir bajo SPS | sí |
+| sampling de facets | media | alta | campo esperado no capturado | capturar y detener si true | sí |
+| árbol incompleto | alta | alta | solo UI parcial | response de facets + residual | sí |
+| solapamiento | alta | alta | jerarquía/landings/clusters | unión e intersecciones por SKU | sí |
+| páginas repetidas/parciales | media | alta | no probado | firmas y boundary probes | sí |
+| orden no determinista | media | alta | default release date | `OrderByNameASC`, repetición | sí |
+| facet Impuestos corrupto | alta | media | `VLOOKUP(...)` | allow-list/evento de calidad | no |
+| EAN ausente | media | media | campo opcional | identidad por itemId | no |
+| presentación solo en nombre | alta | media | parser regex actual | atributos + revisión | no |
+| múltiples sellers | media | alta | esquema sellers[] | incluir seller en oferta | sí si aparece |
+| 403/429/antibot | baja-media | crítica | no observado | concurrency 1, delay, stop | sí |
+| cambio de esquema GraphQL | media | alta | endpoint no revalidado | fixtures/versionado | sí |
+| disponibilidad dinámica | alta | media | términos oficiales | timestamp y contexto | no |
 
-## 15. Revisión legal y operativa
+## 18. Revisión legal y operativa
 
-`robots.txt` publica sitemap y desautoriza rutas como `/account`, `/login`, `/checkout`, `/busca`, `/buscapagina` y `/api`. La radiografía no accedió a áreas autenticadas ni de compra.
+### Robots
 
-La documentación oficial confirma que los precios y ofertas web pueden diferir de tiendas físicas y que productos web/físicos no son conjuntos idénticos.
+`robots.txt` publica un sitemap y desautoriza, entre otras, rutas:
 
-Interpretación legal adicional: Pendiente de revisión humana.
+- `/img*`;
+- `/account*`;
+- `/login*`;
+- `/checkout*`;
+- `/busca*`;
+- `/quick-view*`;
+- `/espiar*`;
+- `/buscapagina*`;
+- `/api*`;
+- host QA;
+- host móvil.
 
-## 16. Mapeo a contratos
+La ruta `/_v/segment/graphql/v1` no aparece nombrada en esa lista, pero esto no equivale a autorización jurídica. Debe usarse con operación conservadora y revisión humana antes de automatización completa.
 
-El detalle completo está en `la-colonia-inventario-campos.md`.
+### Términos
 
-Hueco principal: el contrato puede representar ubicación desconocida, pero todavía no existe evidencia reproducible para elevarla a `confirmed`. No se propone modificar el contrato hasta conocer el mecanismo público.
+Los términos:
 
-## 17. Estrategias evaluadas
+- prohíben evasión o prueba de vulnerabilidades;
+- reconocen posibles errores/inexactitudes;
+- permiten cambios de productos, precios, existencias y condiciones;
+- distinguen precios/promociones web de otros canales;
+- reconocen disponibilidad por ciudad.
 
-| Estrategia | Cobertura | Duplicados | Estabilidad | Recomendación |
-|---|---|---|---|---|
-| raíz paginada | potencialmente alta | baja por SKU | total variable | baseline de referencia |
-| categorías principales | alta, no demostrada | alta | media | control secundario |
-| categorías hoja | desconocida | media/alta | Pendiente | candidata tras discovery |
-| prefijos/búsqueda | no garantizada | alta | baja | diagnóstico solamente |
-| facets combinadas | potencial | alta | riesgo de sampling | no primaria |
-| híbrida | mayor verificabilidad | controlable | mejor | recomendada |
-| producto conocido | mínima | ninguna | alta | validación de campos |
-| sitemap | Pendiente | baja | Pendiente | fuente auxiliar |
+Interpretación jurídica adicional: **no realizada**. Recomendación: revisión humana antes del full crawl.
 
-## 18. Estrategia recomendada
+## 19. Mapeo a contratos y huecos
 
-Estrategia híbrida:
+El inventario completo está en `la-colonia-inventario-campos.md`.
 
-1. fijar y verificar contexto público de San Pedro Sula;
-2. obtener total raíz con `OrderByNameASC` y página pequeña;
-3. capturar árbol estructural y facets sanitizadas;
-4. recorrer categorías hoja únicamente después de medir sampling;
-5. deduplicar globalmente por `itemId`;
-6. comparar unión de hojas contra raíz paginada en una validación controlada;
-7. reportar residuales, solapamientos y conjuntos idénticos;
-8. abrir una muestra de productos para validar precio, presentación y disponibilidad;
-9. detener en 403, 429, esquema inválido o páginas repetidas.
+Huecos candidatos, no implementados:
 
-Solicitudes estimadas: Pendiente hasta confirmar total, page size máximo seguro, cantidad real de hojas y ubicación.
+1. `seller_id` normalizado para distinguir ofertas múltiples;
+2. contexto reproducible de tienda/región/sales channel;
+3. `promotion_text` estructurado;
+4. decisión semántica entre `current_price` y alias `effective_price`;
+5. impuestos limpios (`Tax`/`taxPercentage`) solo si se confirma fuente confiable;
+6. `productId` agregado separado de la identidad SKU generada;
+7. estado explícito `location_not_verified` o mapeo documentado a `LocationStatus.UNKNOWN`.
 
-## 19. Preguntas obligatorias — estado
+## 20. Estrategias evaluadas
 
-1. Plataforma: VTEX IO, confirmado.
-2. Selección SPS: funcionalmente documentada; mecanismo técnico Pendiente.
-3. Dependencia de ubicación: probable y operativamente relevante; no cuantificada.
-4. Total real: Pendiente; se observaron 8936 y 9143.
-5. Niveles: Departamento, Categoría, Sub-Categoría y especificación `Subcategoria`.
-6. Diferencias: categorías son jerarquía; landing/colección son conjuntos editoriales; filtro restringe; búsqueda usa texto.
-7. Categorías estructurales: Departamento/Categoría/Sub-Categoría.
-8. Promocionales: Landing, product clusters y ofertas.
-9–11. Cobertura, solapamientos y productos sin hoja: Pendiente.
-12. Menú: Pendiente.
-13. Facets: endpoint de product search/facets VTEX; operación exacta Pendiente.
-14. Listados: GraphQL `productSearch`, confirmado por extractor.
-15. Producto: product page + datos VTEX; operación exacta Pendiente.
-16. Paginación: `from/to` inclusivos.
-17. Límite máximo: Pendiente.
-18–19. Estabilidad/repetición: controles implementados, evidencia live Pendiente.
-20. Producto: `productId`.
-21. SKU: `itemId`.
-22. EAN: `items[].ean`.
-23. Presentación: atributos SKU; fallback `nameComplete`.
-24. Precio actual: `Price`.
-25. Precio regular: `ListPrice` cuando mayor.
-26. Promoción: diferencia declarada o teasers.
-27–28. Disponibilidad: seller, cantidad, precio y mensaje agotado.
-29. Duplicados: conjunto global de `itemId`.
-30. Cobertura: raíz + hojas + unión/residuales.
-31. Solicitudes: Pendiente.
-32. Pendientes: ubicación, sampling, límites, unión y estabilidad.
-33. Listo para scraper completo: no.
-34. Primero: resolver ubicación SPS y capturar facets estructurales.
-35. Siguiente prueba: prueba controlada de contexto SPS + raíz/facets, propuesta pero no autorizada.
+| Estrategia | Cobertura | Duplicados | Omisiones | Solicitudes | Dependencia ubicación | Decisión |
+|---|---|---|---|---|---|---|
+| A. raíz paginada | potencialmente completa | baja por SKU | límite/sampling | ~186 páginas con 9,291 y size 50, contexto no válido | alta | universo de referencia |
+| B. categorías principales | parcial | alta padre/hijos | productos mal categorizados | Pendiente | alta | control secundario |
+| C. categorías hoja | potencialmente eficiente | solapamiento posible | hojas incompletas | Pendiente | alta | candidata tras discovery |
+| D. búsqueda prefijos | no garantizada | muy alta | silenciosas | alta | alta | solo diagnóstico |
+| E. facets combinadas | variable | alta | sampling | variable | alta | no primaria |
+| F. híbrida | máxima verificabilidad | controlable | detectables con residual | mayor pero presupuestable | alta | recomendada |
+| G. producto conocido | mínima | ninguna | casi total | baja | alta | validación de campos |
+| H. sitemap | URLs, no necesariamente ofertas | baja | productos no indexados | baja | baja | inventario auxiliar |
 
-## 20. Evidencia
+### Estrategia recomendada
 
-Fuentes públicas revisadas:
+**Híbrida:**
 
-- `https://www.lacolonia.com/`;
-- `https://www.lacolonia.com/robots.txt`;
-- `https://www.lacolonia.com/supermercado?map=departamento`;
-- páginas de categoría, búsqueda, colección y landings públicas;
-- `https://www.lacolonia.com/preguntas-frecuentes`;
-- código existente del PR #7: contratos, extractor y runner.
+1. fijar contexto público SPS;
+2. capturar raíz y facets;
+3. usar raíz paginada como universo de referencia;
+4. usar categorías hoja como particiones operativas solo si no hay sampling;
+5. deduplicar por `itemId` y agrupar por `productId`;
+6. medir solapamientos y residuales;
+7. validar una muestra de PDP/SKU/ofertas;
+8. detener ante páginas repetidas, parciales, total cambiante, 403 o 429;
+9. calcular presupuesto antes de autorizar recorrido progresivo.
 
-No se conservaron cookies, tokens, headers privados ni datos personales.
+El cálculo `ceil(9291/50)=186` es únicamente un **piso provisional de páginas raíz bajo contexto no verificado**, no un presupuesto SPS ni autorización.
 
-## 21. Estado final
+## 21. Información pendiente bloqueante
+
+- mecanismo exacto de selección de SPS;
+- identificador público de ciudad, tienda, seller, región o canal;
+- precio y disponibilidad antes/después de seleccionar SPS;
+- respuesta GraphQL actual;
+- endpoint actual del menú;
+- endpoint y respuesta de facets;
+- `sampling`;
+- árbol completo y niveles reales;
+- categorías hoja y vacías;
+- solapamientos y residuales;
+- productos sin hoja;
+- múltiples sellers;
+- muestras con precio normal, promoción, peso, múltiples SKU y EAN ausente;
+- estabilidad de total, IDs, orden y páginas;
+- límite real de paginación;
+- presupuesto final.
+
+## 22. Evidencia pública principal
+
+| Evidencia | Timestamp de consulta | Resultado | Confianza |
+|---|---|---|---|
+| `/supermercado` | 2026-08-06 noche HN | 9,291; selector; facets | observado directo |
+| `/preguntas-frecuentes` | 2026-08-06 | seleccionar ciudad; SPS; Plaza Pedregal | oficial |
+| `/terminos-y-condiciones` | 2026-08-06 | variación por canal/ciudad; `Agotado SPS/TGU` | oficial |
+| `/localizador-de-tiendas` | 2026-08-06 | selector dinámico ciudad/departamento | observado |
+| `/robots.txt` | 2026-08-06 | sitemap y disallow | confirmado por red |
+| PDP muestreadas | 2026-08-06 | referencia, especificaciones, `No disponible` | observado |
+| assets VTEX | 2026-08-06 | `vtexassets.com` | observado |
+| contratos/código PR #7 | 2026-08-06 | campos, endpoint, operación y reglas | confirmado por repositorio |
+| documentación VTEX | 2026-08-06 | sesión, región, facets y Search GraphQL | plataforma; no prueba configuración local |
+
+No se guardaron cookies, tokens, sesiones ni datos personales.
+
+## 23. Respuestas a las 35 preguntas obligatorias
+
+1. **Plataforma:** VTEX storefront/VTEX IO, confianza alta; endpoint actual pendiente de revalidación.
+2. **Selección SPS:** funcionalmente por selector de ciudad/tienda; mecanismo técnico Pendiente.
+3. **Precios por ubicación:** plausible por VTEX, no demostrado en La Colonia; disponibilidad por ciudad sí está documentada.
+4. **Total real correcto:** Pendiente. Se observan 9,291 sin tienda, no SPS.
+5. **Niveles:** Departamento, Categoría, Sub-Categoría; `Subcategoria` es especificación; niveles adicionales Pendiente.
+6. **Diferencias:** categoría/subcategoría son jerarquía; landing/colección/promoción/filtro no lo son.
+7. **Estructurales:** `category-1/2/3` y rutas de categoría confirmadas.
+8. **Promocionales:** Landing, Ofertas, campañas y product clusters.
+9. **Hojas cubren todo:** Pendiente.
+10. **Solapamientos:** esperables, no medidos.
+11. **Productos sin hoja:** Pendiente.
+12. **Endpoint menú:** Pendiente.
+13. **Endpoint facets:** Pendiente; respuesta esperada documentada.
+14. **Endpoint listados:** `/_v/segment/graphql/v1`, `productSearchV3`, confirmado por código existente.
+15. **Endpoint producto:** PDP HTML `/<linkText>/p`; consulta técnica dedicada Pendiente.
+16. **Paginación:** `from/to` inclusivos.
+17. **Límite máximo:** configuración actual 50; backend real Pendiente.
+18. **Orden estable:** no probado; recomendado `OrderByNameASC`.
+19. **Páginas repetidas:** no observadas; runner las detecta por firma.
+20. **Identificador producto:** `productId`.
+21. **Identificador SKU:** `itemId`.
+22. **EAN:** `items[].ean`.
+23. **Presentación:** atributos SKU + `nameComplete` como fallback.
+24. **Precio actual:** `commertialOffer.Price`.
+25. **Precio regular:** `ListPrice` solo cuando el sitio lo presenta como superior al actual.
+26. **Promoción:** diferencia válida, `discountHighlights` o `teasers`.
+27. **Disponibilidad:** seller + Price + AvailableQuantity bajo ubicación.
+28. **Agotado:** evidencia explícita bajo contexto confirmado; sin tienda es `unknown`.
+29. **Evitar duplicados:** deduplicación global por `itemId`.
+30. **Demostrar cobertura:** raíz vs unión de hojas, intersecciones y residual.
+31. **Solicitudes estimadas:** piso raíz provisional 186; total híbrido Pendiente.
+32. **Pendiente:** ubicación, endpoints, facets, sampling, cobertura, estabilidad, precios SPS y presupuesto.
+33. **Listo para scraper completo:** no.
+34. **Primero:** resolver contexto SPS reproducible.
+35. **Siguiente prueba:** `SPS-context-and-root-facets-001`, propuesta y no autorizada.
+
+## 24. Estado final de la etapa
 
 ```text
-PR #7 = abierto, draft, no fusionado
-PR #17 = congelado y sin cambios
-código ejecutable = sin cambios
-contratos = sin cambios
-workflows = sin cambios
-archivo operacional = sin cambios
-full crawl = no ejecutado
-productos descargados masivamente = 0
-radiografía = incompleta
+radiografía = incompleta pero documentada
+estrategia = híbrida recomendada
+listo para implementar full scraper = no
 listo para full crawl = no
+fixtures creados = 0
+pruebas offline nuevas = 0
+código ejecutable modificado = no
+contratos modificados = no
+workflows modificados = no
+archivo operacional modificado = no
+productos descargados masivamente = 0
+ejecuciones live = 0
 ```
