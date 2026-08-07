@@ -1,7 +1,7 @@
 """Diagnóstico offline-first del contexto SPS de La Colonia.
 
 No toca contratos comerciales ni el scraper. ``offline_fixture`` no abre red.
-``run_live`` es un adaptador futuro: exige --live + --authorization-id.
+``run_live`` exige --live + --authorization-id y una allow-list activa explícita.
 """
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 import time
 from dataclasses import asdict, dataclass, field
 from html.parser import HTMLParser
@@ -17,6 +18,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 TARGET_URL = "https://www.lacolonia.com/"
+ACTIVE_AUTHORIZATION_IDS: frozenset[str] = frozenset()
 CONSUMED_AUTHORIZATION_IDS = frozenset({"SPS-context-and-root-facets-001"})
 AUTHORIZATION_PATTERN = re.compile(r"^SPS-context-and-root-facets-\d{3}$")
 VTEX_CONTEXT_NAMES = (
@@ -28,6 +30,12 @@ SENSITIVE_PARTS = (
     "apikey", "api_key", "sessionid", "session_id", "orderform", "address",
     "coordinate", "latitude", "longitude", "postalcode", "postal_code",
     "email", "phone",
+)
+_ALLOWED_LOCAL_SCHEMES = frozenset({"about", "data", "file"})
+_ALLOWED_SYNTHETIC_HOST = "synthetic.invalid"
+_ALLOWED_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+_BROWSER_CANDIDATES = (
+    "google-chrome-stable", "google-chrome", "chromium", "chromium-browser",
 )
 
 
@@ -139,6 +147,18 @@ class SpsContextDiagnostic:
     warnings: list[str] = field(default_factory=list)
     stop_reason: str | None = None
     logical_requests: int = 0
+    authorization_checked: bool = False
+    browser_started: bool = False
+    target_navigation_started: bool = False
+    target_navigation_completed: bool = False
+    store_selector_opened: bool = False
+    city_selected: bool = False
+    store_selected: bool = False
+    context_observed: bool = False
+    root_observed: bool = False
+    facets_observed: bool = False
+    authorization_consumption_eligible: bool = False
+    context_replay_verification: str = "pending_live"
 
     def sanitized_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -292,6 +312,22 @@ def sanitize_url(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
 
 
+def sanitize_error(error: BaseException | str) -> str:
+    """Sanitiza excepciones antes de incorporarlas al artefacto diagnóstico."""
+    text = str(error)
+    text = re.sub(r"-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}", "redacted_coordinates", text)
+    text = re.sub(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+", "Bearer redacted", text)
+    text = re.sub(
+        r"(?i)\b(authorization|cookie|token|jwt|secret|password|api[_-]?key|session(?:id|_id)?|orderform(?:id)?|address|coordinates?|latitude|longitude|postal(?:code|_code)?|email|phone)\b\s*[:=]\s*([^\s,;&]+)",
+        lambda m: f"{m.group(1)}=redacted",
+        text,
+    )
+    text = re.sub(r"\b[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b", "redacted", text)
+    url_pattern = re.compile(r"https?://[^\s'\"<>]+")
+    text = url_pattern.sub(lambda m: sanitize_url(m.group(0)), text)
+    return text[:2000]
+
+
 def compare_storage(before: Mapping[str, Any], after: Mapping[str, Any], *, storage_type: str) -> list[dict[str, Any]]:
     result = []
     for name in sorted(set(before) | set(after)):
@@ -314,13 +350,9 @@ def classify_graphql(operation_name: str | None, query: str) -> tuple[str, ...]:
     op, body = (operation_name or "").lower(), query.lower()
     kinds: list[str] = []
     tests = (
-        ("productSearch", "productsearch"),
-        ("facets", "facet"),
-        ("session", "session"),
-        ("segment", "segment"),
-        ("region", "region"),
-        ("store", "store"),
-        ("checkout", "checkout"),
+        ("productSearch", "productsearch"), ("facets", "facet"),
+        ("session", "session"), ("segment", "segment"),
+        ("region", "region"), ("store", "store"), ("checkout", "checkout"),
     )
     for output, needle in tests:
         if needle in op or needle in body:
@@ -483,7 +515,13 @@ def summarize_response(event: Mapping[str, Any], metadata: NetworkMetadata | Non
     return result
 
 
-def validate_live_authorization(*, live: bool, authorization_id: str | None, consumed_ids: Iterable[str] = CONSUMED_AUTHORIZATION_IDS) -> str:
+def validate_live_authorization(
+    *,
+    live: bool,
+    authorization_id: str | None,
+    active_ids: Iterable[str] = ACTIVE_AUTHORIZATION_IDS,
+    consumed_ids: Iterable[str] = CONSUMED_AUTHORIZATION_IDS,
+) -> str:
     if not live:
         if authorization_id:
             raise DiagnosticSafetyError("authorization-id no se acepta en offline_fixture")
@@ -492,9 +530,22 @@ def validate_live_authorization(*, live: bool, authorization_id: str | None, con
         raise DiagnosticSafetyError("--live requiere --authorization-id")
     if not AUTHORIZATION_PATTERN.fullmatch(authorization_id):
         raise DiagnosticSafetyError("authorization-id fuera de formato")
-    if authorization_id in set(consumed_ids):
+    consumed = set(consumed_ids)
+    if authorization_id in consumed:
         raise DiagnosticSafetyError(f"authorization-id ya consumido: {authorization_id}")
+    if authorization_id not in set(active_ids):
+        raise DiagnosticSafetyError(f"authorization-id no autorizado: {authorization_id}")
     return "live"
+
+
+def _persist_report(report: SpsContextDiagnostic, output_path: Path | None) -> None:
+    if output_path is None:
+        return
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(report.sanitized_dict(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def run_offline_fixture(*, html: str, fixture: Mapping[str, Any], output_path: Path | None = None, budget: DiagnosticBudget | None = None) -> SpsContextDiagnostic:
@@ -509,9 +560,7 @@ def run_offline_fixture(*, html: str, fixture: Mapping[str, Any], output_path: P
     context = fixture.get("context")
     if not isinstance(context, Mapping):
         raise ValueError("fixture.context inválido")
-    groups = (
-        ("cookies", "cookie"), ("local_storage", "localStorage"), ("session_storage", "sessionStorage")
-    )
+    groups = (("cookies", "cookie"), ("local_storage", "localStorage"), ("session_storage", "sessionStorage"))
     observations = {}
     for prefix, storage_type in groups:
         before, after = context.get(prefix + "_before"), context.get(prefix + "_after")
@@ -547,9 +596,7 @@ def run_offline_fixture(*, html: str, fixture: Mapping[str, Any], output_path: P
         now[0] += budget.minimum_delay_seconds
     report.logical_requests = counter.count
     report.redactions = ["cookies", "authorization", "tokens", "orderForm IDs", "session IDs", "addresses", "coordinates", "personal data", "JWT", "API keys"]
-    if output_path:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(report.sanitized_dict(), ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _persist_report(report, output_path)
     return report
 
 
@@ -642,26 +689,23 @@ def _execute_replay(context: Any, raw_event: Mapping[str, Any], counter: Logical
     if replay["method"] == "GET":
         response = context.request.get(replay["url"], headers=headers)
     else:
-        response = context.request.fetch(
-            replay["url"], method=replay["method"], headers=headers, data=replay["post_data"]
-        )
+        response = context.request.fetch(replay["url"], method=replay["method"], headers=headers, data=replay["post_data"])
     response_headers = dict(response.headers)
     content_type = response_headers.get("content-type")
-    body = None
-    if content_type and "json" in content_type.lower():
-        try:
-            body = response.json()
-        except Exception:
-            body = None
+    if not 200 <= int(response.status) < 300:
+        raise DiagnosticSafetyError(f"HTTP inesperado {response.status} en {sanitize_url(replay['url'])}")
+    if not content_type or "json" not in content_type.lower():
+        raise DiagnosticSafetyError("respuesta GraphQL sin content-type JSON")
+    try:
+        body = response.json()
+    except Exception as exc:
+        raise DiagnosticSafetyError("respuesta GraphQL JSON inválida") from exc
+    if not isinstance(body, Mapping):
+        raise DiagnosticSafetyError("respuesta GraphQL JSON inválida")
     return {
-        "url": replay["url"],
-        "method": replay["method"],
-        "resource_type": "fetch",
-        "headers": headers,
-        "post_data": replay["post_data"],
-        "status": response.status,
-        "content_type": content_type,
-        "response_body": body,
+        "url": replay["url"], "method": replay["method"], "resource_type": "fetch",
+        "headers": headers, "post_data": replay["post_data"], "status": response.status,
+        "content_type": content_type, "response_body": body,
     }
 
 
@@ -669,59 +713,176 @@ def _shape(event: Mapping[str, Any]) -> dict[str, Any]:
     return structural_fields(parse_network_request(event))
 
 
-def run_live(*, authorization_id: str, output_path: Path | None = None, budget: DiagnosticBudget | None = None) -> SpsContextDiagnostic:
-    """Adaptador futuro. No se llama desde tests/offline_fixture."""
-    validate_live_authorization(live=True, authorization_id=authorization_id)
-    budget, counter = budget or DiagnosticBudget(), LogicalRequestCounter(budget)
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError as exc:  # pragma: no cover
-        raise DiagnosticSafetyError("Playwright no instalado") from exc
+def _stop_reason(error: BaseException, report: SpsContextDiagnostic) -> str:
+    message = str(error).lower()
+    if isinstance(error, DomTargetNotFound):
+        return "dom_target_not_found"
+    if isinstance(error, AmbiguousDomTarget):
+        return "ambiguous_dom_target"
+    if isinstance(error, LogicalRequestBudgetExceeded):
+        return "logical_request_budget_exceeded"
+    if "productsearch" in message and "observ" in message:
+        return "product_search_not_observed"
+    if "facets" in message and "observ" in message:
+        return "facets_not_observed"
+    if "http inesperado" in message:
+        return "unexpected_http_status"
+    if "json" in message:
+        return "invalid_json_response"
+    if error.__class__.__name__ == "TimeoutError" and "playwright" in error.__class__.__module__:
+        return "playwright_timeout"
+    if report.target_navigation_started and not report.target_navigation_completed:
+        return "target_navigation_failed"
+    if report.target_navigation_completed and not report.store_selector_opened:
+        return "store_selector_failed"
+    if report.store_selector_opened and not report.city_selected:
+        return "city_selection_failed"
+    if report.city_selected and not report.store_selected:
+        return "store_selection_failed"
+    if isinstance(error, DiagnosticSafetyError):
+        if report.authorization_checked and not report.browser_started and "authorization" in message:
+            return "authorization_rejected"
+        return "diagnostic_safety_error"
+    return "unexpected_diagnostic_error"
 
-    report = SpsContextDiagnostic(
-        started_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        mode="live",
-        browser="chromium",
-        location_status="pending",
-    )
-    with sync_playwright() as pw:  # pragma: no cover - live prohibido en esta etapa
-        browser = pw.chromium.launch(headless=True)
-        context = browser.new_context()
-        page = context.new_page()
-        templates: list[dict[str, Any]] = []
-        capture_templates = {"enabled": False}
 
-        def route_handler(route: Any, request: Any) -> None:
-            if capture_templates["enabled"] and request.resource_type in {"xhr", "fetch"}:
-                raw = _raw_request(request)
-                metadata = parse_network_request(raw)
-                if {"productSearch", "facets"}.intersection(metadata.classifications):
-                    templates.append(raw)
-                    route.abort()
-                    return
+def find_compatible_browser_executable() -> str | None:
+    """Devuelve un Chromium/Chrome del sistema; no descarga browsers."""
+    for name in _BROWSER_CANDIDATES:
+        path = shutil.which(name)
+        if path:
+            return path
+    return None
+
+
+def install_local_network_guard(context: Any, *, events: list[Mapping[str, Any]] | None = None) -> None:
+    """Bloquea toda red externa en checks de browser; synthetic.invalid se intercepta localmente."""
+    sink = events if events is not None else []
+
+    def guard(route: Any, request: Any) -> None:
+        parts = urlsplit(request.url)
+        scheme, host = parts.scheme.lower(), (parts.hostname or "").lower()
+        if scheme in _ALLOWED_LOCAL_SCHEMES:
             route.continue_()
+            return
+        if host in _ALLOWED_LOCAL_HOSTS:
+            route.continue_()
+            return
+        if host == _ALLOWED_SYNTHETIC_HOST:
+            sink.append({"url": sanitize_url(request.url), "action": "fulfilled_locally"})
+            route.fulfill(status=200, content_type="application/json", body='{"synthetic":true}')
+            return
+        if scheme in {"http", "https"}:
+            sink.append({"url": sanitize_url(request.url), "action": "blocked_before_network"})
+            route.abort("blockedbyclient")
+            return
+        route.abort("blockedbyclient")
 
-        page.route("**/*", route_handler)
+    context.route("**/*", guard)
+
+
+def launch_compatible_chromium(pw: Any) -> tuple[Any, str]:
+    """Lanza Chromium sin descargar: managed si existe, si no browser del runner."""
+    managed = Path(str(pw.chromium.executable_path))
+    if managed.exists():
+        return pw.chromium.launch(headless=True), str(managed)
+    executable = find_compatible_browser_executable()
+    if not executable:
+        raise DiagnosticSafetyError("browser Chromium/Chrome compatible no disponible")
+    return pw.chromium.launch(headless=True, executable_path=executable), executable
+
+
+def _record_failure(report: SpsContextDiagnostic, error: BaseException, counter: LogicalRequestCounter) -> None:
+    report.logical_requests = counter.count
+    report.completed_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    report.stop_reason = _stop_reason(error, report)
+    report.errors.append(f"{error.__class__.__name__}: {sanitize_error(error)}")
+    report.redactions = [
+        "cookies", "authorization", "tokens", "orderForm IDs", "session IDs",
+        "addresses", "coordinates", "personal data", "JWT", "API keys",
+    ]
+
+
+def run_live(
+    *,
+    authorization_id: str | None,
+    output_path: Path | None = None,
+    budget: DiagnosticBudget | None = None,
+    active_ids: Iterable[str] = ACTIVE_AUTHORIZATION_IDS,
+    _network_policy: str = "live",
+) -> SpsContextDiagnostic:
+    """Live futuro; devuelve siempre reporte sanitizado ante fallo controlable.
+
+    La autorización se considera elegible para consumo cuando se marca
+    ``target_navigation_started`` inmediatamente antes de ``page.goto(TARGET_URL)``.
+    No se persiste remotamente el consumo en esta etapa.
+    """
+    if _network_policy not in {"live", "local_only"}:
+        raise ValueError("network policy inválida")
+    budget = budget or DiagnosticBudget()
+    counter = LogicalRequestCounter(budget)
+    report = SpsContextDiagnostic(
+        started_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"), mode="live",
+        browser="not_started", location_status="pending",
+    )
+    try:
+        report.authorization_checked = True
+        validate_live_authorization(
+            live=True, authorization_id=authorization_id, active_ids=active_ids,
+        )
+
         try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:  # pragma: no cover
+            raise DiagnosticSafetyError("Playwright no instalado") from exc
+
+        with sync_playwright() as pw:  # pragma: no cover - no se usa contra La Colonia en esta etapa
+            browser, executable = launch_compatible_chromium(pw)
+            report.browser = f"chromium:{Path(executable).name}"
+            report.browser_started = True
+            context = browser.new_context()
+            page = context.new_page()
+            templates: list[dict[str, Any]] = []
+            capture_templates = {"enabled": False}
+
+            def route_handler(route: Any, request: Any) -> None:
+                parts = urlsplit(request.url)
+                host = (parts.hostname or "").lower()
+                if capture_templates["enabled"] and request.resource_type in {"xhr", "fetch"}:
+                    raw = _raw_request(request)
+                    metadata = parse_network_request(raw)
+                    if {"productSearch", "facets"}.intersection(metadata.classifications):
+                        templates.append(raw)
+                        route.abort()
+                        return
+                if _network_policy == "local_only":
+                    if parts.scheme.lower() in _ALLOWED_LOCAL_SCHEMES or host in _ALLOWED_LOCAL_HOSTS:
+                        route.continue_()
+                        return
+                    if host == _ALLOWED_SYNTHETIC_HOST:
+                        route.fulfill(status=200, content_type="application/json", body='{"synthetic":true}')
+                        return
+                    route.abort("blockedbyclient")
+                    return
+                route.continue_()
+
+            page.route("**/*", route_handler)
             counter.reserve("open_home")
+            report.target_navigation_started = True
+            report.authorization_consumption_eligible = True
             page.goto(TARGET_URL, wait_until="domcontentloaded")
+            report.target_navigation_completed = True
             local_before, session_before = _storage(page)
             cookies_before = _cookies(context)
 
-            _pw_activate(
-                _pw_unique(page, store_selector_plan(), "Selecciona tu tienda"),
-                "Selecciona tu tienda",
-            )
+            _pw_activate(_pw_unique(page, store_selector_plan(), "Selecciona tu tienda"), "Selecciona tu tienda")
+            report.store_selector_opened = True
             counter.reserve("select_city")
-            _pw_activate(
-                _pw_unique(page, city_selector_plan(), "San Pedro Sula"),
-                "San Pedro Sula",
-            )
+            _pw_activate(_pw_unique(page, city_selector_plan(), "San Pedro Sula"), "San Pedro Sula")
+            report.city_selected = True
             counter.reserve("select_store")
-            _pw_activate(
-                _pw_unique(page, store_option_plan(), "Plaza Pedregal"),
-                "Plaza Pedregal",
-            )
+            _pw_activate(_pw_unique(page, store_option_plan(), "Plaza Pedregal"), "Plaza Pedregal")
+            report.store_selected = True
             page.wait_for_timeout(500)
 
             local_after, session_after = _storage(page)
@@ -734,20 +895,14 @@ def run_live(*, authorization_id: str, output_path: Path | None = None, budget: 
             for name in VTEX_CONTEXT_NAMES:
                 matches = [item for item in combined if str(item["name"]).lower() == name.lower()]
                 report.context_evidence.append({
-                    "kind": "vtex_context_mechanism",
-                    "name": name,
-                    "observed": bool(matches),
+                    "kind": "vtex_context_mechanism", "name": name, "observed": bool(matches),
                     "changed_after_store_selection": any(item["changed_after_store_selection"] for item in matches),
                 })
-            report.location_status = (
-                "confirmed"
-                if any(item.get("changed_after_store_selection") for item in report.context_evidence)
-                else "ui_only"
-            )
+            report.context_observed = True
+            report.location_status = "confirmed" if any(
+                item.get("changed_after_store_selection") for item in report.context_evidence
+            ) else "ui_only"
 
-            # Captura la forma real del request de la PLP, pero lo aborta antes
-            # de enviarlo. Luego reproduce el mismo endpoint/query con <=5
-            # resultados, sin inventar IDs ni endpoints.
             capture_templates["enabled"] = True
             counter.reserve("observe_catalog_request_shape")
             page.goto(TARGET_URL.rstrip("/") + "/supermercado", wait_until="domcontentloaded")
@@ -755,10 +910,7 @@ def run_live(*, authorization_id: str, output_path: Path | None = None, budget: 
             capture_templates["enabled"] = False
 
             def first(kind: str) -> dict[str, Any] | None:
-                return next(
-                    (raw for raw in templates if kind in parse_network_request(raw).classifications),
-                    None,
-                )
+                return next((raw for raw in templates if kind in parse_network_request(raw).classifications), None)
 
             root_template, facets_template = first("productSearch"), first("facets")
             if root_template is None:
@@ -768,17 +920,16 @@ def run_live(*, authorization_id: str, output_path: Path | None = None, budget: 
 
             same = root_template is facets_template
             root_1 = _execute_replay(context, root_template, counter, "root_minimal")
+            report.root_observed = True
             facets_1 = root_1 if same else _execute_replay(context, facets_template, counter, "facets_minimal")
+            report.facets_observed = True
             root_2 = _execute_replay(context, root_template, counter, "root_minimal_repeat")
             facets_2 = root_2 if same else _execute_replay(context, facets_template, counter, "facets_minimal_repeat")
 
             root_meta, facets_meta = parse_network_request(root_1), parse_network_request(facets_1)
             report.root = {**structural_fields(root_meta), **summarize_response(root_1, root_meta)}
             report.facets = {**structural_fields(facets_meta), **summarize_response(facets_1, facets_meta)}
-            report.requests = [
-                structural_fields(parse_network_request(event))
-                for event in (root_1, facets_1, root_2, facets_2)
-            ]
+            report.requests = [structural_fields(parse_network_request(event)) for event in (root_1, facets_1, root_2, facets_2)]
             report.stability = {
                 "root_request_shape_stable": _shape(root_1) == _shape(root_2),
                 "facets_request_shape_stable": _shape(facets_1) == _shape(facets_2),
@@ -791,17 +942,16 @@ def run_live(*, authorization_id: str, output_path: Path | None = None, budget: 
                 "cookies", "authorization", "tokens", "orderForm IDs", "session IDs",
                 "addresses", "coordinates", "personal data", "JWT", "API keys",
             ]
-        finally:
-            context.close()
-            browser.close()
-
-    if output_path:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(
-            json.dumps(report.sanitized_dict(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+            report.stop_reason = "completed"
+    except Exception as exc:
+        _record_failure(report, exc, counter)
+    finally:
+        if report.completed_at is None:
+            report.completed_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        report.logical_requests = counter.count
+        _persist_report(report, output_path)
     return report
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Diagnóstico SPS offline-first")
@@ -820,10 +970,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     budget = DiagnosticBudget(args.max_logical_requests, args.concurrency, args.minimum_delay_seconds, args.max_retries)
-    mode = validate_live_authorization(live=args.live, authorization_id=args.authorization_id)
-    if mode == "live":
-        report = run_live(authorization_id=str(args.authorization_id), output_path=args.output, budget=budget)
+    if args.live:
+        report = run_live(authorization_id=args.authorization_id, output_path=args.output, budget=budget)
     else:
+        validate_live_authorization(live=False, authorization_id=args.authorization_id)
         if not args.fixture_dom or not args.fixture_network:
             raise DiagnosticSafetyError("offline_fixture requiere --fixture-dom y --fixture-network")
         report = run_offline_fixture(
@@ -834,7 +984,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if not args.output:
         print(json.dumps(report.sanitized_dict(), ensure_ascii=False, indent=2, sort_keys=True))
-    return 0
+    return 0 if not report.errors else 2
 
 
 if __name__ == "__main__":
