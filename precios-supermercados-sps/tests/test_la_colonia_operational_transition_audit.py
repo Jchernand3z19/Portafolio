@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -35,6 +36,9 @@ OPERATIONAL_PATH = (
     "precios-supermercados-sps/.automation/la-colonia-live-command.json"
 )
 HEAD_SHA = "1a515913a514d3b246c3445eddfff8fcb0d951b4"
+FORBIDDEN_NETWORK_IMPORTS = frozenset(
+    {"requests", "urllib", "httpx", "aiohttp", "socket"}
+)
 
 
 def authorized_context(**overrides):
@@ -117,6 +121,19 @@ def evaluate(command, *, context=None, comments=()):
         json.dumps(command),
         comments,
     )
+
+
+def _network_imports(source: str) -> set[str]:
+    """Devuelve módulos raíz de red importados realmente por código Python."""
+
+    tree = ast.parse(source)
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".", 1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".", 1)[0])
+    return imported & FORBIDDEN_NETWORK_IMPORTS
 
 
 @pytest.mark.parametrize(
@@ -339,6 +356,22 @@ def test_upload_artifact_runs_always_and_recovery_never_dispatches():
 
 
 def test_transition_audit_is_offline_only():
-    text = Path(__file__).read_text(encoding="utf-8")
-    for forbidden in ("requests.", "urllib", "httpx", "aiohttp", "socket."):
-        assert forbidden not in text
+    source = Path(__file__).read_text(encoding="utf-8")
+    assert _network_imports(source) == set()
+
+
+def test_transition_audit_rejects_requests_import():
+    assert _network_imports("import requests\n") == {"requests"}
+
+
+def test_transition_audit_rejects_urllib_import_from():
+    assert _network_imports("from urllib import request\n") == {"urllib"}
+
+
+def test_transition_audit_accepts_source_without_network_imports():
+    assert _network_imports("import json\nfrom pathlib import Path\n") == set()
+
+
+def test_transition_audit_ignores_network_names_inside_strings():
+    source = 'message = "requests. urllib httpx aiohttp socket."\n'
+    assert _network_imports(source) == set()
