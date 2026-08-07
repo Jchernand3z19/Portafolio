@@ -1,185 +1,442 @@
 # La Colonia — plan de extracción posterior a la radiografía
 
-## Estado
+## 1. Estado
 
-Este plan no autoriza ejecución. La radiografía actual es incompleta y no permite full crawl.
+Este documento es un plan. **No autoriza ninguna ejecución.**
 
-## Objetivo
+```text
+radiografía = incompleta
+contexto SPS = no reproducible todavía
+listo para implementar scraper completo = no
+listo para full crawl = no
+```
 
-Construir un scraper verificable para el catálogo público de La Colonia, con contexto reproducible de San Pedro Sula, identidad por SKU, cobertura demostrable y operación conservadora.
+No se modifican scraper, runtime, contratos, workflows ni archivo operacional.
 
-## Fase 1 — Resolver ubicación SPS
+## 2. Objetivo
 
-Prueba propuesta, todavía no autorizada:
+Construir un extractor verificable para el catálogo público de La Colonia que:
 
-1. abrir sesión pública nueva;
-2. registrar el estado por defecto sin publicar cookies;
-3. seleccionar San Pedro Sula mediante la UI pública;
-4. identificar nombres de mecanismos: cookie/localStorage/sessionStorage/query/header/contexto VTEX;
-5. registrar solo campos públicos no sensibles;
-6. repetir una consulta raíz y un SKU conocido antes/después;
-7. comparar precio, seller y disponibilidad;
-8. clasificar ubicación como `confirmed`, `inferred` o `unknown`.
+- represente San Pedro Sula de forma reproducible;
+- identifique producto, SKU, seller y oferta;
+- conserve precio y disponibilidad con contexto;
+- demuestre cobertura y detecte omisiones;
+- opere secuencialmente y bajo presupuesto;
+- se detenga ante señales de bloqueo o inestabilidad.
 
-Criterio de salida: una consulta reproducible debe demostrar que corresponde a SPS. Si no, conservar `location_not_verified`.
+## 3. Principios de arquitectura
 
-## Fase 2 — Capturar taxonomía y facets
+1. **Ubicación antes que precio.** No normalizar precios como SPS sin contexto confirmado.
+2. **SKU antes que nombre.** `itemId` es la identidad primaria de SKU; `productId` agrupa variantes.
+3. **Raíz como referencia, hojas como particiones.** Ninguna de las dos demuestra cobertura por sí sola.
+4. **Deduplicación global.** Un SKU puede aparecer en padre, hija, marca, landing, búsqueda y colección.
+5. **Evidencia antes que inferencia.** Registrar `confirmed`, `inferred`, `pending` y eventos de calidad.
+6. **Operación conservadora.** Concurrencia 1, pausa mínima 1.5 s y máximo un reintento.
+7. **Sin full crawl hasta presupuesto y cobertura.**
 
-1. obtener raíz con página pequeña y orden `OrderByNameASC`;
-2. capturar respuesta de facets sanitizada;
-3. separar `category-1`, categoría, subcategoría y specifications;
-4. registrar IDs, slugs, cantidades, hijos y sampling;
-5. excluir marca, landing, búsqueda y product clusters como particiones estructurales;
-6. marcar valores corruptos, especialmente Impuestos.
+## 4. Fase 1 — Resolver el contexto público de San Pedro Sula
 
-Criterio de salida: árbol estructural versionable con categorías hoja candidatas y evidencia de sampling.
+### Prueba propuesta
 
-## Fase 3 — Validar paginación
+```text
+Nombre: SPS-context-and-root-facets-001
+Estado: propuesta; no autorizada
+```
 
-Usar concurrencia 1, pausa >=1.5 s y un máximo de una repetición.
+Pasos mínimos:
 
-Muestras:
+1. abrir una sesión pública limpia;
+2. registrar el estado por defecto sin guardar valores de cookies;
+3. abrir una PDP conocida y la raíz;
+4. seleccionar San Pedro Sula mediante la UI pública;
+5. identificar solamente nombres de mecanismos técnicos:
+   - cookie;
+   - localStorage;
+   - sessionStorage;
+   - query parameter;
+   - header;
+   - contexto GraphQL;
+   - sesión de checkout;
+   - seller/tienda;
+   - `regionId`;
+   - sales channel/binding;
+6. repetir la raíz y la misma PDP;
+7. comparar total, product IDs de la muestra, seller, Price, ListPrice y disponibilidad;
+8. registrar valores públicos no sensibles indispensables; redactar sesiones/tokens;
+9. clasificar ubicación como `confirmed`, `inferred` o `unknown`.
 
-- raíz: dos páginas consecutivas;
-- categoría pequeña: primera y última página;
-- categoría mediana: dos páginas;
-- categoría grande: frontera controlada;
-- búsqueda: una página para demostrar que no es partición.
+### Límites
+
+```text
+concurrency = 1
+delay = >= 1.5 s
+retries = máximo 1
+root pages = 1 mínima
+PDP = 1 conocida
+facets = 1 respuesta
+full crawl = no
+```
+
+### Criterio de salida
+
+Una consulta reproducible debe demostrar que pertenece a SPS. Si no:
+
+```text
+location_status = unknown
+classification = location_not_verified
+```
+
+## 5. Fase 2 — Capturar taxonomía y facets
+
+Después de confirmar SPS:
+
+1. ejecutar una consulta raíz con page size mínimo y `OrderByNameASC`;
+2. capturar una respuesta de facets sanitizada;
+3. registrar `recordsFiltered` y `sampling`;
+4. inventariar `type`, `name`, `key`, `value`, `quantity`, `selected`, `children`;
+5. separar:
+   - `category-1` Departamento;
+   - `category-2` Categoría;
+   - `category-3` Sub-Categoría;
+   - niveles adicionales reales;
+   - marca;
+   - landing;
+   - colección;
+   - especificaciones como `Subcategoria` e Impuestos;
+6. marcar categorías vacías y hojas positivas;
+7. detener si `sampling=true`, faltan hijos esperados o las cantidades son inválidas;
+8. excluir valores corruptos como fórmulas `VLOOKUP(...)`.
+
+Criterio de salida: árbol estructural versionable con hojas candidatas, cantidades y evidencia de completitud.
+
+## 6. Fase 3 — Validar listados y paginación
+
+Muestra mínima:
+
+| Tipo | Prueba |
+|---|---|
+| raíz | páginas 1 y 2; repetir página 1 |
+| categoría grande | primera página y una frontera controlada |
+| categoría mediana | dos páginas consecutivas |
+| categoría pequeña | primera y última página |
+| hoja candidata | primera y última página |
+| búsqueda | una página, solo para demostrar transversalidad |
+| landing | una página |
+| marca | una página |
 
 Validar:
 
 - `from/to` inclusivos;
-- page size real;
-- total estable;
-- orden estable;
-- firmas de página no repetidas;
-- páginas parciales;
-- límite máximo y sampling.
+- tamaño real de página;
+- orden `OrderByNameASC` estable;
+- total constante dentro de la ventana;
+- primer y último ID;
+- firmas de página distintas;
+- ausencia de páginas parciales inesperadas;
+- límite máximo del backend;
+- ausencia de sampling;
+- estabilidad al repetir.
 
-## Fase 4 — Validar campos de producto
+Detener ante página repetida, cambio de total significativo o respuesta parcial.
 
-Muestra mínima:
+## 7. Fase 4 — Validar productos y ofertas
 
-- normal;
-- promoción;
-- agotado;
-- por peso;
-- varios SKU/presentaciones;
-- EAN ausente, si aparece.
+Muestra objetivo, no masiva:
 
-Validar `productId`, `itemId`, references, EAN, seller, Price, ListPrice, cantidad, unidad, multiplicador, imágenes y categorías.
+1. producto con precio normal;
+2. producto con promoción declarada;
+3. producto agotado en SPS;
+4. producto vendido por peso;
+5. producto con varios SKU/presentaciones;
+6. producto con EAN ausente, si aparece;
+7. producto con más de un seller, si aparece.
 
-## Fase 5 — Cobertura y deduplicación
-
-Estrategia recomendada: híbrida.
-
-1. raíz paginada como universo de referencia;
-2. categorías hoja como particiones operativas;
-3. deduplicación por `itemId`;
-4. relación secundaria por `productId`;
-5. unión de hojas;
-6. comparación contra raíz;
-7. residuales raíz - hojas;
-8. solapamientos entre hojas;
-9. detección de conjuntos idénticos;
-10. reporte de productos sin hoja.
-
-No usar suma de cantidades como prueba de cobertura.
-
-## Fase 6 — Normalización
-
-Reglas iniciales:
-
-- `effective_price = Price`;
-- `reported_regular_price = ListPrice` solo si `ListPrice > Price`;
-- promoción declarada si diferencia válida o teaser;
-- `availability` combinando seller, precio y AvailableQuantity;
-- presentación desde atributos SKU, fallback conservador a `nameComplete`;
-- ubicación desconocida hasta evidencia SPS;
-- identidad SKU por `itemId`, fallback según `select_source_key`.
-
-## Fase 7 — Presupuesto
-
-No calcular solicitudes definitivas hasta conocer:
-
-- total raíz bajo SPS;
-- page size seguro;
-- número real de categorías hoja;
-- sampling;
-- solapamiento;
-- necesidad de detalle individual.
-
-Fórmula preliminar:
+Campos mínimos:
 
 ```text
-requests_root = ceil(root_total / page_size)
-requests_leaves = sum(ceil(leaf_total / page_size))
-requests_validation = muestras + repeticiones
-requests_total = requests_root + requests_leaves + requests_validation
+productId
+productReference
+productName
+linkText
+brand
+categories/categoryTree
+itemId
+referenceId
+ean
+name/nameComplete
+measurementUnit
+unitMultiplier
+sellerId/sellerDefault
+Price
+ListPrice
+AvailableQuantity
+discountHighlights
+teasers
+images
 ```
 
-El plan final debe minimizar duplicación y permanecer bajo un presupuesto explícito aprobado.
+Reglas:
 
-## Recuperación de errores
+- `effective_price = Price` solo bajo contexto SPS confirmado;
+- `reported_regular_price = ListPrice` solo si es mayor que Price y la fuente presenta la comparación;
+- promoción declarada por diferencia válida o teaser/highlight;
+- no inventar oferta por comparación histórica;
+- `No disponible` sin tienda no es `out_of_stock` global;
+- cantidades de VTEX Search son señal de disponibilidad, no inventario exacto.
 
-Detener ante:
+## 8. Fase 5 — Identidad y deduplicación
 
-- 403 persistente;
-- 429;
+### Claves
+
+```text
+product identity = productId
+SKU identity = itemId
+offer identity = supermarket + verified location/region + itemId + sellerId
+state identity = state_hash comercial existente
+```
+
+Fallback SKU existente:
+
+1. referencia SKU;
+2. EAN;
+3. productId;
+4. URL estable.
+
+### Índices de trabajo
+
+- `products_by_product_id`;
+- `skus_by_item_id`;
+- `offers_by_context_item_seller`;
+- `memberships_by_item_id` para categorías/landings/brands;
+- `state_hash_by_offer`.
+
+No usar `productName` como identidad.
+
+## 9. Fase 6 — Demostrar cobertura
+
+Estrategia recomendada: **híbrida**.
+
+1. obtener la raíz paginada como universo de referencia bajo SPS;
+2. obtener categorías hoja como particiones candidatas;
+3. deduplicar ambos conjuntos por `itemId`;
+4. agrupar por `productId` para métricas de producto;
+5. calcular:
+   - `root_unique_skus`;
+   - `leaf_union_unique_skus`;
+   - intersecciones entre hojas;
+   - `root_minus_leaves`;
+   - `leaves_minus_root`;
+   - conjuntos idénticos;
+   - productos/SKU sin hoja;
+6. repetir una muestra para demostrar estabilidad;
+7. clasificar:
+   - `complete_and_partitionable`;
+   - `complete_with_overlap`;
+   - `incomplete`;
+   - `sampled`;
+   - `unstable`;
+   - `inconclusive`.
+
+No aceptar como prueba:
+
+```text
+sum(quantity) >= root_total
+```
+
+ni:
+
+```text
+unique_products == recordsFiltered
+```
+
+sin estabilidad, contexto y pertenencia demostrados.
+
+## 10. Fase 7 — Presupuesto
+
+### Piso provisional
+
+La raíz pública sin tienda mostró 9,291 productos. Con page size 50:
+
+```text
+ceil(9291 / 50) = 186 páginas
+```
+
+Este valor es solo una referencia inferior de la raíz **sin ubicación verificada**. No es el total SPS ni una autorización.
+
+### Fórmula final
+
+```text
+requests_context = requests necesarias para fijar/verificar SPS
+requests_facets = raíz mínima + facets
+requests_root = ceil(root_total_sps / safe_page_size)
+requests_leaves = sum(ceil(leaf_total / safe_page_size))
+requests_probes = fronteras y repeticiones mínimas
+requests_recovery = reserva limitada
+requests_total = context + facets + root + leaves + probes + recovery
+```
+
+### Optimización
+
+- si la raíz es estable y no tiene límite, puede ser el recorrido primario;
+- si la raíz se limita o repite, usar hojas estructurales;
+- no recorrer landings, marcas o búsquedas como cobertura primaria;
+- evitar detalle PDP cuando Search GraphQL ya entrega los campos requeridos;
+- reservar PDP solo para validación y campos ausentes;
+- detener si el presupuesto excede el límite aprobado.
+
+El presupuesto definitivo permanece Pendiente hasta conocer total SPS, hojas, sampling y solapamientos.
+
+## 11. Fase 8 — Normalización y validación
+
+Mapeo inicial:
+
+```text
+current_price = Price
+effective_price = Price bajo contexto confirmado
+reported_regular_price = ListPrice cuando ListPrice > Price
+is_promotion = diferencia válida o teaser/highlight
+availability = seller + Price + AvailableQuantity + contexto
+presentation = atributos SKU; fallback conservador a nameComplete
+location_status = confirmed solo con evidencia reproducible
+```
+
+Eventos de calidad sugeridos:
+
+- `location_not_verified`;
+- `missing_price`;
+- `availability_conflict`;
+- `missing_ean`;
+- `presentation_from_name`;
+- `multiple_sellers`;
+- `facet_value_corrupt`;
+- `sampling_detected`;
+- `repeated_page`;
+- `partial_page`;
+- `catalog_total_changed`;
+- `product_without_leaf_category`.
+
+No modificar contratos antes de resolver los huecos documentados.
+
+## 12. Fase 9 — Recuperación y checkpoints
+
+Detener inmediatamente ante:
+
+- HTTP 403 persistente;
+- HTTP 429;
 - captcha/antibot;
-- autenticación;
-- JSON inválido;
-- cambio estructural;
+- exigencia de autenticación;
+- JSON inválido persistente;
+- cambio de esquema;
 - página repetida;
 - página parcial inesperada;
-- total inconsistente por encima del umbral aprobado.
+- contexto SPS perdido;
+- total cambiante por encima del umbral aprobado;
+- riesgo de afectar el servicio.
 
-Conservar checkpoints sanitizados y no repetir páginas ya aceptadas.
+Checkpoint sanitizado por página:
 
-## Orden de implementación recomendado
+```text
+partition
+from/to
+orderBy
+recordsFiltered
+products_returned
+unique_item_ids_hash
+page_signature
+duration
+status
+quality_events
+```
 
-1. detector/contexto de ubicación pública;
-2. parser de facets sanitizadas;
-3. modelo de particiones estructurales;
-4. pruebas offline con muestras capturadas;
-5. validación de paginación pequeña;
-6. validación de productos representativos;
-7. cálculo de cobertura y presupuesto;
-8. solo después, autorización de recorrido progresivo.
+No guardar catálogo completo en artefactos públicos ni cookies/tokens.
 
-## Siguiente prueba exacta propuesta
+## 13. Orden de implementación recomendado
+
+1. detector/verificador de contexto SPS;
+2. captura sanitizada de sesión comercial pública;
+3. cliente de facets con contrato cerrado;
+4. parser de árbol y clasificación de facets;
+5. fixtures sanitizados de respuestas ya capturadas;
+6. pruebas offline de ubicación/facets/precios;
+7. validación mínima de paginación;
+8. validación representativa de SKU/ofertas;
+9. cálculo de cobertura y presupuesto;
+10. recorrido progresivo únicamente con autorización nueva.
+
+## 14. Estrategias comparadas
+
+| Estrategia | Cobertura | Duplicados | Omisiones | Estabilidad | Mantenibilidad | Uso recomendado |
+|---|---|---|---|---|---|---|
+| raíz paginada | alta potencial | baja | límite/sampling | Pendiente | alta | universo de referencia |
+| categorías principales | parcial | alta | residuales | media | media | control |
+| categorías hoja | alta potencial | media/alta | hojas faltantes | Pendiente | media | partición operativa |
+| rangos/prefijos | no demostrable | alta | alta | baja | baja | diagnóstico |
+| facets combinadas | variable | alta | sampling | baja-media | baja | recuperación limitada |
+| híbrida | mayor verificabilidad | controlable | detectables | mejor | media | recomendada |
+| producto conocido | mínima | ninguna | casi total | alta | alta | validación |
+| sitemap | URLs | baja | no indexados | media | alta | auxiliar |
+
+## 15. Criterios de listo para implementar
+
+Todos deben cumplirse:
+
+- SPS reproducible;
+- seller/precio/disponibilidad bajo SPS;
+- endpoint de listados revalidado;
+- facets capturadas;
+- sampling conocido;
+- árbol estructural identificado;
+- identidad product/SKU confirmada;
+- casos normal/promoción/agotado/peso/multi-SKU;
+- límites de paginación confirmados;
+- presupuesto calculado.
+
+## 16. Criterios de listo para full crawl
+
+Además:
+
+- total raíz SPS estable;
+- unión de hojas medida;
+- solapamientos cuantificados;
+- residuales explicados;
+- páginas estables y no repetidas;
+- cero 403/429 persistentes;
+- umbrales y presupuesto aprobados;
+- estrategia de recuperación probada offline;
+- autorización explícita nueva.
+
+## 17. Siguiente prueba exacta propuesta
 
 ```text
 Nombre: SPS-context-and-root-facets-001
-Objetivo: confirmar contexto público de San Pedro Sula y capturar una sola respuesta raíz/facets
+Objetivo: confirmar el contexto público de San Pedro Sula y capturar una sola respuesta raíz/facets
 Concurrencia: 1
-Pausa: >=1.5 segundos
+Pausa mínima: 1.5 segundos
 Reintentos: máximo 1
-Productos: page size mínimo, sin recorrido adicional
+Páginas de datos: mínimo indispensable
+PDP: una conocida antes/después
 Full crawl: no
-Estado: propuesta, no autorizada
+Persistencia: no
+Estado: propuesta, NO AUTORIZADA
 ```
 
-## Criterios para declarar listo para implementación
+Resultado esperado de la prueba:
 
-- ubicación SPS reproducible;
-- precio y seller bajo ese contexto;
-- facets sin sampling desconocido;
-- árbol estructural identificado;
-- límite de paginación confirmado;
-- identidad product/SKU confirmada;
-- muestra de promoción, agotado y peso;
-- presupuesto calculado.
+- nombre del mecanismo de ubicación, sin secretos;
+- identificador público de contexto cuando sea indispensable;
+- total raíz SPS;
+- `sampling`;
+- niveles de categoría y cantidades;
+- comparación de un SKU antes/después;
+- clasificación `confirmed/inferred/unknown`;
+- presupuesto preliminar actualizado.
 
-## Criterios para declarar listo para full crawl
+## 18. Decisión
 
-Además de lo anterior:
-
-- total raíz estable;
-- unión de hojas medida;
-- residuales explicados;
-- solapamientos cuantificados;
-- páginas no repetidas;
-- cero 403/429 persistentes;
-- umbrales aprobados;
-- autorización explícita nueva.
+```text
+estrategia recomendada = híbrida
+primer componente a implementar = verificador de contexto SPS
+siguiente prueba = SPS-context-and-root-facets-001
+autorización de siguiente prueba = inexistente
+full crawl = no autorizado
+```
