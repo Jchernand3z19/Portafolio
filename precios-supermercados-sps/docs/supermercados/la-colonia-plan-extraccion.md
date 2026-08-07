@@ -6,19 +6,16 @@ Este documento es un plan. **No autoriza ninguna ejecución.**
 
 ```text
 radiografía = incompleta
-SPS-context-and-root-facets-001 = consumida; D — bloqueada por limitación de herramienta
-diagnóstico de navegador SPS = preparado offline
-contexto SPS real = no reproducible todavía
+SPS-context-and-root-facets-001 = consumida; no repetir
+SPS-context-and-root-facets-002 = no creada / no autorizada
+autorizaciones live activas = 0
+diagnóstico de navegador SPS = pre-live hardening completado
+contexto SPS real = no confirmado
 listo para implementar scraper completo = no
 listo para full crawl = no
 ```
 
-No se modifican scraper, runtime, contratos, workflows ni archivo operacional.
-
-La siguiente ejecución live requiere primero el diagnóstico de navegador descrito
-en `la-colonia-browser-context-diagnostic.md`, una autorización explícita nueva
-y un ID nuevo asignado fuera del código. `SPS-context-and-root-facets-002` no ha
-sido creado ni autorizado.
+No se modifican scraper productivo, runner normal, contratos comerciales, archivo operacional ni workflows live.
 
 ## 2. Objetivo
 
@@ -26,159 +23,163 @@ Construir un extractor verificable para el catálogo público de La Colonia que:
 
 - represente San Pedro Sula de forma reproducible;
 - identifique producto, SKU, seller y oferta;
-- conserve precio y disponibilidad con contexto;
+- conserve precio y disponibilidad con contexto confirmado;
 - demuestre cobertura y detecte omisiones;
 - opere secuencialmente y bajo presupuesto;
-- se detenga ante señales de bloqueo o inestabilidad.
+- se detenga ante bloqueo, inestabilidad o pérdida de contexto.
 
-## 3. Principios de arquitectura
+## 3. Principios
 
 1. **Ubicación antes que precio.** No normalizar precios como SPS sin contexto confirmado.
-2. **SKU antes que nombre.** `itemId` es la identidad primaria de SKU; `productId` agrupa variantes.
-3. **Raíz como referencia, hojas como particiones.** Ninguna de las dos demuestra cobertura por sí sola.
-4. **Deduplicación global.** Un SKU puede aparecer en padre, hija, marca, landing, búsqueda y colección.
-5. **Evidencia antes que inferencia.** Registrar `confirmed`, `inferred`, `pending` y eventos de calidad.
-6. **Operación conservadora.** Concurrencia 1, pausa mínima 1.5 s y máximo un reintento.
-7. **Sin full crawl hasta presupuesto y cobertura.**
+2. **SKU antes que nombre.** `itemId` es la identidad primaria del SKU; `productId` agrupa variantes.
+3. **Raíz como referencia, hojas como particiones.** Ninguna demuestra cobertura por sí sola.
+4. **Deduplicación global.** Un SKU puede aparecer en varias superficies.
+5. **Evidencia antes que inferencia.** `expected` no implica `observed`.
+6. **Operación conservadora.** Concurrencia 1, pausa mínima 1.5 s, máximo un reintento.
+7. **Sin full crawl antes de demostrar contexto, estabilidad, cobertura y presupuesto.**
 
-## 4. Fase 1 — Resolver el contexto público de San Pedro Sula
+## 4. Fase 1 — Contexto SPS
 
-### Estado de la prueba anterior
-
-```text
-Nombre: SPS-context-and-root-facets-001
-Estado: consumida
-Resultado: D — bloqueada por limitación de herramienta
-Stop reason: tool_cannot_interact_with_store_selector_or_inspect_session_context
-Repetición: no autorizada
-```
-
-La prueba 001 confirmó que la capacidad de navegación usada en esa etapa no
-podía interactuar con el selector dinámico de tienda ni inspeccionar
-cookies/localStorage/sessionStorage/XHR. Se detuvo antes de seleccionar SPS y
-antes de consultar raíz/facets.
-
-### Diagnóstico de navegador requerido
-
-Se preparó offline:
+### 4.1 Prueba consumida
 
 ```text
-precios-supermercados-sps/src/precios_supermercados/diagnostics/
-  la_colonia_sps_context_diagnostic.py
+SPS-context-and-root-facets-001
+resultado = D — bloqueada por limitación de herramienta
+stop_reason = tool_cannot_interact_with_store_selector_or_inspect_session_context
+repetición = no autorizada
 ```
 
-Su objetivo futuro es:
+Se detuvo antes de seleccionar SPS y antes de consultar raíz/facets.
 
-1. crear un browser context público limpio;
-2. registrar el estado por defecto sin publicar valores sensibles;
-3. localizar `Selecciona tu tienda` mediante selectores semánticos;
-4. seleccionar San Pedro Sula mediante UI pública;
-5. seleccionar Plaza Pedregal cuando la UI real lo requiera;
-6. observar únicamente nombres/presencia/cambio de:
-   - cookies;
-   - localStorage;
-   - sessionStorage;
-   - query parameter;
-   - header;
-   - contexto GraphQL;
-   - seller/tienda;
-   - `regionId`;
-   - sales channel/binding;
-   - session/segment;
-7. capturar el request GraphQL real de catálogo sin inventar endpoint;
-8. reducir la ventana a `from=0`, `to<=4`;
-9. capturar raíz/facets;
-10. repetir una vez;
-11. persistir solo diagnóstico sanitizado;
-12. clasificar ubicación como `confirmed`, `ui_only` o `inconclusive`.
+### 4.2 Diagnóstico de navegador
 
-### Límites de una futura autorización
+Se implementó:
 
 ```text
-concurrency = 1
-delay = >= 1.5 s
-retries = máximo 1
-max_logical_requests = 8
-root/facets = mínimo indispensable
-full crawl = no
+src/precios_supermercados/diagnostics/la_colonia_sps_context_diagnostic.py
 ```
 
-### Criterio de salida
+El diagnóstico prepara:
 
-Una consulta reproducible debe demostrar que pertenece a SPS. Si no:
+- BrowserContext limpio;
+- selectores semánticos para `Selecciona tu tienda`, `San Pedro Sula` y `Plaza Pedregal`;
+- observación sanitizada de cookies/localStorage/sessionStorage;
+- captura XHR/fetch/GraphQL;
+- replay mínimo basado en el request real observado;
+- budget máximo de 8 solicitudes lógicas;
+- failure artifacts persistibles;
+- checkpoints de progreso;
+- bloqueo de autorizaciones no activas.
+
+### 4.3 Hardening pre-live
+
+Estado actual:
 
 ```text
-location_status = unknown
-classification = location_not_verified
+ACTIVE_AUTHORIZATION_IDS = []
+CONSUMED_AUTHORIZATION_IDS = [SPS-context-and-root-facets-001]
 ```
 
-## 5. Fase 2 — Capturar taxonomía y facets
+Por tanto:
+
+```text
+001 -> reject: consumed
+002 -> reject: not authorized
+003 -> reject: not authorized
+999 -> reject: not authorized
+```
+
+Una futura autorización de 002 requerirá un cambio explícito que active exactamente ese ID. No existe esa activación en el estado actual.
+
+### 4.4 Regla de consumo
+
+```text
+fallo antes de page.goto(TARGET_URL)
+    -> authorization_consumption_eligible = false
+
+inicio de page.goto(TARGET_URL)
+    -> target_navigation_started = true
+    -> authorization_consumption_eligible = true
+```
+
+No existe todavía persistencia remota del consumo.
+
+### 4.5 Runtime
+
+Playwright Python está instalado como dependencia y la CI pre-live demostró un Chrome/Chromium compatible ya presente en el runner.
+
+```text
+Playwright = 1.62.0
+playwright install chromium = no ejecutado
+workflow modificado para browser = no
+```
+
+La validación usa contenido local/sintético y bloquea HTTP/HTTPS externo desde BrowserContext.
+
+### 4.6 Replay de contexto
+
+`_safe_replay_headers` no inventa ni copia headers sensibles o no demostrados. Solo permite headers públicos cerrados.
+
+Las cookies del BrowserContext pueden acompañar el `APIRequestContext`, pero no se ha demostrado todavía que todos los mecanismos SPS de La Colonia se preserven en el replay.
+
+```text
+context_replay_verification = pending_live
+```
+
+## 5. Fase 2 — Capturar raíz y facets
+
+Solo después de una nueva autorización y de confirmar SPS:
+
+1. seleccionar ciudad/tienda exclusivamente por UI pública;
+2. observar cambio técnico reproducible;
+3. capturar la forma real del request de catálogo;
+4. reducir la ventana a `from=0`, `to<=4`;
+5. capturar una raíz mínima;
+6. capturar facets mínimas;
+7. repetir una vez;
+8. registrar estabilidad y sampling;
+9. detener si el contexto no puede atribuirse a SPS.
+
+No existe autorización para ejecutar estos pasos actualmente.
+
+## 6. Taxonomía y facets
 
 Después de confirmar SPS:
 
-1. ejecutar una consulta raíz con page size mínimo y `OrderByNameASC`;
-2. capturar una respuesta de facets sanitizada;
-3. registrar `recordsFiltered` y `sampling`;
-4. inventariar `type`, `name`, `key`, `value`, `quantity`, `selected`, `children`;
-5. separar:
-   - `category-1` Departamento;
-   - `category-2` Categoría;
-   - `category-3` Sub-Categoría;
-   - niveles adicionales reales;
-   - marca;
-   - landing;
-   - colección;
-   - especificaciones como `Subcategoria` e Impuestos;
-6. marcar categorías vacías y hojas positivas;
-7. detener si `sampling=true`, faltan hijos esperados o las cantidades son inválidas;
-8. excluir valores corruptos como fórmulas `VLOOKUP(...)`.
+- registrar `recordsFiltered` y `sampling`;
+- inventariar `type`, `name`, `key`, `value`, `quantity`, `selected`, `children`;
+- separar `category-1`, `category-2`, `category-3` y niveles reales adicionales;
+- separar marca, landing, colección y especificaciones;
+- detectar categorías vacías;
+- excluir valores corruptos;
+- detener ante sampling o árbol inconsistente.
 
-Criterio de salida: árbol estructural versionable con hojas candidatas,
-cantidades y evidencia de completitud.
+## 7. Paginación
 
-## 6. Fase 3 — Validar listados y paginación
-
-Muestra mínima:
-
-| Tipo | Prueba |
-|---|---|
-| raíz | páginas 1 y 2; repetir página 1 |
-| categoría grande | primera página y una frontera controlada |
-| categoría mediana | dos páginas consecutivas |
-| categoría pequeña | primera y última página |
-| hoja candidata | primera y última página |
-| búsqueda | una página, solo para demostrar transversalidad |
-| landing | una página |
-| marca | una página |
-
-Validar:
+Validar antes de cualquier recorrido amplio:
 
 - `from/to` inclusivos;
-- tamaño real de página;
-- orden `OrderByNameASC` estable;
+- page size efectivo;
+- `OrderByNameASC` estable;
 - total constante dentro de la ventana;
-- primer y último ID;
-- firmas de página distintas;
-- ausencia de páginas parciales inesperadas;
+- firmas distintas entre páginas;
+- ausencia de repetición o parcialidad inesperada;
 - límite máximo del backend;
-- ausencia de sampling;
 - estabilidad al repetir.
 
-Detener ante página repetida, cambio de total significativo o respuesta parcial.
+## 8. Productos y ofertas
 
-## 7. Fase 4 — Validar productos y ofertas
+Muestras futuras mínimas:
 
-Muestra objetivo, no masiva:
+1. precio normal;
+2. promoción declarada;
+3. agotado bajo SPS confirmado;
+4. producto por peso;
+5. multi-SKU;
+6. EAN ausente si aparece;
+7. más de un seller si aparece.
 
-1. producto con precio normal;
-2. producto con promoción declarada;
-3. producto agotado en SPS;
-4. producto vendido por peso;
-5. producto con varios SKU/presentaciones;
-6. producto con EAN ausente, si aparece;
-7. producto con más de un seller, si aparece.
-
-Campos mínimos:
+Campos de interés:
 
 ```text
 productId
@@ -204,270 +205,212 @@ images
 
 Reglas:
 
-- `effective_price = Price` solo bajo contexto SPS confirmado;
-- `reported_regular_price = ListPrice` solo si es mayor que Price y la fuente presenta la comparación;
-- promoción declarada por diferencia válida o teaser/highlight;
-- no inventar oferta por comparación histórica;
-- `No disponible` sin tienda no es `out_of_stock` global;
-- cantidades de VTEX Search son señal de disponibilidad, no inventario exacto.
+- `effective_price = Price` únicamente bajo SPS confirmado;
+- `reported_regular_price = ListPrice` solo cuando corresponda;
+- no inventar promociones;
+- `No disponible` sin tienda no equivale a `out_of_stock` global;
+- cantidades Search son señal de disponibilidad, no inventario exacto.
 
-## 8. Fase 5 — Identidad y deduplicación
-
-### Claves
+## 9. Identidad y deduplicación
 
 ```text
 product identity = productId
 SKU identity = itemId
-offer identity = supermarket + verified location/region + itemId + sellerId
-state identity = state_hash comercial existente
+offer identity = supermarket + verified context + itemId + sellerId
+state identity = state_hash existente
 ```
-
-Fallback SKU existente:
-
-1. referencia SKU;
-2. EAN;
-3. productId;
-4. URL estable.
-
-### Índices de trabajo
-
-- `products_by_product_id`;
-- `skus_by_item_id`;
-- `offers_by_context_item_seller`;
-- `memberships_by_item_id` para categorías/landings/brands;
-- `state_hash_by_offer`.
 
 No usar `productName` como identidad.
 
-## 9. Fase 6 — Demostrar cobertura
+## 10. Cobertura
 
 Estrategia recomendada: **híbrida**.
 
-1. obtener la raíz paginada como universo de referencia bajo SPS;
-2. obtener categorías hoja como particiones candidatas;
-3. deduplicar ambos conjuntos por `itemId`;
-4. agrupar por `productId` para métricas de producto;
-5. calcular:
-   - `root_unique_skus`;
-   - `leaf_union_unique_skus`;
-   - intersecciones entre hojas;
-   - `root_minus_leaves`;
-   - `leaves_minus_root`;
-   - conjuntos idénticos;
-   - productos/SKU sin hoja;
-6. repetir una muestra para demostrar estabilidad;
-7. clasificar:
-   - `complete_and_partitionable`;
-   - `complete_with_overlap`;
-   - `incomplete`;
-   - `sampled`;
-   - `unstable`;
-   - `inconclusive`.
+1. raíz SPS paginada como universo de referencia;
+2. hojas estructurales como particiones candidatas;
+3. dedupe por `itemId`;
+4. agrupación por `productId`;
+5. medir intersecciones, residuales, solapamientos y SKU sin hoja;
+6. repetir una muestra para demostrar estabilidad.
 
-No aceptar como prueba:
+Clasificaciones previstas:
 
 ```text
-sum(quantity) >= root_total
+complete_and_partitionable
+complete_with_overlap
+incomplete
+sampled
+unstable
+inconclusive
 ```
 
-ni:
+No aceptar como prueba de cobertura una simple suma de `quantity`.
+
+## 11. Presupuesto
+
+Referencia histórica sin ubicación verificada:
 
 ```text
-unique_products == recordsFiltered
+9291 / page_size 50 -> 186 páginas aproximadas
 ```
 
-sin estabilidad, contexto y pertenencia demostrados.
+No es total SPS ni autorización.
 
-## 10. Fase 7 — Presupuesto
-
-### Piso provisional
-
-La raíz pública sin tienda mostró 9,291 productos. Con page size 50:
+Presupuesto futuro:
 
 ```text
-ceil(9291 / 50) = 186 páginas
+requests_context
++ requests_facets
++ requests_root
++ requests_leaves
++ requests_probes
++ requests_recovery
 ```
 
-Este valor es solo una referencia de la raíz **sin ubicación verificada**.
-No es el total SPS ni una autorización.
+El presupuesto definitivo permanece pendiente de total SPS, sampling, hojas y solapamientos.
 
-### Fórmula final
+## 12. Normalización
 
-```text
-requests_context = requests necesarias para fijar/verificar SPS
-requests_facets = raíz mínima + facets
-requests_root = ceil(root_total_sps / safe_page_size)
-requests_leaves = sum(ceil(leaf_total / safe_page_size))
-requests_probes = fronteras y repeticiones mínimas
-requests_recovery = reserva limitada
-requests_total = context + facets + root + leaves + probes + recovery
-```
-
-### Optimización
-
-- si la raíz es estable y no tiene límite, puede ser el recorrido primario;
-- si la raíz se limita o repite, usar hojas estructurales;
-- no recorrer landings, marcas o búsquedas como cobertura primaria;
-- evitar detalle PDP cuando Search GraphQL ya entrega los campos requeridos;
-- reservar PDP solo para validación y campos ausentes;
-- detener si el presupuesto excede el límite aprobado.
-
-El presupuesto definitivo permanece Pendiente hasta conocer total SPS, hojas,
-sampling y solapamientos.
-
-## 11. Fase 8 — Normalización y validación
-
-Mapeo inicial:
+Mapeo inicial futuro:
 
 ```text
 current_price = Price
 effective_price = Price bajo contexto confirmado
-reported_regular_price = ListPrice cuando ListPrice > Price
+reported_regular_price = ListPrice cuando sea válida la comparación
 is_promotion = diferencia válida o teaser/highlight
 availability = seller + Price + AvailableQuantity + contexto
-presentation = atributos SKU; fallback conservador a nameComplete
+presentation = atributos SKU; fallback conservador
 location_status = confirmed solo con evidencia reproducible
 ```
 
-Eventos de calidad sugeridos:
-
-- `location_not_verified`;
-- `missing_price`;
-- `availability_conflict`;
-- `missing_ean`;
-- `presentation_from_name`;
-- `multiple_sellers`;
-- `facet_value_corrupt`;
-- `sampling_detected`;
-- `repeated_page`;
-- `partial_page`;
-- `catalog_total_changed`;
-- `product_without_leaf_category`.
-
 No modificar contratos antes de resolver los huecos documentados.
 
-## 12. Fase 9 — Recuperación y checkpoints
+## 13. Recuperación y failure artifacts
 
-Detener inmediatamente ante:
+La herramienta de contexto ya persiste un diagnóstico sanitizado ante fallos controlables.
 
-- HTTP 403 persistente;
-- HTTP 429;
-- captcha/antibot;
-- exigencia de autenticación;
-- JSON inválido persistente;
-- cambio de esquema;
-- página repetida;
-- página parcial inesperada;
-- contexto SPS perdido;
-- total cambiante por encima del umbral aprobado;
-- riesgo de afectar el servicio.
-
-Checkpoint sanitizado por página:
+Campos de progreso:
 
 ```text
-partition
-from/to
-orderBy
-recordsFiltered
-products_returned
-unique_item_ids_hash
-page_signature
-duration
-status
-quality_events
+authorization_checked
+browser_started
+target_navigation_started
+target_navigation_completed
+store_selector_opened
+city_selected
+store_selected
+context_observed
+root_observed
+facets_observed
 ```
 
-No guardar catálogo completo en artefactos públicos ni cookies/tokens.
+Detener ante:
 
-## 13. Orden de implementación recomendado
+- 403 persistente;
+- 429;
+- captcha/antibot;
+- autenticación obligatoria;
+- JSON inválido;
+- HTTP inesperado;
+- cambio de esquema;
+- selector ausente/ambiguo;
+- pérdida de contexto SPS;
+- página repetida/parcial;
+- presupuesto agotado;
+- riesgo de afectar el servicio.
 
-Estado actualizado:
+## 14. Seguridad pre-live
 
-1. **diagnóstico de navegador/verificador de contexto SPS — preparado offline**;
-2. captura sanitizada de sesión comercial pública — preparada en el diagnóstico;
-3. cliente de facets con contrato cerrado;
-4. parser de árbol y clasificación de facets;
-5. fixtures sanitizados de respuestas reales únicamente después de captura autorizada;
-6. pruebas offline de ubicación/facets/precios;
-7. validación mínima de paginación;
-8. validación representativa de SKU/ofertas;
-9. cálculo de cobertura y presupuesto;
-10. recorrido progresivo únicamente con autorización nueva.
+Durante tests de navegador:
 
-## 14. Estrategias comparadas
+```text
+about:, data:, file: = permitidos
+loopback local = permitido
+synthetic.invalid = interceptado y fulfilled localmente
+HTTP/HTTPS externo = abortado antes de red
+lacolonia.com = abortado antes de red
+```
 
-| Estrategia | Cobertura | Duplicados | Omisiones | Estabilidad | Mantenibilidad | Uso recomendado |
-|---|---|---|---|---|---|---|
-| raíz paginada | alta potencial | baja | límite/sampling | Pendiente | alta | universo de referencia |
-| categorías principales | parcial | alta | residuales | media | media | control |
-| categorías hoja | alta potencial | media/alta | hojas faltantes | Pendiente | media | partición operativa |
-| rangos/prefijos | no demostrable | alta | alta | baja | baja | diagnóstico |
-| facets combinadas | variable | alta | sampling | baja-media | baja | recuperación limitada |
-| híbrida | mayor verificabilidad | controlable | detectables | mejor | media | recomendada |
-| producto conocido | mínima | ninguna | casi total | alta | alta | validación |
-| sitemap | URLs | baja | no indexados | media | alta | auxiliar |
+Resultado de esta etapa:
 
-## 15. Criterios de listo para implementar
+```text
+tráfico a La Colonia = 0
+SPS seleccionado = no
+root consultado = no
+facets consultadas = no
+productos descargados = 0
+```
 
-Todos deben cumplirse:
+## 15. CI pre-live
 
-- SPS reproducible;
+Primera validación técnica del hardening:
+
+```text
+workflow = Precios Supermercados SPS - Pruebas base
+run = 31203765743
+run_number = 142
+job = 92949733529
+Python = 3.12.13
+Playwright = 1.62.0
+compileall = success
+pytest = 533 passed
+failed = 0
+errors = 0
+duration = 40.49s
+conclusion = success
+```
+
+No se utilizó workflow_dispatch ni workflow live.
+
+La suite probó browser real local/sintético, selectores, storage, network interception, failure artifacts y autorizaciones. Los logs registraron una advertencia de teardown `TargetClosedError`, pero pytest quedó completamente verde y el test explícito de cierre de browser pasó.
+
+## 16. Criterios de listo para implementar scraper completo
+
+Todavía pendientes:
+
+- SPS reproducible en sesión real autorizada;
 - seller/precio/disponibilidad bajo SPS;
-- endpoint de listados revalidado;
-- facets capturadas;
+- endpoint de listados revalidado bajo SPS;
+- facets capturadas bajo SPS;
 - sampling conocido;
-- árbol estructural identificado;
-- identidad product/SKU confirmada;
-- casos normal/promoción/agotado/peso/multi-SKU;
-- límites de paginación confirmados;
+- identidad product/SKU observada bajo SPS;
+- casos representativos;
+- paginación confirmada;
 - presupuesto calculado.
 
-La existencia del diagnóstico de navegador no satisface por sí sola estos
-criterios; solo elimina la limitación de herramienta a nivel de implementación.
+## 17. Criterios de listo para full crawl
 
-## 16. Criterios de listo para full crawl
-
-Además:
+Además de lo anterior:
 
 - total raíz SPS estable;
 - unión de hojas medida;
 - solapamientos cuantificados;
 - residuales explicados;
-- páginas estables y no repetidas;
-- cero 403/429 persistentes;
-- umbrales y presupuesto aprobados;
-- estrategia de recuperación probada offline;
+- páginas estables/no repetidas;
+- ausencia de 403/429 persistentes;
+- umbrales aprobados;
 - autorización explícita nueva.
 
-## 17. Próxima prueba live
+## 18. Próximo paso
 
-No existe una nueva prueba live autorizada.
+No existe prueba live autorizada.
 
 ```text
-SPS-context-and-root-facets-001 = consumida; no repetir
-SPS-context-and-root-facets-002 = no creada; no autorizada
-siguiente ID = Pendiente
-prerrequisito = diagnóstico de navegador + autorización explícita nueva
+SPS-context-and-root-facets-001 = consumida
+SPS-context-and-root-facets-002 = no creada / no autorizada
+autorizaciones activas = 0
 ```
 
-Una futura autorización, si se concede, deberá usar el diagnóstico de navegador
-para:
+Una futura etapa podrá activar exactamente 002 **solo después** de autorización explícita. Después deberá ejecutar una prueba mínima con el diagnóstico ya endurecido.
 
-- seleccionar SPS exclusivamente por UI pública;
-- producir evidencia técnica sanitizada del contexto;
-- observar el request GraphQL real;
-- ejecutar raíz/facets mínimas;
-- repetir una vez;
-- detenerse dentro del presupuesto.
-
-## 18. Decisión
+## 19. Decisión
 
 ```text
 estrategia recomendada = híbrida
-primer componente = diagnóstico de navegador SPS, preparado offline
+diagnóstico de navegador = hardening pre-live completado
+context_replay_verification = pending_live
 siguiente prueba live = Pendiente
-autorización de siguiente prueba = inexistente
-SPS-context-and-root-facets-001 = consumida
-SPS-context-and-root-facets-002 = no creada
+autorización live actual = inexistente
 full crawl = no autorizado
+recorrido por categorías = no autorizado
 ```
