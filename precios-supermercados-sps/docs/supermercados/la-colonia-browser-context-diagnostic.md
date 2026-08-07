@@ -442,20 +442,21 @@ No contienen cookies, sesiones, direcciones ni tokens reales.
 
 ## 18. Validación CI del hardening
 
-Primera CI técnica del hardening:
+CI final de esta etapa:
 
 ```text
 workflow = Precios Supermercados SPS - Pruebas base
-run = 31203765743
-run_number = 142
-job = 92949733529
+run = 31204158725
+run_number = 144
+job = 92951035840
+head = 773e5584974f4d081c66daf2294ff10a1867a52d
 Python = 3.12.13
 Playwright = 1.62.0
 compileall = success
 pytest = 533 passed
 failed = 0
 errors = 0
-duration = 40.49s
+duration = 47.53s
 conclusion = success
 ```
 
@@ -483,7 +484,8 @@ workflow live = no
 - `context_replay_verification` permanece `pending_live`;
 - no existe autorización live activa;
 - no existe `SPS-context-and-root-facets-002` autorizada;
-- la prueba real del target requiere una autorización nueva futura.
+- la prueba real del target requiere una autorización nueva futura;
+- los logs de CI conservan una advertencia de teardown de Playwright aunque las 533 pruebas, incluida la de cierre explícito, pasan.
 
 ## 21. Decisión pre-live
 
