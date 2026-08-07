@@ -1,0 +1,7 @@
+interface:
+  display_name: "Precios Supermercados — Engineering Workflow"
+  short_description: "Ingeniería, pruebas y revisión para Precios Supermercados SPS"
+  default_prompt: "Usa $precios-supermercados-engineering para aplicar el workflow de ingeniería del proyecto a la tarea actual respetando los AGENTS.md aplicables."
+
+policy:
+  allow_implicit_invocation: true
