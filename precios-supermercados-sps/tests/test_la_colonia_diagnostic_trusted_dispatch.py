@@ -93,7 +93,7 @@ def test_request_id_diagnostico_invalido_se_rechaza():
     assert "request_id" in decision.reason
 
 
-def test_comentario_diagnostico_es_sanitizado_e_idempotente():
+def test_comentario_diagnostico_es_sanitizado_y_no_es_autoridad():
     decision = decide(diagnostic_command())
     comment = build_controller_comment(
         decision,
@@ -102,13 +102,12 @@ def test_comentario_diagnostico_es_sanitizado_e_idempotente():
     )
     assert "diagnostic_overlap" in comment
     assert DIAGNOSTIC_WORKFLOW in comment
-    assert request_marker("la-colonia-window-diagnostic-380-399-001") in comment
+    assert request_marker("la-colonia-window-diagnostic-380-399-001") not in comment
     for forbidden in ("productId", "productName", "price", "payload"):
         assert forbidden not in comment
 
     repeated = decide(diagnostic_command(), [comment])
-    assert repeated.accepted is False
-    assert repeated.should_comment is False
+    assert repeated.accepted is True
 
 
 @pytest.mark.parametrize(
@@ -251,30 +250,19 @@ def test_full_sigue_prohibido():
     assert "full" in decision.reason
 
 
-def test_controlador_tiene_allow_list_estatica_y_checkout_confiable():
+def test_controlador_privilegiado_esta_bloqueado_y_usa_checkout_inmutable():
     text = CONTROLLER.read_text(encoding="utf-8")
-    assert "const allowedWorkflows = new Map([" in text
-    assert LIVE_WORKFLOW in text
-    assert DIAGNOSTIC_WORKFLOW in text
-    map_section = text.split("const allowedWorkflows = new Map([", 1)[1].split(
-        "const expectedModes", 1
-    )[0]
-    assert map_section.count("'.github/workflows/") == 2
-    assert "workflow_id: selectedWorkflowFile" in text
-    assert "workflow_id: decision.workflow" not in text
-    assert "ref: main" in text
+    assert "actions: write" not in text
+    assert "ref: ${{ github.workflow_sha }}" in text
     assert "persist-credentials: false" in text
-    assert "ref: decision.ref" in text
     assert "github.event.pull_request.head" not in text
 
 
-def test_controlador_registra_modo_workflow_y_no_repite_dispatch_por_comentario():
+def test_controlador_no_contiene_dispatch_ni_autoridad_por_comentario():
     text = CONTROLLER.read_text(encoding="utf-8")
-    assert "mode: decision.mode || null" in text
-    assert "workflow: decision.workflow || null" in text
-    assert "dispatch_sent: false" in text
-    assert "comentario pendiente de recuperación por el conector" in text
-    assert text.count("'POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches'") == 1
+    assert "/actions/workflows/" not in text
+    assert "listComments" not in text
+    assert "issues: write" not in text
 
 
 def test_workflow_diagnostico_es_manual_y_cerrado():
