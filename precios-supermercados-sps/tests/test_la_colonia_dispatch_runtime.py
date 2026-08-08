@@ -8,47 +8,35 @@ def _workflow_text() -> str:
     ).read_text(encoding="utf-8")
 
 
-def test_dispatch_usa_allow_list_y_api_actual():
+def test_controlador_esta_globalmente_bloqueado_y_no_puede_despachar():
     workflow = _workflow_text()
 
-    assert "const allowedWorkflows = new Map([" in workflow
-    assert "precios-supermercados-sps-la-colonia-live.yml" in workflow
-    assert "precios-supermercados-sps-la-colonia-diagnostic.yml" in workflow
-    assert "workflow_id: selectedWorkflowFile" in workflow
-    assert "workflow_id: decision.workflow" not in workflow
-    assert "return_run_details: true" in workflow
-    assert "'X-GitHub-Api-Version': apiVersion" in workflow
-    assert "const apiVersion = '2026-03-10';" in workflow
+    assert "actions: write" not in workflow
+    assert "/actions/workflows/" not in workflow
 
 
 def test_resultado_expone_run_modo_y_workflow_sin_datos_comerciales():
     workflow = _workflow_text()
 
     assert "dispatcher-result.json" in workflow
-    assert "mode: decision.mode || null" in workflow
-    assert "workflow: decision.workflow || null" in workflow
-    assert "live_run_id" in workflow
-    assert "live_run_url" in workflow
     assert "retention-days: 1" in workflow
     assert "product_name" not in workflow
     assert "price" not in workflow.lower()
 
 
-def test_comentario_intenta_graphql_y_rest_con_fallback_seguro():
+def test_controlador_no_escribe_comentarios_desde_contexto_privilegiado():
     workflow = _workflow_text()
 
-    assert "addComment(input: {subjectId: $subjectId, body: $body})" in workflow
-    assert "github.rest.issues.createComment" in workflow
-    assert "comentario pendiente de recuperación por el conector" in workflow
-    assert "core.setFailed('La solicitud fue rechazada" in workflow
+    assert "issues: write" not in workflow
+    assert "addComment" not in workflow
+    assert "createComment" not in workflow
 
 
 def test_no_ejecuta_datos_del_pr_en_shell():
     workflow = _workflow_text()
 
-    assert "ref: main" in workflow
+    assert "ref: ${{ github.workflow_sha }}" in workflow
     assert "persist-credentials: false" in workflow
     assert "eval " not in workflow
     assert "github.event.pull_request.head" not in workflow
-    assert "workflow_id: decision.workflow" not in workflow
-    assert "ref: decision.ref" in workflow
+    assert "/dispatches" not in workflow

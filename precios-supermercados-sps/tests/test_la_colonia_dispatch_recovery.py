@@ -78,7 +78,7 @@ def _new_artifact(mode: str, workflow: str, **overrides):
     return _artifact(mode=mode, workflow=workflow, **overrides)
 
 
-def test_observador_solo_lee_resultado_del_controlador_desde_main():
+def test_observador_solo_lee_resultado_con_codigo_inmutable():
     workflow = _workflow_text()
     assert "workflow_run:" in workflow
     assert "La Colonia - Despachador seguro por archivo" in workflow
@@ -86,10 +86,10 @@ def test_observador_solo_lee_resultado_del_controlador_desde_main():
     assert "contents: read" in workflow
     assert "issues: write" not in workflow
     assert "actions: write" not in workflow
-    assert "actions/checkout@v4" in workflow
-    assert "ref: main" in workflow
+    assert "actions/checkout@11d5960a326750d5838078e36cf38b85af677262" in workflow
+    assert "ref: ${{ github.workflow_sha }}" in workflow
     assert "persist-credentials: false" in workflow
-    assert "actions/download-artifact@v4" in workflow
+    assert "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093" in workflow
     assert "dispatcher-result.json" in workflow
 
 
