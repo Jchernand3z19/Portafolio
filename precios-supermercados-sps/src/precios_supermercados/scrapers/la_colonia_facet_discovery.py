@@ -8,7 +8,6 @@ lógicas predeterminadas del plan ``catalog_categories_v1``.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
@@ -16,6 +15,7 @@ from .la_colonia_catalog_coverage import PartitionSpec
 from .la_colonia_catalog_partitions import (
     DEFAULT_MAX_PARTITIONS,
     PartitionRequestPlan,
+    build_structural_discovery_report,
     estimate_partition_request_plan,
 )
 
@@ -44,7 +44,6 @@ _ALLOWED_COMMAND_FIELDS = frozenset(
         "allow_full",
     }
 )
-_CATEGORY_KEY_RE = re.compile(r"category-(\d+)\Z")
 _FORBIDDEN_PUBLIC_KEYS = frozenset(
     {
         "url",
@@ -294,61 +293,76 @@ def analyze_category_facets(
     if not isinstance(facets, Sequence) or isinstance(facets, (str, bytes)):
         raise InvalidFacetStructureError("facets debe ser una secuencia")
 
-    counts: dict[int, int] = {}
-    leaves: list[tuple[int, int, tuple[tuple[str, str], ...]]] = []
-    seen_paths: dict[tuple[tuple[str, str], ...], int] = {}
+    report = build_structural_discovery_report(
+        facets,
+        run_id="facet-discovery-analysis",
+        root_total=root_total,
+        sampling=False,
+        max_partitions=max_partitions,
+        max_category_level=max_category_level,
+    )
+    if not report.valid:
+        quantity_errors = {
+            "quantity_not_integer",
+            "negative_quantity",
+            "child_quantity_exceeds_parent",
+            "duplicate_structural_node_conflict",
+        }
+        if "partition_limit_exceeded" in report.errors:
+            raise FacetPartitionLimitError("La cantidad de hojas supera el límite")
+        if any(reason in quantity_errors for reason in report.errors):
+            if "quantity_not_integer" in report.errors:
+                raise InvalidFacetQuantitiesError("quantity debe ser entero")
+            if "negative_quantity" in report.errors:
+                raise InvalidFacetQuantitiesError("quantity no puede ser negativo")
+            if "duplicate_structural_node_conflict" in report.errors:
+                raise InvalidFacetQuantitiesError(
+                    "La misma ruta tiene cantidades o topología incompatibles"
+                )
+            raise InvalidFacetQuantitiesError("Cantidades estructurales inválidas")
+        incomplete_errors = {
+            "category_facets_missing",
+            "contradictory_topology",
+            "children_missing",
+            "positive_branch_without_valid_children",
+            "positive_leaves_missing",
+            "leaf_union_below_root_total",
+        }
+        if any(reason in incomplete_errors for reason in report.errors):
+            if "children_missing" in report.errors:
+                raise IncompleteFacetTreeError("Cada nodo debe declarar children")
+            if "leaf_union_below_root_total" in report.errors:
+                raise IncompleteFacetTreeError(
+                    "La suma de hojas positivas no cubre el total raíz"
+                )
+            if report.errors == ("positive_leaves_missing",):
+                raise IncompleteFacetTreeError("No existen particiones hoja positivas")
+            raise IncompleteFacetTreeError("El árbol de categorías está incompleto")
+        raise InvalidFacetStructureError("Evidencia estructural inválida")
+
+    positive = tuple(leaf for leaf in report.valid_leaves if leaf.expected_products > 0)
+    zero_leaves = sum(leaf.expected_products == 0 for leaf in report.valid_leaves)
+    leaf_quantity_sum = sum(leaf.expected_products for leaf in positive)
     events: list[str] = []
-
-    category_facets = 0
-    for facet in facets:
-        if not isinstance(facet, Mapping):
-            raise InvalidFacetStructureError("Cada facet debe ser un objeto")
-        facet_type = str(facet.get("type") or "").strip().upper()
-        if facet_type not in {"CATEGORYTREE", "CATEGORY"}:
-            continue
-        category_facets += 1
-        values = facet.get("values")
-        if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
-            raise InvalidFacetStructureError("facet.values debe ser una secuencia")
-        _collect_nodes(
-            values,
-            parent_level=None,
-            parent_path=(),
-            parent_quantity=None,
-            max_category_level=max_category_level,
-            counts=counts,
-            leaves=leaves,
-            seen_paths=seen_paths,
-        )
-
-    if category_facets == 0:
-        raise IncompleteFacetTreeError("No se devolvieron facets de categoría")
-
-    positive = [item for item in leaves if item[1] > 0]
-    zero_leaves = sum(item[1] == 0 for item in leaves)
-    if len(positive) > max_partitions:
-        raise FacetPartitionLimitError("La cantidad de hojas supera el límite")
-    if not positive:
-        raise IncompleteFacetTreeError("No existen particiones hoja positivas")
-
-    leaf_quantity_sum = sum(quantity for _, quantity, _ in positive)
-    if leaf_quantity_sum < root_total:
-        raise IncompleteFacetTreeError(
-            "La suma de hojas positivas no cubre el total raíz"
-        )
     if leaf_quantity_sum > root_total:
         events.append("leaf_quantities_exceed_root_total")
+    if report.duplicate_structural_nodes:
+        events.append("duplicate_structural_nodes")
 
-    ordered = sorted(positive, key=lambda item: item[2])
     partitions = tuple(
         FacetLeafPartition(
-            name=f"partition-{index:04d}",
-            quantity=quantity,
-            level=level,
-            _path=path,
+            name=leaf.name,
+            quantity=leaf.expected_products,
+            level=len(leaf._category_path),
+            _path=leaf._category_path,
         )
-        for index, (level, quantity, path) in enumerate(ordered, start=1)
+        for leaf in positive
     )
+    nodes_by_level: dict[int, set[tuple[tuple[str, str], ...]]] = {}
+    for leaf in report.valid_leaves:
+        for level in range(1, len(leaf._category_path) + 1):
+            nodes_by_level.setdefault(level, set()).add(leaf._category_path[:level])
+    counts = {level: len(paths) for level, paths in nodes_by_level.items()}
     level_names = tuple(f"category-{level}" for level in sorted(counts))
     counts_by_name = {f"category-{level}": counts[level] for level in sorted(counts)}
     return FacetTreeAnalysis(
@@ -357,7 +371,7 @@ def analyze_category_facets(
         facet_levels_detected=level_names,
         facet_values_count=counts_by_name,
         leaf_partitions=partitions,
-        leaf_partitions_count=len(leaves),
+        leaf_partitions_count=len(report.valid_leaves),
         positive_leaf_partitions=len(partitions),
         zero_quantity_partitions=zero_leaves,
         leaf_quantity_sum=leaf_quantity_sum,
@@ -420,76 +434,3 @@ def serialize_sanitized_facet_summary(
     if len(encoded) > max_bytes:
         raise ValueError("El artefacto facet_discovery supera 64 KiB")
     return encoded
-
-
-def _collect_nodes(
-    values: Sequence[Any],
-    *,
-    parent_level: int | None,
-    parent_path: tuple[tuple[str, str], ...],
-    parent_quantity: int | None,
-    max_category_level: int,
-    counts: dict[int, int],
-    leaves: list[tuple[int, int, tuple[tuple[str, str], ...]]],
-    seen_paths: dict[tuple[tuple[str, str], ...], int],
-) -> None:
-    for node in values:
-        if not isinstance(node, Mapping):
-            raise InvalidFacetStructureError("Cada valor de facet debe ser objeto")
-        key = str(node.get("key") or "").strip()
-        value = str(node.get("value") or "").strip()
-        match = _CATEGORY_KEY_RE.fullmatch(key)
-        if not match or not value:
-            raise InvalidFacetStructureError("Nivel o valor de categoría inválido")
-        level = int(match.group(1))
-        if not 1 <= level <= max_category_level:
-            raise InvalidFacetStructureError("Nivel de categoría no permitido")
-        expected_level = 1 if parent_level is None else parent_level + 1
-        if level != expected_level:
-            raise IncompleteFacetTreeError("La jerarquía de categorías tiene saltos")
-
-        quantity_value = node.get("quantity")
-        if isinstance(quantity_value, bool):
-            raise InvalidFacetQuantitiesError("quantity debe ser entero")
-        try:
-            quantity = int(quantity_value)
-        except (TypeError, ValueError) as exc:
-            raise InvalidFacetQuantitiesError("quantity debe ser entero") from exc
-        if quantity < 0:
-            raise InvalidFacetQuantitiesError("quantity no puede ser negativo")
-        if parent_quantity is not None and quantity > parent_quantity:
-            raise InvalidFacetQuantitiesError(
-                "Una categoría hija no puede exceder a su padre"
-            )
-
-        path = (*parent_path, (key, value))
-        previous = seen_paths.get(path)
-        if previous is not None:
-            if previous != quantity:
-                raise InvalidFacetQuantitiesError(
-                    "La misma ruta tiene cantidades incompatibles"
-                )
-            continue
-        seen_paths[path] = quantity
-        counts[level] = counts.get(level, 0) + 1
-
-        if "children" not in node:
-            raise IncompleteFacetTreeError(
-                "Cada nodo debe declarar children para distinguir hoja de corte"
-            )
-        children = node.get("children")
-        if not isinstance(children, Sequence) or isinstance(children, (str, bytes)):
-            raise InvalidFacetStructureError("children debe ser una secuencia")
-        if children:
-            _collect_nodes(
-                children,
-                parent_level=level,
-                parent_path=path,
-                parent_quantity=quantity,
-                max_category_level=max_category_level,
-                counts=counts,
-                leaves=leaves,
-                seen_paths=seen_paths,
-            )
-        else:
-            leaves.append((level, quantity, path))

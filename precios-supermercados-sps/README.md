@@ -4,9 +4,12 @@ Fundación técnica para recolectar, normalizar, validar y conservar cambios rel
 
 ## Estado
 
-**En desarrollo — fase de fundación.**
+**Ingeniería offline implementada; live globalmente bloqueado.**
 
-Esta entrega define contratos, identificadores, reglas históricas, documentación y pruebas. No contiene un scraper real ni datos de supermercados.
+El proyecto contiene extractor, crawler, diagnósticos y simuladores de seguridad,
+pero todos los transportes reales y jobs live permanecen fail-closed. No declara
+completo el catálogo live ni confirma el contexto técnico SPS. La fuente de verdad
+actual es [`docs/arquitectura.md`](docs/arquitectura.md).
 
 ## Contratos
 
@@ -66,10 +69,12 @@ python -m compileall precios-supermercados-sps/src
 pytest precios-supermercados-sps/tests
 ```
 
-## Fuera de alcance
+## Fuera de alcance actual
 
-- análisis de un supermercado;
-- scraper real;
+- tráfico live sin autorización nueva;
+- evidencia productiva de GATE-17;
+- declaración de catálogo live completo;
+- confirmación técnica SPS;
 - conexión a Google Sheets;
 - scraping diario;
 - Power BI;

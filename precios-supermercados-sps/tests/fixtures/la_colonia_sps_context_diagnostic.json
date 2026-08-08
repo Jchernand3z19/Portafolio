@@ -1,0 +1,223 @@
+{
+  "context": {
+    "cookies_before": {
+      "vtex_session": "synthetic-session-before",
+      "locale": "es-HN"
+    },
+    "cookies_after": {
+      "vtex_session": "synthetic-session-after",
+      "locale": "es-HN",
+      "vtex_segment": "synthetic-segment-after"
+    },
+    "local_storage_before": {
+      "regionId": "synthetic-region-before",
+      "access_token": "synthetic-token-before"
+    },
+    "local_storage_after": {
+      "regionId": "synthetic-region-sps",
+      "access_token": "synthetic-token-after",
+      "salesChannel": "synthetic-sales-channel"
+    },
+    "session_storage_before": {
+      "orderFormId": "synthetic-order-form-before"
+    },
+    "session_storage_after": {
+      "orderFormId": "synthetic-order-form-after",
+      "pickupPoint": "synthetic-plaza-pedregal",
+      "seller": "synthetic-seller"
+    }
+  },
+  "network": [
+    {
+      "url": "https://synthetic.invalid/_v/segment/graphql/v1?operationName=productSearchV3&token=fake-token",
+      "method": "POST",
+      "resource_type": "xhr",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer synthetic-jwt-token"
+      },
+      "post_data": {
+        "operationName": "productSearchV3",
+        "query": "query productSearchV3 { productSearch { recordsFiltered products { productId items { itemId sellers { sellerId commertialOffer { Price ListPrice AvailableQuantity } } } } } }",
+        "variables": {
+          "from": 0,
+          "to": 4,
+          "orderBy": "OrderByNameASC",
+          "selectedFacets": [
+            {
+              "key": "category-1",
+              "value": "supermercado"
+            }
+          ],
+          "map": "category-1",
+          "sessionId": "synthetic-secret-session"
+        }
+      },
+      "status": 200,
+      "content_type": "application/json",
+      "response_body": {
+        "data": {
+          "productSearch": {
+            "recordsFiltered": 123,
+            "sampling": false,
+            "products": [
+              {
+                "productId": "synthetic-product-1",
+                "items": [
+                  {
+                    "itemId": "synthetic-sku-1",
+                    "sellers": [
+                      {
+                        "sellerId": "synthetic-seller",
+                        "commertialOffer": {
+                          "Price": 10.0,
+                          "ListPrice": 12.0,
+                          "AvailableQuantity": 8
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "productId": "synthetic-product-2",
+                "items": [
+                  {
+                    "itemId": "synthetic-sku-2",
+                    "sellers": [
+                      {
+                        "sellerId": "synthetic-seller",
+                        "commertialOffer": {
+                          "Price": 20.0,
+                          "ListPrice": 20.0,
+                          "AvailableQuantity": 0
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "url": "https://synthetic.invalid/_v/segment/graphql/v1?operationName=facets",
+      "method": "POST",
+      "resource_type": "fetch",
+      "headers": {
+        "Content-Type": "application/json",
+        "Cookie": "vtex_session=synthetic-cookie"
+      },
+      "post_data": {
+        "operationName": "facets",
+        "query": "query facets { facets { key name type values { name value quantity selected children } } }",
+        "variables": {
+          "from": 0,
+          "to": 4,
+          "selectedFacets": [
+            {
+              "key": "category-1",
+              "value": "supermercado"
+            }
+          ],
+          "orderBy": "OrderByNameASC"
+        }
+      },
+      "status": 200,
+      "content_type": "application/json",
+      "response_body": {
+        "data": {
+          "sampling": false,
+          "facets": [
+            {
+              "key": "category-1",
+              "name": "Departamento",
+              "type": "TEXT",
+              "values": [
+                {
+                  "name": "Supermercado",
+                  "value": "supermercado",
+                  "quantity": 123,
+                  "selected": true,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "key": "category-2",
+              "name": "Categoría",
+              "type": "TEXT",
+              "values": [
+                {
+                  "name": "Abarrotes",
+                  "value": "abarrotes",
+                  "quantity": 40,
+                  "selected": false,
+                  "children": [
+                    {
+                      "value": "cereales"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "key": "category-3",
+              "name": "Sub-Categoría",
+              "type": "TEXT",
+              "values": [
+                {
+                  "name": "Cereales",
+                  "value": "cereales",
+                  "quantity": 10,
+                  "selected": false,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "key": "brand",
+              "name": "Marca",
+              "type": "TEXT",
+              "values": [
+                {
+                  "name": "Marca Sintética",
+                  "value": "marca-sintetica",
+                  "quantity": 3,
+                  "selected": false,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "key": "Subcategoria",
+              "name": "Subcategoria",
+              "type": "TEXT",
+              "values": [
+                {
+                  "name": "Valor sintético",
+                  "value": "valor-sintetico",
+                  "quantity": 2,
+                  "selected": false,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "logical_requests": [
+    "open_home",
+    "open_store_selector",
+    "select_city",
+    "select_store",
+    "root_fixture",
+    "facets_fixture",
+    "repeat_fixture"
+  ],
+  "synthetic_token": "fake-token-not-real"
+}

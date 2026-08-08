@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+  <body>
+    <section id="closed-selector">
+      <button role="button" aria-label="Selecciona tu tienda">
+        Selecciona tu tienda
+      </button>
+    </section>
+    <section id="open-selector">
+      <div role="dialog" aria-label="Selector de tienda">
+        <label for="city">Ciudad</label>
+        <select id="city" aria-label="Ciudad">
+          <option role="option" aria-label="Tegucigalpa">Tegucigalpa</option>
+          <option role="option" aria-label="San Pedro Sula">San Pedro Sula</option>
+        </select>
+        <div role="listbox" aria-label="Tiendas disponibles">
+          <button role="option" aria-label="Plaza Pedregal">Plaza Pedregal</button>
+          <button role="option" aria-label="Tienda sintética secundaria">
+            Tienda sintética secundaria
+          </button>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>

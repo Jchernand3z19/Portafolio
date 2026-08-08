@@ -25,6 +25,7 @@ from precios_supermercados.scrapers.la_colonia_facet_discovery_adapter import (
     ROOT_TOTAL_QUERY,
     FacetDiscoveryTransportError,
     LaColoniaFacetDiscoveryAdapter,
+    OfflineTestOpener,
 )
 from precios_supermercados.scrapers.la_colonia_facet_discovery_runtime import (
     OUTCOME_OVER_BUDGET,
@@ -136,7 +137,7 @@ def test_adapter_has_zero_retries_fixed_timeout_and_no_cookies_or_tokens():
 
 def test_adapter_builds_only_fixed_variables_and_headers():
     opener = CaptureOpener()
-    adapter = LaColoniaFacetDiscoveryAdapter(opener=opener)
+    adapter = LaColoniaFacetDiscoveryAdapter(opener=OfflineTestOpener(opener))
     adapter(CATALOG_CATEGORIES_V1.requests[0])
     request, timeout = opener.requests[0]
     params = parse_qs(urlparse(request.full_url).query)
@@ -156,7 +157,7 @@ def test_adapter_builds_only_fixed_variables_and_headers():
 
 
 def test_adapter_rejects_unknown_logical_operation():
-    adapter = LaColoniaFacetDiscoveryAdapter(opener=CaptureOpener())
+    adapter = LaColoniaFacetDiscoveryAdapter(opener=OfflineTestOpener(CaptureOpener()))
     fake = type(CATALOG_CATEGORIES_V1.requests[0])("unknown", 1, "unknown")
     with pytest.raises(FacetDiscoveryTransportError):
         adapter(fake)
@@ -164,7 +165,7 @@ def test_adapter_rejects_unknown_logical_operation():
 
 def test_adapter_enforces_maximum_two_requests():
     opener = CaptureOpener()
-    adapter = LaColoniaFacetDiscoveryAdapter(opener=opener)
+    adapter = LaColoniaFacetDiscoveryAdapter(opener=OfflineTestOpener(opener))
     adapter(CATALOG_CATEGORIES_V1.requests[0])
     adapter(CATALOG_CATEGORIES_V1.requests[1])
     with pytest.raises(FacetDiscoveryTransportError):
@@ -177,7 +178,9 @@ def test_adapter_rejects_nonpositive_root_total():
         return FakeResponse({"data": {"productSearch": {"recordsFiltered": 0}}})
 
     with pytest.raises(FacetDiscoveryTransportError):
-        LaColoniaFacetDiscoveryAdapter(opener=opener)(CATALOG_CATEGORIES_V1.requests[0])
+        LaColoniaFacetDiscoveryAdapter(opener=OfflineTestOpener(opener))(
+            CATALOG_CATEGORIES_V1.requests[0]
+        )
 
 
 def test_runtime_completes_within_budget_using_fake_transport_only():
@@ -289,6 +292,6 @@ def test_no_real_internet_is_needed_by_tests(monkeypatch):
 
     monkeypatch.setattr(socket, "create_connection", blocked)
     opener = CaptureOpener()
-    adapter = LaColoniaFacetDiscoveryAdapter(opener=opener)
+    adapter = LaColoniaFacetDiscoveryAdapter(opener=OfflineTestOpener(opener))
     assert adapter(CATALOG_CATEGORIES_V1.requests[0]) == {"recordsFiltered": 100}
     assert adapter(CATALOG_CATEGORIES_V1.requests[1])["sampling"] is False
