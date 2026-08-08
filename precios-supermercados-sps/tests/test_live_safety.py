@@ -654,6 +654,102 @@ def test_default_monitor_clock_advances_without_explicit_transition(monkeypatch)
     assert store.snapshot("reservation-1")["state"] == ReservationState.UNCERTAIN.value
 
 
+def test_explicit_timestamps_cannot_rebase_default_monitor_backwards(monkeypatch):
+    clock = ManualClock(100)
+    monkeypatch.setattr(live_safety.time, "monotonic", clock)
+    observer = IndependentFencingObserver()
+    store = LinearizableAuthority(observer)
+    value = request(store)
+    store.issue_for_offline_test("grant-1", value)
+    store.reserve("grant-1", value, "reservation-1", now=0)
+
+    clock.now = 104
+    store.activate(
+        "reservation-1",
+        now=0,
+        evidence=start_evidence(store, observer, observed_at=0),
+    )
+    clock.now = 113
+    with pytest.raises(SafetyViolation, match="Transición de reserva inválida"):
+        store.open_connection("reservation-1", now=0)
+
+    snapshot = store.snapshot("reservation-1")
+    assert snapshot["state"] == ReservationState.UNCERTAIN.value
+    assert snapshot["physical_in_flight"] == 1
+
+
+def test_monitor_backend_exception_marks_active_reservation_uncertain():
+    class ThrowingClock:
+        value = 0.0
+        fail = False
+
+        def __call__(self):
+            if self.fail:
+                raise RuntimeError("clock backend unavailable")
+            return self.value
+
+    clock = ThrowingClock()
+    store = LinearizableAuthority(clock=clock)
+    value = request(store)
+    store.issue_for_offline_test("grant-1", value)
+    store.reserve("grant-1", value, "reservation-1", now=0)
+    clock.fail = True
+    with pytest.raises(SafetyViolation, match="Clock del monitor no disponible"):
+        store.snapshot("reservation-1")
+    clock.fail = False
+    assert store.snapshot("reservation-1")["state"] == ReservationState.UNCERTAIN.value
+    with pytest.raises(SafetyViolation, match="Transición de reserva inválida"):
+        store.activate("reservation-1", now=0, evidence=None)
+
+
+@pytest.mark.parametrize(
+    ("changes", "activate_at"),
+    [
+        ({"physical_started_at": 11}, 11),
+        ({"_seal": None}, 10),
+    ],
+)
+def test_rewritten_start_evidence_is_rejected_even_with_original_issuer(
+    changes, activate_at
+):
+    store, _, observer = reserved()
+    original = start_evidence(store, observer, observed_at=10)
+    tampered = replace(original, **changes)
+    with pytest.raises(SafetyViolation, match="evidencia del simulador"):
+        store.activate("reservation-1", now=activate_at, evidence=tampered)
+    assert store.snapshot("reservation-1")["state"] == ReservationState.UNCERTAIN.value
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"physical_closed_at": 18},
+        {"source": "forged-source"},
+        {"phase": "fencing"},
+        {"_seal": None},
+        {"source": {"not": "text"}},
+    ],
+)
+def test_rewritten_closure_evidence_is_rejected(changes):
+    store, _, observer = reserved()
+    store.activate(
+        "reservation-1", now=10,
+        evidence=start_evidence(store, observer, observed_at=10),
+    )
+    store.open_connection("reservation-1", now=11)
+    store.complete_tls("reservation-1", now=12)
+    store.send_http_request("reservation-1", now=13)
+    store.receive_first_byte("reservation-1", now=14)
+    store.receive_final_response("reservation-1", now=15)
+    store.begin_closing("reservation-1", now=16)
+    original = closure_evidence(store, observer, observed_at=17, phase="normal")
+    with pytest.raises(SafetyViolation, match="evidencia del simulador"):
+        store.confirm_physical_closed(
+            "reservation-1", evidence=replace(original, **changes)
+        )
+    assert store.snapshot("reservation-1")["state"] == ReservationState.CLOSING.value
+
+
 @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf"), True])
 def test_injected_monitor_clock_fails_closed_on_invalid_values(invalid: object):
     clock = ManualClock(0)

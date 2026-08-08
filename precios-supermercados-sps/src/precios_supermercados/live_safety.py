@@ -7,12 +7,14 @@ permite probar las invariantes que un broker/enforcer real deberá preservar.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import ipaddress
 import json
 import math
 import re
 import threading
 import time
+import secrets
 from types import MappingProxyType
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -256,6 +258,7 @@ class FencingEvidence:
     physical_closed_at: float
     source: str
     _issuer: object = field(repr=False, compare=False)
+    _seal: str = field(repr=False, compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,6 +268,7 @@ class PhysicalStartEvidence:
     request_digest: str
     physical_started_at: float
     _issuer: object = field(repr=False, compare=False)
+    _seal: str = field(repr=False, compare=False)
 
 
 class IndependentFencingObserver:
@@ -277,6 +281,45 @@ class IndependentFencingObserver:
 
     def __init__(self) -> None:
         self._issuer = object()
+        self._seal_key = secrets.token_bytes(32)
+
+    def _seal(self, kind: str, *values: object) -> str:
+        payload = json.dumps(
+            [kind, *values], separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        return hmac.new(self._seal_key, payload, hashlib.sha256).hexdigest()
+
+    def _valid_start(self, evidence: PhysicalStartEvidence) -> bool:
+        try:
+            if not isinstance(evidence._seal, str):
+                return False
+            expected = self._seal(
+                "start",
+                evidence.reservation_id,
+                evidence.epoch,
+                evidence.request_digest,
+                evidence.physical_started_at,
+            )
+            return hmac.compare_digest(evidence._seal, expected)
+        except (TypeError, ValueError):
+            return False
+
+    def _valid_closed(self, evidence: FencingEvidence) -> bool:
+        try:
+            if not isinstance(evidence._seal, str):
+                return False
+            expected = self._seal(
+                "closed",
+                evidence.reservation_id,
+                evidence.epoch,
+                evidence.request_digest,
+                evidence.phase,
+                evidence.physical_closed_at,
+                evidence.source,
+            )
+            return hmac.compare_digest(evidence._seal, expected)
+        except (TypeError, ValueError):
+            return False
 
     def observe_closed_for_offline_test(
         self,
@@ -304,7 +347,7 @@ class IndependentFencingObserver:
             raise ValueError("Evidencia de fencing inválida") from exc
         if timestamp < 0:
             raise ValueError("Evidencia de fencing inválida")
-        return FencingEvidence(
+        values = (
             reservation_id,
             epoch,
             request_digest,
@@ -312,6 +355,10 @@ class IndependentFencingObserver:
             timestamp,
             source.strip(),
             self._issuer,
+        )
+        return FencingEvidence(
+            *values,
+            self._seal("closed", *values[:-1]),
         )
 
     def observe_started_for_offline_test(
@@ -336,12 +383,16 @@ class IndependentFencingObserver:
             raise ValueError("Evidencia de inicio físico inválida") from exc
         if timestamp < 0:
             raise ValueError("Evidencia de inicio físico inválida")
-        return PhysicalStartEvidence(
+        values = (
             reservation_id,
             epoch,
             request_digest,
             timestamp,
             self._issuer,
+        )
+        return PhysicalStartEvidence(
+            *values,
+            self._seal("start", *values[:-1]),
         )
 
 
@@ -371,6 +422,7 @@ class LinearizableAuthority:
         self._fencing_issuer = (
             fencing_observer._issuer if fencing_observer is not None else object()
         )
+        self._fencing_observer = fencing_observer
 
     @property
     def epoch(self) -> int:
@@ -494,6 +546,8 @@ class LinearizableAuthority:
             if (
                 type(evidence) is not PhysicalStartEvidence
                 or evidence._issuer is not self._fencing_issuer
+                or self._fencing_observer is None
+                or not self._fencing_observer._valid_start(evidence)
                 or evidence.reservation_id != reservation.reservation_id
                 or evidence.epoch != reservation.epoch
                 or evidence.request_digest != reservation.request_digest
@@ -774,7 +828,12 @@ class LinearizableAuthority:
         reservation.last_transition_at = now
         self._last_observed_at = now
         if self._uses_default_clock:
-            self._clock_offset = now - self._raw_monotonic()
+            candidate = now - self._raw_monotonic()
+            self._clock_offset = (
+                candidate
+                if self._clock_offset is None
+                else max(self._clock_offset, candidate)
+            )
 
     def _enforce_deadline(
         self, reservation: _ReservationRecord, now: float, deadline: float, label: str
@@ -821,7 +880,11 @@ class LinearizableAuthority:
             ReservationState.CLOSING,
         }:
             return
-        now = self._clock()
+        try:
+            now = self._clock()
+        except Exception as exc:
+            reservation.state = ReservationState.UNCERTAIN
+            raise SafetyViolation("Clock del monitor no disponible") from exc
         if (
             isinstance(now, bool)
             or not isinstance(now, (int, float))
@@ -846,6 +909,8 @@ class LinearizableAuthority:
         if (
             type(evidence) is not FencingEvidence
             or evidence._issuer is not self._fencing_issuer
+            or self._fencing_observer is None
+            or not self._fencing_observer._valid_closed(evidence)
             or evidence.reservation_id != reservation.reservation_id
             or evidence.epoch != reservation.epoch
             or evidence.request_digest != reservation.request_digest

@@ -4,6 +4,10 @@
 
 Fecha de análisis: **2026-08-06**, sesión iniciada a las **22:55 America/Tegucigalpa**.
 
+> Snapshot histórico. Estado vigente: `SPS-context-and-root-facets-001` fue
+> consumida y no puede reutilizarse; `SPS-context-and-root-facets-002` no ha sido
+> creada ni autorizada. Este documento no concede autoridad operacional.
+
 Clasificación final: **radiografía incompleta / inconclusive para full crawl**.
 
 Hallazgos principales:
@@ -690,7 +694,8 @@ No se guardaron cookies, tokens, sesiones ni datos personales.
 32. **Pendiente:** ubicación, endpoints, facets, sampling, cobertura, estabilidad, precios SPS y presupuesto.
 33. **Listo para scraper completo:** no.
 34. **Primero:** resolver contexto SPS reproducible.
-35. **Siguiente prueba:** `SPS-context-and-root-facets-001`, propuesta y no autorizada.
+35. **Estado vigente:** `SPS-context-and-root-facets-001` está consumida y no se
+    reutiliza; `SPS-context-and-root-facets-002` no existe ni está autorizada.
 
 ## 24. Estado final de la etapa
 

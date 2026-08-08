@@ -2,6 +2,10 @@
 
 Fecha: 2026-08-06. Estado: **incompleto**. No contiene cookies, tokens, secretos, identificadores privados ni datos personales.
 
+> Snapshot histórico. Estado vigente: `SPS-context-and-root-facets-001` fue
+> consumida y no puede reutilizarse; `SPS-context-and-root-facets-002` no ha sido
+> creada ni autorizada. Este documento no concede autoridad operacional.
+
 ## 1. Solicitudes y superficies
 
 | Propósito | Método | Endpoint conceptual | Protocolo | operationName | Variables/campos principales | Respuesta relevante | Paginación | Ubicación | Confianza |
@@ -287,4 +291,6 @@ cookies/tokens guardados = 0
 tráfico total exacto = Pendiente por limitación del tooling
 ```
 
-La siguiente captura técnica propuesta es `SPS-context-and-root-facets-001`; todavía no está autorizada.
+La propuesta histórica `SPS-context-and-root-facets-001` ya fue consumida y no
+puede reutilizarse. `SPS-context-and-root-facets-002` no ha sido creada ni
+autorizada; no existe una siguiente captura live autorizada.
