@@ -166,17 +166,17 @@ def test_missing_facet_fields_are_rejected(field):
     assert decide(value).accepted is False
 
 
-def test_facet_request_is_idempotent():
+def test_facet_comment_marker_is_observability_only():
     decision = decide(facet_command(), [request_marker(FACET_DISCOVERY_REQUEST_ID)])
-    assert decision.accepted is False
-    assert decision.should_comment is False
+    assert decision.accepted is True
 
 
-def test_facet_workflow_is_manual_with_minimum_permissions_and_main_checkout():
+def test_facet_workflow_is_manual_blocked_with_minimum_permissions_and_immutable_checkout():
     text = FACET_WORKFLOW_FILE.read_text(encoding="utf-8")
     assert "workflow_dispatch:" in text
     assert "permissions:\n  contents: read" in text
-    assert "ref: main" in text
+    assert "if: ${{ false }}" in text
+    assert "ref: ${{ github.sha }}" in text
     assert "persist-credentials: false" in text
     assert "timeout-minutes: 10" in text
     assert "cancel-in-progress: false" in text
@@ -199,31 +199,29 @@ def test_facet_workflow_exposes_only_three_inputs_and_maps_exit_two_to_success()
     assert '"$exit_code" -eq 2' in text
 
 
-def test_controller_workflow_runs_only_trusted_main_module():
+def test_controller_workflow_uses_immutable_workflow_code_and_is_blocked():
     text = CONTROLLER.read_text(encoding="utf-8")
-    assert "ref: main" in text
+    assert "ref: ${{ github.workflow_sha }}" in text
+    assert "actions: write" not in text
     assert "persist-credentials: false" in text
     assert "controlar_solicitud_archivo_la_colonia.js" in text
     assert "pull_request.head" not in text
     assert "workflow_id: decision.workflow" not in text
 
 
-def test_controller_runtime_validates_relation_exact_inputs_and_fixed_main_ref():
+def test_controller_runtime_is_global_fail_closed_without_dispatch_capability():
     text = CONTROLLER_RUNTIME.read_text(encoding="utf-8")
-    assert '[FACET_WORKFLOW, new Set(["facet_discovery"])]' in text
-    assert 'decision.mode === "facet_discovery" ? "main"' in text
-    assert "workflow_id: selectedWorkflowFile" in text
-    assert "workflow_id: decision.workflow" not in text
-    assert 'decision.inputs.request_id === "la-colonia-facet-discovery-001"' in text
-    assert 'decision.inputs.discovery_plan === "catalog_categories_v1"' in text
-    assert 'decision.inputs.delay_seconds === "1.5"' in text
+    assert "GLOBAL LIVE BLOCKED" in text
+    assert "github.request(" not in text
+    assert "/actions/workflows/" not in text
+    assert "listComments" not in text
 
 
-def test_controller_runtime_dispatches_once_and_does_not_repeat_after_comment_failure():
+def test_controller_runtime_never_dispatches_or_writes_comments():
     text = CONTROLLER_RUNTIME.read_text(encoding="utf-8")
-    endpoint = '"POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches"'
-    assert text.count(endpoint) == 1
-    assert "comentario pendiente de recuperación por el conector" in text
+    assert "/dispatches" not in text
+    assert "createComment" not in text
+    assert "github.graphql" not in text
 
 
 def test_observer_accepts_facet_and_keeps_sanitized_summary(tmp_path):
@@ -263,9 +261,9 @@ def test_observer_keeps_legacy_compatibility(tmp_path):
     assert "legacy_artifact: `true`" in summary
 
 
-def test_recovery_workflow_still_checks_out_main_and_never_dispatches():
+def test_recovery_workflow_checks_out_workflow_sha_and_never_dispatches():
     text = RECOVERY_WORKFLOW.read_text(encoding="utf-8")
-    assert "ref: main" in text
+    assert "ref: ${{ github.workflow_sha }}" in text
     assert "persist-credentials: false" in text
     assert "/dispatches" not in text
 

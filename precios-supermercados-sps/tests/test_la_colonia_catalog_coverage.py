@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from precios_supermercados.scrapers.base import HttpResponse, SafeHttpClient
+from precios_supermercados.scrapers.base import HttpResponse, OfflineTestTransport, SafeHttpClient
 from precios_supermercados.scrapers.la_colonia import (
     FORBIDDEN_PATH_PREFIXES,
     USER_AGENT,
@@ -42,7 +42,6 @@ def page(
     values: list[str] | None = None,
     *,
     order_by: str = NAME_ASC,
-    membership_valid: bool = True,
 ):
     return observe_coverage_page(
         partition=partition,
@@ -51,7 +50,6 @@ def page(
         to_index=end,
         records_filtered=total,
         product_keys=values if values is not None else keys(start, end - start + 1),
-        membership_valid=membership_valid,
     )
 
 
@@ -237,7 +235,8 @@ def test_12_product_in_two_categories_is_deduplicated_globally():
         products_reported=3,
     )
 
-    assert report.accepted is True
+    assert report.accepted is False
+    assert "legacy_evidence_non_authoritative" in report.coverage_reason
     assert report.products_unique == 3
     assert report.duplicate_occurrences == 1
 
@@ -308,8 +307,9 @@ def test_16_complete_union_between_categories_is_accepted():
         products_reported=4,
     )
 
-    assert report.accepted is True
-    assert report.coverage_demonstrated is True
+    assert report.accepted is False
+    assert report.coverage_demonstrated is False
+    assert "legacy_evidence_non_authoritative" in report.coverage_reason
     assert report.products_unique == report.products_reported == 4
 
 
@@ -422,6 +422,10 @@ def test_21_sanitized_summary_contains_only_aggregate_metrics():
         "coverage_demonstrated",
         "coverage_reason",
         "accepted",
+        "run_id",
+        "tree_digest",
+        "primary_plan_digest",
+        "reconciliation_plan_digest",
     }
     assert set(summary) == expected_fields
     assert "PRIVATE-A" not in rendered
@@ -487,7 +491,7 @@ def test_22_normal_runner_still_rejects_partial_pages():
         forbidden_path_prefixes=FORBIDDEN_PATH_PREFIXES,
         user_agent=USER_AGENT,
         max_retries=0,
-        transport=transport,
+        transport=OfflineTestTransport(transport),
         sleeper=lambda _: None,
     )
     extractor = LaColoniaExtractor(client=client, clock=lambda: FIXED_TIME)
@@ -512,15 +516,17 @@ def test_22_normal_runner_still_rejects_partial_pages():
     assert result.metrics.pages_completed == 0
 
 
-def test_23_invalid_partition_membership_is_rejected():
-    result = partition_result(
-        "membership",
-        2,
-        [page("membership", 0, 1, 2, membership_valid=False)],
-    )
-
-    assert result.coverage_demonstrated is False
-    assert "partition_membership_invalid" in result.coverage_reason
+def test_23_caller_cannot_supply_membership_boolean():
+    with pytest.raises(TypeError, match="membership_valid"):
+        observe_coverage_page(
+            partition="membership",
+            order_by=NAME_ASC,
+            from_index=0,
+            to_index=1,
+            records_filtered=2,
+            product_keys=["A", "B"],
+            membership_valid=True,
+        )
 
 
 def test_24_missing_discovered_partition_is_rejected():
@@ -544,4 +550,4 @@ def test_25_catalog_report_type_is_explicit():
     )
 
     assert isinstance(report, CatalogCoverageReport)
-    assert report.accepted is True
+    assert report.accepted is False

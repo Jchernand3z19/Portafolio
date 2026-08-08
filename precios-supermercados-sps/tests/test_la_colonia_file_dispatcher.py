@@ -68,12 +68,11 @@ def test_request_id_invalido():
     assert "request_id" in decision.reason
 
 
-def test_request_id_ya_procesado():
+def test_comentarios_no_controlan_replay_ni_autorizacion():
     marker = request_marker("la-colonia-smoke-10-001")
     decision = decide(comments=[f"resultado anterior\n{marker}"])
-    assert not decision.accepted
-    assert not decision.should_comment
-    assert "procesada" in decision.reason
+    assert decision.accepted
+    assert decision.should_comment
 
 
 def test_archivo_no_modificado_en_ultimo_commit():
@@ -277,12 +276,12 @@ def test_comentario_de_aceptacion():
         controller_run_id=12345,
         controller_url="https://github.com/Jchernand3z19/Portafolio/actions/runs/12345",
     )
-    assert "Solicitud aceptada" in comment
+    assert "Solicitud válida pero bloqueada" in comment
     assert "la-colonia-smoke-10-001" in comment
     assert "a" * 40 in comment
     assert "feature/la-colonia-full-crawl-validation" in comment
-    assert "workflow_dispatch enviado" in comment
-    assert request_marker("la-colonia-smoke-10-001") in comment
+    assert "no se envió workflow_dispatch" in comment
+    assert request_marker("la-colonia-smoke-10-001") not in comment
 
 
 def test_comentario_de_rechazo_no_publica_contenido_inseguro():
@@ -304,12 +303,11 @@ def test_no_ejecuta_contenido_proveniente_del_pr():
         repo_root / ".github/workflows/precios-supermercados-sps-la-colonia-command.yml"
     ).read_text(encoding="utf-8")
     assert "pull_request_target:" in workflow
-    assert "ref: main" in workflow
+    assert "ref: ${{ github.workflow_sha }}" in workflow
     assert "persist-credentials: false" in workflow
     assert "github.event.pull_request.head" not in workflow
     assert "eval " not in workflow
-    assert "dispatcher-command.json" in workflow
-    assert "--command dispatcher-command.json" in workflow
+    assert "controlar_solicitud_archivo_la_colonia.js" in workflow
     assert "issue_comment:" not in workflow
 
 
@@ -318,13 +316,10 @@ def test_permisos_minimos_del_controlador():
     workflow = (
         repo_root / ".github/workflows/precios-supermercados-sps-la-colonia-command.yml"
     ).read_text(encoding="utf-8")
-    for permission in (
-        "contents: read",
-        "pull-requests: read",
-        "issues: write",
-        "actions: write",
-    ):
+    for permission in ("contents: read", "pull-requests: read"):
         assert permission in workflow
+    assert "issues: write" not in workflow
+    assert "actions: write" not in workflow
 
 
 def test_evento_reemplazado_no_despacha():

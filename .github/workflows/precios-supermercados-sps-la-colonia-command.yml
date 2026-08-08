@@ -9,8 +9,6 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  issues: write
-  actions: write
 
 concurrency:
   group: la-colonia-file-dispatch-${{ github.event.pull_request.number }}
@@ -18,23 +16,25 @@ concurrency:
 
 jobs:
   dispatch-command:
+    # Global fail-closed: no existe autorización live ni evidencia de GATE-17.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Descargar código confiable desde main
-        uses: actions/checkout@v4
+      - name: Descargar el código inmutable del workflow
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: main
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
 
       - name: Configurar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
-      - name: Procesar y despachar con código confiable
-        id: dispatch
-        uses: actions/github-script@v7
+      - name: Validar solicitud sin capacidad de despacho
+        id: controller
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const controller = require('./precios-supermercados-sps/scripts/controlar_solicitud_archivo_la_colonia.js');
@@ -42,35 +42,9 @@ jobs:
 
       - name: Conservar resultado operacional del controlador
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: la-colonia-file-dispatch-${{ github.run_id }}
           path: dispatcher-result.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 1
-
-# Contrato textual de compatibilidad de pruebas; la implementación ejecutable
-# reside en controlar_solicitud_archivo_la_colonia.js, siempre desde main.
-# const allowedWorkflows = new Map([
-#   ['.github/workflows/precios-supermercados-sps-la-colonia-live.yml'],
-#   ['.github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml'],
-#   [facetWorkflowPath],
-# ]);
-# const expectedModes
-# workflow_id: selectedWorkflowFile
-# return_run_details: true
-# const apiVersion = '2026-03-10';
-# 'X-GitHub-Api-Version': apiVersion
-# mode: decision.mode || null
-# workflow: decision.workflow || null
-# dispatch_sent: false
-# live_run_id
-# live_run_url
-# addComment(input: {subjectId: $subjectId, body: $body})
-# github.rest.issues.createComment
-# comentario pendiente de recuperación por el conector
-# core.setFailed('La solicitud fue rechazada
-# ref: decision.ref
-# 'POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches'
-# dispatcher-command.json
-# --command dispatcher-command.json

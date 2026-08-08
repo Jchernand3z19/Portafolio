@@ -376,6 +376,10 @@ def evaluate_file_request(
 ) -> DispatchDecision:
     """Evalúa contexto, archivo no confiable e idempotencia sin ejecutarlo."""
 
+    # Los comentarios son observabilidad únicamente. Se conserva el parámetro
+    # para compatibilidad, pero nunca participa en autorización ni replay.
+    del existing_comment_markers
+
     context_error = _validate_context(context)
     if context_error is not None:
         return context_error
@@ -391,14 +395,6 @@ def evaluate_file_request(
         return _rejected(validation_error, pr_number=pr_number)
     assert request_id is not None and mode is not None
     assert workflow in TRUSTED_WORKFLOWS and inputs is not None
-
-    marker = request_marker(request_id)
-    if any(marker in body for body in existing_comment_markers if isinstance(body, str)):
-        return _rejected(
-            "La solicitud ya fue procesada.",
-            should_comment=False,
-            pr_number=pr_number,
-        )
 
     return DispatchDecision(
         True,
@@ -436,7 +432,7 @@ def build_controller_comment(
     assert decision.ref is not None
     normalized = json.dumps(decision.inputs, ensure_ascii=False, indent=2, sort_keys=True)
     return (
-        "## Solicitud aceptada\n\n"
+        "## Solicitud válida pero bloqueada\n\n"
         f"- request_id: `{decision.request_id}`\n"
         f"- Modo: `{decision.mode}`\n"
         f"- Workflow: `{decision.workflow}`\n"
@@ -444,8 +440,7 @@ def build_controller_comment(
         f"- Rama: `{decision.ref}`\n"
         f"- Run ID del controlador: `{controller_run_id}`\n"
         f"- Enlace del controlador: {controller_url}\n"
-        "- Estado: **workflow_dispatch enviado**\n\n"
+        "- Estado: **no se envió workflow_dispatch; GLOBAL LIVE BLOCKED**\n\n"
         "### Parámetros normalizados\n\n"
-        f"```json\n{normalized}\n```\n\n"
-        f"{request_marker(decision.request_id)}"
+        f"```json\n{normalized}\n```"
     )

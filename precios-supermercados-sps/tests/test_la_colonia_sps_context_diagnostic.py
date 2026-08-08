@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import json
 import socket
+import threading
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -307,6 +308,52 @@ def test_minimum_delay_is_enforced():
 def test_retry_budget_is_closed():
     with pytest.raises(ValueError, match="max_retries"):
         DiagnosticBudget(max_retries=2)
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf"), True])
+def test_diagnostic_budget_rejects_nonfinite_or_boolean_delay(invalid):
+    with pytest.raises(ValueError, match="minimum_delay_seconds"):
+        DiagnosticBudget(minimum_delay_seconds=invalid)
+
+
+def test_counter_rejects_when_sleeper_does_not_advance_physical_clock():
+    counter = LogicalRequestCounter(DiagnosticBudget())
+    counter.reserve("first", clock=lambda: 0.0, sleeper=lambda _: None)
+    with pytest.raises(DiagnosticSafetyError, match="pacing físico no observado"):
+        counter.reserve("second", clock=lambda: 0.0, sleeper=lambda _: None)
+    assert counter.count == 1
+    assert counter.labels == ["first"]
+
+
+def test_counter_budget_is_atomic_under_concurrent_reservations():
+    counter = LogicalRequestCounter(DiagnosticBudget(max_logical_requests=8))
+    clock_value = [0.0]
+    clock_lock = threading.Lock()
+    outcomes: list[str] = []
+
+    def clock() -> float:
+        with clock_lock:
+            return clock_value[0]
+
+    def sleeper(seconds: float) -> None:
+        with clock_lock:
+            clock_value[0] += seconds
+
+    def reserve_one(index: int) -> None:
+        try:
+            counter.reserve(f"request-{index}", clock=clock, sleeper=sleeper)
+            outcomes.append("accepted")
+        except LogicalRequestBudgetExceeded:
+            outcomes.append("denied")
+
+    threads = [threading.Thread(target=reserve_one, args=(index,)) for index in range(16)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert outcomes.count("accepted") == 8
+    assert outcomes.count("denied") == 8
+    assert counter.count == 8
 
 
 def test_live_mode_requires_authorization_id():

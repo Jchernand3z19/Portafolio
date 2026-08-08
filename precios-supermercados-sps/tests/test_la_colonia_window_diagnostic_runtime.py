@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 import precios_supermercados.scrapers.la_colonia_window_diagnostic_runtime as runtime_module
-from precios_supermercados.scrapers.base import HttpResponse, SafeHttpClient
+from precios_supermercados.scrapers.base import HttpResponse, OfflineTestTransport, SafeHttpClient
 from precios_supermercados.scrapers.la_colonia import FORBIDDEN_PATH_PREFIXES, USER_AGENT
 from precios_supermercados.scrapers.la_colonia_window_diagnostic import WindowDiagnosticReport
 from precios_supermercados.scrapers.la_colonia_window_diagnostic_runtime import (
@@ -90,7 +90,7 @@ def build_runtime(planner=complete_planner, *, sleeper=None, max_duration=300.0)
         user_agent=USER_AGENT,
         max_retries=0,
         retry_delay_seconds=0,
-        transport=transport,
+        transport=OfflineTestTransport(transport),
         sleeper=lambda _: None,
     )
     sleeps = [] if sleeper is None else sleeper
@@ -227,15 +227,14 @@ def test_invalid_graphql_structure_stops():
 
 def test_runtime_rejects_retries_and_non_fixed_delay():
     transport = PlannedTransport(complete_planner)
-    client = SafeHttpClient(
-        allowed_hosts={"www.lacolonia.com"},
-        forbidden_path_prefixes=FORBIDDEN_PATH_PREFIXES,
-        user_agent=USER_AGENT,
-        max_retries=1,
-        transport=transport,
-    )
-    with pytest.raises(ValueError, match="max_retries=0"):
-        LaColoniaWindowDiagnosticRuntime(client)
+    with pytest.raises(ValueError, match="max_retries debe ser 0"):
+        SafeHttpClient(
+            allowed_hosts={"www.lacolonia.com"},
+            forbidden_path_prefixes=FORBIDDEN_PATH_PREFIXES,
+            user_agent=USER_AGENT,
+            max_retries=1,
+            transport=OfflineTestTransport(transport),
+        )
 
     runtime, _, _ = build_runtime()
     with pytest.raises(ValueError, match="1.5"):

@@ -221,12 +221,10 @@ def test_facet_request_id_is_normalized_from_trusted_code(facet_command):
     assert decision.inputs["delay_seconds"] == "1.5"
 
 
-def test_existing_idempotency_marker_rejects_second_attempt_silently(facet_command):
+def test_existing_comment_marker_does_not_control_replay(facet_command):
     marker = request_marker("la-colonia-facet-discovery-001")
     decision = evaluate(facet_command, comments=[marker])
-    assert decision.accepted is False
-    assert decision.should_comment is False
-    assert "procesada" in decision.reason
+    assert decision.accepted is True
 
 
 def test_absence_of_comment_only_means_request_is_eligible_not_that_a_run_exists(
@@ -302,7 +300,7 @@ def test_expected_event_and_paths_filter_are_declared_in_main_workflow():
     assert "types: [synchronize]" in text
     assert "paths:" in text
     assert text.count(OPERATIONAL_PATH) == 1
-    assert "ref: main" in text
+    assert "ref: ${{ github.workflow_sha }}" in text
     assert "persist-credentials: false" in text
 
 
@@ -323,22 +321,19 @@ def test_controller_recovers_commit_and_file_from_event_head_sha():
     assert "ref: eventHeadSha" in text
 
 
-def test_controller_uses_fixed_main_ref_for_facet_and_only_one_dispatch():
+def test_controller_is_globally_blocked_without_dispatch_endpoint():
     text = CONTROLLER.read_text(encoding="utf-8")
-    endpoint = '"POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches"'
-    assert 'decision.mode === "facet_discovery" ? "main"' in text
-    assert text.count(endpoint) == 1
-    assert "workflow_id: selectedWorkflowFile" in text
-    assert "workflow_id: decision.workflow" not in text
+    assert "GLOBAL LIVE BLOCKED" in text
+    assert "/actions/workflows/" not in text
+    assert "github.request(" not in text
 
 
-def test_comment_fallback_does_not_repeat_dispatch():
+def test_comments_are_observability_only_and_controller_does_not_dispatch():
     text = CONTROLLER.read_text(encoding="utf-8")
-    endpoint = '"POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches"'
-    assert text.count(endpoint) == 1
-    assert "github.graphql" in text
-    assert "github.rest.issues.createComment" in text
-    assert "comentario pendiente de recuperación" in text
+    assert "/dispatches" not in text
+    assert "github.graphql" not in text
+    assert "createComment" not in text
+    assert "listComments" not in text
 
 
 def test_upload_artifact_runs_always_and_recovery_never_dispatches():
@@ -348,7 +343,7 @@ def test_upload_artifact_runs_always_and_recovery_never_dispatches():
     assert "if: always()" in workflow
     assert "dispatcher-result.json" in workflow
     assert "workflow_run:" in recovery
-    assert "ref: main" in recovery
+    assert "ref: ${{ github.workflow_sha }}" in recovery
     assert "FACET_WORKFLOW" in observer
     assert "RECOVERY_REQUIRED" in observer
     assert "/dispatches" not in recovery

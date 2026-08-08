@@ -387,7 +387,7 @@ def test_runner_normal_is_not_integrated_with_facet_discovery():
     assert "FacetDiscovery" not in source
 
 
-def test_existing_coverage_contract_still_accepts_stable_partition():
+def test_legacy_coverage_metrics_cannot_accept_a_catalog():
     partition = PartitionSpec("p", "category-3", "private", 2)
     observations = [
         observe_coverage_page(
@@ -404,7 +404,8 @@ def test_existing_coverage_contract_still_accepts_stable_partition():
         [covered], partitions_discovered=1, products_reported=2
     )
     assert covered.coverage_demonstrated is True
-    assert report.accepted is True
+    assert report.accepted is False
+    assert "legacy_evidence_non_authoritative" in report.coverage_reason
 
 
 def test_runtime_does_not_need_real_internet(monkeypatch):
@@ -459,14 +460,16 @@ def test_partition_limit_is_enforced():
         )
 
 
-def test_no_positive_partitions_is_classified():
+def test_empty_catalog_with_valid_zero_leaf_is_within_budget():
     values = [node(1, "ROOT", 0, [node(2, "ZERO", 0, [])])]
     transport = FakeTransport(
         root_total=0,
         facet_response=facets_payload(total=0, values=values),
     )
     result, _, _ = run_runtime(transport)
-    assert result.summary["discovery_outcome"] == OUTCOME_NO_POSITIVE
+    assert result.summary["discovery_outcome"] == OUTCOME_WITHIN_BUDGET
+    assert result.summary["positive_leaf_partitions"] == 0
+    assert result.summary["zero_quantity_partitions"] == 1
 
 
 def test_runtime_classifies_invalid_quantities():

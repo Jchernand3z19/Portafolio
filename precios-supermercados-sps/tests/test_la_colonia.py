@@ -13,6 +13,7 @@ from precios_supermercados.scrapers.base import (
     EmptyResponseError,
     HttpResponse,
     HttpStatusError,
+    OfflineTestTransport,
     RateLimitedError,
     RobotsPolicyError,
     SafeHttpClient,
@@ -367,7 +368,7 @@ def test_client_blocks_robots_excluded_routes_before_transport():
         allowed_hosts={"www.lacolonia.com"},
         forbidden_path_prefixes=("/api", "/busca", "/buscapagina"),
         user_agent="test",
-        transport=transport,
+        transport=OfflineTestTransport(transport),
     )
     for url in (
         "https://www.lacolonia.com/api/catalog_system/pub/products/search",
@@ -384,7 +385,7 @@ def test_client_blocks_mobile_domain():
         allowed_hosts={"www.lacolonia.com"},
         forbidden_path_prefixes=("/api",),
         user_agent="test",
-        transport=lambda *_: None,
+        transport=OfflineTestTransport(lambda *_: None),
     )
     with pytest.raises(RobotsPolicyError, match="Host"):
         client.get("https://mobile.lacolonia.com/supermercado")
@@ -395,7 +396,9 @@ def test_client_stops_on_403_and_captcha():
         allowed_hosts={"www.lacolonia.com"},
         forbidden_path_prefixes=("/api",),
         user_agent="test",
-        transport=lambda url, headers, timeout: HttpResponse(403, url, {}, b"blocked"),
+        transport=OfflineTestTransport(
+            lambda url, headers, timeout: HttpResponse(403, url, {}, b"blocked")
+        ),
     )
     with pytest.raises(BlockedResponseError):
         forbidden.get("https://www.lacolonia.com/_v/segment/graphql/v1")
@@ -403,32 +406,32 @@ def test_client_stops_on_403_and_captcha():
         allowed_hosts={"www.lacolonia.com"},
         forbidden_path_prefixes=("/api",),
         user_agent="test",
-        transport=lambda url, headers, timeout: HttpResponse(200, url, {}, b"CAPTCHA"),
+        transport=OfflineTestTransport(
+            lambda url, headers, timeout: HttpResponse(200, url, {}, b"CAPTCHA")
+        ),
     )
     with pytest.raises(BlockedResponseError):
         captcha.get("https://www.lacolonia.com/_v/segment/graphql/v1")
 
 
-def test_client_retries_few_times_on_server_error():
+def test_client_rejects_retry_configuration_and_never_hides_second_attempt():
     calls = []
 
     def transport(url, headers, timeout):
         calls.append(url)
         return HttpResponse(500, url, {}, b"error")
 
-    client = SafeHttpClient(
-        allowed_hosts={"www.lacolonia.com"},
-        forbidden_path_prefixes=("/api",),
-        user_agent="test",
-        max_retries=2,
-        retry_delay_seconds=0,
-        transport=transport,
-        sleeper=lambda _: None,
-    )
-    with pytest.raises(HttpStatusError) as error:
-        client.get("https://www.lacolonia.com/_v/segment/graphql/v1")
-    assert error.value.status_code == 500
-    assert len(calls) == 3
+    with pytest.raises(ValueError, match="max_retries debe ser 0"):
+        SafeHttpClient(
+            allowed_hosts={"www.lacolonia.com"},
+            forbidden_path_prefixes=("/api",),
+            user_agent="test",
+            max_retries=1,
+            retry_delay_seconds=0,
+            transport=OfflineTestTransport(transport),
+            sleeper=lambda _: None,
+        )
+    assert calls == []
 
 
 def test_client_respects_429_and_then_stops():
@@ -437,16 +440,18 @@ def test_client_respects_429_and_then_stops():
         allowed_hosts={"www.lacolonia.com"},
         forbidden_path_prefixes=("/api",),
         user_agent="test",
-        max_retries=1,
+        max_retries=0,
         retry_delay_seconds=0,
-        transport=lambda url, headers, timeout: HttpResponse(
-            429, url, {"Retry-After": "2"}, b"rate limited"
+        transport=OfflineTestTransport(
+            lambda url, headers, timeout: HttpResponse(
+                429, url, {"Retry-After": "2"}, b"rate limited"
+            )
         ),
         sleeper=sleeps.append,
     )
     with pytest.raises(RateLimitedError):
         client.get("https://www.lacolonia.com/_v/segment/graphql/v1")
-    assert 2.0 in sleeps
+    assert sleeps == []
 
 
 def test_live_limit_cannot_exceed_ten_products():

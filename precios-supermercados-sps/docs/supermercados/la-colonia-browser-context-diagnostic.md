@@ -249,7 +249,7 @@ No se usan índices visuales como `nth(3)`.
 Dependencia Python:
 
 ```text
-playwright>=1.45,<2
+playwright==1.62.0
 ```
 
 La CI resolvió:
@@ -424,7 +424,7 @@ Defaults:
 max_logical_requests = 8
 concurrency = 1
 minimum_delay_seconds = 1.5
-max_retries = 1
+max_retries = 0
 ```
 
 El contador se detiene al alcanzar el presupuesto.

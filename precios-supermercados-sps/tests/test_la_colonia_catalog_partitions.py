@@ -46,6 +46,7 @@ def nested_facets():
                                     "key": "category-3",
                                     "value": "granos",
                                     "quantity": 4,
+                                    "children": [],
                                 }
                             ],
                         },
@@ -83,20 +84,13 @@ def test_sampled_facets_are_rejected_as_incomplete_discovery():
 
 def test_duplicate_leaf_is_deduplicated_but_conflicting_quantity_is_rejected():
     facets = nested_facets()
-    duplicate = {
-        "type": "CATEGORYTREE",
-        "values": [
-            {
-                "key": "category-3",
-                "value": "agua",
-                "quantity": 2,
-                "children": [],
-            }
-        ],
-    }
+    duplicate = {"type": "CATEGORYTREE", "values": [facets[0]["values"][0]]}
     assert len(discover_leaf_category_partitions([*facets, duplicate])) == 3
 
-    duplicate["values"][0]["quantity"] = 7
+    duplicate["values"][0] = {
+        **duplicate["values"][0],
+        "quantity": 7,
+    }
     with pytest.raises(ValueError, match="cantidades incompatibles"):
         discover_leaf_category_partitions([*facets, duplicate])
 

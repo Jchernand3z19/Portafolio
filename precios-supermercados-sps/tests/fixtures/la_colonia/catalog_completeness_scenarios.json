@@ -1,0 +1,14 @@
+{
+  "A_normal_full_page": {"expected": "COMPLETE", "total": 4, "primary": [[0, 3, 4, ["A", "B", "C", "D"]]], "recovery": [[2, 3, 4, ["C", "D"]]], "reconcile": ["A", "B", "C", "D"]},
+  "B_intermediate_20_returns_19": {"expected": "COMPLETE", "total": 21, "primary": [[0, 19, 21, ["P00", "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18"]], [20, 20, 21, ["P20"]]], "recovery": [[18, 20, 21, ["P18", "P19", "P20"]]], "reconcile": ["P00", "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18", "P19", "P20"]},
+  "C_duplicate_between_windows": {"expected": "COMPLETE", "total": 4, "primary": [[0, 3, 4, ["A", "B", "C", "D"]]], "recovery": [[2, 3, 4, ["C", "D"]]], "reconcile": ["D", "C", "B", "A"]},
+  "D_duplicate_between_leaves": {"expected": "GLOBAL_COMPLETE", "leaves": [["A", "B"], ["B", "C"]], "global_total": 3},
+  "E_recovered_by_overlap": {"expected": "COMPLETE", "total": 5, "primary": [[0, 3, 5, ["A", "B", "C"]], [4, 4, 5, ["E"]]], "recovery": [[2, 4, 5, ["C", "D", "E"]]], "reconcile": ["A", "B", "C", "D", "E"]},
+  "F_missing_not_recoverable": {"expected": "INCOMPLETE", "total": 5, "primary": [[0, 3, 5, ["A", "B", "C"]], [4, 4, 5, ["E"]]], "recovery": [[2, 4, 5, ["C", "E"]]], "reconcile": ["A", "B", "C", "E"]},
+  "G_total_changes": {"expected": "INCOMPLETE", "total": 5, "primary": [[0, 3, 5, ["A", "B", "C", "D"]], [4, 4, 6, ["E"]]], "recovery": [[2, 4, 5, ["C", "D", "E"]]], "reconcile": ["A", "B", "C", "D", "E"]},
+  "H_empty_leaf": {"expected": "EMPTY_COMPLETE", "total": 0},
+  "I_duplicate_facet": {"expected": "FACET_DEDUP", "quantity": 2},
+  "J_truncated_response": {"expected": "INCOMPLETE", "total": 5, "primary": [[0, 3, 5, ["A", "B", "C"]], [4, 4, 5, ["E"]]], "recovery": [[2, 4, 5, ["C", "D"]]], "reconcile": ["A", "B", "C", "D", "E"]},
+  "K_reordered_results": {"expected": "INCOMPLETE", "total": 4, "primary": [[0, 3, 4, ["A", "B", "C", "D"]]], "recovery": [[2, 3, 4, ["C", "D"]]], "reconcile": ["A", "B", "C", "X"]},
+  "L_unknown_residual": {"expected": "INCOMPLETE", "total": 4, "primary": [[0, 3, 4, ["A", "B", "C"]]], "recovery": [[2, 3, 4, ["C"]]], "reconcile": null}
+}

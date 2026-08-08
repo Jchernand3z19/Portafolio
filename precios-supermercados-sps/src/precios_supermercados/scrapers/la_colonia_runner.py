@@ -26,6 +26,11 @@ from .base import (
     StructureChangedError,
 )
 from .la_colonia import LaColoniaExtractor, decode_search_variables
+from .la_colonia_catalog_coverage import (
+    CanonicalCatalogEvidence,
+    CatalogCoverageReport,
+    evaluate_canonical_catalog_coverage,
+)
 from .la_colonia_graphql import (
     ALLOWED_ORDER_BY,
     MAX_CATALOG_PAGE_SIZE,
@@ -48,33 +53,59 @@ class CrawlConfig:
     max_pages: int | None = 2
     max_products: int | None = None
     delay_seconds: float = 1.5
-    max_retries: int = 2
+    max_retries: int = 0
     stop_on_error: bool = True
     order_by: str = "OrderByNameASC"
     max_duration_seconds: float = 1_800.0
 
     def __post_init__(self) -> None:
-        if not 1 <= self.page_size <= MAX_CATALOG_PAGE_SIZE:
+        if (
+            isinstance(self.page_size, bool)
+            or type(self.page_size) is not int
+            or not 1 <= self.page_size <= MAX_CATALOG_PAGE_SIZE
+        ):
             raise ValueError(
                 f"page_size debe estar entre 1 y {MAX_CATALOG_PAGE_SIZE}"
             )
-        if self.max_pages is not None and self.max_pages <= 0:
-            raise ValueError("max_pages debe ser mayor que cero")
+        if self.max_pages is not None and (
+            isinstance(self.max_pages, bool)
+            or type(self.max_pages) is not int
+            or self.max_pages <= 0
+        ):
+            raise ValueError("max_pages debe ser entero mayor que cero")
         if self.max_products is not None:
-            if self.max_products <= 0:
-                raise ValueError("max_products debe ser mayor que cero")
+            if (
+                isinstance(self.max_products, bool)
+                or type(self.max_products) is not int
+                or self.max_products <= 0
+            ):
+                raise ValueError("max_products debe ser entero mayor que cero")
             if self.max_products % self.page_size != 0:
                 raise ValueError(
                     "max_products debe ser múltiplo de page_size para conservar "
                     "un tamaño de página constante"
                 )
-        if self.delay_seconds < 0:
+        if (
+            isinstance(self.delay_seconds, bool)
+            or not isinstance(self.delay_seconds, (int, float))
+            or not math.isfinite(self.delay_seconds)
+            or self.delay_seconds < 0
+        ):
             raise ValueError("delay_seconds no puede ser negativo")
-        if not 0 <= self.max_retries <= 3:
-            raise ValueError("max_retries debe estar entre 0 y 3")
+        if (
+            isinstance(self.max_retries, bool)
+            or type(self.max_retries) is not int
+            or self.max_retries != 0
+        ):
+            raise ValueError("max_retries debe ser 0")
         if self.order_by not in ALLOWED_ORDER_BY:
             raise ValueError(f"order_by no permitido: {self.order_by}")
-        if self.max_duration_seconds <= 0:
+        if (
+            isinstance(self.max_duration_seconds, bool)
+            or not isinstance(self.max_duration_seconds, (int, float))
+            or not math.isfinite(self.max_duration_seconds)
+            or self.max_duration_seconds <= 0
+        ):
             raise ValueError("max_duration_seconds debe ser mayor que cero")
 
 
@@ -89,8 +120,13 @@ class AcceptanceThresholds:
 
     def __post_init__(self) -> None:
         for name, value in asdict(self).items():
-            if value is not None and not 0 <= value <= 1:
-                raise ValueError(f"{name} debe estar entre 0 y 1")
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or not 0 <= value <= 1
+            ):
+                raise ValueError(f"{name} debe ser numérico finito entre 0 y 1")
 
     @property
     def complete(self) -> bool:
@@ -136,6 +172,7 @@ class CatalogRunMetrics:
     products_reported_final: int = 0
     catalog_pages_reported: int = 0
     pages_expected: int = 0
+    pages_planned: int = 0
     pages_attempted: int = 0
     pages_completed: int = 0
     page_coverage: float = 0.0
@@ -171,6 +208,8 @@ class CatalogRunMetrics:
     warnings: list[str] = field(default_factory=list)
     quality_events: list[str] = field(default_factory=list)
     proposed_thresholds: dict[str, float] = field(default_factory=dict)
+    collection_succeeded: bool = False
+    catalog_complete: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -183,6 +222,7 @@ class CatalogRunResult:
     products: tuple[RawProduct, ...]
     pages: tuple[PageSummary, ...]
     metrics: CatalogRunMetrics
+    coverage: CatalogCoverageReport | None = None
 
     def sanitized_summary(self) -> dict[str, Any]:
         """Devuelve métricas y hashes limitados, nunca el catálogo completo."""
@@ -196,6 +236,11 @@ class CatalogRunResult:
         return {
             "metrics": self.metrics.as_dict(),
             "pages": [page.as_dict() for page in self.pages],
+            "coverage": (
+                self.coverage.sanitized_summary()
+                if self.coverage is not None
+                else {"accepted": False, "coverage_reason": "canonical_coverage_missing"}
+            ),
             "sample_source_key_hashes": sample_hashes,
         }
 
@@ -225,6 +270,7 @@ class LaColoniaCatalogRunner:
         run_id: str | None = None,
         profile: AcceptanceProfile = AcceptanceProfile.BASELINE,
         thresholds: AcceptanceThresholds | None = None,
+        canonical_evidence: CanonicalCatalogEvidence | None = None,
     ) -> CatalogRunResult:
         """Ejecuta un recorrido secuencial y detiene la primera página crítica."""
 
@@ -240,6 +286,7 @@ class LaColoniaCatalogRunner:
         pages: list[PageSummary] = []
         accumulated: list[RawProduct] = []
         seen_skus: set[tuple[str, str]] = set()
+        seen_item_ids: set[str] = set()
         seen_products: set[str] = set()
         seen_page_signatures: set[str] = set()
         previous_to: int | None = None
@@ -248,32 +295,11 @@ class LaColoniaCatalogRunner:
         run_started_monotonic = self.monotonic()
 
         client = self.extractor.client
-        original_transport = getattr(client, "transport", None)
-        original_max_retries = getattr(client, "max_retries", None)
         attempts_total = 0
-        transport_instrumented = callable(original_transport)
-
-        if transport_instrumented:
-
-            def observed_transport(url: str, headers: Mapping[str, str], timeout: float):
-                nonlocal attempts_total
-                attempts_total += 1
-                response = original_transport(url, headers, timeout)
-                if response.status_code == 403:
-                    metrics.http_403 += 1
-                elif response.status_code == 429:
-                    metrics.http_429 += 1
-                elif 500 <= response.status_code <= 599:
-                    metrics.http_5xx += 1
-                return response
-
-            client.transport = observed_transport
-        if original_max_retries is not None:
-            client.max_retries = config.max_retries
 
         try:
             page = 1
-            while metrics.pages_expected == 0 or page <= metrics.pages_expected:
+            while metrics.pages_planned == 0 or page <= metrics.pages_planned:
                 if self.monotonic() - run_started_monotonic > config.max_duration_seconds:
                     self._critical(
                         metrics,
@@ -311,6 +337,7 @@ class LaColoniaCatalogRunner:
                     break
 
                 page_attempts_before = attempts_total
+                attempts_total += 1
                 page_started = self.monotonic()
                 try:
                     response = client.get(source_url)
@@ -329,22 +356,21 @@ class LaColoniaCatalogRunner:
                 except BlockedResponseError as exc:
                     elapsed = self.monotonic() - page_started
                     total_duration += elapsed
-                    if not transport_instrumented and exc.status_code == 403:
+                    if exc.status_code == 403:
                         metrics.http_403 += 1
                     self._critical(metrics, "http_403_or_captcha", structural=False)
                     break
                 except RateLimitedError:
                     elapsed = self.monotonic() - page_started
                     total_duration += elapsed
-                    if not transport_instrumented:
-                        metrics.http_429 += 1
+                    metrics.http_429 += 1
                     metrics.persistent_http_429 += 1
                     self._critical(metrics, "persistent_http_429", structural=False)
                     break
                 except HttpStatusError as exc:
                     elapsed = self.monotonic() - page_started
                     total_duration += elapsed
-                    if not transport_instrumented and 500 <= exc.status_code <= 599:
+                    if 500 <= exc.status_code <= 599:
                         metrics.http_5xx += 1
                     self._critical(metrics, f"http_status_{exc.status_code}", structural=False)
                     break
@@ -372,14 +398,21 @@ class LaColoniaCatalogRunner:
                     metrics.catalog_pages_reported = math.ceil(
                         total_reported / config.page_size
                     )
-                    metrics.pages_expected = _planned_pages(total_reported, config)
+                    metrics.pages_expected = metrics.catalog_pages_reported
+                    metrics.pages_planned = _planned_pages(total_reported, config)
                 metrics.products_reported_final = total_reported
 
                 expected_products = min(
                     config.page_size,
                     max(metrics.products_reported_initial - from_index, 0),
                 )
-                page_product_keys = _page_product_keys(raw_products)
+                try:
+                    page_product_keys = _page_product_keys(raw_products)
+                except StructureChangedError:
+                    self._critical(
+                        metrics, "uninterpretable_product_identity", structural=True
+                    )
+                    break
                 page_signature = _page_signature(page_product_keys)
                 page_events = list(result.quality_events)
 
@@ -390,6 +423,26 @@ class LaColoniaCatalogRunner:
                 metrics.duplicate_skus += result.metrics.duplicate_skus
 
                 page_valid = True
+                duplicate_products = _count_duplicate_products(
+                    page_product_keys, seen_products
+                )
+                if duplicate_products:
+                    metrics.duplicate_products += duplicate_products
+                    page_events.append("structure:duplicate_product_identity")
+                    self._critical(
+                        metrics,
+                        "duplicate_product_identity",
+                        structural=True,
+                    )
+                    page_valid = False
+                if total_reported != metrics.products_reported_initial:
+                    page_events.append("structure:catalog_total_changed")
+                    self._critical(
+                        metrics,
+                        "catalog_total_changed_during_run",
+                        structural=True,
+                    )
+                    page_valid = False
                 if len(raw_products) < expected_products:
                     page_events.append("quality:partial_product_page_global")
                     self._critical(
@@ -454,13 +507,26 @@ class LaColoniaCatalogRunner:
                 else:
                     metrics.pages_completed += 1
                     seen_page_signatures.add(page_signature)
-                    duplicate_products = _count_duplicate_products(
-                        page_product_keys, seen_products
-                    )
-                    metrics.duplicate_products += duplicate_products
                     seen_products.update(page_product_keys)
 
                     for product in result.products:
+                        item_id = product.raw_values.get("item_id")
+                        if not isinstance(item_id, str) or not item_id.strip():
+                            self._critical(
+                                metrics,
+                                "uninterpretable_sku_identity",
+                                structural=True,
+                            )
+                            continue
+                        if item_id in seen_item_ids:
+                            metrics.duplicate_skus += 1
+                            self._critical(
+                                metrics,
+                                "duplicate_sku_identity",
+                                structural=True,
+                            )
+                            continue
+                        seen_item_ids.add(item_id)
                         identity = (
                             product.source_key_type.value,
                             product.source_key,
@@ -474,17 +540,16 @@ class LaColoniaCatalogRunner:
                     previous_to = to_index
                     expected_order_by = order_by
 
-                if page >= metrics.pages_expected:
+                if page >= metrics.pages_planned:
                     break
                 if config.delay_seconds:
                     self.sleeper(config.delay_seconds)
                     metrics.delay_seconds_applied += config.delay_seconds
                 page += 1
         finally:
-            if transport_instrumented:
-                client.transport = original_transport
-            if original_max_retries is not None:
-                client.max_retries = original_max_retries
+            # No cleanup físico: el transporte real está cerrado y los harnesses
+            # offline no poseen conexiones persistentes.
+            pass
 
         self._finish_metrics(
             metrics,
@@ -495,10 +560,38 @@ class LaColoniaCatalogRunner:
             profile=profile,
             thresholds=thresholds,
         )
+        coverage = (
+            evaluate_canonical_catalog_coverage(canonical_evidence)
+            if canonical_evidence is not None
+            else None
+        )
+        if coverage is not None:
+            exact_binding = (
+                coverage.accepted
+                and coverage.run_id == run_id
+                and coverage.products_reported == metrics.products_reported_initial
+                and set(coverage._product_keys) == seen_products
+                and set(coverage._sku_keys)
+                == {f"itemId:{item_id}" for item_id in seen_item_ids}
+            )
+            if exact_binding and metrics.collection_succeeded:
+                metrics.rejection_reasons = [
+                    reason
+                    for reason in metrics.rejection_reasons
+                    if reason != "canonical_coverage_missing"
+                ]
+                metrics.catalog_complete = True
+                metrics.accepted = not metrics.rejection_reasons
+            else:
+                _append_unique(
+                    metrics.rejection_reasons,
+                    "canonical_coverage_incomplete_or_not_bound",
+                )
         return CatalogRunResult(
             products=tuple(accumulated),
             pages=tuple(pages),
             metrics=metrics,
+            coverage=coverage,
         )
 
     def _finish_metrics(
@@ -571,6 +664,7 @@ class LaColoniaCatalogRunner:
         _append_unique(metrics.warnings, "ordering_is_not_strictly_unique")
 
         mandatory = {
+            "catalog_scope_incomplete": metrics.pages_planned != metrics.pages_expected,
             "pages_incomplete": metrics.pages_completed != metrics.pages_expected,
             "page_coverage_below_100_percent": not math.isclose(
                 metrics.page_coverage, 1.0
@@ -581,6 +675,11 @@ class LaColoniaCatalogRunner:
             "persistent_http_429_present": metrics.persistent_http_429 != 0,
             "no_skus_extracted": metrics.skus_extracted <= 0,
             "no_skus_with_price": metrics.skus_with_price <= 0,
+            "product_identity_count_mismatch": (
+                len(seen_products) != metrics.products_reported_initial
+            ),
+            "duplicate_skus_present": metrics.duplicate_skus != 0,
+            "canonical_coverage_missing": True,
         }
         for reason, failed in mandatory.items():
             if failed:
@@ -630,7 +729,13 @@ class LaColoniaCatalogRunner:
                     if failed:
                         _append_unique(metrics.rejection_reasons, reason)
 
-        metrics.accepted = not metrics.rejection_reasons
+        metrics.collection_succeeded = not any(
+            reason
+            for reason in metrics.rejection_reasons
+            if reason != "canonical_coverage_missing"
+        )
+        metrics.catalog_complete = False
+        metrics.accepted = False
         finished_at = _utc(self.clock())
         metrics.finished_at_utc = finished_at.isoformat()
         metrics.duration_seconds = round(
@@ -721,9 +826,16 @@ def _page_product_keys(products: Sequence[Mapping[str, Any]]) -> list[str]:
         product_id = _clean(product.get("productId"))
         reference = _clean(product.get("productReference"))
         link_text = _clean(product.get("linkText"))
-        name = _clean(product.get("productName"))
-        key = product_id or reference or link_text or name
-        keys.append(key or f"missing-product-key:{index}")
+        if product_id:
+            keys.append(f"productId:{product_id}")
+        elif reference:
+            keys.append(f"productReference:{reference}")
+        elif link_text:
+            keys.append(f"linkText:{link_text}")
+        else:
+            raise StructureChangedError(
+                f"Producto {index} sin identidad canónica interpretable"
+            )
     return keys
 
 

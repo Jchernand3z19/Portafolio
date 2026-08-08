@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Mapping
+from pathlib import Path
 
 import pytest
 
 import precios_supermercados.scrapers.la_colonia_runner as runner_module
-from precios_supermercados.scrapers.base import HttpResponse, SafeHttpClient
+from precios_supermercados.scrapers.base import HttpResponse, OfflineTestTransport, SafeHttpClient
 from precios_supermercados.scrapers.la_colonia import (
     FORBIDDEN_PATH_PREFIXES,
     USER_AGENT,
@@ -18,6 +20,14 @@ from precios_supermercados.scrapers.la_colonia import (
 from precios_supermercados.scrapers.la_colonia_graphql import (
     MAX_CATALOG_PAGE_SIZE,
     build_product_search_url,
+)
+from precios_supermercados.scrapers.la_colonia_catalog_coverage import (
+    CanonicalCatalogEvidence,
+    build_traversal_evidence,
+    raw_page_evidence_from_response,
+)
+from precios_supermercados.scrapers.la_colonia_catalog_partitions import (
+    build_structural_discovery_report,
 )
 from precios_supermercados.scrapers.la_colonia_runner import (
     AcceptanceProfile,
@@ -144,7 +154,7 @@ def build_runner(plans: dict[int, Any], *, client_retries: int = 0):
         user_agent=USER_AGENT,
         max_retries=client_retries,
         retry_delay_seconds=0,
-        transport=transport,
+        transport=OfflineTestTransport(transport),
         sleeper=lambda _: None,
     )
     extractor = LaColoniaExtractor(client=client, clock=lambda: FIXED_TIME)
@@ -166,6 +176,7 @@ def run_catalog(
     profile: AcceptanceProfile = AcceptanceProfile.BASELINE,
     thresholds: AcceptanceThresholds | None = None,
     max_retries: int = 0,
+    canonical_evidence: CanonicalCatalogEvidence | None = None,
 ):
     runner, transport = build_runner(plans, client_retries=max_retries)
     result = runner.run(
@@ -180,6 +191,7 @@ def run_catalog(
         run_id="offline_runner_test",
         profile=profile,
         thresholds=thresholds,
+        canonical_evidence=canonical_evidence,
     )
     return result, transport
 
@@ -203,10 +215,64 @@ def permissive_thresholds(**overrides) -> AcceptanceThresholds:
     return AcceptanceThresholds(**values)
 
 
-def test_two_complete_pages_are_accepted():
+def canonical_evidence_for_plans(
+    plans: dict[int, Mapping[str, Any]], *, total: int
+) -> CanonicalCatalogEvidence:
+    facets = [{
+        "type": "CATEGORYTREE",
+        "values": [{
+            "key": "category-1", "value": "1", "quantity": total,
+            "children": [{
+                "key": "category-2", "value": "2", "quantity": total,
+                "children": [],
+            }],
+        }],
+    }]
+    structure = build_structural_discovery_report(
+        facets, run_id="offline_runner_test", root_total=total
+    )
+    partition = structure.valid_leaves[0].name
+
+    def traversal(traversal_id: str, order_by: str):
+        pages = tuple(
+            raw_page_evidence_from_response(
+                run_id="offline_runner_test",
+                traversal_id=traversal_id,
+                partition=partition,
+                order_by=order_by,
+                from_index=start,
+                to_index=start + len(payload["data"]["productSearch"]["products"]) - 1,
+                response=payload,
+            )
+            for start, payload in sorted(plans.items())
+        )
+        return build_traversal_evidence(
+            run_id="offline_runner_test",
+            traversal_id=traversal_id,
+            tree_digest=structure.tree_digest,
+            order_by=order_by,
+            pages=pages,
+        )
+
+    return CanonicalCatalogEvidence(
+        run_id="offline_runner_test",
+        root_response={"recordsFiltered": total},
+        facets_response={
+            "recordsFiltered": total,
+            "sampling": False,
+            "facets": facets,
+        },
+        primary=traversal("primary", "OrderByNameASC"),
+        reconciliation=traversal("reconciliation", "OrderByReleaseDateDESC"),
+    )
+
+
+def test_two_complete_pages_are_collected_but_not_catalog_accepted_without_coverage():
     result, transport = run_catalog(complete_plans(pages=2), max_pages=2)
 
-    assert result.metrics.accepted is True
+    assert result.metrics.collection_succeeded is True
+    assert result.metrics.accepted is False
+    assert "canonical_coverage_missing" in result.metrics.rejection_reasons
     assert result.metrics.pages_expected == 2
     assert result.metrics.pages_completed == 2
     assert result.metrics.products_returned == 20
@@ -214,10 +280,85 @@ def test_two_complete_pages_are_accepted():
     assert transport.calls == [0, 10]
 
 
-def test_ten_complete_pages_are_accepted():
+def test_runner_accepts_only_exact_bound_canonical_coverage():
+    plans = complete_plans(pages=2)
+    evidence = canonical_evidence_for_plans(plans, total=20)
+    result, transport = run_catalog(
+        plans,
+        max_pages=2,
+        canonical_evidence=evidence,
+    )
+
+    assert result.metrics.collection_succeeded is True
+    assert result.metrics.catalog_complete is True
+    assert result.metrics.accepted is True
+    assert result.coverage is not None and result.coverage.accepted is True
+    assert "canonical_coverage_missing" not in result.metrics.rejection_reasons
+    assert transport.calls == [0, 10]
+
+
+def test_real_cli_returns_success_only_with_canonical_coverage(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    plans = {0: make_payload(0, 2, 2)}
+    facets = [{
+        "type": "CATEGORYTREE",
+        "values": [{
+            "key": "category-1", "value": "1", "quantity": 2,
+            "children": [{
+                "key": "category-2", "value": "2", "quantity": 2,
+                "children": [],
+            }],
+        }],
+    }]
+    evidence = {
+        "schema_version": "1",
+        "run_id": "offline_cli_test",
+        "root_response": {"recordsFiltered": 2},
+        "facets_response": {
+            "recordsFiltered": 2, "sampling": False, "facets": facets,
+        },
+        "primary": {
+            "traversal_id": "a", "order_by": "OrderByNameASC",
+            "pages": [{
+                "partition": "partition-0001", "from_index": 0, "to_index": 1,
+                "response": plans[0], "purpose": "PRIMARY",
+            }],
+        },
+        "reconciliation": {
+            "traversal_id": "b", "order_by": "OrderByReleaseDateDESC",
+            "pages": [{
+                "partition": "partition-0001", "from_index": 0, "to_index": 1,
+                "response": plans[0], "purpose": "PRIMARY",
+            }],
+        },
+    }
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    script_path = Path(__file__).parents[1] / "scripts/probar_la_colonia.py"
+    spec = importlib.util.spec_from_file_location("probar_la_colonia_test", script_path)
+    assert spec is not None and spec.loader is not None
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    monkeypatch.setattr(cli, "LaColoniaCatalogRunner", lambda: build_runner(plans)[0])
+
+    exit_code = cli.main([
+        "--mode", "smoke", "--page-size", "10", "--max-pages", "1",
+        "--delay-seconds", "0", "--canonical-evidence", str(evidence_path),
+        "--output-dir", str(tmp_path / "out"),
+    ])
+
+    assert exit_code == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["metrics"]["accepted"] is True
+    assert summary["coverage"]["accepted"] is True
+
+
+def test_ten_complete_pages_still_require_canonical_coverage():
     result, _ = run_catalog(complete_plans(pages=10), max_pages=10)
 
-    assert result.metrics.accepted is True
+    assert result.metrics.collection_succeeded is True
+    assert result.metrics.accepted is False
     assert result.metrics.pages_completed == 10
     assert result.metrics.page_coverage == pytest.approx(1.0)
     assert result.metrics.products_returned == 100
@@ -231,7 +372,8 @@ def test_last_page_with_fewer_products_is_legitimate():
     }
     result, _ = run_catalog(plans)
 
-    assert result.metrics.accepted is True
+    assert result.metrics.collection_succeeded is True
+    assert result.metrics.accepted is False
     assert result.pages[-1].products_expected == 4
     assert result.pages[-1].products_returned == 4
 
@@ -270,7 +412,7 @@ def test_repeated_page_is_detected():
     assert result.metrics.pages_completed == 1
 
 
-def test_duplicate_sku_between_pages_is_deduplicated():
+def test_duplicate_sku_between_pages_is_rejected_before_dedup_can_hide_it():
     page_one = make_payload(0, 10, 20)
     page_two_products = [make_product(index) for index in range(10, 20)]
     page_two_products[0]["items"][0]["itemId"] = "S00000"
@@ -281,13 +423,35 @@ def test_duplicate_sku_between_pages_is_deduplicated():
 
     result, _ = run_catalog({0: page_one, 10: page_two}, max_pages=2)
 
-    assert result.metrics.accepted is True
+    assert result.metrics.collection_succeeded is False
+    assert result.metrics.accepted is False
+    assert "duplicate_sku_identity" in result.metrics.rejection_reasons
     assert result.metrics.duplicate_skus == 1
     assert result.metrics.skus_returned == 20
     assert result.metrics.skus_extracted == 19
 
 
-def test_duplicate_product_between_pages_is_measured():
+def test_canonical_coverage_and_runner_reject_duplicate_sku_across_products():
+    page_one = make_payload(0, 10, 20)
+    page_two_products = [make_product(index) for index in range(10, 20)]
+    page_two_products[0]["items"][0]["itemId"] = "S00000"
+    page_two = make_payload(10, 10, 20, products=page_two_products)
+    plans = {0: page_one, 10: page_two}
+    evidence = canonical_evidence_for_plans(plans, total=20)
+
+    result, _ = run_catalog(
+        plans,
+        max_pages=2,
+        canonical_evidence=evidence,
+    )
+
+    assert result.coverage is not None and result.coverage.accepted is False
+    assert "duplicate_sku_identity" in result.coverage.coverage_reason
+    assert result.metrics.catalog_complete is False
+    assert result.metrics.accepted is False
+
+
+def test_duplicate_product_between_pages_rejects_collection():
     page_one = make_payload(0, 10, 20)
     page_two_products = [make_product(index) for index in range(10, 20)]
     page_two_products[0]["productId"] = "P00000"
@@ -295,8 +459,10 @@ def test_duplicate_product_between_pages_is_measured():
 
     result, _ = run_catalog({0: page_one, 10: page_two}, max_pages=2)
 
-    assert result.metrics.accepted is True
+    assert result.metrics.accepted is False
+    assert result.metrics.collection_succeeded is False
     assert result.metrics.duplicate_products == 1
+    assert "duplicate_product_identity" in result.metrics.rejection_reasons
 
 
 def test_catalog_total_without_changes_is_recorded():
@@ -308,14 +474,15 @@ def test_catalog_total_without_changes_is_recorded():
     assert "catalog_total_changed_during_run" not in result.metrics.warnings
 
 
-def test_catalog_total_increase_is_warning_in_baseline():
+def test_catalog_total_increase_is_fail_closed_in_baseline():
     plans = {
         0: make_payload(0, 10, 20),
         10: make_payload(10, 10, 21),
     }
     result, _ = run_catalog(plans, max_pages=2)
 
-    assert result.metrics.accepted is True
+    assert result.metrics.accepted is False
+    assert result.metrics.collection_succeeded is False
     assert result.metrics.products_reported_final == 21
     assert result.metrics.total_change_absolute == 1
     assert "catalog_total_changed_during_run" in result.metrics.warnings
@@ -343,24 +510,24 @@ def test_http_403_stops_immediately():
 
 
 def test_persistent_http_429_stops_after_bounded_retries():
-    plan = [(429, b"rate limited"), (429, b"rate limited"), (429, b"rate limited")]
-    result, transport = run_catalog({0: plan}, max_pages=2, max_retries=2)
+    plan = [(429, b"rate limited")]
+    result, transport = run_catalog({0: plan}, max_pages=2, max_retries=0)
 
     assert result.metrics.accepted is False
-    assert result.metrics.http_429 == 3
+    assert result.metrics.http_429 == 1
     assert result.metrics.persistent_http_429 == 1
     assert "persistent_http_429" in result.metrics.rejection_reasons
-    assert transport.calls == [0, 0, 0]
+    assert transport.calls == [0]
 
 
 def test_http_500_stops_after_bounded_retries():
-    plan = [(500, b"error"), (500, b"error")]
-    result, transport = run_catalog({0: plan}, max_pages=2, max_retries=1)
+    plan = [(500, b"error")]
+    result, transport = run_catalog({0: plan}, max_pages=2, max_retries=0)
 
     assert result.metrics.accepted is False
-    assert result.metrics.http_5xx == 2
+    assert result.metrics.http_5xx == 1
     assert "http_status_500" in result.metrics.rejection_reasons
-    assert transport.calls == [0, 0]
+    assert transport.calls == [0]
 
 
 def test_structural_change_is_rejected():
@@ -482,7 +649,7 @@ def test_page_with_no_sku_price_is_rejected():
     assert "page_without_prices" in result.metrics.rejection_reasons
 
 
-def test_duplicates_are_non_blocking_inside_validated_threshold():
+def test_sku_duplicates_do_not_grant_canonical_acceptance_inside_threshold():
     page_one = make_payload(0, 10, 20)
     page_two_products = [make_product(index) for index in range(10, 20)]
     page_two_products[0]["items"][0]["itemId"] = "S00000"
@@ -500,7 +667,9 @@ def test_duplicates_are_non_blocking_inside_validated_threshold():
 
     assert result.metrics.duplicate_skus == 1
     assert result.metrics.duplicate_sku_ratio == pytest.approx(0.05)
-    assert result.metrics.accepted is True
+    assert result.metrics.collection_succeeded is False
+    assert result.metrics.accepted is False
+    assert "duplicate_sku_identity" in result.metrics.rejection_reasons
 
 
 def test_validation_rejects_ratio_above_observed_threshold():
@@ -540,9 +709,11 @@ def test_max_products_limits_scope_with_constant_page_size():
         max_products=100,
     )
 
-    assert result.metrics.pages_expected == 5
+    assert result.metrics.pages_expected == 10
+    assert result.metrics.pages_planned == 5
     assert result.metrics.products_returned == 100
-    assert result.metrics.accepted is True
+    assert result.metrics.collection_succeeded is False
+    assert result.metrics.accepted is False
     assert transport.calls == [0, 20, 40, 60, 80]
 
 
@@ -569,6 +740,26 @@ def test_more_than_fifty_products_per_page_is_rejected():
 def test_non_multiple_max_products_is_rejected():
     with pytest.raises(ValueError, match="múltiplo"):
         CrawlConfig(page_size=30, max_products=100)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("page_size", True),
+        ("max_pages", True),
+        ("max_products", True),
+        ("max_retries", False),
+    ],
+)
+def test_crawl_config_rejects_boolean_numeric_values(field, value):
+    with pytest.raises(ValueError):
+        CrawlConfig(**{field: value})
+
+
+@pytest.mark.parametrize("value", [True, False, float("nan"), float("inf")])
+def test_acceptance_thresholds_reject_non_finite_or_boolean_values(value):
+    with pytest.raises(ValueError):
+        AcceptanceThresholds(max_missing_price_ratio=value)
 
 
 def test_sanitized_summary_contains_hashes_not_catalog_rows():

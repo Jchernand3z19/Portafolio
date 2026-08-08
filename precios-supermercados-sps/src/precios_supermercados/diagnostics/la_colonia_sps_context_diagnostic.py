@@ -8,8 +8,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import shutil
+import threading
 import time
 from dataclasses import asdict, dataclass, field
 from html.parser import HTMLParser
@@ -60,17 +62,26 @@ class DiagnosticBudget:
     max_logical_requests: int = 8
     concurrency: int = 1
     minimum_delay_seconds: float = 1.5
-    max_retries: int = 1
+    max_retries: int = 0
 
     def __post_init__(self) -> None:
-        if not 1 <= self.max_logical_requests <= 8:
+        if (
+            isinstance(self.max_logical_requests, bool)
+            or type(self.max_logical_requests) is not int
+            or not 1 <= self.max_logical_requests <= 8
+        ):
             raise ValueError("max_logical_requests debe estar entre 1 y 8")
-        if self.concurrency != 1:
+        if isinstance(self.concurrency, bool) or type(self.concurrency) is not int or self.concurrency != 1:
             raise ValueError("concurrency debe ser exactamente 1")
-        if self.minimum_delay_seconds < 1.5:
+        if (
+            isinstance(self.minimum_delay_seconds, bool)
+            or not isinstance(self.minimum_delay_seconds, (int, float))
+            or not math.isfinite(float(self.minimum_delay_seconds))
+            or self.minimum_delay_seconds < 1.5
+        ):
             raise ValueError("minimum_delay_seconds debe ser >= 1.5")
-        if not 0 <= self.max_retries <= 1:
-            raise ValueError("max_retries debe estar entre 0 y 1")
+        if isinstance(self.max_retries, bool) or type(self.max_retries) is not int or self.max_retries != 0:
+            raise ValueError("max_retries debe ser 0")
 
 
 @dataclass(slots=True)
@@ -79,6 +90,7 @@ class LogicalRequestCounter:
     count: int = 0
     labels: list[str] = field(default_factory=list)
     last_started_at: float | None = None
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
     def reserve(
         self,
@@ -87,18 +99,33 @@ class LogicalRequestCounter:
         clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
     ) -> int:
-        if self.count >= self.config.max_logical_requests:
-            raise LogicalRequestBudgetExceeded("presupuesto lógico agotado")
-        now = clock()
-        if self.last_started_at is not None:
-            remaining = self.config.minimum_delay_seconds - (now - self.last_started_at)
-            if remaining > 0:
-                sleeper(remaining)
-                now = clock()
-        self.count += 1
-        self.labels.append(label)
-        self.last_started_at = now
-        return self.count
+        if not isinstance(label, str) or not label.strip():
+            raise DiagnosticSafetyError("label de request inválido")
+        with self._lock:
+            if self.count >= self.config.max_logical_requests:
+                raise LogicalRequestBudgetExceeded("presupuesto lógico agotado")
+            now = clock()
+            if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+                raise DiagnosticSafetyError("reloj no finito")
+            if self.last_started_at is not None:
+                elapsed = now - self.last_started_at
+                if elapsed < 0:
+                    raise DiagnosticSafetyError("reloj no monotónico")
+                remaining = self.config.minimum_delay_seconds - elapsed
+                if remaining > 0:
+                    sleeper(remaining)
+                    now = clock()
+                    if (
+                        isinstance(now, bool)
+                        or not isinstance(now, (int, float))
+                        or not math.isfinite(float(now))
+                        or now - self.last_started_at < self.config.minimum_delay_seconds
+                    ):
+                        raise DiagnosticSafetyError("pacing físico no observado después de sleep")
+            self.count += 1
+            self.labels.append(label.strip())
+            self.last_started_at = float(now)
+            return self.count
 
 
 @dataclass(frozen=True, slots=True)
@@ -682,8 +709,23 @@ def _safe_replay_headers(headers: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
-def _execute_replay(context: Any, raw_event: Mapping[str, Any], counter: LogicalRequestCounter, label: str) -> dict[str, Any]:
+def _execute_replay(
+    context: Any,
+    raw_event: Mapping[str, Any],
+    counter: LogicalRequestCounter,
+    label: str,
+    *,
+    network_policy: str,
+) -> dict[str, Any]:
     replay = build_minimal_graphql_replay(raw_event, max_results=5)
+    parts = urlsplit(replay["url"])
+    host = (parts.hostname or "").lower()
+    if network_policy != "local_only" or not (
+        parts.scheme.lower() in _ALLOWED_LOCAL_SCHEMES
+        or host in _ALLOWED_LOCAL_HOSTS
+        or host == _ALLOWED_SYNTHETIC_HOST
+    ):
+        raise DiagnosticSafetyError("Replay externo bloqueado antes de red")
     counter.reserve(label)
     headers = _safe_replay_headers(raw_event.get("headers") if isinstance(raw_event.get("headers"), Mapping) else {})
     if replay["method"] == "GET":
@@ -779,17 +821,39 @@ def install_local_network_guard(context: Any, *, events: list[Mapping[str, Any]]
         route.abort("blockedbyclient")
 
     context.route("**/*", guard)
+    route_web_socket = getattr(context, "route_web_socket", None)
+    if not callable(route_web_socket):
+        raise DiagnosticSafetyError(
+            "runtime Playwright sin guard previo de WebSocket; diagnóstico denegado"
+        )
+
+    def guard_web_socket(web_socket: Any) -> None:
+        sink.append({"url": sanitize_url(web_socket.url), "action": "websocket_blocked"})
+        web_socket.close()
+
+    route_web_socket("**/*", guard_web_socket)
 
 
 def launch_compatible_chromium(pw: Any) -> tuple[Any, str]:
     """Lanza Chromium sin descargar: managed si existe, si no browser del runner."""
+    launch_args = [
+        "--disable-background-networking",
+        "--disable-component-update",
+        "--disable-domain-reliability",
+        "--disable-features=MediaRouter,OptimizationHints,AutofillServerCommunication",
+        "--disable-sync",
+        "--metrics-recording-only",
+        "--no-first-run",
+    ]
     managed = Path(str(pw.chromium.executable_path))
     if managed.exists():
-        return pw.chromium.launch(headless=True), str(managed)
+        return pw.chromium.launch(headless=True, args=launch_args), str(managed)
     executable = find_compatible_browser_executable()
     if not executable:
         raise DiagnosticSafetyError("browser Chromium/Chrome compatible no disponible")
-    return pw.chromium.launch(headless=True, executable_path=executable), executable
+    return pw.chromium.launch(
+        headless=True, executable_path=executable, args=launch_args
+    ), executable
 
 
 def _record_failure(report: SpsContextDiagnostic, error: BaseException, counter: LogicalRequestCounter) -> None:
@@ -801,6 +865,18 @@ def _record_failure(report: SpsContextDiagnostic, error: BaseException, counter:
         "cookies", "authorization", "tokens", "orderForm IDs", "session IDs",
         "addresses", "coordinates", "personal data", "JWT", "API keys",
     ]
+
+
+def _diagnostic_labels(
+    network_policy: str, *, changed_context_observed: bool | None = None
+) -> tuple[str, str]:
+    """Evita que evidencia sintética se serialice como confirmación live."""
+
+    if network_policy == "local_only":
+        return "synthetic_local", "offline_fixture"
+    if changed_context_observed is None:
+        return "live", "pending"
+    return "live", "confirmed" if changed_context_observed else "ui_only"
 
 
 def run_live(
@@ -821,15 +897,20 @@ def run_live(
         raise ValueError("network policy inválida")
     budget = budget or DiagnosticBudget()
     counter = LogicalRequestCounter(budget)
+    report_mode, initial_location_status = _diagnostic_labels(_network_policy)
     report = SpsContextDiagnostic(
-        started_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"), mode="live",
-        browser="not_started", location_status="pending",
+        started_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"), mode=report_mode,
+        browser="not_started", location_status=initial_location_status,
     )
     try:
         report.authorization_checked = True
         validate_live_authorization(
             live=True, authorization_id=authorization_id, active_ids=active_ids,
         )
+        if _network_policy == "live":
+            raise DiagnosticSafetyError(
+                "GLOBAL LIVE BLOCKED mientras GATE-17 carezca de evidencia productiva"
+            )
 
         try:
             from playwright.sync_api import sync_playwright
@@ -840,7 +921,8 @@ def run_live(
             browser, executable = launch_compatible_chromium(pw)
             report.browser = f"chromium:{Path(executable).name}"
             report.browser_started = True
-            context = browser.new_context()
+            context = browser.new_context(service_workers="block")
+            install_local_network_guard(context)
             page = context.new_page()
             templates: list[dict[str, Any]] = []
             capture_templates = {"enabled": False}
@@ -899,9 +981,13 @@ def run_live(
                     "changed_after_store_selection": any(item["changed_after_store_selection"] for item in matches),
                 })
             report.context_observed = True
-            report.location_status = "confirmed" if any(
-                item.get("changed_after_store_selection") for item in report.context_evidence
-            ) else "ui_only"
+            _, report.location_status = _diagnostic_labels(
+                _network_policy,
+                changed_context_observed=any(
+                    item.get("changed_after_store_selection")
+                    for item in report.context_evidence
+                ),
+            )
 
             capture_templates["enabled"] = True
             counter.reserve("observe_catalog_request_shape")
@@ -919,12 +1005,20 @@ def run_live(
                 raise DiagnosticSafetyError("facets reales no observadas; no se inventa endpoint")
 
             same = root_template is facets_template
-            root_1 = _execute_replay(context, root_template, counter, "root_minimal")
+            root_1 = _execute_replay(
+                context, root_template, counter, "root_minimal", network_policy=_network_policy
+            )
             report.root_observed = True
-            facets_1 = root_1 if same else _execute_replay(context, facets_template, counter, "facets_minimal")
+            facets_1 = root_1 if same else _execute_replay(
+                context, facets_template, counter, "facets_minimal", network_policy=_network_policy
+            )
             report.facets_observed = True
-            root_2 = _execute_replay(context, root_template, counter, "root_minimal_repeat")
-            facets_2 = root_2 if same else _execute_replay(context, facets_template, counter, "facets_minimal_repeat")
+            root_2 = _execute_replay(
+                context, root_template, counter, "root_minimal_repeat", network_policy=_network_policy
+            )
+            facets_2 = root_2 if same else _execute_replay(
+                context, facets_template, counter, "facets_minimal_repeat", network_policy=_network_policy
+            )
 
             root_meta, facets_meta = parse_network_request(root_1), parse_network_request(facets_1)
             report.root = {**structural_fields(root_meta), **summarize_response(root_1, root_meta)}
@@ -963,7 +1057,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-logical-requests", type=int, default=8)
     parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--minimum-delay-seconds", type=float, default=1.5)
-    parser.add_argument("--max-retries", type=int, default=1)
+    parser.add_argument("--max-retries", type=int, default=0)
     return parser
 
 

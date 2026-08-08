@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import asdict, dataclass
-from email.message import Message
 from typing import Any, Callable, Mapping
-from urllib.error import HTTPError, URLError
+from urllib.error import URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
 
 from precios_supermercados.models import RawProduct
 
@@ -45,6 +44,10 @@ class EmptyResponseError(ScraperError):
 
 class StructureChangedError(ScraperError):
     """La respuesta ya no contiene la estructura esperada."""
+
+
+class ExternalNetworkDeniedError(ScraperError):
+    """El transporte real está cerrado mientras GATE-17 siga bloqueado."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +109,23 @@ class ExtractionResult:
 Transport = Callable[[str, Mapping[str, str], float], HttpResponse]
 
 
+@dataclass(frozen=True, slots=True)
+class OfflineTestTransport:
+    """Harness explícito sin autoridad; sólo se admite en pruebas offline."""
+
+    handler: Transport
+
+    def __post_init__(self) -> None:
+        if not callable(self.handler):
+            raise ValueError("handler debe ser callable")
+        module = getattr(self.handler, "__module__", self.handler.__class__.__module__)
+        if not str(module).split(".")[-1].startswith("test_"):
+            raise ValueError("OfflineTestTransport sólo admite handlers de módulos test_*")
+
+    def __call__(self, url: str, headers: Mapping[str, str], timeout: float) -> HttpResponse:
+        return self.handler(url, headers, timeout)
+
+
 class SafeHttpClient:
     """Cliente GET limitado a hosts y rutas expresamente permitidas."""
 
@@ -117,6 +137,11 @@ class SafeHttpClient:
         "unusual traffic",
     )
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError("SafeHttpClient es inmutable después de inicializar")
+        object.__setattr__(self, name, value)
+
     def __init__(
         self,
         *,
@@ -124,18 +149,30 @@ class SafeHttpClient:
         forbidden_path_prefixes: tuple[str, ...],
         user_agent: str,
         timeout_seconds: float = 20.0,
-        max_retries: int = 2,
+        max_retries: int = 0,
         retry_delay_seconds: float = 1.5,
-        transport: Transport | None = None,
+        transport: OfflineTestTransport | None = None,
         sleeper: Callable[[float], None] = time.sleep,
     ) -> None:
-        if timeout_seconds <= 0:
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (int, float))
+            or not math.isfinite(float(timeout_seconds))
+            or timeout_seconds <= 0
+        ):
             raise ValueError("timeout_seconds debe ser mayor que cero")
-        if max_retries < 0 or max_retries > 3:
-            raise ValueError("max_retries debe estar entre 0 y 3")
-        if retry_delay_seconds < 0:
+        if isinstance(max_retries, bool) or type(max_retries) is not int or max_retries != 0:
+            raise ValueError("max_retries debe ser 0")
+        if (
+            isinstance(retry_delay_seconds, bool)
+            or not isinstance(retry_delay_seconds, (int, float))
+            or not math.isfinite(float(retry_delay_seconds))
+            or retry_delay_seconds < 0
+        ):
             raise ValueError("retry_delay_seconds no puede ser negativo")
-        self.allowed_hosts = {host.casefold() for host in allowed_hosts}
+        if transport is not None and type(transport) is not OfflineTestTransport:
+            raise ValueError("transport requiere OfflineTestTransport explícito")
+        self.allowed_hosts = frozenset(host.casefold() for host in allowed_hosts)
         self.forbidden_path_prefixes = tuple(
             prefix.casefold() for prefix in forbidden_path_prefixes
         )
@@ -143,8 +180,13 @@ class SafeHttpClient:
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.retry_delay_seconds = retry_delay_seconds
-        self.transport = transport or self._urllib_transport
+        self._transport = transport or self._deny_external_transport
         self.sleeper = sleeper
+        self._sealed = True
+
+    @property
+    def transport(self) -> Transport:
+        return self._transport
 
     def validate_url(self, url: str) -> None:
         parsed = urlsplit(url)
@@ -168,7 +210,7 @@ class SafeHttpClient:
             if attempt:
                 self.sleeper(self.retry_delay_seconds)
             try:
-                response = self.transport(url, headers, self.timeout_seconds)
+                response = self._transport(url, headers, self.timeout_seconds)
             except (TimeoutError, URLError) as exc:
                 if attempt >= self.max_retries:
                     raise ScraperError(f"No fue posible consultar {url}: {exc}") from exc
@@ -186,6 +228,8 @@ class SafeHttpClient:
                 retry_after = _retry_after_seconds(response.headers)
                 self.sleeper(min(retry_after, 30.0))
                 continue
+            if 300 <= status <= 399:
+                raise HttpStatusError(status, response.url)
             if 500 <= status <= 599:
                 if attempt >= self.max_retries:
                     raise HttpStatusError(status, response.url)
@@ -205,28 +249,15 @@ class SafeHttpClient:
         return self.get(url).json()
 
     @staticmethod
-    def _urllib_transport(
+    def _deny_external_transport(
         url: str,
         headers: Mapping[str, str],
         timeout_seconds: float,
     ) -> HttpResponse:
-        request = Request(url, headers=dict(headers), method="GET")
-        try:
-            with urlopen(request, timeout=timeout_seconds) as response:
-                return HttpResponse(
-                    status_code=int(response.status),
-                    url=response.geturl(),
-                    headers=dict(response.headers.items()),
-                    body=response.read(),
-                )
-        except HTTPError as exc:
-            headers_message: Message = exc.headers
-            return HttpResponse(
-                status_code=int(exc.code),
-                url=exc.geturl(),
-                headers=dict(headers_message.items()),
-                body=exc.read(),
-            )
+        del url, headers, timeout_seconds
+        raise ExternalNetworkDeniedError(
+            "GLOBAL LIVE BLOCKED: use un fake explícito para pruebas offline"
+        )
 
 
 def _retry_after_seconds(headers: Mapping[str, str]) -> float:

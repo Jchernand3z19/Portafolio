@@ -1,7 +1,7 @@
 """Contrato offline y sanitizado de cobertura para La Colonia.
 
-Este módulo no realiza solicitudes HTTP, no modifica el runner normal y no
-persiste datos comerciales. Las identidades de producto se mantienen únicamente
+Este módulo no realiza solicitudes HTTP y no persiste datos comerciales. Su
+evaluador canónico está diseñado para ser consumido por runner y CLI. Las identidades se mantienen únicamente
 en memoria para demostrar cobertura, detectar repeticiones y reconciliar
 particiones u órdenes de búsqueda.
 """
@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 from dataclasses import asdict, dataclass, field
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from .la_colonia_graphql import ALLOWED_ORDER_BY, MAX_CATALOG_PAGE_SIZE
@@ -48,6 +49,9 @@ class PartitionSpec:
     facet_value: str
     expected_products: int
     leaf: bool = True
+    _category_path: tuple[tuple[str, str], ...] = field(
+        default=(), repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -58,6 +62,107 @@ class PartitionSpec:
             raise ValueError("expected_products no puede ser negativo")
         if not self.facet_key.startswith("category-"):
             raise ValueError("La partición debe usar una facet de categoría")
+
+
+@dataclass(frozen=True, slots=True)
+class StructuralDiscoveryReport:
+    """Universo estructural autoritativo derivado del árbol original."""
+
+    run_id: str
+    tree_digest: str
+    nodes_seen: int
+    positive_nodes: int
+    valid_leaves: tuple[PartitionSpec, ...]
+    invalid_positive_leaves: int
+    duplicate_structural_nodes: int
+    discovered_leaf_identities: tuple[str, ...]
+    errors: tuple[str, ...]
+    structural_status: str
+    root_total: int
+
+    @property
+    def valid(self) -> bool:
+        return self.structural_status == "VALID" and not self.errors
+
+
+@dataclass(frozen=True, slots=True)
+class RawProductEvidence:
+    """Evidencia mínima para identidad y membership, antes de deduplicar."""
+
+    product_id: str | None
+    product_reference: str | None
+    link_text: str | None
+    item_ids: tuple[str, ...]
+    category_paths: tuple[tuple[tuple[str, tuple[str, ...]], ...], ...]
+
+    @property
+    def identity(self) -> str | None:
+        for label, value in (
+            ("productId", self.product_id),
+            ("productReference", self.product_reference),
+            ("linkText", self.link_text),
+        ):
+            if (text := _optional_text(value)) is not None:
+                return f"{label}:{text}"
+        return None
+
+    @property
+    def sku_identities(self) -> tuple[str, ...]:
+        return tuple(f"itemId:{value}" for value in self.item_ids)
+
+
+@dataclass(frozen=True, slots=True)
+class RawPageEvidence:
+    run_id: str
+    traversal_id: str
+    partition: str
+    order_by: str
+    from_index: int
+    to_index: int
+    records_filtered: int
+    products: tuple[RawProductEvidence, ...]
+    purpose: str = "PRIMARY"
+
+
+@dataclass(frozen=True, slots=True)
+class TraversalEvidence:
+    """Una travesía completa con lineage inequívoco."""
+
+    run_id: str
+    traversal_id: str
+    tree_digest: str
+    plan_digest: str
+    order_by: str
+    pages: tuple[RawPageEvidence, ...]
+
+    def __post_init__(self) -> None:
+        if not self.traversal_id.strip() or not self.plan_digest.strip():
+            raise ValueError("La traversal debe tener identidad y plan digest")
+        if self.order_by not in ALLOWED_ORDER_BY:
+            raise ValueError("order_by de traversal no permitido")
+        if any(page.traversal_id != self.traversal_id for page in self.pages):
+            raise ValueError("La evidencia mezcla identidades de traversal")
+        if any(page.run_id != self.run_id for page in self.pages):
+            raise ValueError("La evidencia mezcla run_id")
+        if any(page.order_by != self.order_by for page in self.pages):
+            raise ValueError("La evidencia mezcla order_by")
+
+
+@dataclass(frozen=True, slots=True)
+class CanonicalCatalogEvidence:
+    """Entrada cruda autoritativa; totales y estructura se derivan internamente."""
+
+    run_id: str
+    root_response: Mapping[str, Any]
+    facets_response: Mapping[str, Any]
+    primary: TraversalEvidence
+    reconciliation: TraversalEvidence | None
+
+    def __post_init__(self) -> None:
+        if not self.run_id.strip():
+            raise ValueError("run_id canónico no puede estar vacío")
+        object.__setattr__(self, "root_response", _deep_freeze(self.root_response))
+        object.__setattr__(self, "facets_response", _deep_freeze(self.facets_response))
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +177,6 @@ class CoveragePageObservation:
     products_received: int
     products_expected: int
     complete: bool
-    membership_valid: bool
     sequence_signature: str
     set_signature: str
     quality_events: tuple[str, ...] = ()
@@ -104,6 +208,7 @@ class PartitionCoverageResult:
     coverage_demonstrated: bool
     coverage_reason: str
     _product_keys: tuple[str, ...] = field(default=(), repr=False, compare=False)
+    _sku_keys: tuple[str, ...] = field(default=(), repr=False, compare=False)
     _reasons: tuple[str, ...] = field(default=(), repr=False, compare=False)
 
 
@@ -130,14 +235,479 @@ class CatalogCoverageReport:
     coverage_demonstrated: bool
     coverage_reason: str
     accepted: bool
+    run_id: str
+    tree_digest: str
+    primary_plan_digest: str
+    reconciliation_plan_digest: str
     _reasons: tuple[str, ...] = field(default=(), repr=False, compare=False)
+    _product_keys: tuple[str, ...] = field(default=(), repr=False, compare=False)
+    _sku_keys: tuple[str, ...] = field(default=(), repr=False, compare=False)
 
     def sanitized_summary(self) -> dict[str, Any]:
         value = asdict(self)
         value.pop("_reasons", None)
+        value.pop("_product_keys", None)
+        value.pop("_sku_keys", None)
         summary = {"schema_version": COVERAGE_SCHEMA_VERSION, **value}
         validate_sanitized_coverage_summary(summary)
         return summary
+
+
+def raw_page_evidence_from_response(
+    *,
+    run_id: str,
+    traversal_id: str,
+    partition: str,
+    order_by: str,
+    from_index: int,
+    to_index: int,
+    response: Mapping[str, Any],
+    purpose: str = "PRIMARY",
+) -> RawPageEvidence:
+    """Parsea payload GraphQL crudo; totals/products no son argumentos libres."""
+
+    data = response.get("data")
+    if not isinstance(data, Mapping):
+        raise ValueError("La evidencia de página no contiene data")
+    product_search = data.get("productSearch")
+    if not isinstance(product_search, Mapping):
+        raise ValueError("La evidencia de página no contiene productSearch")
+    records_filtered = _closed_nonnegative_int(product_search.get("recordsFiltered"))
+    products = product_search.get("products")
+    if not isinstance(products, Sequence) or isinstance(products, (str, bytes)):
+        raise ValueError("La evidencia de página no contiene products")
+    return _raw_page_evidence_from_values(
+        run_id=run_id,
+        traversal_id=traversal_id,
+        partition=partition,
+        order_by=order_by,
+        from_index=from_index,
+        to_index=to_index,
+        records_filtered=records_filtered,
+        products=products,
+        purpose=purpose,
+    )
+
+
+def _raw_page_evidence_from_values(
+    *,
+    run_id: str,
+    traversal_id: str,
+    partition: str,
+    order_by: str,
+    from_index: int,
+    to_index: int,
+    records_filtered: int,
+    products: Sequence[Mapping[str, Any]],
+    purpose: str,
+) -> RawPageEvidence:
+
+    if purpose not in {"PRIMARY", "RECOVERY"}:
+        raise ValueError("purpose de evidencia no permitido")
+    evidence: list[RawProductEvidence] = []
+    for product in products:
+        if not isinstance(product, Mapping):
+            raise ValueError("Cada producto de evidencia debe ser un objeto")
+        tree = product.get("categoryTree")
+        candidates_by_level: list[tuple[str, tuple[str, ...]]] = []
+        if isinstance(tree, Sequence) and not isinstance(tree, (str, bytes)):
+            for level, node in enumerate(tree, start=1):
+                if not isinstance(node, Mapping):
+                    candidates_by_level = []
+                    break
+                candidates = tuple(
+                    dict.fromkeys(
+                        value
+                        for raw in (node.get("id"), node.get("value"), node.get("name"))
+                        if (value := _optional_text(raw)) is not None
+                    )
+                )
+                if not candidates:
+                    candidates_by_level = []
+                    break
+                candidates_by_level.append((f"category-{level}", candidates))
+        candidate_paths: list[tuple[tuple[str, tuple[str, ...]], ...]] = []
+        if candidates_by_level:
+            candidate_paths.append(tuple(candidates_by_level))
+        categories = product.get("categories")
+        if isinstance(categories, Sequence) and not isinstance(categories, (str, bytes)):
+            for raw_category in categories:
+                if (text := _optional_text(raw_category)) is None:
+                    continue
+                segments = [segment.strip() for segment in text.split("/") if segment.strip()]
+                if not segments:
+                    continue
+                path = tuple(
+                    (f"category-{index}", (segment,))
+                    for index, segment in enumerate(segments, start=1)
+                )
+                represented = any(
+                    len(existing) == len(path)
+                    and all(
+                        key == existing_key and value[0] in existing_values
+                        for (key, value), (existing_key, existing_values) in zip(
+                            path, existing
+                        )
+                    )
+                    for existing in candidate_paths
+                )
+                if not represented and path not in candidate_paths:
+                    candidate_paths.append(path)
+        raw_items = product.get("items")
+        if not isinstance(raw_items, Sequence) or isinstance(raw_items, (str, bytes)):
+            raise ValueError("Cada producto debe contener items verificables")
+        item_ids: list[str] = []
+        for item in raw_items:
+            if not isinstance(item, Mapping):
+                raise ValueError("Cada SKU de evidencia debe ser un objeto")
+            item_id = _optional_text(item.get("itemId"))
+            if item_id is None:
+                raise ValueError("Cada SKU de evidencia requiere itemId")
+            item_ids.append(item_id)
+        evidence.append(
+            RawProductEvidence(
+                product_id=_optional_text(product.get("productId")),
+                product_reference=_optional_text(product.get("productReference")),
+                link_text=_optional_text(product.get("linkText")),
+                item_ids=tuple(item_ids),
+                category_paths=tuple(candidate_paths),
+            )
+        )
+    return RawPageEvidence(
+        run_id=run_id,
+        traversal_id=traversal_id,
+        partition=partition,
+        order_by=order_by,
+        from_index=from_index,
+        to_index=to_index,
+        records_filtered=records_filtered,
+        products=tuple(evidence),
+        purpose=purpose,
+    )
+
+
+def build_traversal_evidence(
+    *,
+    run_id: str,
+    traversal_id: str,
+    tree_digest: str,
+    order_by: str,
+    pages: Sequence[RawPageEvidence],
+) -> TraversalEvidence:
+    values = tuple(pages)
+    plan_digest = _traversal_plan_digest(
+        run_id=run_id,
+        traversal_id=traversal_id,
+        tree_digest=tree_digest,
+        order_by=order_by,
+        pages=values,
+    )
+    return TraversalEvidence(
+        run_id=run_id,
+        traversal_id=traversal_id,
+        tree_digest=tree_digest,
+        plan_digest=plan_digest,
+        order_by=order_by,
+        pages=values,
+    )
+
+
+def evaluate_canonical_catalog_coverage(
+    evidence: CanonicalCatalogEvidence,
+    *,
+    request_limit: int = DEFAULT_MAX_COVERAGE_REQUESTS,
+) -> CatalogCoverageReport:
+    """Deriva total y estructura desde respuestas crudas antes de decidir."""
+
+    from .la_colonia_catalog_partitions import build_structural_discovery_report
+
+    structural_errors: list[str] = []
+    try:
+        root_total = _closed_nonnegative_int(
+            evidence.root_response.get("recordsFiltered")
+        )
+    except ValueError:
+        root_total = 0
+        structural_errors.append("invalid_root_response_total")
+    try:
+        facets_total = _closed_nonnegative_int(
+            evidence.facets_response.get("recordsFiltered")
+        )
+        if facets_total != root_total:
+            structural_errors.append("facet_total_differs_from_root")
+    except ValueError:
+        structural_errors.append("invalid_facets_response_total")
+    sampling = evidence.facets_response.get("sampling")
+    if not isinstance(sampling, bool):
+        structural_errors.append("invalid_sampling_evidence")
+        sampling = True
+    facets = evidence.facets_response.get("facets")
+    if not isinstance(facets, Sequence) or isinstance(facets, (str, bytes)):
+        structural_errors.append("invalid_facets_evidence")
+        facets = ()
+    structure = build_structural_discovery_report(
+        facets,
+        run_id=evidence.run_id,
+        root_total=root_total,
+        sampling=sampling,
+    )
+    if structural_errors:
+        structure = StructuralDiscoveryReport(
+            run_id=structure.run_id,
+            tree_digest=structure.tree_digest,
+            nodes_seen=structure.nodes_seen,
+            positive_nodes=structure.positive_nodes,
+            valid_leaves=structure.valid_leaves,
+            invalid_positive_leaves=structure.invalid_positive_leaves,
+            duplicate_structural_nodes=structure.duplicate_structural_nodes,
+            discovered_leaf_identities=structure.discovered_leaf_identities,
+            errors=tuple((*structural_errors, *structure.errors)),
+            structural_status="INVALID",
+            root_total=structure.root_total,
+        )
+    return _evaluate_canonical_catalog_coverage(
+        structure,
+        evidence.primary,
+        evidence.reconciliation,
+        request_limit=request_limit,
+    )
+
+
+def _evaluate_canonical_catalog_coverage(
+    structure: StructuralDiscoveryReport,
+    primary: TraversalEvidence,
+    reconciliation: TraversalEvidence | None,
+    *,
+    request_limit: int = DEFAULT_MAX_COVERAGE_REQUESTS,
+) -> CatalogCoverageReport:
+    """Única decisión autoritativa de completitud del catálogo."""
+
+    if request_limit <= 0:
+        raise ValueError("request_limit debe ser mayor que cero")
+    reasons: list[str] = []
+    if not structure.valid:
+        _append_unique(reasons, "invalid_structural_evidence")
+    for traversal in (primary, reconciliation):
+        if traversal is None:
+            continue
+        if traversal.run_id != structure.run_id:
+            _append_unique(reasons, "traversal_run_id_mismatch")
+        if traversal.tree_digest != structure.tree_digest:
+            _append_unique(reasons, "traversal_tree_digest_mismatch")
+        expected_digest = _traversal_plan_digest(
+            run_id=traversal.run_id,
+            traversal_id=traversal.traversal_id,
+            tree_digest=traversal.tree_digest,
+            order_by=traversal.order_by,
+            pages=traversal.pages,
+        )
+        if traversal.plan_digest != expected_digest:
+            _append_unique(reasons, "traversal_plan_digest_invalid")
+    if reconciliation is None:
+        _append_unique(reasons, "independent_reconciliation_missing")
+    elif reconciliation.traversal_id == primary.traversal_id:
+        _append_unique(reasons, "self_reconciliation_forbidden")
+    elif reconciliation.order_by == primary.order_by:
+        _append_unique(reasons, "reconciliation_order_not_independent")
+
+    primary_results = _evaluate_raw_traversal(structure, primary)
+    secondary_results = (
+        _evaluate_raw_traversal(structure, reconciliation)
+        if reconciliation is not None
+        else {}
+    )
+    partition_results: list[PartitionCoverageResult] = []
+    global_primary: set[str] = set()
+    global_secondary: set[str] = set()
+    global_primary_skus: set[str] = set()
+    global_secondary_skus: set[str] = set()
+    for leaf in structure.valid_leaves:
+        first = primary_results.get(leaf.name)
+        second = secondary_results.get(leaf.name)
+        if first is None or not first.coverage_demonstrated:
+            _append_unique(reasons, f"primary_incomplete:{leaf.name}")
+        if second is None or not second.coverage_demonstrated:
+            _append_unique(reasons, f"reconciliation_incomplete:{leaf.name}")
+        if first is not None:
+            global_primary.update(first._product_keys)
+            global_primary_skus.update(first._sku_keys)
+            partition_results.append(first)
+        if second is not None:
+            global_secondary.update(second._product_keys)
+            global_secondary_skus.update(second._sku_keys)
+        if first is not None and second is not None:
+            if first._product_keys != second._product_keys:
+                _append_unique(reasons, f"reconciliation_union_mismatch:{leaf.name}")
+            if first._sku_keys != second._sku_keys:
+                _append_unique(reasons, f"reconciliation_sku_union_mismatch:{leaf.name}")
+
+    expected_names = {leaf.name for leaf in structure.valid_leaves}
+    observed_primary = {page.partition for page in primary.pages}
+    observed_secondary = (
+        {page.partition for page in reconciliation.pages}
+        if reconciliation is not None
+        else set()
+    )
+    if observed_primary - expected_names or observed_secondary - expected_names:
+        _append_unique(reasons, "unknown_partition_observed")
+    if global_primary != global_secondary:
+        _append_unique(reasons, "global_reconciliation_mismatch")
+    if global_primary_skus != global_secondary_skus:
+        _append_unique(reasons, "global_sku_reconciliation_mismatch")
+    if len(global_primary) != structure.root_total:
+        _append_unique(reasons, "global_union_differs_from_structural_root")
+
+    pages_attempted = len(primary.pages) + (
+        len(reconciliation.pages) if reconciliation is not None else 0
+    )
+    if pages_attempted > request_limit:
+        _append_unique(reasons, "request_limit_exceeded")
+    inherited = (
+        reason
+        for result in (*primary_results.values(), *secondary_results.values())
+        for reason in result._reasons
+    )
+    _extend_unique(reasons, inherited)
+
+    occurrences = sum(len(result._product_keys) for result in partition_results)
+    cross_partition_duplicates = occurrences - len(global_primary)
+    accepted = not reasons
+    return CatalogCoverageReport(
+        partitions_discovered=len(structure.valid_leaves),
+        partitions_attempted=len(primary_results),
+        partitions_completed=sum(
+            result.coverage_demonstrated for result in primary_results.values()
+        ),
+        pages_expected=sum(result.pages_expected for result in primary_results.values()),
+        pages_attempted=pages_attempted,
+        pages_completed=sum(result.pages_completed for result in primary_results.values()),
+        products_reported=structure.root_total,
+        products_received=sum(
+            len(page.products)
+            for page in primary.pages
+        ),
+        products_unique=len(global_primary),
+        duplicate_occurrences=(
+            sum(result.duplicate_occurrences for result in primary_results.values())
+            + cross_partition_duplicates
+        ),
+        repeated_page_sets=sum(
+            result.repeated_page_sets for result in primary_results.values()
+        ),
+        unexpected_overlaps=sum(
+            result.unexpected_overlaps for result in primary_results.values()
+        ),
+        missing_coverage_events=len(reasons),
+        total_changes=sum(result.total_changes for result in primary_results.values()),
+        uncategorized_products=0,
+        request_limit=request_limit,
+        coverage_demonstrated=accepted,
+        coverage_reason="coverage_demonstrated" if accepted else ";".join(reasons),
+        accepted=accepted,
+        run_id=structure.run_id,
+        tree_digest=structure.tree_digest,
+        primary_plan_digest=primary.plan_digest,
+        reconciliation_plan_digest=(
+            reconciliation.plan_digest if reconciliation is not None else ""
+        ),
+        _reasons=tuple(reasons),
+        _product_keys=tuple(sorted(global_primary)),
+        _sku_keys=tuple(sorted(global_primary_skus)),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryCoverageResult:
+    """Resultado fail-closed de recuperar una omisión con ventanas solapadas."""
+
+    partition: str
+    status: str
+    products_reported: int
+    products_unique: int
+    products_recovered: int
+    residual: int
+    reasons: tuple[str, ...]
+    deterministic_union: tuple[str, ...] = field(repr=False)
+
+    @property
+    def accepted(self) -> bool:
+        # Compatibilidad de métricas: sólo el evaluador canónico concede accepted.
+        return False
+
+
+def evaluate_overlap_recovery(
+    partition: PartitionSpec,
+    primary_pages: Sequence[CoveragePageObservation],
+    recovery_pages: Sequence[CoveragePageObservation],
+    *,
+    reconciliation_pages: Sequence[CoveragePageObservation] | None,
+) -> RecoveryCoverageResult:
+    """Acepta recuperación solo cuando otra travesía confirma la unión exacta."""
+
+    primary = tuple(primary_pages)
+    recovery = tuple(recovery_pages)
+    values = primary + recovery
+    reasons: list[str] = []
+    if not primary:
+        reasons.append("primary_traversal_missing")
+    if not recovery:
+        reasons.append("recovery_windows_missing")
+    if any(item.partition != partition.name for item in values):
+        reasons.append("partition_mismatch")
+    totals = {item.records_filtered for item in values}
+    if totals != {partition.expected_products}:
+        reasons.append("total_changed_or_differs_from_discovery")
+    if any(not item.complete for item in recovery):
+        reasons.append("recovery_response_truncated")
+    if any("duplicate_within_page" in item.quality_events for item in values):
+        reasons.append("duplicate_within_page")
+
+    positions: set[int] = set()
+    for item in primary:
+        positions.update(
+            range(
+                item.from_index,
+                min(item.to_index, partition.expected_products - 1) + 1,
+            )
+        )
+    if positions != set(range(partition.expected_products)):
+        reasons.append("logical_positions_not_fully_planned")
+
+    primary_keys = {key for item in primary for key in item._product_keys}
+    union = {key for item in values for key in item._product_keys}
+    recovered = union - primary_keys
+    residual = max(partition.expected_products - len(union), 0)
+    if len(union) != partition.expected_products:
+        reasons.append("residual_unknown")
+    if any(not item.complete for item in primary) and not recovered:
+        reasons.append("partial_page_not_recovered")
+
+    if reconciliation_pages is None:
+        reasons.append("reconciliation_missing")
+    else:
+        reconciliation = tuple(reconciliation_pages)
+        if any(item.partition != partition.name for item in reconciliation):
+            reasons.append("reconciliation_partition_mismatch")
+        else:
+            traversal = _evaluate_traversal(partition, reconciliation)
+            if not traversal.coverage_demonstrated:
+                reasons.append("reconciliation_incomplete")
+            elif traversal.product_keys != union:
+                reasons.append("reordering_not_reconciled")
+        if not reconciliation:
+            reasons.append("reordering_not_reconciled")
+
+    status = "LEGACY_EVIDENCE_CONSISTENT" if not reasons else "INCOMPLETE"
+    return RecoveryCoverageResult(
+        partition=partition.name,
+        status=status,
+        products_reported=partition.expected_products,
+        products_unique=len(union),
+        products_recovered=len(recovered),
+        residual=residual,
+        reasons=tuple(dict.fromkeys(reasons)),
+        deterministic_union=tuple(sorted(union)),
+    )
 
 
 def observe_coverage_page(
@@ -148,7 +718,6 @@ def observe_coverage_page(
     to_index: int,
     records_filtered: int,
     product_keys: Sequence[str],
-    membership_valid: bool = True,
 ) -> CoveragePageObservation:
     """Crea una observación offline a partir de identidades privadas."""
 
@@ -177,8 +746,6 @@ def observe_coverage_page(
         events.append("more_products_than_expected")
     if len(set(keys)) != len(keys):
         events.append("duplicate_within_page")
-    if not membership_valid:
-        events.append("partition_membership_invalid")
 
     return CoveragePageObservation(
         partition=partition,
@@ -189,7 +756,6 @@ def observe_coverage_page(
         products_received=len(keys),
         products_expected=expected,
         complete=len(keys) == expected,
-        membership_valid=membership_valid,
         sequence_signature=_signature(keys),
         set_signature=_signature(sorted(set(keys))),
         quality_events=tuple(events),
@@ -332,7 +898,8 @@ def evaluate_catalog_coverage(
     )
     _extend_unique(reasons, inherited_reasons)
 
-    coverage_demonstrated = not reasons
+    _append_unique(reasons, "legacy_evidence_non_authoritative")
+    coverage_demonstrated = False
     return CatalogCoverageReport(
         partitions_discovered=partitions_discovered,
         partitions_attempted=len(values),
@@ -358,6 +925,10 @@ def evaluate_catalog_coverage(
             "coverage_demonstrated" if coverage_demonstrated else ";".join(reasons)
         ),
         accepted=coverage_demonstrated,
+        run_id="legacy-non-authoritative",
+        tree_digest="",
+        primary_plan_digest="",
+        reconciliation_plan_digest="",
         _reasons=tuple(reasons),
     )
 
@@ -419,7 +990,7 @@ def _evaluate_traversal(
                     min(item.to_index, total - 1) + 1,
                 )
             )
-        if item.complete and item.membership_valid and not item.quality_events:
+        if item.complete and not item.quality_events:
             pages_completed += 1
         _extend_unique(reasons, item.quality_events)
 
@@ -472,6 +1043,166 @@ def _evaluate_traversal(
     )
 
 
+def _evaluate_raw_traversal(
+    structure: StructuralDiscoveryReport,
+    traversal: TraversalEvidence,
+) -> dict[str, PartitionCoverageResult]:
+    grouped: dict[str, list[RawPageEvidence]] = {}
+    for page in traversal.pages:
+        grouped.setdefault(page.partition, []).append(page)
+
+    results: dict[str, PartitionCoverageResult] = {}
+    for leaf in structure.valid_leaves:
+        pages = tuple(
+            sorted(
+                grouped.get(leaf.name, ()),
+                key=lambda page: (page.from_index, page.to_index),
+            )
+        )
+        reasons: list[str] = []
+        if leaf.expected_products == 0:
+            if pages:
+                _append_unique(reasons, "empty_leaf_was_requested")
+            results[leaf.name] = PartitionCoverageResult(
+                partition=leaf.name,
+                pages_expected=0,
+                pages_attempted=len(pages),
+                pages_completed=0,
+                products_reported=0,
+                products_received=sum(len(page.products) for page in pages),
+                products_unique=0,
+                duplicate_occurrences=0,
+                repeated_page_sets=0,
+                unexpected_overlaps=0,
+                missing_coverage_events=len(reasons),
+                total_changes=0,
+                orderings_attempted=1,
+                orderings_reconciled=False,
+                coverage_demonstrated=not reasons,
+                coverage_reason="coverage_demonstrated" if not reasons else ";".join(reasons),
+                _product_keys=(),
+                _reasons=tuple(reasons),
+            )
+            continue
+        if not pages:
+            _append_unique(reasons, "partition_not_attempted")
+
+        positions: dict[int, str] = {}
+        primary_planned_positions: set[int] = set()
+        occurrences: list[str] = []
+        sku_occurrences: list[str] = []
+        sku_owners: dict[str, str] = {}
+        completed_pages = 0
+        total_changes = 0
+        totals: list[int] = []
+        page_sets: set[frozenset[str]] = set()
+        repeated_page_sets = 0
+        overlap_conflicts = 0
+        for page in pages:
+            totals.append(page.records_filtered)
+            if page.records_filtered != leaf.expected_products:
+                _append_unique(reasons, "partition_total_differs_from_discovery")
+            if page.from_index < 0 or page.to_index < page.from_index:
+                _append_unique(reasons, "invalid_page_range")
+                continue
+            if page.to_index - page.from_index + 1 > MAX_CATALOG_PAGE_SIZE:
+                _append_unique(reasons, "page_range_above_limit")
+            expected = min(
+                page.to_index - page.from_index + 1,
+                max(leaf.expected_products - page.from_index, 0),
+            )
+            if page.purpose == "PRIMARY":
+                primary_planned_positions.update(
+                    range(page.from_index, min(page.to_index, leaf.expected_products - 1) + 1)
+                )
+            if len(page.products) == expected:
+                completed_pages += 1
+            elif page.purpose == "RECOVERY":
+                _append_unique(reasons, "recovery_response_truncated")
+            keys_on_page: list[str] = []
+            for offset, product in enumerate(page.products):
+                identity = product.identity
+                if identity is None:
+                    _append_unique(reasons, "uninterpretable_product_identity")
+                    continue
+                if not _membership_matches(product, leaf._category_path):
+                    _append_unique(reasons, "partition_membership_invalid")
+                position = page.from_index + offset
+                if position > page.to_index or position >= leaf.expected_products:
+                    _append_unique(reasons, "product_outside_requested_range")
+                    continue
+                previous = positions.get(position)
+                if previous is not None and previous != identity:
+                    overlap_conflicts += 1
+                    _append_unique(reasons, "overlap_position_conflict")
+                else:
+                    positions[position] = identity
+                occurrences.append(identity)
+                keys_on_page.append(identity)
+                sku_keys = product.sku_identities
+                if not sku_keys:
+                    _append_unique(reasons, "uninterpretable_sku_identity")
+                if len(set(sku_keys)) != len(sku_keys):
+                    _append_unique(reasons, "duplicate_sku_identity")
+                for sku_key in sku_keys:
+                    owner = sku_owners.get(sku_key)
+                    if owner is not None and owner != identity:
+                        _append_unique(reasons, "duplicate_sku_identity")
+                    else:
+                        sku_owners[sku_key] = identity
+                sku_occurrences.extend(sku_keys)
+            page_set = frozenset(keys_on_page)
+            if page_set in page_sets and page_set:
+                repeated_page_sets += 1
+                _append_unique(reasons, "repeated_page_set")
+            page_sets.add(page_set)
+
+        total_changes = sum(left != right for left, right in zip(totals, totals[1:]))
+        if total_changes:
+            _append_unique(reasons, "partition_total_changed")
+        if set(positions) != set(range(leaf.expected_products)):
+            _append_unique(reasons, "logical_positions_not_fully_covered")
+        if primary_planned_positions != set(range(leaf.expected_products)):
+            _append_unique(reasons, "primary_plan_does_not_cover_leaf")
+        unique = frozenset(occurrences)
+        if len(unique) != leaf.expected_products:
+            _append_unique(reasons, "unique_products_differ_from_partition_total")
+        position_identities = list(positions.values())
+        if len(set(position_identities)) != len(position_identities):
+            _append_unique(reasons, "duplicate_compensates_omission")
+        unique_skus = frozenset(sku_occurrences)
+
+        duplicate_occurrences = len(occurrences) - len(unique)
+        page_width = max(
+            (page.to_index - page.from_index + 1 for page in pages),
+            default=MAX_CATALOG_PAGE_SIZE,
+        )
+        expected_pages = math.ceil(leaf.expected_products / page_width)
+        accepted = not reasons
+        results[leaf.name] = PartitionCoverageResult(
+            partition=leaf.name,
+            pages_expected=expected_pages,
+            pages_attempted=len(pages),
+            pages_completed=completed_pages,
+            products_reported=leaf.expected_products,
+            products_received=len(occurrences),
+            products_unique=len(unique),
+            duplicate_occurrences=duplicate_occurrences,
+            repeated_page_sets=repeated_page_sets,
+            unexpected_overlaps=overlap_conflicts,
+            missing_coverage_events=len(reasons),
+            total_changes=total_changes,
+            orderings_attempted=1,
+            orderings_reconciled=False,
+            coverage_demonstrated=accepted,
+            coverage_reason="coverage_demonstrated" if accepted else ";".join(reasons),
+            _product_keys=tuple(sorted(unique)),
+            _sku_keys=tuple(sorted(unique_skus)),
+            _reasons=tuple(reasons),
+        )
+    return results
+
+
 def _expected_overlap(
     left: CoveragePageObservation,
     right: CoveragePageObservation,
@@ -484,6 +1215,81 @@ def _expected_overlap(
 def _signature(values: Sequence[str]) -> str:
     encoded = json.dumps(list(values), separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _first_nonempty(*values: Any) -> str | None:
+    for value in values:
+        if (text := _optional_text(value)) is not None:
+            return text
+    return None
+
+
+def _membership_matches(
+    product: RawProductEvidence,
+    expected_path: tuple[tuple[str, str], ...],
+) -> bool:
+    matches = 0
+    for path in product.category_paths:
+        if len(path) != len(expected_path):
+            continue
+        if all(
+            observed_key == expected_key and expected_value in candidates
+            for (observed_key, candidates), (expected_key, expected_value) in zip(
+                path, expected_path
+            )
+        ):
+            matches += 1
+    return matches == 1
+
+
+def _closed_nonnegative_int(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("El total debe ser un entero no negativo")
+    return value
+
+
+def _traversal_plan_digest(
+    *,
+    run_id: str,
+    traversal_id: str,
+    tree_digest: str,
+    order_by: str,
+    pages: Sequence[RawPageEvidence],
+) -> str:
+    plan = {
+        "run_id": run_id,
+        "traversal_id": traversal_id,
+        "tree_digest": tree_digest,
+        "order_by": order_by,
+        "pages": [
+            {
+                "ordinal": index,
+                "partition": page.partition,
+                "from": page.from_index,
+                "to": page.to_index,
+                "purpose": page.purpose,
+            }
+            for index, page in enumerate(pages)
+        ],
+    }
+    return hashlib.sha256(
+        json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _deep_freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(key): _deep_freeze(item) for key, item in value.items()})
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return tuple(_deep_freeze(item) for item in value)
+    return value
 
 
 def _append_unique(values: list[str], value: str) -> None:

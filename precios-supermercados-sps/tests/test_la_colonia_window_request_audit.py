@@ -8,9 +8,14 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-import precios_supermercados.scrapers.base as base_module
 import precios_supermercados.scrapers.la_colonia_window_diagnostic_runtime as runtime_module
-from precios_supermercados.scrapers.base import HttpResponse, HttpStatusError, SafeHttpClient
+from precios_supermercados.scrapers.base import (
+    ExternalNetworkDeniedError,
+    HttpResponse,
+    HttpStatusError,
+    OfflineTestTransport,
+    SafeHttpClient,
+)
 from precios_supermercados.scrapers.la_colonia import FORBIDDEN_PATH_PREFIXES, USER_AGENT
 from precios_supermercados.scrapers.la_colonia_graphql import PRODUCT_SEARCH_QUERY
 from precios_supermercados.scrapers.la_colonia_window_diagnostic import (
@@ -122,7 +127,7 @@ def _runtime(planner=_complete_planner, *, sleeper=None):
         user_agent=USER_AGENT,
         max_retries=0,
         retry_delay_seconds=0,
-        transport=transport,
+        transport=OfflineTestTransport(transport),
         sleeper=lambda _: None,
     )
     sleeps = [] if sleeper is None else sleeper
@@ -247,7 +252,7 @@ def test_safe_http_client_has_no_response_cache_and_does_not_reuse_previous_body
         forbidden_path_prefixes=FORBIDDEN_PATH_PREFIXES,
         user_agent=USER_AGENT,
         max_retries=0,
-        transport=transport,
+        transport=OfflineTestTransport(transport),
         sleeper=lambda _: None,
     )
     first = client.get(url)
@@ -272,7 +277,7 @@ def test_max_retries_zero_prevents_hidden_transport_calls():
         forbidden_path_prefixes=FORBIDDEN_PATH_PREFIXES,
         user_agent=USER_AGENT,
         max_retries=0,
-        transport=transport,
+        transport=OfflineTestTransport(transport),
         sleeper=lambda _: None,
     )
     with pytest.raises(HttpStatusError, match="503"):
@@ -280,39 +285,15 @@ def test_max_retries_zero_prevents_hidden_transport_calls():
     assert calls == [url]
 
 
-def test_urllib_transport_sends_the_exact_url_without_local_rewrite(monkeypatch):
+def test_default_transport_is_globally_denied_before_any_network():
     expected_url = build_window_url(FRONTIER_380_399_V1.phase_one[2])
-    captured = {}
-
-    class FakeResponse:
-        status = 200
-        headers = {"Content-Type": "application/json"}
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, traceback):
-            return False
-
-        def geturl(self):
-            return expected_url
-
-        def read(self):
-            return b"{}"
-
-    def fake_urlopen(request, timeout):
-        captured["url"] = request.full_url
-        captured["timeout"] = timeout
-        return FakeResponse()
-
-    monkeypatch.setattr(base_module, "urlopen", fake_urlopen)
-    response = SafeHttpClient._urllib_transport(
-        expected_url,
-        {"User-Agent": USER_AGENT},
-        20.0,
+    client = SafeHttpClient(
+        allowed_hosts={"www.lacolonia.com"},
+        forbidden_path_prefixes=FORBIDDEN_PATH_PREFIXES,
+        user_agent=USER_AGENT,
     )
-    assert captured == {"url": expected_url, "timeout": 20.0}
-    assert response.url == expected_url
+    with pytest.raises(ExternalNetworkDeniedError, match="GLOBAL LIVE BLOCKED"):
+        client.get(expected_url)
 
 
 def test_runtime_uses_each_response_body_for_its_own_window():

@@ -6,12 +6,11 @@ No acepta URL, query, operationName, variables, facets ni headers externos.
 from __future__ import annotations
 
 import json
-import ssl
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from .la_colonia_facet_discovery import FacetDiscoveryRequest
 
@@ -152,8 +151,26 @@ _OPERATIONS = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class OfflineTestOpener:
+    """Harness inyectable explícito, sin autoridad live."""
+
+    handler: Callable[[Request, float], Any]
+
+    def __post_init__(self) -> None:
+        module = getattr(self.handler, "__module__", self.handler.__class__.__module__)
+        if not str(module).split(".")[-1].startswith("test_"):
+            raise ValueError("OfflineTestOpener sólo admite handlers de módulos test_*")
+
+    def __call__(self, request: Request, timeout: float):
+        return self.handler(request, timeout)
+
+
 def _default_opener(request: Request, timeout: float):
-    return urlopen(request, timeout=timeout, context=ssl.create_default_context())
+    del request, timeout
+    raise FacetDiscoveryTransportError(
+        "GLOBAL LIVE BLOCKED: facet discovery requiere un fake offline"
+    )
 
 
 class LaColoniaFacetDiscoveryAdapter:
@@ -162,10 +179,15 @@ class LaColoniaFacetDiscoveryAdapter:
     max_retries = FACET_DISCOVERY_MAX_RETRIES
     max_requests = FACET_DISCOVERY_MAX_REQUESTS
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError("Adapter inmutable después de inicializar")
+        object.__setattr__(self, name, value)
+
     def __init__(
         self,
         *,
-        opener: Callable[[Request, float], Any] = _default_opener,
+        opener: OfflineTestOpener | Callable[[Request, float], Any] = _default_opener,
         timeout_seconds: float = FACET_DISCOVERY_TIMEOUT_SECONDS,
     ) -> None:
         if timeout_seconds != FACET_DISCOVERY_TIMEOUT_SECONDS:
@@ -173,11 +195,12 @@ class LaColoniaFacetDiscoveryAdapter:
         parsed = urlparse(FACET_DISCOVERY_ENDPOINT)
         if parsed.scheme != "https" or parsed.hostname != FACET_DISCOVERY_HOST:
             raise ValueError("Endpoint facet discovery no autorizado")
-        if not callable(opener):
-            raise ValueError("opener debe ser callable")
+        if opener is not _default_opener and type(opener) is not OfflineTestOpener:
+            raise ValueError("opener requiere OfflineTestOpener explícito")
         self._opener = opener
         self._timeout_seconds = timeout_seconds
         self._requests_attempted = 0
+        self._sealed = True
 
     @property
     def requests_attempted(self) -> int:
@@ -191,7 +214,7 @@ class LaColoniaFacetDiscoveryAdapter:
             raise FacetDiscoveryTransportError("Operación facet discovery no autorizada")
         if self._requests_attempted >= FACET_DISCOVERY_MAX_REQUESTS:
             raise FacetDiscoveryTransportError("Máximo de dos solicitudes excedido")
-        self._requests_attempted += 1
+        object.__setattr__(self, "_requests_attempted", self._requests_attempted + 1)
         payload = self._execute(operation)
         if logical_request.name == "root_total":
             return self._normalize_root(payload)
