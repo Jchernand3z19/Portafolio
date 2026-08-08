@@ -38,6 +38,7 @@ _FORBIDDEN_PUBLIC_KEYS = frozenset(
         "product_keys",
     }
 )
+_RAW_COLLECTOR_ISSUER = object()
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,11 +55,20 @@ class PartitionSpec:
     )
 
     def __post_init__(self) -> None:
-        if not self.name.strip():
+        if not isinstance(self.name, str) or not self.name.strip():
             raise ValueError("name no puede estar vacío")
-        if not self.facet_key.strip() or not self.facet_value.strip():
+        if (
+            not isinstance(self.facet_key, str)
+            or not isinstance(self.facet_value, str)
+            or not self.facet_key.strip()
+            or not self.facet_value.strip()
+        ):
             raise ValueError("facet_key y facet_value no pueden estar vacíos")
-        if self.expected_products < 0:
+        if (
+            isinstance(self.expected_products, bool)
+            or not isinstance(self.expected_products, int)
+            or self.expected_products < 0
+        ):
             raise ValueError("expected_products no puede ser negativo")
         if not self.facet_key.startswith("category-"):
             raise ValueError("La partición debe usar una facet de categoría")
@@ -121,7 +131,33 @@ class RawPageEvidence:
     to_index: int
     records_filtered: int
     products: tuple[RawProductEvidence, ...]
+    response_digest: str
     purpose: str = "PRIMARY"
+    _collector_issuer: object = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        for label, value in (
+            ("run_id", self.run_id),
+            ("traversal_id", self.traversal_id),
+            ("partition", self.partition),
+            ("response_digest", self.response_digest),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{label} debe ser texto no vacío")
+        if self.order_by not in ALLOWED_ORDER_BY:
+            raise ValueError("order_by de página no permitido")
+        if (
+            isinstance(self.from_index, bool)
+            or not isinstance(self.from_index, int)
+            or isinstance(self.to_index, bool)
+            or not isinstance(self.to_index, int)
+            or self.from_index < 0
+            or self.to_index < self.from_index
+        ):
+            raise ValueError("Rango de página inválido")
+        _closed_nonnegative_int(self.records_filtered)
+        if self.purpose not in {"PRIMARY", "RECOVERY"}:
+            raise ValueError("purpose de evidencia no permitido")
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +245,9 @@ class PartitionCoverageResult:
     coverage_reason: str
     _product_keys: tuple[str, ...] = field(default=(), repr=False, compare=False)
     _sku_keys: tuple[str, ...] = field(default=(), repr=False, compare=False)
+    _product_sku_pairs: tuple[tuple[str, str], ...] = field(
+        default=(), repr=False, compare=False
+    )
     _reasons: tuple[str, ...] = field(default=(), repr=False, compare=False)
 
 
@@ -242,12 +281,16 @@ class CatalogCoverageReport:
     _reasons: tuple[str, ...] = field(default=(), repr=False, compare=False)
     _product_keys: tuple[str, ...] = field(default=(), repr=False, compare=False)
     _sku_keys: tuple[str, ...] = field(default=(), repr=False, compare=False)
+    _product_sku_pairs: tuple[tuple[str, str], ...] = field(
+        default=(), repr=False, compare=False
+    )
 
     def sanitized_summary(self) -> dict[str, Any]:
         value = asdict(self)
         value.pop("_reasons", None)
         value.pop("_product_keys", None)
         value.pop("_sku_keys", None)
+        value.pop("_product_sku_pairs", None)
         summary = {"schema_version": COVERAGE_SCHEMA_VERSION, **value}
         validate_sanitized_coverage_summary(summary)
         return summary
@@ -285,6 +328,7 @@ def raw_page_evidence_from_response(
         to_index=to_index,
         records_filtered=records_filtered,
         products=products,
+        response_digest=_mapping_digest(product_search),
         purpose=purpose,
     )
 
@@ -299,6 +343,7 @@ def _raw_page_evidence_from_values(
     to_index: int,
     records_filtered: int,
     products: Sequence[Mapping[str, Any]],
+    response_digest: str,
     purpose: str,
 ) -> RawPageEvidence:
 
@@ -308,6 +353,10 @@ def _raw_page_evidence_from_values(
     for product in products:
         if not isinstance(product, Mapping):
             raise ValueError("Cada producto de evidencia debe ser un objeto")
+        for identity_field in ("productId", "productReference", "linkText"):
+            identity_value = product.get(identity_field)
+            if identity_value is not None and not isinstance(identity_value, str):
+                raise ValueError(f"{identity_field} debe ser texto")
         tree = product.get("categoryTree")
         candidates_by_level: list[tuple[str, tuple[str, ...]]] = []
         if isinstance(tree, Sequence) and not isinstance(tree, (str, bytes)):
@@ -382,7 +431,9 @@ def _raw_page_evidence_from_values(
         to_index=to_index,
         records_filtered=records_filtered,
         products=tuple(evidence),
+        response_digest=response_digest,
         purpose=purpose,
+        _collector_issuer=_RAW_COLLECTOR_ISSUER,
     )
 
 
@@ -485,6 +536,7 @@ def _evaluate_canonical_catalog_coverage(
     if request_limit <= 0:
         raise ValueError("request_limit debe ser mayor que cero")
     reasons: list[str] = []
+    _append_unique(reasons, "trusted_collector_provenance_unavailable")
     if not structure.valid:
         _append_unique(reasons, "invalid_structural_evidence")
     for traversal in (primary, reconciliation):
@@ -509,6 +561,22 @@ def _evaluate_canonical_catalog_coverage(
         _append_unique(reasons, "self_reconciliation_forbidden")
     elif reconciliation.order_by == primary.order_by:
         _append_unique(reasons, "reconciliation_order_not_independent")
+    if not primary.pages:
+        _append_unique(reasons, "primary_collector_observation_missing")
+    if any(page._collector_issuer is not _RAW_COLLECTOR_ISSUER for page in primary.pages):
+        _append_unique(reasons, "primary_collector_provenance_invalid")
+    if reconciliation is not None:
+        if not reconciliation.pages:
+            _append_unique(reasons, "reconciliation_collector_observation_missing")
+        if any(
+            page._collector_issuer is not _RAW_COLLECTOR_ISSUER
+            for page in reconciliation.pages
+        ):
+            _append_unique(reasons, "reconciliation_collector_provenance_invalid")
+        primary_responses = {page.response_digest for page in primary.pages}
+        secondary_responses = {page.response_digest for page in reconciliation.pages}
+        if primary_responses.intersection(secondary_responses):
+            _append_unique(reasons, "reconciliation_response_reused")
 
     primary_results = _evaluate_raw_traversal(structure, primary)
     secondary_results = (
@@ -521,6 +589,8 @@ def _evaluate_canonical_catalog_coverage(
     global_secondary: set[str] = set()
     global_primary_skus: set[str] = set()
     global_secondary_skus: set[str] = set()
+    global_primary_pairs: set[tuple[str, str]] = set()
+    global_secondary_pairs: set[tuple[str, str]] = set()
     for leaf in structure.valid_leaves:
         first = primary_results.get(leaf.name)
         second = secondary_results.get(leaf.name)
@@ -531,15 +601,19 @@ def _evaluate_canonical_catalog_coverage(
         if first is not None:
             global_primary.update(first._product_keys)
             global_primary_skus.update(first._sku_keys)
+            global_primary_pairs.update(first._product_sku_pairs)
             partition_results.append(first)
         if second is not None:
             global_secondary.update(second._product_keys)
             global_secondary_skus.update(second._sku_keys)
+            global_secondary_pairs.update(second._product_sku_pairs)
         if first is not None and second is not None:
             if first._product_keys != second._product_keys:
                 _append_unique(reasons, f"reconciliation_union_mismatch:{leaf.name}")
             if first._sku_keys != second._sku_keys:
                 _append_unique(reasons, f"reconciliation_sku_union_mismatch:{leaf.name}")
+            if first._product_sku_pairs != second._product_sku_pairs:
+                _append_unique(reasons, f"reconciliation_product_sku_mapping_mismatch:{leaf.name}")
 
     expected_names = {leaf.name for leaf in structure.valid_leaves}
     observed_primary = {page.partition for page in primary.pages}
@@ -554,6 +628,18 @@ def _evaluate_canonical_catalog_coverage(
         _append_unique(reasons, "global_reconciliation_mismatch")
     if global_primary_skus != global_secondary_skus:
         _append_unique(reasons, "global_sku_reconciliation_mismatch")
+    if global_primary_pairs != global_secondary_pairs:
+        _append_unique(reasons, "global_product_sku_mapping_mismatch")
+    for pairs, label in (
+        (global_primary_pairs, "primary"),
+        (global_secondary_pairs, "reconciliation"),
+    ):
+        owners: dict[str, str] = {}
+        for product_key, sku_key in pairs:
+            previous_owner = owners.get(sku_key)
+            if previous_owner is not None and previous_owner != product_key:
+                _append_unique(reasons, f"global_sku_owner_conflict:{label}")
+            owners[sku_key] = product_key
     if len(global_primary) != structure.root_total:
         _append_unique(reasons, "global_union_differs_from_structural_root")
 
@@ -613,6 +699,7 @@ def _evaluate_canonical_catalog_coverage(
         _reasons=tuple(reasons),
         _product_keys=tuple(sorted(global_primary)),
         _sku_keys=tuple(sorted(global_primary_skus)),
+        _product_sku_pairs=tuple(sorted(global_primary_pairs)),
     )
 
 
@@ -1091,6 +1178,7 @@ def _evaluate_raw_traversal(
         primary_planned_positions: set[int] = set()
         occurrences: list[str] = []
         sku_occurrences: list[str] = []
+        product_sku_pairs: list[tuple[str, str]] = []
         sku_owners: dict[str, str] = {}
         completed_pages = 0
         total_changes = 0
@@ -1150,6 +1238,7 @@ def _evaluate_raw_traversal(
                         _append_unique(reasons, "duplicate_sku_identity")
                     else:
                         sku_owners[sku_key] = identity
+                    product_sku_pairs.append((identity, sku_key))
                 sku_occurrences.extend(sku_keys)
             page_set = frozenset(keys_on_page)
             if page_set in page_sets and page_set:
@@ -1198,6 +1287,7 @@ def _evaluate_raw_traversal(
             coverage_reason="coverage_demonstrated" if accepted else ";".join(reasons),
             _product_keys=tuple(sorted(unique)),
             _sku_keys=tuple(sorted(unique_skus)),
+            _product_sku_pairs=tuple(sorted(set(product_sku_pairs))),
             _reasons=tuple(reasons),
         )
     return results
@@ -1218,9 +1308,9 @@ def _signature(values: Sequence[str]) -> str:
 
 
 def _optional_text(value: Any) -> str | None:
-    if value is None:
+    if not isinstance(value, str):
         return None
-    text = str(value).strip()
+    text = value.strip()
     return text or None
 
 
@@ -1275,6 +1365,7 @@ def _traversal_plan_digest(
                 "from": page.from_index,
                 "to": page.to_index,
                 "purpose": page.purpose,
+                "response_digest": page.response_digest,
             }
             for index, page in enumerate(pages)
         ],
@@ -1282,6 +1373,19 @@ def _traversal_plan_digest(
     return hashlib.sha256(
         json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+
+
+def _mapping_digest(value: Mapping[str, Any]) -> str:
+    try:
+        encoded = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("La respuesta no es JSON canónico verificable") from exc
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _deep_freeze(value: Any) -> Any:

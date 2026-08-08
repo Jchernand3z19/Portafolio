@@ -8,7 +8,9 @@ el runner normal del catálogo.
 from __future__ import annotations
 
 import json
+import math
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -115,6 +117,7 @@ class _ExecutionState:
     stop_reason: str = ""
     exit_code: int = EXIT_COMPLETED
     phase_two_started: bool = False
+    last_elapsed: float = 0.0
 
 
 def get_diagnostic_plan(name: str) -> DiagnosticPlan:
@@ -137,7 +140,12 @@ class LaColoniaWindowDiagnosticRuntime:
         clock: Callable[[], datetime] | None = None,
         max_duration_seconds: float = DIAGNOSTIC_MAX_DURATION_SECONDS,
     ) -> None:
-        if max_duration_seconds <= 0:
+        if (
+            isinstance(max_duration_seconds, bool)
+            or not isinstance(max_duration_seconds, (int, float))
+            or not math.isfinite(max_duration_seconds)
+            or max_duration_seconds <= 0
+        ):
             raise ValueError("max_duration_seconds debe ser mayor que cero")
         self.client = client or SafeHttpClient(
             allowed_hosts={"www.lacolonia.com"},
@@ -151,7 +159,8 @@ class LaColoniaWindowDiagnosticRuntime:
         self.sleeper = sleeper
         self.monotonic = monotonic
         self.clock = clock or (lambda: datetime.now(timezone.utc))
-        self.max_duration_seconds = max_duration_seconds
+        self.max_duration_seconds = float(max_duration_seconds)
+        self._run_lock = threading.Lock()
 
     def run(
         self,
@@ -161,12 +170,42 @@ class LaColoniaWindowDiagnosticRuntime:
         delay_seconds: float = DIAGNOSTIC_DELAY_SECONDS,
     ) -> DiagnosticExecutionResult:
         _validate_request_id(request_id)
-        if float(delay_seconds) != DIAGNOSTIC_DELAY_SECONDS:
+        if (
+            isinstance(delay_seconds, bool)
+            or not isinstance(delay_seconds, (int, float))
+            or not math.isfinite(delay_seconds)
+            or delay_seconds != DIAGNOSTIC_DELAY_SECONDS
+        ):
             raise ValueError("delay_seconds debe ser exactamente 1.5")
+        if not self._run_lock.acquire(blocking=False):
+            raise ValueError("diagnostic_runtime_already_running")
+        try:
+            return self._run_locked(
+                request_id=request_id,
+                plan_name=plan_name,
+                delay_seconds=float(delay_seconds),
+            )
+        finally:
+            self._run_lock.release()
+
+    def _run_locked(
+        self,
+        *,
+        request_id: str,
+        plan_name: str,
+        delay_seconds: float,
+    ) -> DiagnosticExecutionResult:
         plan = get_diagnostic_plan(plan_name)
         started_at = _utc(self.clock())
         state = _ExecutionState(request_id=request_id, plan=plan, started_at=started_at)
-        started_monotonic = self.monotonic()
+        try:
+            started_monotonic = self.monotonic()
+        except Exception:
+            started_monotonic = None
+        if not _finite_number(started_monotonic):
+            self._technical_stop(state, "invalid_monotonic_clock")
+            return self._finish(state, None, None, None)
+        started_monotonic = float(started_monotonic)
 
         phase_one = self._execute_phase(
             state,
@@ -185,6 +224,8 @@ class LaColoniaWindowDiagnosticRuntime:
             state.requests_planned = DIAGNOSTIC_MAX_REQUESTS
             self.sleeper(delay_seconds)
             state.delay_seconds_applied += delay_seconds
+            if not self._duration_within_budget(state, started_monotonic):
+                return self._finish(state, phase_one, None, started_monotonic)
             phase_two = self._execute_phase(
                 state,
                 plan.phase_two,
@@ -220,18 +261,21 @@ class LaColoniaWindowDiagnosticRuntime:
             if state.requests_attempted >= state.plan.max_requests:
                 self._technical_stop(state, "maximum_request_count_exceeded")
                 break
-            if self.monotonic() - started_monotonic > self.max_duration_seconds:
-                self._technical_stop(state, "maximum_duration_exceeded")
+            if not self._duration_within_budget(state, started_monotonic):
                 break
 
             state.requests_attempted += 1
             try:
                 response = self.client.get(build_window_url(window))
+                if not self._duration_within_budget(state, started_monotonic):
+                    break
                 observation = observe_window_payload(
                     window,
                     response.json(),
                     response_bytes=len(response.body),
                 )
+                if not self._duration_within_budget(state, started_monotonic):
+                    break
             except BlockedResponseError:
                 self._technical_stop(state, "http_403_or_captcha")
                 break
@@ -262,6 +306,8 @@ class LaColoniaWindowDiagnosticRuntime:
             if index < len(windows) - 1:
                 self.sleeper(delay_seconds)
                 state.delay_seconds_applied += delay_seconds
+                if not self._duration_within_budget(state, started_monotonic):
+                    break
 
         if not phase_observations:
             return None
@@ -277,15 +323,40 @@ class LaColoniaWindowDiagnosticRuntime:
         state.stop_reason = reason
         _append_unique(state.quality_events, f"stop:{reason}")
 
+    def _duration_within_budget(
+        self,
+        state: _ExecutionState,
+        started_monotonic: float,
+    ) -> bool:
+        try:
+            now = self.monotonic()
+        except Exception:
+            self._technical_stop(state, "invalid_monotonic_clock")
+            return False
+        if not _finite_number(now):
+            self._technical_stop(state, "invalid_monotonic_clock")
+            return False
+        elapsed = float(now) - started_monotonic
+        if elapsed < state.last_elapsed:
+            self._technical_stop(state, "non_monotonic_clock")
+            return False
+        state.last_elapsed = elapsed
+        if elapsed > self.max_duration_seconds:
+            self._technical_stop(state, "maximum_duration_exceeded")
+            return False
+        return True
+
     def _finish(
         self,
         state: _ExecutionState,
         phase_one: WindowDiagnosticReport | None,
         phase_two: WindowDiagnosticReport | None,
-        started_monotonic: float,
+        started_monotonic: float | None,
     ) -> DiagnosticExecutionResult:
+        if started_monotonic is not None:
+            self._duration_within_budget(state, started_monotonic)
         finished_at = _utc(self.clock())
-        duration = max(self.monotonic() - started_monotonic, 0.0)
+        duration = state.last_elapsed
         totals = [item.records_filtered for item in state.observations]
         total_initial = totals[0] if totals else 0
         total_final = totals[-1] if totals else 0
@@ -360,6 +431,14 @@ def serialize_diagnostic_summary(
     if len(encoded) > max_bytes:
         raise ValueError("El artefacto diagnóstico supera el límite de 64 KiB")
     return encoded
+
+
+def _finite_number(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+    )
 
 
 def render_diagnostic_markdown(summary: Mapping[str, Any]) -> str:

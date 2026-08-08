@@ -85,8 +85,13 @@ def exact_network_policy() -> dict[str, object]:
     }
 
 
-def request(store: LinearizableAuthority, *, sha: str = SHA) -> ImmutableLiveRequest:
-    return ImmutableLiveRequest("offline-test-001", sha, "one_exchange", store.epoch)
+def request(
+    store: LinearizableAuthority,
+    *,
+    sha: str = SHA,
+    request_id: str = "offline-test-001",
+) -> ImmutableLiveRequest:
+    return ImmutableLiveRequest(request_id, sha, "one_exchange", store.epoch)
 
 
 def reserved() -> tuple[LinearizableAuthority, ImmutableLiveRequest, IndependentFencingObserver]:
@@ -202,6 +207,93 @@ def test_grant_consumption_is_atomic_and_one_shot_under_race():
     for thread in threads:
         thread.join()
     assert sorted(outcomes) == ["accepted", "denied"]
+
+
+def test_same_request_digest_cannot_receive_two_sequential_grants():
+    store = LinearizableAuthority()
+    value = request(store)
+    store.issue_for_offline_test("grant-1", value)
+
+    with pytest.raises(SafetyViolation, match="Grant duplicado"):
+        store.issue_for_offline_test("grant-2", value)
+    with pytest.raises(SafetyViolation, match="Grant desconocido"):
+        store.grant_snapshot("grant-2")
+
+
+def test_authority_rejects_duck_typed_requests():
+    class FakeRequest:
+        epoch = 0
+        digest = "forged"
+        budget = ClosedBudget()
+
+    store = LinearizableAuthority()
+    with pytest.raises(SafetyViolation, match="tipado"):
+        store.issue_for_offline_test("grant-fake", FakeRequest())  # type: ignore[arg-type]
+
+    valid = request(store)
+    store.issue_for_offline_test("grant-1", valid)
+    with pytest.raises(SafetyViolation, match="tipado"):
+        store.reserve(
+            "grant-1", FakeRequest(), "reservation-fake", now=0  # type: ignore[arg-type]
+        )
+
+
+def test_same_request_digest_issue_race_creates_exactly_one_grant():
+    store = LinearizableAuthority()
+    value = request(store)
+    barrier = threading.Barrier(3)
+    outcomes: dict[str, str] = {}
+
+    def issue(grant_id: str) -> None:
+        barrier.wait()
+        try:
+            store.issue_for_offline_test(grant_id, value)
+            outcomes[grant_id] = "issued"
+        except SafetyViolation:
+            outcomes[grant_id] = "denied"
+
+    threads = [threading.Thread(target=issue, args=(f"grant-{index}",)) for index in (1, 2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(outcomes.values()) == ["denied", "issued"]
+    loser = next(grant_id for grant_id, outcome in outcomes.items() if outcome == "denied")
+    with pytest.raises(SafetyViolation, match="Grant desconocido"):
+        store.grant_snapshot(loser)
+
+
+def test_closed_request_digest_remains_burned_for_current_epoch():
+    store, value, observer = reserved()
+    complete_exchange(store, observer)
+
+    with pytest.raises(SafetyViolation, match="Grant duplicado"):
+        store.issue_for_offline_test("grant-2", value)
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "activation_deadline_seconds",
+        "connect_deadline_seconds",
+        "tls_deadline_seconds",
+        "first_byte_deadline_seconds",
+        "response_deadline_seconds",
+        "hard_reservation_deadline_seconds",
+    ],
+)
+def test_integer_and_float_deadline_forms_have_one_canonical_digest(field_name):
+    store = LinearizableAuthority()
+    integer_budget = replace(ClosedBudget(), **{field_name: 5})
+    float_budget = replace(ClosedBudget(), **{field_name: 5.0})
+    first = replace(request(store), budget=integer_budget)
+    second = replace(request(store), budget=float_budget)
+    assert first.digest == second.digest
+    store.issue_for_offline_test("grant-1", first)
+    with pytest.raises(SafetyViolation, match="Grant duplicado"):
+        store.issue_for_offline_test("grant-2", second)
 
 
 def test_global_exclusion_allows_only_one_of_two_distinct_grants():
@@ -385,7 +477,7 @@ def test_lost_start_observation_fences_and_installs_conservative_pacing():
         "reservation-1",
         evidence=closure_evidence(store, observer, observed_at=20, phase="fencing"),
     )
-    value = request(store)
+    value = request(store, request_id="offline-test-002")
     store.issue_for_offline_test("grant-2", value)
     store.reserve("grant-2", value, "reservation-2", now=21)
     with pytest.raises(SafetyViolation):
@@ -401,7 +493,7 @@ def test_lost_start_observation_fences_and_installs_conservative_pacing():
 def test_physical_pacing_uses_start_to_start_not_reservation_time():
     store, _, observer = reserved()
     complete_exchange(store, observer, now=10, step=0)
-    value = request(store)
+    value = request(store, request_id="offline-test-002")
     store.issue_for_offline_test("grant-2", value)
     store.reserve("grant-2", value, "reservation-2", now=11)
     with pytest.raises(SafetyViolation):
@@ -885,7 +977,22 @@ def test_network_capability_attestation_is_exact_bound_and_issuer_scoped():
     malformed_producer = replace(attestation, producer=123)  # type: ignore[arg-type]
     with pytest.raises(SafetyViolation, match="capacidades"):
         enforcer.validate(policy, malformed_producer)
+
+    mutable_capabilities = set(attestation.capabilities)
+    mutable = replace(attestation, capabilities=mutable_capabilities)  # type: ignore[arg-type]
+    with pytest.raises(SafetyViolation, match="capacidades"):
+        enforcer.validate(policy, mutable)
+    mutable_capabilities.clear()
     assert not hasattr(live_safety, "validate_exact_network_policy")
+
+
+@pytest.mark.parametrize("address", ["224.0.0.1", "239.1.1.1", "ff02::1", "ff0e::1"])
+def test_network_policy_rejects_multicast_peers(address: str):
+    policy = exact_network_policy()
+    policy["resolved_addresses"] = (address,)
+    policy["selected_peer"] = address
+    with pytest.raises(SafetyViolation, match="dirección prohibida"):
+        OfflineNetworkEnforcer().attest(policy)
 
 
 def test_local_browser_guard_requires_and_blocks_websocket_channel():

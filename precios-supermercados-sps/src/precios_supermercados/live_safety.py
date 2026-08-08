@@ -127,16 +127,16 @@ class ClosedBudget:
 
     def canonical(self) -> dict[str, int | float]:
         return {
-            "activation_deadline_seconds": self.activation_deadline_seconds,
-            "connect_deadline_seconds": self.connect_deadline_seconds,
-            "first_byte_deadline_seconds": self.first_byte_deadline_seconds,
-            "hard_reservation_deadline_seconds": self.hard_reservation_deadline_seconds,
+            "activation_deadline_seconds": float(self.activation_deadline_seconds),
+            "connect_deadline_seconds": float(self.connect_deadline_seconds),
+            "first_byte_deadline_seconds": float(self.first_byte_deadline_seconds),
+            "hard_reservation_deadline_seconds": float(self.hard_reservation_deadline_seconds),
             "max_connections": self.max_connections,
             "max_final_responses": self.max_final_responses,
             "max_http_requests": self.max_http_requests,
             "max_retries": self.max_retries,
-            "response_deadline_seconds": self.response_deadline_seconds,
-            "tls_deadline_seconds": self.tls_deadline_seconds,
+            "response_deadline_seconds": float(self.response_deadline_seconds),
+            "tls_deadline_seconds": float(self.tls_deadline_seconds),
         }
 
 
@@ -356,6 +356,7 @@ class LinearizableAuthority:
     ) -> None:
         self._lock = threading.RLock()
         self._grants: dict[str, _GrantRecord] = {}
+        self._issued_request_digests: set[str] = set()
         self._reservations: dict[str, _ReservationRecord] = {}
         self._epoch = 0
         self._active_reservation_id: str | None = None
@@ -406,10 +407,19 @@ class LinearizableAuthority:
 
         with self._lock:
             self._guard_active_deadline()
-            if not grant_id or request.epoch != self._epoch or grant_id in self._grants:
+            if type(request) is not ImmutableLiveRequest:
+                raise SafetyViolation("Request tipado obligatorio")
+            request_digest = request.digest
+            if (
+                not grant_id
+                or request.epoch != self._epoch
+                or grant_id in self._grants
+                or request_digest in self._issued_request_digests
+            ):
                 raise SafetyViolation("Grant duplicado o epoch stale")
-            grant = _GrantRecord(grant_id, request.digest, request.epoch)
+            grant = _GrantRecord(grant_id, request_digest, request.epoch)
             self._grants[grant_id] = grant
+            self._issued_request_digests.add(request_digest)
             return grant.snapshot()
 
     def reserve(
@@ -422,6 +432,8 @@ class LinearizableAuthority:
     ) -> Reservation:
         with self._lock:
             self._guard_active_deadline()
+            if type(request) is not ImmutableLiveRequest:
+                raise SafetyViolation("Request tipado obligatorio")
             self._validate_initial_time(now)
             grant = self._grants.get(grant_id)
             if (
@@ -945,6 +957,7 @@ class OfflineNetworkEnforcer:
             or type(capabilities.producer) is not str
             or not capabilities.producer
             or capabilities.policy_digest != digest
+            or type(capabilities.capabilities) is not frozenset
             or capabilities.capabilities != _ENFORCEMENT_CAPABILITIES
         ):
             raise SafetyViolation(
@@ -992,5 +1005,8 @@ def _validate_network_policy_shape(policy: Mapping[str, Any]) -> None:
         parsed_selected = ipaddress.ip_address(selected)
     except ValueError as exc:
         raise SafetyViolation("Resolución contiene una dirección inválida") from exc
-    if any(not address.is_global for address in parsed_addresses) or not parsed_selected.is_global:
+    if any(
+        not address.is_global or address.is_multicast
+        for address in parsed_addresses
+    ) or not parsed_selected.is_global or parsed_selected.is_multicast:
         raise SafetyViolation("Resolución contiene una dirección prohibida")

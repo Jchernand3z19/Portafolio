@@ -3,9 +3,27 @@ from __future__ import annotations
 import pytest
 
 from precios_supermercados.scrapers.la_colonia_catalog_partitions import (
+    build_structural_discovery_report,
     discover_leaf_category_partitions,
     estimate_partition_request_plan,
 )
+
+
+@pytest.mark.parametrize("quantity", [0.9, 2.9, True, "2"])
+def test_non_integer_facet_quantities_fail_closed(quantity):
+    report = build_structural_discovery_report(
+        [{"type": "CATEGORYTREE", "values": [{
+            "key": "category-1",
+            "value": "bad",
+            "quantity": quantity,
+            "children": [],
+        }]}],
+        run_id="strict-quantity",
+        root_total=0,
+    )
+
+    assert report.valid is False
+    assert "quantity_not_integer" in report.errors
 
 
 def nested_facets():

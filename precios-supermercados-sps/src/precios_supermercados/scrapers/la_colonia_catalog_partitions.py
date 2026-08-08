@@ -74,7 +74,7 @@ def build_structural_discovery_report(
     """Valida el árbol original antes de deduplicar y conserva su universo."""
 
     errors: list[str] = []
-    if not run_id.strip():
+    if not isinstance(run_id, str) or not run_id.strip():
         errors.append("invalid_run_id")
     nodes_seen = 0
     positive_nodes = 0
@@ -90,7 +90,10 @@ def build_structural_discovery_report(
         errors.append("invalid_partition_limit")
     if max_category_level <= 0:
         errors.append("invalid_category_level_limit")
-    if root_total is not None and root_total < 0:
+    if (
+        root_total is not None
+        and (isinstance(root_total, bool) or not isinstance(root_total, int) or root_total < 0)
+    ):
         errors.append("invalid_root_total")
     if not isinstance(facets, Sequence) or isinstance(facets, (str, bytes)):
         facets = ()
@@ -118,21 +121,20 @@ def build_structural_discovery_report(
                 add_error("node_not_object")
                 continue
             quantity_raw = node.get("quantity")
-            try:
-                if isinstance(quantity_raw, bool):
-                    raise ValueError
-                quantity = int(quantity_raw)
-            except (TypeError, ValueError):
+            if isinstance(quantity_raw, bool) or not isinstance(quantity_raw, int):
                 add_error("quantity_not_integer")
                 continue
+            quantity = quantity_raw
             if quantity > 0:
                 positive_nodes += 1
             if quantity < 0:
                 add_error("negative_quantity")
                 continue
 
-            key = str(node.get("key") or "").strip()
-            value = str(node.get("value") or "").strip()
+            raw_key = node.get("key")
+            raw_value = node.get("value")
+            key = raw_key.strip() if isinstance(raw_key, str) else ""
+            value = raw_value.strip() if isinstance(raw_value, str) else ""
             match = _CATEGORY_KEY.fullmatch(key)
             malformed_identity = not match or not value
             if malformed_identity:

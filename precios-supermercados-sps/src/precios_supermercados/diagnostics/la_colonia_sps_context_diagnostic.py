@@ -188,7 +188,9 @@ class SpsContextDiagnostic:
     context_replay_verification: str = "pending_live"
 
     def sanitized_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        value = asdict(self)
+        _validate_public_report(value)
+        return value
 
 
 @dataclass(slots=True)
@@ -507,19 +509,19 @@ def summarize_response(event: Mapping[str, Any], metadata: NetworkMetadata | Non
     if "productSearch" in metadata.classifications:
         result["recordsFiltered"], result["sampling"] = search.get("recordsFiltered"), search.get("sampling")
         products = search.get("products")
-        result["products"] = [
-            {"productId": p.get("productId"), "items": [
-                {"itemId": item.get("itemId"), "sellers": [
-                    {"sellerId": seller.get("sellerId"),
-                     "Price": (seller.get("commertialOffer") or {}).get("Price"),
-                     "ListPrice": (seller.get("commertialOffer") or {}).get("ListPrice"),
-                     "AvailableQuantity": (seller.get("commertialOffer") or {}).get("AvailableQuantity")}
-                    for seller in (item.get("sellers") or [])[:3] if isinstance(seller, Mapping)
-                ]}
-                for item in (p.get("items") or [])[:5] if isinstance(item, Mapping)
-            ]}
-            for p in (products or [])[:5] if isinstance(p, Mapping)
+        materialized = [p for p in (products or []) if isinstance(p, Mapping)]
+        items = [
+            item
+            for product in materialized
+            for item in (product.get("items") or [])
+            if isinstance(item, Mapping)
         ]
+        result["products_returned"] = len(materialized)
+        result["skus_returned"] = len(items)
+        result["sellers_returned"] = sum(
+            len([seller for seller in (item.get("sellers") or []) if isinstance(seller, Mapping)])
+            for item in items
+        )
     facets = search.get("facets") or data.get("facets")
     if "facets" in metadata.classifications and isinstance(facets, Sequence) and not isinstance(facets, (str, bytes)):
         result["sampling"] = search.get("sampling", data.get("sampling"))
@@ -527,19 +529,41 @@ def summarize_response(event: Mapping[str, Any], metadata: NetworkMetadata | Non
         for facet in facets:
             if not isinstance(facet, Mapping):
                 continue
-            values = facet.get("values") if isinstance(facet.get("values"), Sequence) else []
+            raw_values = facet.get("values")
+            values = (
+                raw_values
+                if isinstance(raw_values, Sequence)
+                and not isinstance(raw_values, (str, bytes))
+                else []
+            )
             result["facets"].append({
-                "name": facet.get("name"), "key": facet.get("key"), "type": facet.get("type"),
+                "type": facet.get("type"),
                 "classification": classify_facet(str(facet.get("key") or ""), str(facet.get("name") or "")),
                 "values_returned": len(values),
-                "values": [
-                    {"name": v.get("name"), "value": v.get("value"), "quantity": v.get("quantity"),
-                     "selected": v.get("selected"),
-                     "children": len(v.get("children") or []) if isinstance(v.get("children"), Sequence) else 0}
-                    for v in values[:5] if isinstance(v, Mapping)
-                ],
+                "positive_values": sum(
+                    type(v.get("quantity")) is int and v.get("quantity") > 0
+                    for v in values if isinstance(v, Mapping)
+                ),
             })
     return result
+
+
+_FORBIDDEN_REPORT_KEYS = frozenset({
+    "productid", "itemid", "sellerid", "price", "listprice",
+    "availablequantity", "productname", "linktext", "ean",
+})
+
+
+def _validate_public_report(value: Any) -> None:
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            normalized_key = "".join(character for character in str(key).casefold() if character.isalnum())
+            if normalized_key in _FORBIDDEN_REPORT_KEYS:
+                raise DiagnosticSafetyError(f"Campo comercial prohibido en reporte: {key}")
+            _validate_public_report(nested)
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for nested in value:
+            _validate_public_report(nested)
 
 
 def validate_live_authorization(

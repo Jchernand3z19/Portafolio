@@ -214,12 +214,13 @@ def observe_window_payload(
         raise ValueError("La ventana contiene productos no materializados como objetos")
     products = list(products_value)
 
-    try:
-        records_filtered = int(product_search["recordsFiltered"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("recordsFiltered es inválido") from exc
-    if records_filtered < 0:
-        raise ValueError("recordsFiltered no puede ser negativo")
+    records_filtered = product_search.get("recordsFiltered")
+    if (
+        isinstance(records_filtered, bool)
+        or not isinstance(records_filtered, int)
+        or records_filtered < 0
+    ):
+        raise ValueError("recordsFiltered es inválido")
 
     events: list[str] = []
     if len(products) < window.width:
@@ -246,7 +247,11 @@ def observe_window_payload(
                 "utf-8"
             )
         )
-    if response_bytes < 0:
+    if (
+        isinstance(response_bytes, bool)
+        or not isinstance(response_bytes, int)
+        or response_bytes < 0
+    ):
         raise ValueError("response_bytes no puede ser negativo")
 
     return WindowObservation(

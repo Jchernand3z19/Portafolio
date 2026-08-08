@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit
 
@@ -82,7 +83,13 @@ def complete_planner(values, call_number):
     return 200, payload([f"{prefix}{index}" for index in range(start, end + 1)])
 
 
-def build_runtime(planner=complete_planner, *, sleeper=None, max_duration=300.0):
+def build_runtime(
+    planner=complete_planner,
+    *,
+    sleeper=None,
+    max_duration=300.0,
+    monotonic=None,
+):
     transport = PlannedTransport(planner)
     client = SafeHttpClient(
         allowed_hosts={"www.lacolonia.com"},
@@ -97,7 +104,7 @@ def build_runtime(planner=complete_planner, *, sleeper=None, max_duration=300.0)
     runtime = LaColoniaWindowDiagnosticRuntime(
         client,
         sleeper=sleeps.append,
-        monotonic=StepClock(),
+        monotonic=monotonic or StepClock(),
         clock=lambda: FIXED_TIME,
         max_duration_seconds=max_duration,
     )
@@ -239,6 +246,97 @@ def test_runtime_rejects_retries_and_non_fixed_delay():
     runtime, _, _ = build_runtime()
     with pytest.raises(ValueError, match="1.5"):
         runtime.run(request_id="diagnostic-test-010", delay_seconds=1.0)
+
+
+@pytest.mark.parametrize("invalid", [True, float("nan"), float("inf"), float("-inf"), 0])
+def test_runtime_rejects_invalid_max_duration(invalid):
+    with pytest.raises(ValueError, match="max_duration_seconds"):
+        LaColoniaWindowDiagnosticRuntime(max_duration_seconds=invalid)
+
+
+def test_response_crossing_duration_budget_is_discarded_before_completion():
+    class ManualClock:
+        value = 0.0
+
+        def __call__(self):
+            return self.value
+
+    clock = ManualClock()
+
+    def planner(values, call_number):
+        result = complete_planner(values, call_number)
+        if call_number == 8:
+            clock.value = 301.0
+        return result
+
+    runtime, transport, _ = build_runtime(planner, monotonic=clock)
+    result = runtime.run(request_id="diagnostic-duration-response")
+
+    assert len(transport.calls) == 8
+    assert result.exit_code == EXIT_TECHNICAL_STOP
+    assert result.summary["stop_reason"] == "maximum_duration_exceeded"
+    assert result.summary["requests_completed"] == 7
+    assert result.summary["completed"] is False
+
+
+def test_sleep_crossing_duration_budget_stops_before_next_request():
+    class ManualClock:
+        value = 0.0
+
+        def __call__(self):
+            return self.value
+
+    clock = ManualClock()
+    transport = PlannedTransport(complete_planner)
+    client = SafeHttpClient(
+        allowed_hosts={"www.lacolonia.com"},
+        forbidden_path_prefixes=FORBIDDEN_PATH_PREFIXES,
+        user_agent=USER_AGENT,
+        max_retries=0,
+        retry_delay_seconds=0,
+        transport=OfflineTestTransport(transport),
+        sleeper=lambda _: None,
+    )
+
+    def sleeper(_seconds):
+        clock.value = 301.0
+
+    runtime = LaColoniaWindowDiagnosticRuntime(
+        client,
+        sleeper=sleeper,
+        monotonic=clock,
+        clock=lambda: FIXED_TIME,
+    )
+    result = runtime.run(request_id="diagnostic-duration-sleep")
+
+    assert len(transport.calls) == 1
+    assert result.exit_code == EXIT_TECHNICAL_STOP
+    assert result.summary["requests_completed"] == 1
+
+
+def test_same_runtime_rejects_concurrent_run_before_second_request():
+    entered = threading.Event()
+    release = threading.Event()
+
+    def planner(values, call_number):
+        entered.set()
+        assert release.wait(timeout=2)
+        return complete_planner(values, call_number)
+
+    runtime, transport, _ = build_runtime(planner)
+    first_result = []
+    thread = threading.Thread(
+        target=lambda: first_result.append(runtime.run(request_id="diagnostic-concurrent-1"))
+    )
+    thread.start()
+    assert entered.wait(timeout=2)
+    with pytest.raises(ValueError, match="already_running"):
+        runtime.run(request_id="diagnostic-concurrent-2")
+    assert len(transport.calls) == 1
+    release.set()
+    thread.join(timeout=2)
+    assert not thread.is_alive()
+    assert len(first_result) == 1
 
 
 def test_request_id_is_validated():

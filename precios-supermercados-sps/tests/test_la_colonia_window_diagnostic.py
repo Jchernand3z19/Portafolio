@@ -65,6 +65,24 @@ def test_disallowed_order_is_rejected():
         WindowSpec("bad", 0, 19, "OrderByUnknown")
 
 
+@pytest.mark.parametrize("invalid", [True, 9291.9, "9291"])
+def test_records_filtered_requires_exact_nonnegative_integer(invalid):
+    value = payload(0, 1, 1)
+    value["data"]["productSearch"]["recordsFiltered"] = invalid
+    with pytest.raises(ValueError, match="recordsFiltered"):
+        observe_window_payload(WindowSpec("A", 0, 0), value)
+
+
+@pytest.mark.parametrize("invalid", [True, -1, 1.5, "1"])
+def test_response_bytes_requires_exact_nonnegative_integer(invalid):
+    with pytest.raises(ValueError, match="response_bytes"):
+        observe_window_payload(
+            WindowSpec("A", 0, 0),
+            payload(0, 1, 1),
+            response_bytes=invalid,
+        )
+
+
 def test_complete_overlapping_windows_match_expected_overlap():
     a = observation("A", 360, 379, [f"P{i}" for i in range(360, 380)])
     b = observation("B", 370, 389, [f"P{i}" for i in range(370, 390)])

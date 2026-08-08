@@ -288,6 +288,7 @@ class LaColoniaCatalogRunner:
         seen_skus: set[tuple[str, str]] = set()
         seen_item_ids: set[str] = set()
         seen_products: set[str] = set()
+        seen_product_sku_pairs: set[tuple[str, str]] = set()
         seen_page_signatures: set[str] = set()
         previous_to: int | None = None
         expected_order_by: str | None = None
@@ -408,6 +409,7 @@ class LaColoniaCatalogRunner:
                 )
                 try:
                     page_product_keys = _page_product_keys(raw_products)
+                    page_product_sku_pairs = _page_product_sku_pairs(raw_products)
                 except StructureChangedError:
                     self._critical(
                         metrics, "uninterpretable_product_identity", structural=True
@@ -508,6 +510,7 @@ class LaColoniaCatalogRunner:
                     metrics.pages_completed += 1
                     seen_page_signatures.add(page_signature)
                     seen_products.update(page_product_keys)
+                    seen_product_sku_pairs.update(page_product_sku_pairs)
 
                     for product in result.products:
                         item_id = product.raw_values.get("item_id")
@@ -573,6 +576,7 @@ class LaColoniaCatalogRunner:
                 and set(coverage._product_keys) == seen_products
                 and set(coverage._sku_keys)
                 == {f"itemId:{item_id}" for item_id in seen_item_ids}
+                and set(coverage._product_sku_pairs) == seen_product_sku_pairs
             )
             if exact_binding and metrics.collection_succeeded:
                 metrics.rejection_reasons = [
@@ -839,6 +843,27 @@ def _page_product_keys(products: Sequence[Mapping[str, Any]]) -> list[str]:
     return keys
 
 
+def _page_product_sku_pairs(
+    products: Sequence[Mapping[str, Any]],
+) -> set[tuple[str, str]]:
+    product_keys = _page_product_keys(products)
+    pairs: set[tuple[str, str]] = set()
+    for index, (product, product_key) in enumerate(zip(products, product_keys)):
+        items = product.get("items")
+        if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
+            raise StructureChangedError(f"Producto {index} sin items verificables")
+        if not items:
+            raise StructureChangedError(f"Producto {index} sin SKU verificable")
+        for item in items:
+            if not isinstance(item, Mapping):
+                raise StructureChangedError(f"Producto {index} con SKU inválido")
+            item_id = _clean(item.get("itemId"))
+            if item_id is None:
+                raise StructureChangedError(f"Producto {index} con itemId inválido")
+            pairs.add((product_key, f"itemId:{item_id}"))
+    return pairs
+
+
 def _count_duplicate_products(page_keys: Sequence[str], seen: set[str]) -> int:
     local_seen: set[str] = set()
     duplicates = 0
@@ -855,9 +880,9 @@ def _page_signature(product_keys: Sequence[str]) -> str:
 
 
 def _clean(value: Any) -> str | None:
-    if value is None:
+    if not isinstance(value, str):
         return None
-    cleaned = str(value).strip()
+    cleaned = value.strip()
     return cleaned or None
 
 

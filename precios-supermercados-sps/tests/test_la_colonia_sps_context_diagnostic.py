@@ -16,6 +16,7 @@ from precios_supermercados.diagnostics.la_colonia_sps_context_diagnostic import 
     DomTargetNotFound,
     LogicalRequestBudgetExceeded,
     LogicalRequestCounter,
+    SpsContextDiagnostic,
     build_minimal_graphql_replay,
     city_selector_plan,
     classify_facet,
@@ -172,20 +173,30 @@ def test_root_response_is_summarized_without_full_payload(root_event: dict):
     summary = summarize_response(root_event)
     assert summary["recordsFiltered"] == 123
     assert summary["sampling"] is False
-    assert len(summary["products"]) == 2
-    assert summary["products"][0]["productId"] == "synthetic-product-1"
-    assert summary["products"][0]["items"][0]["itemId"] == "synthetic-sku-1"
+    assert summary["products_returned"] == 2
+    assert summary["skus_returned"] == 2
+    rendered = json.dumps(summary)
+    assert "synthetic-product" not in rendered
+    assert "synthetic-sku" not in rendered
+    assert "productId" not in rendered
+    assert "itemId" not in rendered
+    for forbidden in ("sellerId", "Price", "ListPrice", "AvailableQuantity"):
+        assert forbidden not in rendered
+
+
+@pytest.mark.parametrize("field", ["Price", "price", "PRODUCTID", "product_id", "item-id"])
+def test_public_report_rejects_commercial_fields_before_persistence(field):
+    report = SpsContextDiagnostic(root={field: 1})
+    with pytest.raises(DiagnosticSafetyError, match="Campo comercial prohibido"):
+        report.sanitized_dict()
 
 
 def test_facets_response_is_classified(facets_event: dict):
     summary = summarize_response(facets_event)
-    classes = {item["key"]: item["classification"] for item in summary["facets"]}
-    assert classes["category-1"] == "department"
-    assert classes["category-2"] == "category"
-    assert classes["category-3"] == "subcategory"
-    assert classes["brand"] == "brand"
-    assert classes["Subcategoria"] == "specification"
+    classes = {item["classification"] for item in summary["facets"]}
+    assert {"department", "category", "subcategory", "brand", "specification"} <= classes
     assert summary["sampling"] is False
+    assert all("key" not in item and "values" not in item for item in summary["facets"])
 
 
 @pytest.mark.parametrize(

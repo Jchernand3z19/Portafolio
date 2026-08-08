@@ -10,7 +10,7 @@ historia, pero no conceden autoridad ni sustituyen este contrato.
 - Autorizaciones activas: ninguna.
 - SPS technical context: `UNCONFIRMED`.
 - Catálogo live completo: no declarado.
-- GATE-17: `BLOCKED_EXTERNAL`.
+- GATE-17: `FAIL_PRODUCTIVE_EVIDENCE` (`main` sin protección ni ruleset).
 - Ready for live: no.
 
 Los jobs `live-crawl`, `diagnostic` y `facet-discovery` tienen un guard
@@ -42,6 +42,14 @@ igual al total reportado. Deduplicar nunca demuestra completitud.
 Identidad de producto VTEX: `productId -> productReference -> linkText`. Identidad
 de SKU: `itemId`. La unión se ordena determinísticamente y no serializa IDs en
 resúmenes públicos.
+
+La evidencia canónica que hoy puede cargar el CLI sigue siendo JSON aportado por
+el caller; por diseño no recibe autoridad de completitud. El evaluador conserva
+las métricas y contraejemplos, pero añade
+`trusted_collector_provenance_unavailable` y nunca publica `accepted=True` hasta
+que exista un collector interno ligado a observaciones de solicitudes físicas
+distintas. Cambiar etiquetas, orden, `extensions` o digests de contenido no
+convierte una travesía en reconciliación independiente.
 
 ## Autoridad y frontera física — modelo offline
 
@@ -94,8 +102,8 @@ como aislamiento físico productivo.
 
 | Gate | Significado canónico | Estado |
 |---|---|---|
-| GATE-01 | DEFAULT DENY | PASS_OFFLINE_MODEL |
-| GATE-02 | UNIQUE LIVE ENTRY / BLOCK ALTERNATIVES | PASS_OFFLINE_MODEL (todos los jobs live bloqueados) |
+| GATE-01 | DEFAULT DENY | PASS_OFFLINE_MODEL en PR; FAIL productivo hasta integrar |
+| GATE-02 | UNIQUE LIVE ENTRY / BLOCK ALTERNATIVES | PASS_OFFLINE_MODEL en PR; FAIL productivo hasta integrar |
 | GATE-03 | AUTHORIZATION SEPARATE FROM CONTRACT VALIDITY | PASS_OFFLINE_MODEL |
 | GATE-04 | IMMUTABLE SHA / REQUEST IDENTITY | PASS_OFFLINE_MODEL |
 | GATE-05 | ONE-SHOT ATOMIC CONSUMPTION / REPLAY | PASS_OFFLINE_MODEL |
@@ -109,10 +117,10 @@ como aislamiento físico productivo.
 | GATE-13 | STOP ON CAPTCHA / ANTIBOT | PASS_OFFLINE_MODEL |
 | GATE-14 | STOP ON AUTH / ADDRESS / GPS REQUIREMENT | PASS_OFFLINE_MODEL |
 | GATE-15 | EXCESSIVE LOAD STOP | PASS_OFFLINE_MODEL |
-| GATE-16 | TRUSTED WORKFLOW / CODE / SUPPLY CHAIN | PASS_OFFLINE_MODEL; jobs live cerrados |
-| GATE-17 | PRODUCTIVE RULESET / PROTECTION EVIDENCE | BLOCKED_EXTERNAL |
-| GATE-18 | EXACT FINAL VALIDATION | PASS_OFFLINE_MODEL |
-| GATE-19 | ADVERSARIAL OFFLINE COVERAGE | PASS_OFFLINE_MODEL |
+| GATE-16 | TRUSTED WORKFLOW / CODE / SUPPLY CHAIN | PASS_OFFLINE_MODEL en PR; FAIL productivo hasta integrar |
+| GATE-17 | PRODUCTIVE RULESET / PROTECTION EVIDENCE | FAIL_PRODUCTIVE_EVIDENCE |
+| GATE-18 | EXACT FINAL VALIDATION | FAIL-CLOSED; collector confiable pendiente |
+| GATE-19 | ADVERSARIAL OFFLINE COVERAGE | PASS_OFFLINE_MODEL; aceptación autoritativa bloqueada |
 | GATE-20 | COMMENTS NON-AUTHORITATIVE | PASS_OFFLINE_MODEL |
 
 Ningún estado de esta matriz autoriza live. La habilitación futura requiere una

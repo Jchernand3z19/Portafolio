@@ -234,6 +234,21 @@ def canonical_evidence_for_plans(
     partition = structure.valid_leaves[0].name
 
     def traversal(traversal_id: str, order_by: str):
+        traversal_plans = plans
+        if traversal_id == "reconciliation":
+            traversal_plans = {
+                start: {
+                    "data": {
+                        "productSearch": {
+                            **payload["data"]["productSearch"],
+                            "products": list(
+                                reversed(payload["data"]["productSearch"]["products"])
+                            ),
+                        }
+                    }
+                }
+                for start, payload in plans.items()
+            }
         pages = tuple(
             raw_page_evidence_from_response(
                 run_id="offline_runner_test",
@@ -244,7 +259,7 @@ def canonical_evidence_for_plans(
                 to_index=start + len(payload["data"]["productSearch"]["products"]) - 1,
                 response=payload,
             )
-            for start, payload in sorted(plans.items())
+            for start, payload in sorted(traversal_plans.items())
         )
         return build_traversal_evidence(
             run_id="offline_runner_test",
@@ -280,7 +295,7 @@ def test_two_complete_pages_are_collected_but_not_catalog_accepted_without_cover
     assert transport.calls == [0, 10]
 
 
-def test_runner_accepts_only_exact_bound_canonical_coverage():
+def test_runner_rejects_external_coverage_without_trusted_collector_provenance():
     plans = complete_plans(pages=2)
     evidence = canonical_evidence_for_plans(plans, total=20)
     result, transport = run_catalog(
@@ -290,10 +305,10 @@ def test_runner_accepts_only_exact_bound_canonical_coverage():
     )
 
     assert result.metrics.collection_succeeded is True
-    assert result.metrics.catalog_complete is True
-    assert result.metrics.accepted is True
-    assert result.coverage is not None and result.coverage.accepted is True
-    assert "canonical_coverage_missing" not in result.metrics.rejection_reasons
+    assert result.metrics.catalog_complete is False
+    assert result.metrics.accepted is False
+    assert result.coverage is not None and result.coverage.accepted is False
+    assert "trusted_collector_provenance_unavailable" in result.coverage.coverage_reason
     assert transport.calls == [0, 10]
 
 
@@ -322,7 +337,16 @@ def test_real_cli_returns_success_only_with_canonical_coverage(
             "traversal_id": "a", "order_by": "OrderByNameASC",
             "pages": [{
                 "partition": "partition-0001", "from_index": 0, "to_index": 1,
-                "response": plans[0], "purpose": "PRIMARY",
+                    "response": {
+                        "data": {
+                            "productSearch": {
+                                **plans[0]["data"]["productSearch"],
+                                "products": list(reversed(
+                                    plans[0]["data"]["productSearch"]["products"]
+                                )),
+                            }
+                        }
+                    }, "purpose": "PRIMARY",
             }],
         },
         "reconciliation": {
@@ -348,10 +372,11 @@ def test_real_cli_returns_success_only_with_canonical_coverage(
         "--output-dir", str(tmp_path / "out"),
     ])
 
-    assert exit_code == 0
+    assert exit_code == 2
     summary = json.loads(capsys.readouterr().out)
-    assert summary["metrics"]["accepted"] is True
-    assert summary["coverage"]["accepted"] is True
+    assert summary["metrics"]["accepted"] is False
+    assert summary["coverage"]["accepted"] is False
+    assert "trusted_collector_provenance_unavailable" in summary["coverage"]["coverage_reason"]
 
 
 def test_ten_complete_pages_still_require_canonical_coverage():

@@ -121,10 +121,13 @@ def canonical_scenario(name: str):
                     order_by="OrderByReleaseDateDESC",
                     from_index=0,
                     to_index=max(total - 1, 0),
-                    response={"data": {"productSearch": {
-                        "recordsFiltered": total,
-                        "products": raw_products(scenario["reconcile"]),
-                    }}},
+                    response={
+                        "data": {"productSearch": {
+                            "recordsFiltered": total,
+                            "products": raw_products(scenario["reconcile"]),
+                        }},
+                        "extensions": {"offline_attempt": "reconciliation"},
+                    },
                 ),
         )
         reconciliation = build_traversal_evidence(
@@ -160,10 +163,10 @@ def canonical_scenario(name: str):
 
 
 @pytest.mark.parametrize("name", ["A_normal_full_page", "B_intermediate_20_returns_19", "C_duplicate_between_windows", "E_recovered_by_overlap"])
-def test_a_l_complete_cases_use_the_canonical_pipeline(name: str):
+def test_a_l_consistent_cases_remain_blocked_without_trusted_collector(name: str):
     report = canonical_scenario(name)
-    assert report.accepted is True
-    assert report.coverage_reason == "coverage_demonstrated"
+    assert report.accepted is False
+    assert "trusted_collector_provenance_unavailable" in report.coverage_reason
 
 
 @pytest.mark.parametrize("name", ["F_missing_not_recoverable", "G_total_changes", "J_truncated_response", "K_reordered_results", "L_unknown_residual"])
@@ -171,6 +174,103 @@ def test_a_l_incomplete_cases_use_the_canonical_pipeline(name: str):
     report = canonical_scenario(name)
     assert report.accepted is False
     assert report.coverage_reason != "coverage_demonstrated"
+
+
+def _two_traversal_report(primary_products, reconciliation_products, *, same_response=False):
+    structure = structural_report(2)
+    partition = structure.valid_leaves[0].name
+
+    def traversal(traversal_id, order_by, products, marker):
+        response = {"data": {"productSearch": {
+            "recordsFiltered": 2,
+            "products": products,
+        }}}
+        response["extensions"] = {
+            "caller_marker" if same_response else "offline_attempt": marker
+        }
+        page = raw_page_evidence_from_response(
+            run_id=RUN_ID,
+            traversal_id=traversal_id,
+            partition=partition,
+            order_by=order_by,
+            from_index=0,
+            to_index=1,
+            response=response,
+        )
+        return build_traversal_evidence(
+            run_id=RUN_ID,
+            traversal_id=traversal_id,
+            tree_digest=structure.tree_digest,
+            order_by=order_by,
+            pages=(page,),
+        )
+
+    return evaluate_canonical_catalog_coverage(CanonicalCatalogEvidence(
+        run_id=RUN_ID,
+        root_response={"recordsFiltered": 2},
+        facets_response={
+            "recordsFiltered": 2,
+            "sampling": False,
+            "facets": [{"type": "CATEGORYTREE", "values": [{
+                "key": "category-1", "value": "leaf", "quantity": 2,
+                "children": [],
+            }]}],
+        },
+        primary=traversal("a", ORDER, primary_products, "a"),
+        reconciliation=traversal(
+            "b", "OrderByReleaseDateDESC", reconciliation_products, "b"
+        ),
+    ))
+
+
+def test_identical_response_relabelled_as_reconciliation_is_rejected():
+    products = raw_products(["A", "B"])
+    report = _two_traversal_report(products, products, same_response=True)
+    assert report.accepted is False
+    assert "reconciliation_response_reused" in report.coverage_reason
+
+
+def test_product_sku_ownership_swap_is_rejected():
+    first = raw_products(["A", "B"])
+    swapped = raw_products(["A", "B"])
+    swapped[0]["items"], swapped[1]["items"] = swapped[1]["items"], swapped[0]["items"]
+    report = _two_traversal_report(first, swapped)
+    assert report.accepted is False
+    assert "product_sku_mapping_mismatch" in report.coverage_reason
+
+
+@pytest.mark.parametrize("from_index,to_index", [(False, 1), (0, True), (0.0, 1)])
+def test_raw_page_ranges_reject_bool_and_non_integer(from_index, to_index):
+    with pytest.raises(ValueError, match="Rango de página inválido"):
+        raw_page_evidence_from_response(
+            run_id=RUN_ID,
+            traversal_id="a",
+            partition="partition-0001",
+            order_by=ORDER,
+            from_index=from_index,
+            to_index=to_index,
+            response={"data": {"productSearch": {
+                "recordsFiltered": 2,
+                "products": raw_products(["A", "B"]),
+            }}},
+        )
+
+
+@pytest.mark.parametrize("field,value", [("productId", {"bad": 1}), ("itemId", False)])
+def test_raw_identity_fields_reject_non_string_values(field, value):
+    products = raw_products(["A", "B"])
+    if field == "itemId":
+        products[0]["items"][0][field] = value
+    else:
+        products[0][field] = value
+        products[0]["productReference"] = None
+        products[0]["linkText"] = None
+    if field == "itemId":
+        with pytest.raises(ValueError, match="itemId"):
+            _two_traversal_report(products, raw_products(["A", "B"]))
+    else:
+        with pytest.raises(ValueError, match="productId"):
+            _two_traversal_report(products, raw_products(["A", "B"]))
 
 
 def observation(partition: str, value: list):
@@ -306,7 +406,8 @@ def test_h_empty_leaf_runs_through_full_canonical_pipeline():
             reconciliation,
         )
     )
-    assert report.accepted is True
+    assert report.accepted is False
+    assert "collector_observation_missing" in report.coverage_reason
     assert report.products_unique == 0
 
 
@@ -346,7 +447,8 @@ def test_i_duplicate_facet_runs_through_full_canonical_pipeline():
             reconciliation,
         )
     )
-    assert report.accepted is True
+    assert report.accepted is False
+    assert "trusted_collector_provenance_unavailable" in report.coverage_reason
 
 
 def test_d_cross_leaf_duplicate_does_not_replace_global_union_evidence():
@@ -396,7 +498,8 @@ def test_d_cross_leaf_duplicate_does_not_replace_global_union_evidence():
         primary,
         reconciliation,
     ))
-    assert report.accepted is True
+    assert report.accepted is False
+    assert "trusted_collector_provenance_unavailable" in report.coverage_reason
     assert report.products_unique == 3
     assert report.duplicate_occurrences == 1
 
