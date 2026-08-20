@@ -1,11 +1,12 @@
 """Frontera offline entre una ejecución técnica y el estado comercial persistible.
 
-Este módulo no concede autoridad live y no implementa un backend externo. Recibe
-una decisión de aceptación ya producida por una capa superior y aplica, de forma
-atómica e idempotente, únicamente runs comercialmente aceptados sobre un estado
-en memoria. Una futura integración productiva DEBE construir ``catalog_accepted``
-a partir del collector autoritativo; un booleano de caller no sustituye esa
-evidencia.
+No concede autoridad live ni implementa almacenamiento externo. Recibe una
+decisión upstream y aplica de forma atómica/idempotente sólo runs comercialmente
+aceptados. Una integración productiva DEBE derivar ``catalog_accepted`` del
+collector autoritativo; un booleano de caller no sustituye esa evidencia.
+
+Las ofertas ausentes del payload nunca se interpretan aquí como ``not_listed``,
+``out_of_stock`` ni eliminación. Esas transiciones requieren evidencia explícita.
 """
 
 from __future__ import annotations
@@ -55,7 +56,7 @@ class CommercialStateError(ValueError):
 
 
 class CommercialReplayConflict(CommercialStateError):
-    """El mismo scrape_run_id reapareció con contenido o decisión distinta."""
+    """El mismo scrape_run_id reapareció con evidencia o decisión distinta."""
 
 
 class OutOfOrderCommercialObservation(CommercialStateError):
@@ -97,8 +98,6 @@ class CommercialRunDecision:
 
 @dataclass(frozen=True, slots=True)
 class CurrentCommercialOffer:
-    """Último estado comercial aceptado de una oferta."""
-
     validated_offer: ValidatedOffer
     first_observed_at_utc: datetime
     last_observed_at_utc: datetime
@@ -107,8 +106,6 @@ class CurrentCommercialOffer:
 
 @dataclass(frozen=True, slots=True)
 class OfferHistoryPeriod:
-    """Periodo histórico inmutable salvo cierre/confirmación por reemplazo."""
-
     offer_history_id: str
     offer_id: str
     state_hash: str
@@ -125,8 +122,6 @@ class OfferHistoryPeriod:
 
 @dataclass(frozen=True, slots=True)
 class ApplyRunResult:
-    """Resumen determinista de una aplicación, sin datos comerciales sensibles."""
-
     scrape_run_id: str
     commercial_update_allowed: bool
     replayed: bool
@@ -138,7 +133,7 @@ class ApplyRunResult:
 
 
 class InMemoryCommercialState:
-    """Motor de transición atómico/idempotente desacoplado del almacenamiento."""
+    """Motor de transición atómico/idempotente desacoplado del backend."""
 
     def __init__(self) -> None:
         self._current: dict[str, CurrentCommercialOffer] = {}
@@ -164,12 +159,7 @@ class InMemoryCommercialState:
         decision: CommercialRunDecision,
         offers: Iterable[ValidatedOffer],
     ) -> ApplyRunResult:
-        """Aplica un run completo de forma atómica o no muta nada.
-
-        Los runs no autorizados comercialmente se registran para idempotencia pero
-        no tocan current/history. La misma identidad de run con otra decisión o
-        contenido se rechaza como replay conflict.
-        """
+        """Aplica todo el run o nada; jamás infiere estados por ausencia."""
 
         values = tuple(offers)
         self._validate_run_payload(decision, values)
@@ -178,7 +168,7 @@ class InMemoryCommercialState:
         if previous_fingerprint is not None:
             if previous_fingerprint != fingerprint:
                 raise CommercialReplayConflict(
-                    "scrape_run_id reutilizado con decisión o contenido distinto"
+                    "scrape_run_id reutilizado con decisión o evidencia distinta"
                 )
             return ApplyRunResult(
                 scrape_run_id=decision.scrape_run_id,
@@ -220,12 +210,7 @@ class InMemoryCommercialState:
                     last_scrape_run_id=decision.scrape_run_id,
                 )
                 staged_history[offer.offer_id] = [
-                    _new_period(
-                        validated,
-                        decision.scrape_run_id,
-                        ChangeType.INITIAL,
-                        (),
-                    )
+                    _new_period(validated, decision.scrape_run_id, ChangeType.INITIAL, ())
                 ]
                 created += 1
                 continue
@@ -256,10 +241,7 @@ class InMemoryCommercialState:
                     f"cambio no monotónico para {offer.offer_id}"
                 )
 
-            changed_fields = _changed_fields(
-                existing.validated_offer,
-                validated,
-            )
+            changed_fields = _changed_fields(existing.validated_offer, validated)
             if not changed_fields:
                 raise CommercialStateError(
                     "state_hash cambió sin diferencias en campos canónicos"
@@ -324,9 +306,7 @@ class InMemoryCommercialState:
                 raise CommercialStateError("offer_id duplicado dentro del mismo run")
             offer_ids.add(offer.offer_id)
             if generate_state_hash(offer) != validated.state_hash:
-                raise CommercialStateError(
-                    f"state_hash inválido para {offer.offer_id}"
-                )
+                raise CommercialStateError(f"state_hash inválido para {offer.offer_id}")
             if offer.observed_at_utc > decision.decided_at_utc:
                 raise CommercialStateError(
                     "una oferta no puede observarse después de decided_at_utc"
@@ -348,8 +328,15 @@ def _run_fingerprint(
         "scrape_run_id": decision.scrape_run_id,
         "run_status": decision.run_status.value,
         "catalog_accepted": decision.catalog_accepted,
+        "decided_at_utc": decision.decided_at_utc.isoformat(),
         "offers": sorted(
-            (item.offer.offer_id, item.state_hash) for item in offers
+            (
+                item.offer.offer_id,
+                item.state_hash,
+                item.offer.observed_at_utc.isoformat(),
+                item.validated_at_utc.isoformat(),
+            )
+            for item in offers
         ),
     }
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
