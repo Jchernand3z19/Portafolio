@@ -1,0 +1,149 @@
+"""Counterexamples adicionales para replay y ausencia de ofertas."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+import pytest
+
+from precios_supermercados.commercial_state import (
+    CommercialReplayConflict,
+    CommercialRunDecision,
+    InMemoryCommercialState,
+)
+from precios_supermercados.enums import (
+    AvailabilityStatus,
+    LocationStatus,
+    RunStatus,
+    SourceKeyType,
+)
+from precios_supermercados.identifiers import generate_state_hash
+from precios_supermercados.models import NormalizedOffer, ValidatedOffer
+
+
+T0 = datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc)
+
+
+def validated(
+    run_id: str,
+    suffix: str,
+    observed_at: datetime,
+    *,
+    price: str | None = "30",
+    availability: AvailabilityStatus = AvailabilityStatus.IN_STOCK,
+) -> ValidatedOffer:
+    offer = NormalizedOffer(
+        supermarket_id="la-colonia",
+        location_id="unknown",
+        source_product_id=f"sp_{suffix}",
+        source_key_type=SourceKeyType.SKU,
+        source_key=f"SKU-{suffix}",
+        product_id=f"prod_{suffix}",
+        offer_id=f"of_{suffix}",
+        source_name=f"Producto {suffix}",
+        product_url=f"https://example.invalid/{suffix}",
+        normalized_name=f"producto {suffix}",
+        currency="HNL",
+        is_promotion=False,
+        availability=availability,
+        location_status=LocationStatus.UNKNOWN,
+        observed_at_utc=observed_at,
+        scrape_run_id=run_id,
+        extractor_version="test",
+        schema_version="1",
+        source_url="https://example.invalid/graphql",
+        normalized_brand="Marca",
+        category="Categoria",
+        subcategory="Subcategoria",
+        variant="Base",
+        unit_count=1,
+        content_per_unit=Decimal("1"),
+        measurement_unit="unit",
+        total_content=Decimal("1"),
+        current_price=Decimal(price) if price is not None else None,
+        reported_regular_price=Decimal("35"),
+    )
+    return ValidatedOffer(
+        offer=offer,
+        state_hash=generate_state_hash(offer),
+        validated_at_utc=observed_at,
+    )
+
+
+def accepted(run_id: str, decided_at: datetime) -> CommercialRunDecision:
+    return CommercialRunDecision(
+        scrape_run_id=run_id,
+        run_status=RunStatus.SUCCESS,
+        catalog_accepted=True,
+        decided_at_utc=decided_at,
+    )
+
+
+def test_replay_same_state_with_different_observation_timestamp_is_conflict():
+    store = InMemoryCommercialState()
+    first = validated("run-1", "001", T0)
+    store.apply_run(accepted("run-1", T0 + timedelta(hours=1)), [first])
+
+    forged_replay = validated("run-1", "001", T0 + timedelta(minutes=1))
+    with pytest.raises(CommercialReplayConflict):
+        store.apply_run(
+            accepted("run-1", T0 + timedelta(hours=1)),
+            [forged_replay],
+        )
+
+    assert store.current("of_001").last_observed_at_utc == T0
+    assert len(store.history("of_001")) == 1
+
+
+def test_replay_same_payload_with_different_decision_timestamp_is_conflict():
+    store = InMemoryCommercialState()
+    item = validated("run-1", "001", T0)
+    store.apply_run(accepted("run-1", T0 + timedelta(hours=1)), [item])
+
+    with pytest.raises(CommercialReplayConflict):
+        store.apply_run(
+            accepted("run-1", T0 + timedelta(hours=2)),
+            [item],
+        )
+
+
+def test_offer_omitted_from_later_payload_is_not_inferred_as_deleted_or_out_of_stock():
+    store = InMemoryCommercialState()
+    first_a = validated("run-1", "001", T0)
+    first_b = validated("run-1", "002", T0)
+    store.apply_run(
+        accepted("run-1", T0 + timedelta(hours=1)),
+        [first_a, first_b],
+    )
+
+    t1 = T0 + timedelta(days=1)
+    second_a = validated("run-2", "001", t1)
+    store.apply_run(accepted("run-2", t1 + timedelta(hours=1)), [second_a])
+
+    untouched = store.current("of_002")
+    assert untouched is not None
+    assert untouched.validated_offer.offer.availability is AvailabilityStatus.IN_STOCK
+    assert untouched.last_scrape_run_id == "run-1"
+    assert len(store.history("of_002")) == 1
+
+
+def test_explicit_out_of_stock_observation_can_change_state_without_price():
+    store = InMemoryCommercialState()
+    initial = validated("run-1", "001", T0)
+    store.apply_run(accepted("run-1", T0 + timedelta(hours=1)), [initial])
+
+    t1 = T0 + timedelta(days=1)
+    explicit = validated(
+        "run-2",
+        "001",
+        t1,
+        price=None,
+        availability=AvailabilityStatus.OUT_OF_STOCK,
+    )
+    store.apply_run(accepted("run-2", t1 + timedelta(hours=1)), [explicit])
+
+    current = store.current("of_001")
+    assert current is not None
+    assert current.validated_offer.offer.availability is AvailabilityStatus.OUT_OF_STOCK
+    assert current.validated_offer.offer.current_price is None
