@@ -6,6 +6,12 @@ on:
     paths:
       - "precios-supermercados-sps/**"
       - ".github/workflows/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "precios-supermercados-sps/**"
+      - ".github/workflows/**"
 
 permissions:
   contents: read
