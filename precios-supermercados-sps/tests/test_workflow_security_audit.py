@@ -64,7 +64,11 @@ EXPECTED_TRIGGERS = {
     "precios-supermercados-sps-la-colonia-dispatch-recovery.yml": {"workflow_run"},
     "precios-supermercados-sps-la-colonia-facet-discovery.yml": {"workflow_dispatch"},
     "precios-supermercados-sps-la-colonia-live.yml": {"workflow_dispatch"},
-    "precios-supermercados-sps-tests.yml": {"workflow_dispatch", "pull_request"},
+    "precios-supermercados-sps-tests.yml": {
+        "workflow_dispatch",
+        "pull_request",
+        "push",
+    },
 }
 
 BLOCKED_ENTRYPOINTS = {
@@ -219,11 +223,15 @@ def test_network_capable_scripts_exist_only_inside_blocked_jobs():
 
 def test_ci_paths_cover_project_policy_and_every_sps_workflow():
     workflow = load_workflow(WORKFLOW_DIR / "precios-supermercados-sps-tests.yml")
-    paths = workflow["on"]["pull_request"]["paths"]
-    assert set(paths) == {
+    expected_paths = {
         "precios-supermercados-sps/**",
         ".github/workflows/**",
     }
+    pull_request = workflow["on"]["pull_request"]
+    push = workflow["on"]["push"]
+    assert set(pull_request["paths"]) == expected_paths
+    assert set(push["paths"]) == expected_paths
+    assert push["branches"] == ["main"]
 
 
 @pytest.mark.parametrize("suffix", [".yml", ".yaml"])
