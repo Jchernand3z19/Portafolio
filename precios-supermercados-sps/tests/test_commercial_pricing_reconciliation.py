@@ -182,11 +182,9 @@ def test_period_state_hash_is_recomputed_from_offer_content():
 def test_period_wrapper_and_nested_offer_id_must_match():
     store, offer_id = _store_three_periods()
     history = list(store.history(offer_id))
-    forged_offer = replace(history[0].validated_offer.offer, offer_id="of_forged")
-    forged_validated = replace(history[0].validated_offer, offer=forged_offer)
-    history[0] = replace(history[0], validated_offer=forged_validated)
+    history[0] = replace(history[0], offer_id="of_forged")
 
-    with pytest.raises(CommercialPricingError, match="offer_id"):
+    with pytest.raises(CommercialPricingError, match="offer_id distintos"):
         evaluate_real_price_reduction(store.current(offer_id), history)
 
 
