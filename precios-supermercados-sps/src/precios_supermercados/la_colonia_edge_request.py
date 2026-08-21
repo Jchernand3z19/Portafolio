@@ -201,8 +201,18 @@ def validate_la_colonia_edge_request(raw_url: str) -> ValidatedLaColoniaEdgeRequ
     if not isinstance(variables, dict) or tuple(variables) != _VARIABLE_KEYS:
         _fail("variables_shape_or_order_invalid")
 
-    query_value = _clean_text(variables.get("query"), "query_value_invalid", allow_empty=True)
-    full_text = _clean_text(variables.get("fullText"), "full_text_invalid", allow_empty=True)
+    query_value = _clean_text(
+        variables.get("query"),
+        "query_value_invalid",
+        max_length=20_000,
+        allow_empty=True,
+    )
+    full_text = _clean_text(
+        variables.get("fullText"),
+        "full_text_invalid",
+        max_length=20_000,
+        allow_empty=True,
+    )
     selected_facets = _validate_selected_facets(variables.get("selectedFacets"))
     order_by = _clean_text(variables.get("orderBy"), "order_by_invalid", max_length=64)
     if order_by not in ALLOWED_ORDER_BY:
