@@ -11,7 +11,7 @@ el runtime de facet discovery mediante una excepción clasificable.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from types import MappingProxyType
 from typing import NoReturn, Protocol
 
@@ -93,6 +93,7 @@ class VerifiedFacetDiscoveryEdgeTransport:
         self._next_sequence = 1
         self._observations: dict[str, CryptographicallyVerifiedStructuralObservation] = {}
         self._execution_fence: tuple[str, str, str] | None = None
+        self._signed_fence: tuple[object, ...] | None = None
 
     @property
     def requests_completed(self) -> int:
@@ -107,6 +108,30 @@ class VerifiedFacetDiscoveryEdgeTransport:
     @property
     def complete(self) -> bool:
         return set(self._observations) == {"root_total", "category_tree"}
+
+    @staticmethod
+    def _receipt_fence(
+        observation: CryptographicallyVerifiedStructuralObservation,
+    ) -> tuple[object, ...]:
+        payload = observation.verified_receipt.receipt.payload
+        return (
+            payload.run_id,
+            payload.authorization_id,
+            payload.approved_commit_sha,
+            payload.github_repository,
+            payload.github_repository_id,
+            payload.github_ref,
+            payload.github_workflow_ref,
+            payload.github_environment,
+            payload.github_run_id,
+            payload.github_run_attempt,
+            payload.oidc_subject,
+            payload.collector_provider,
+            payload.collector_principal,
+            payload.collector_release_id,
+            payload.collector_code_sha256,
+            payload.signing_key_id,
+        )
 
     def __call__(self, logical_request: FacetDiscoveryRequest) -> Mapping[str, object]:
         if not isinstance(logical_request, FacetDiscoveryRequest):
@@ -179,6 +204,12 @@ class VerifiedFacetDiscoveryEdgeTransport:
             _fail("verified_observation_worker_evidence_mismatch")
         if observation.production_authority is not False:
             _fail("verified_observation_authority_forbidden")
+
+        signed_fence = self._receipt_fence(observation)
+        if self._signed_fence is None:
+            self._signed_fence = signed_fence
+        elif self._signed_fence != signed_fence:
+            _fail("structural_signed_execution_context_changed")
 
         self._observations[logical_request.name] = observation
         self._next_sequence += 1
