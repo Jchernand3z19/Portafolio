@@ -1,9 +1,15 @@
-"""Adapter offline para la respuesta de Workers Observability Telemetry.
+"""Adapter offline para Workers Observability Telemetry.
 
-No realiza HTTP ni contiene credenciales de Cloudflare. Convierte exclusivamente
-una respuesta ya obtenida de la vista ``events`` en ``CloudflareOriginTraceEvidence``.
-La evidencia sigue sin autoridad productiva hasta validar este parser contra una
-respuesta real de la plataforma y separar la identidad que consulta Observability.
+No realiza HTTP ni contiene credenciales de Cloudflare. El flujo es deliberadamente
+de dos pasos porque los atributos custom sólo pertenecen al custom span y no se
+propagan automáticamente al child span de ``fetch``:
+
+1. discovery por ``authorization_id``/``run_id`` para obtener trace IDs;
+2. detalle por ``$metadata.traceId`` para recuperar custom span + fetch child.
+
+La evidencia resultante permanece sin autoridad productiva hasta validar este
+adapter contra una respuesta real de la plataforma y separar la identidad que
+consulta Observability de la identidad del collector.
 """
 
 from __future__ import annotations
@@ -21,7 +27,8 @@ from precios_supermercados.cloudflare_trace_evidence import (
 )
 
 OBSERVABILITY_DATASET = "cloudflare-workers"
-OBSERVABILITY_QUERY_ID = "precios-sps-origin-trace-v1"
+DISCOVERY_QUERY_ID = "precios-sps-origin-trace-discovery-v1"
+DETAIL_QUERY_ID = "precios-sps-origin-trace-detail-v1"
 DEFAULT_WORKER_SERVICE = "precios-sps-provenance"
 MAX_QUERY_EVENTS = 100
 MAX_QUERY_WINDOW = timedelta(minutes=15)
@@ -119,7 +126,38 @@ def _filter(key: str, value: str) -> dict[str, object]:
     }
 
 
-def build_cloudflare_trace_events_query(
+def _query_window(from_utc: datetime, to_utc: datetime) -> tuple[int, int]:
+    start = _utc(from_utc, "query_from_invalid")
+    end = _utc(to_utc, "query_to_invalid")
+    if end <= start:
+        _fail("query_window_invalid")
+    if end - start > MAX_QUERY_WINDOW:
+        _fail("query_window_too_wide")
+    return int(start.timestamp() * 1000), int(end.timestamp() * 1000)
+
+
+def _query_payload(
+    *,
+    query_id: str,
+    from_ms: int,
+    to_ms: int,
+    filters: list[dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "queryId": query_id,
+        "timeframe": {"from": from_ms, "to": to_ms},
+        "view": "events",
+        "limit": MAX_QUERY_EVENTS,
+        "parameters": {
+            "datasets": [OBSERVABILITY_DATASET],
+            "filterCombination": "and",
+            "filters": filters,
+            "limit": MAX_QUERY_EVENTS,
+        },
+    }
+
+
+def build_cloudflare_trace_discovery_query(
     *,
     from_utc: datetime,
     to_utc: datetime,
@@ -127,50 +165,144 @@ def build_cloudflare_trace_events_query(
     run_id: str,
     service_name: str = DEFAULT_WORKER_SERVICE,
 ) -> dict[str, object]:
-    """Construye una consulta events estrecha y determinista para una ejecución."""
+    """Localiza únicamente custom spans de una autorización/ejecución."""
 
-    start = _utc(from_utc, "query_from_invalid")
-    end = _utc(to_utc, "query_to_invalid")
-    if end <= start:
-        _fail("query_window_invalid")
-    if end - start > MAX_QUERY_WINDOW:
-        _fail("query_window_too_wide")
+    from_ms, to_ms = _query_window(from_utc, to_utc)
+    authorization = _text(authorization_id, "authorization_id_invalid", maximum=128)
+    run = _text(run_id, "run_id_invalid", maximum=256)
+    service = _text(service_name, "service_name_invalid", maximum=256)
+    return _query_payload(
+        query_id=DISCOVERY_QUERY_ID,
+        from_ms=from_ms,
+        to_ms=to_ms,
+        filters=[
+            _filter("$metadata.service", service),
+            _filter("$metadata.spanName", ORIGIN_EXECUTION_SPAN_NAME),
+            _filter("precios.authorization_id", authorization),
+            _filter("precios.run_id", run),
+            _filter("precios.trace_contract_version", TRACE_CONTRACT_VERSION),
+        ],
+    )
+
+
+def build_cloudflare_trace_detail_query(
+    *,
+    from_utc: datetime,
+    to_utc: datetime,
+    trace_id: str,
+    service_name: str = DEFAULT_WORKER_SERVICE,
+) -> dict[str, object]:
+    """Recupera todos los eventos de un trace para observar su child ``fetch``."""
+
+    from_ms, to_ms = _query_window(from_utc, to_utc)
+    trace = _text(trace_id, "trace_id_invalid", maximum=512)
+    service = _text(service_name, "service_name_invalid", maximum=256)
+    return _query_payload(
+        query_id=DETAIL_QUERY_ID,
+        from_ms=from_ms,
+        to_ms=to_ms,
+        filters=[
+            _filter("$metadata.service", service),
+            _filter("$metadata.traceId", trace),
+        ],
+    )
+
+
+def _raw_events(payload: Mapping[str, object]) -> tuple[Mapping[str, object], ...]:
+    envelope = _mapping(payload, "observability_response_invalid")
+    if envelope.get("success") is not True:
+        _fail("observability_response_unsuccessful")
+    errors = envelope.get("errors")
+    if errors not in (None, []):
+        _fail("observability_response_errors")
+
+    result = _mapping(envelope.get("result"), "observability_result_invalid")
+    events_container = _mapping(result.get("events"), "observability_events_container_invalid")
+    events = _sequence(events_container.get("events"), "observability_events_invalid")
+    if len(events) > MAX_QUERY_EVENTS:
+        _fail("observability_events_above_limit")
+    count = events_container.get("count")
+    if count is not None:
+        declared_count = _safe_integer(count, "observability_events_count_invalid")
+        if declared_count > len(events):
+            _fail("observability_events_truncated")
+
+    result_events: list[Mapping[str, object]] = []
+    for index, event in enumerate(events):
+        event_map = _mapping(event, f"event_{index}_invalid")
+        if event_map.get("dataset") != OBSERVABILITY_DATASET:
+            _fail(f"event_{index}_dataset_invalid")
+        metadata = _mapping(event_map.get("$metadata"), f"event_{index}_metadata_invalid")
+        workers = event_map.get("$workers")
+        if workers is not None:
+            worker_map = _mapping(workers, f"event_{index}_workers_invalid")
+            if worker_map.get("truncated") is True:
+                _fail(f"event_{index}_truncated")
+        if metadata.get("truncated") is True:
+            _fail(f"event_{index}_metadata_truncated")
+        result_events.append(event_map)
+    return tuple(result_events)
+
+
+def _relevant_parts(
+    event: Mapping[str, object],
+    *,
+    prefix: str,
+) -> tuple[Mapping[str, object], Mapping[str, object], Mapping[str, object]]:
+    metadata = _mapping(event.get("$metadata"), f"{prefix}_metadata_invalid")
+    source = _mapping(event.get("source"), f"{prefix}_source_invalid")
+    workers = _mapping(event.get("$workers"), f"{prefix}_workers_invalid")
+    if workers.get("truncated") is True:
+        _fail(f"{prefix}_truncated")
+    return metadata, source, workers
+
+
+def _custom_span_context(source: Mapping[str, object]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for key in _CUSTOM_ATTRIBUTES:
+        values[key] = _text(source.get(key), f"custom_attribute_{key}_invalid", maximum=512)
+    if values["precios.trace_contract_version"] != TRACE_CONTRACT_VERSION:
+        _fail("custom_trace_contract_version_invalid")
+    if values["precios.collector_provider"] != "cloudflare_workers":
+        _fail("custom_collector_provider_invalid")
+    return values
+
+
+def parse_cloudflare_trace_discovery_response(
+    payload: Mapping[str, object],
+    *,
+    authorization_id: str,
+    run_id: str,
+    service_name: str = DEFAULT_WORKER_SERVICE,
+) -> tuple[str, ...]:
+    """Valida discovery y devuelve trace IDs únicos; no confía sólo en filtros API."""
 
     authorization = _text(authorization_id, "authorization_id_invalid", maximum=128)
     run = _text(run_id, "run_id_invalid", maximum=256)
     service = _text(service_name, "service_name_invalid", maximum=256)
-    from_ms = int(start.timestamp() * 1000)
-    to_ms = int(end.timestamp() * 1000)
+    trace_ids: list[str] = []
+    for index, event in enumerate(_raw_events(payload)):
+        metadata, source, workers = _relevant_parts(event, prefix=f"discovery_{index}")
+        if metadata.get("spanName") != ORIGIN_EXECUTION_SPAN_NAME:
+            _fail("discovery_span_name_invalid")
+        context = _custom_span_context(source)
+        if context["precios.authorization_id"] != authorization:
+            _fail("discovery_authorization_mismatch")
+        if context["precios.run_id"] != run:
+            _fail("discovery_run_mismatch")
+        _, _, _, observed_service, _ = _standard_span_identity(
+            metadata,
+            source,
+            workers,
+            prefix=f"discovery_{index}",
+        )
+        if observed_service != service:
+            _fail("discovery_service_mismatch")
+        trace_ids.append(_text(metadata.get("traceId"), "discovery_trace_id_invalid", maximum=512))
 
-    return {
-        "queryId": OBSERVABILITY_QUERY_ID,
-        "timeframe": {"from": from_ms, "to": to_ms},
-        "view": "events",
-        "limit": MAX_QUERY_EVENTS,
-        "parameters": {
-            "datasets": [OBSERVABILITY_DATASET],
-            "filterCombination": "and",
-            "filters": [
-                _filter("$metadata.service", service),
-                _filter("precios.authorization_id", authorization),
-                _filter("precios.run_id", run),
-                _filter("precios.trace_contract_version", TRACE_CONTRACT_VERSION),
-            ],
-            "limit": MAX_QUERY_EVENTS,
-        },
-    }
-
-
-def _event_parts(event: object, *, index: int) -> tuple[Mapping[str, object], Mapping[str, object], Mapping[str, object]]:
-    event_map = _mapping(event, f"event_{index}_invalid")
-    if event_map.get("dataset") != OBSERVABILITY_DATASET:
-        _fail(f"event_{index}_dataset_invalid")
-    metadata = _mapping(event_map.get("$metadata"), f"event_{index}_metadata_invalid")
-    source = _mapping(event_map.get("source"), f"event_{index}_source_invalid")
-    workers = _mapping(event_map.get("$workers"), f"event_{index}_workers_invalid")
-    if workers.get("truncated") is True:
-        _fail(f"event_{index}_truncated")
-    return metadata, source, workers
+    if len(set(trace_ids)) != len(trace_ids):
+        _fail("discovery_trace_id_duplicate")
+    return tuple(trace_ids)
 
 
 def _standard_span_identity(
@@ -211,18 +343,24 @@ def _span_times(metadata: Mapping[str, object], *, prefix: str) -> tuple[datetim
     return start, end
 
 
-def _custom_span_context(source: Mapping[str, object]) -> dict[str, str]:
-    values: dict[str, str] = {}
-    for key in _CUSTOM_ATTRIBUTES:
-        values[key] = _text(source.get(key), f"custom_attribute_{key}_invalid", maximum=512)
-    if values["precios.trace_contract_version"] != TRACE_CONTRACT_VERSION:
-        _fail("custom_trace_contract_version_invalid")
-    if values["precios.collector_provider"] != "cloudflare_workers":
-        _fail("custom_collector_provider_invalid")
-    return values
+def _source_mapping_if_present(event: Mapping[str, object]) -> Mapping[str, object] | None:
+    source = event.get("source")
+    if not isinstance(source, Mapping):
+        return None
+    if any(not isinstance(key, str) for key in source):
+        return None
+    return source
 
 
-def _is_fetch_child(metadata: Mapping[str, object], source: Mapping[str, object], custom_span_id: str, trace_id: str) -> bool:
+def _metadata(event: Mapping[str, object]) -> Mapping[str, object]:
+    return _mapping(event.get("$metadata"), "event_metadata_invalid")
+
+
+def _is_fetch_child(event: Mapping[str, object], custom_span_id: str, trace_id: str) -> bool:
+    metadata = _metadata(event)
+    source = _source_mapping_if_present(event)
+    if source is None:
+        return False
     return (
         metadata.get("parentSpanId") == custom_span_id
         and metadata.get("traceId") == trace_id
@@ -235,13 +373,11 @@ def _is_fetch_child(metadata: Mapping[str, object], source: Mapping[str, object]
 
 def _build_trace_evidence(
     *,
-    custom_metadata: Mapping[str, object],
-    custom_source: Mapping[str, object],
-    custom_workers: Mapping[str, object],
-    fetch_metadata: Mapping[str, object],
-    fetch_source: Mapping[str, object],
-    fetch_workers: Mapping[str, object],
+    custom_event: Mapping[str, object],
+    fetch_event: Mapping[str, object],
 ) -> CloudflareOriginTraceEvidence:
+    custom_metadata, custom_source, custom_workers = _relevant_parts(custom_event, prefix="custom")
+    fetch_metadata, fetch_source, fetch_workers = _relevant_parts(fetch_event, prefix="fetch")
     custom_trace_id, custom_span_id, custom_invocation, service, version = _standard_span_identity(
         custom_metadata,
         custom_source,
@@ -302,60 +438,45 @@ def _build_trace_evidence(
     )
 
 
-def parse_cloudflare_trace_events_response(payload: Mapping[str, object]) -> tuple[CloudflareOriginTraceEvidence, ...]:
-    """Extrae custom-span + child fetch sin aceptar resultados truncados o ambiguos."""
+def parse_cloudflare_trace_detail_response(
+    payload: Mapping[str, object],
+    *,
+    expected_trace_id: str,
+    service_name: str = DEFAULT_WORKER_SERVICE,
+) -> tuple[CloudflareOriginTraceEvidence, ...]:
+    """Extrae custom-span + child fetch de un trace completo y no truncado."""
 
-    envelope = _mapping(payload, "observability_response_invalid")
-    if envelope.get("success") is not True:
-        _fail("observability_response_unsuccessful")
-    errors = envelope.get("errors")
-    if errors not in (None, []):
-        _fail("observability_response_errors")
+    trace_id = _text(expected_trace_id, "expected_trace_id_invalid", maximum=512)
+    service = _text(service_name, "service_name_invalid", maximum=256)
+    events = _raw_events(payload)
 
-    result = _mapping(envelope.get("result"), "observability_result_invalid")
-    events_container = _mapping(result.get("events"), "observability_events_container_invalid")
-    events = _sequence(events_container.get("events"), "observability_events_invalid")
-    if len(events) > MAX_QUERY_EVENTS:
-        _fail("observability_events_above_limit")
-    count = events_container.get("count")
-    if count is not None:
-        declared_count = _safe_integer(count, "observability_events_count_invalid")
-        if declared_count > len(events):
-            _fail("observability_events_truncated")
+    for event in events:
+        metadata = _metadata(event)
+        observed_trace = metadata.get("traceId")
+        if observed_trace is not None and observed_trace != trace_id:
+            _fail("detail_trace_id_mismatch")
+        observed_service = metadata.get("service")
+        if observed_service is not None and observed_service != service:
+            _fail("detail_service_mismatch")
 
-    parsed: list[tuple[Mapping[str, object], Mapping[str, object], Mapping[str, object]]] = []
-    for index, event in enumerate(events):
-        parsed.append(_event_parts(event, index=index))
-
-    custom_events: list[tuple[Mapping[str, object], Mapping[str, object], Mapping[str, object]]] = []
-    for metadata, source, workers in parsed:
-        if metadata.get("spanName") == ORIGIN_EXECUTION_SPAN_NAME:
-            custom_events.append((metadata, source, workers))
-
+    custom_events = [
+        event for event in events if _metadata(event).get("spanName") == ORIGIN_EXECUTION_SPAN_NAME
+    ]
     evidences: list[CloudflareOriginTraceEvidence] = []
-    for custom_metadata, custom_source, custom_workers in custom_events:
-        trace_id = _text(custom_metadata.get("traceId"), "custom_trace_id_invalid", maximum=512)
+    for custom_event in custom_events:
+        custom_metadata, _custom_source, _custom_workers = _relevant_parts(custom_event, prefix="custom")
+        custom_trace_id = _text(custom_metadata.get("traceId"), "custom_trace_id_invalid", maximum=512)
+        if custom_trace_id != trace_id:
+            _fail("custom_trace_id_mismatch")
         custom_span_id = _text(custom_metadata.get("spanId"), "custom_span_id_invalid", maximum=512)
         fetch_candidates = [
-            (metadata, source, workers)
-            for metadata, source, workers in parsed
-            if _is_fetch_child(metadata, source, custom_span_id, trace_id)
+            event for event in events if _is_fetch_child(event, custom_span_id, custom_trace_id)
         ]
         if not fetch_candidates:
             _fail("origin_fetch_span_missing")
         if len(fetch_candidates) != 1:
             _fail("origin_fetch_span_not_unique")
-        fetch_metadata, fetch_source, fetch_workers = fetch_candidates[0]
-        evidences.append(
-            _build_trace_evidence(
-                custom_metadata=custom_metadata,
-                custom_source=custom_source,
-                custom_workers=custom_workers,
-                fetch_metadata=fetch_metadata,
-                fetch_source=fetch_source,
-                fetch_workers=fetch_workers,
-            )
-        )
+        evidences.append(_build_trace_evidence(custom_event=custom_event, fetch_event=fetch_candidates[0]))
 
     physical_ids = [evidence.physical_evidence_id for evidence in evidences]
     if len(set(physical_ids)) != len(physical_ids):
