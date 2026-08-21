@@ -30,9 +30,15 @@ def _node() -> str:
     return executable
 
 
-def test_cloudflare_core_node_suite() -> None:
+def test_cloudflare_node_suite() -> None:
     result = subprocess.run(
-        [_node(), "--test", str(EDGE_ROOT / "test" / "core.test.mjs")],
+        [
+            _node(),
+            "--test",
+            str(EDGE_ROOT / "test" / "core.test.mjs"),
+            str(EDGE_ROOT / "test" / "ledger.test.mjs"),
+            str(EDGE_ROOT / "test" / "authorization-ledger.test.mjs"),
+        ],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
