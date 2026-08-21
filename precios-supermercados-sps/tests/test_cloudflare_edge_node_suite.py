@@ -37,6 +37,7 @@ def test_cloudflare_node_suite() -> None:
             "--test",
             str(EDGE_ROOT / "test" / "core.test.mjs"),
             str(EDGE_ROOT / "test" / "ledger.test.mjs"),
+            str(EDGE_ROOT / "test" / "authorization-ledger.test.mjs"),
         ],
         cwd=PROJECT_ROOT,
         capture_output=True,
