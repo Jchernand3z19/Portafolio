@@ -19,7 +19,7 @@ from decimal import Decimal
 from typing import Iterable
 
 from .enums import ChangeType, RunStatus
-from .identifiers import generate_state_hash
+from .identifiers import canonicalize_text, generate_state_hash
 from .models import ValidatedOffer
 
 _STATE_FIELDS = (
@@ -394,9 +394,11 @@ def _require_single_open_period(
 
 def _comparable(value: object) -> object:
     if hasattr(value, "value"):
-        return getattr(value, "value")
+        value = getattr(value, "value")
     if isinstance(value, Decimal):
         return value.normalize()
+    if isinstance(value, str):
+        return canonicalize_text(value)
     return value
 
 
