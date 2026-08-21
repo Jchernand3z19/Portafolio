@@ -182,7 +182,8 @@ class InMemoryCommercialState:
             )
 
         if not decision.commercial_update_allowed:
-            self._run_fingerprints[decision.scrape_run_id] = fingerprint
+            if decision.run_status is not RunStatus.RUNNING:
+                self._run_fingerprints[decision.scrape_run_id] = fingerprint
             return ApplyRunResult(
                 scrape_run_id=decision.scrape_run_id,
                 commercial_update_allowed=False,
