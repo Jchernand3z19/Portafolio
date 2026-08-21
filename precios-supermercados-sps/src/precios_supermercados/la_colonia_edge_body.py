@@ -8,7 +8,8 @@ productiva y no abre red.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, NoReturn
@@ -39,6 +40,20 @@ def _object_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 def _reject_constant(value: str) -> NoReturn:
     _fail("json_non_finite_number", f"número JSON no finito: {value}")
+
+
+def _reject_non_finite_floats(value: Any) -> None:
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            _fail("json_non_finite_number")
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            _reject_non_finite_floats(item)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _reject_non_finite_floats(item)
 
 
 def _freeze(value: Any) -> Any:
@@ -99,6 +114,7 @@ def validate_la_colonia_edge_body(
     except json.JSONDecodeError as exc:
         raise LaColoniaEdgeBodyError("body_json_invalid") from exc
 
+    _reject_non_finite_floats(payload)
     if not isinstance(payload, dict):
         _fail("graphql_envelope_not_object")
 
