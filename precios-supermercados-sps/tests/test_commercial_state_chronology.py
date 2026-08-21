@@ -13,7 +13,11 @@ from precios_supermercados.commercial_state import (
     InMemoryCommercialState,
 )
 from precios_supermercados.enums import AvailabilityStatus, LocationStatus, RunStatus, SourceKeyType
-from precios_supermercados.identifiers import generate_state_hash
+from precios_supermercados.identifiers import (
+    generate_offer_id,
+    generate_source_product_id,
+    generate_state_hash,
+)
 from precios_supermercados.models import NormalizedOffer, ValidatedOffer
 
 
@@ -21,14 +25,23 @@ T0 = datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc)
 
 
 def offer(run_id: str, observed_at: datetime) -> NormalizedOffer:
+    supermarket_id = "la-colonia"
+    location_id = "unknown"
+    source_key = "SKU-001"
+    source_product_id = generate_source_product_id(
+        supermarket_id,
+        SourceKeyType.SKU,
+        source_key,
+    )
+    offer_id = generate_offer_id(supermarket_id, location_id, source_product_id)
     return NormalizedOffer(
-        supermarket_id="la-colonia",
-        location_id="unknown",
-        source_product_id="sp_001",
+        supermarket_id=supermarket_id,
+        location_id=location_id,
+        source_product_id=source_product_id,
         source_key_type=SourceKeyType.SKU,
-        source_key="SKU-001",
+        source_key=source_key,
         product_id="prod_001",
-        offer_id="of_001",
+        offer_id=offer_id,
         source_name="Producto",
         product_url="https://example.invalid/producto",
         normalized_name="producto",
@@ -111,4 +124,4 @@ def test_equal_boundaries_are_valid_and_remain_idempotent():
 
     assert first.current_created == 1
     assert replay.replayed is True
-    assert len(store.history("of_001")) == 1
+    assert len(store.history(value.offer_id)) == 1
