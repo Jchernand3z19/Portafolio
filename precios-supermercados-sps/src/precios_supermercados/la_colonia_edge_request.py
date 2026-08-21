@@ -211,8 +211,11 @@ def validate_la_colonia_edge_request(raw_url: str) -> ValidatedLaColoniaEdgeRequ
     to_index = _safe_int(variables.get("to"), "to_invalid")
     if to_index < from_index:
         _fail("range_invalid")
-    if to_index - from_index + 1 > MAX_CATALOG_PAGE_SIZE:
+    page_size = to_index - from_index + 1
+    if page_size > MAX_CATALOG_PAGE_SIZE:
         _fail("page_size_above_limit")
+    if from_index % page_size != 0:
+        _fail("range_not_builder_page")
     if variables.get("hideUnavailableItems") is not False:
         _fail("hide_unavailable_must_be_false")
     if variables.get("skusFilter") != "ALL":
@@ -221,8 +224,11 @@ def validate_la_colonia_edge_request(raw_url: str) -> ValidatedLaColoniaEdgeRequ
     if full_text:
         if query_value or selected_facets:
             _fail("full_text_mode_shape_mismatch")
-    elif not query_value or not selected_facets:
-        _fail("facet_mode_shape_mismatch")
+    else:
+        if not query_value or len(selected_facets) != 1:
+            _fail("facet_mode_shape_mismatch")
+        if selected_facets[0][1] != query_value:
+            _fail("facet_value_query_mismatch")
 
     normalized_variables: dict[str, object] = {
         "query": query_value,
@@ -234,7 +240,7 @@ def validate_la_colonia_edge_request(raw_url: str) -> ValidatedLaColoniaEdgeRequ
         "hideUnavailableItems": False,
         "skusFilter": "ALL",
     }
-    canonical_variables_text = json.dumps(normalized_variables, ensure_ascii=False, separators=(",", ":"))
+    canonical_variables_text = json.dumps(normalized_variables, separators=(",", ":"))
     if variables_text != canonical_variables_text:
         _fail("variables_json_noncanonical")
 
