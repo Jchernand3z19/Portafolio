@@ -17,7 +17,11 @@ import re
 from dataclasses import dataclass
 from typing import NoReturn, Sequence
 
-from precios_supermercados.cloudflare_trace_evidence import PlatformReconciledEdgePage
+from precios_supermercados.cloudflare_trace_evidence import (
+    CloudflareTraceEvidenceError,
+    PlatformReconciledEdgePage,
+    reconcile_cloudflare_origin_trace,
+)
 from precios_supermercados.edge_provenance import canonical_json_bytes
 
 RUN_MANIFEST_SCHEMA_VERSION = "1"
@@ -286,6 +290,10 @@ def _record_from_page(page: PlatformReconciledEdgePage) -> ProvenancePageRecord:
         _fail("platform_page_unreconciled")
     if page.page.cryptographic_signature_verified is not True:
         _fail("platform_page_signature_unverified")
+    try:
+        page = reconcile_cloudflare_origin_trace(page.page, [page.trace_evidence])
+    except CloudflareTraceEvidenceError as exc:
+        raise EdgeProvenanceRunError(f"platform_page_{exc.code}") from exc
     payload = page.page.verified_receipt.receipt.payload
     trace = page.trace_evidence
     return ProvenancePageRecord(
