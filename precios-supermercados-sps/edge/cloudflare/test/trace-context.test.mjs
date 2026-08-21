@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -78,4 +79,23 @@ test("contexto incompleto falla cerrado", () => {
     () => executionTraceAttributes(broken),
     (error) => error?.code === "trace_reservation_id_invalid",
   );
+});
+
+test("wrangler exige tracing persistido con muestreo del cien por ciento", () => {
+  const config = JSON.parse(
+    readFileSync(new URL("../wrangler.json", import.meta.url), "utf8"),
+  );
+  assert.deepEqual(config.observability?.traces, {
+    enabled: true,
+    head_sampling_rate: 1,
+  });
+});
+
+test("entrypoint envuelve la ejecución del Durable Object en el span correlacionado", () => {
+  const source = readFileSync(new URL("../src/index.mjs", import.meta.url), "utf8");
+  assert.match(source, /tracing\.enterSpan\(ORIGIN_EXECUTION_SPAN_NAME/);
+  assert.match(source, /annotateExecutionSpan\(span, input\.execution\)/);
+  const annotateAt = source.indexOf("annotateExecutionSpan(span, input.execution)");
+  const runAt = source.indexOf("runSupervisedExecuteOperation(", annotateAt);
+  assert.ok(annotateAt >= 0 && runAt > annotateAt);
 });
