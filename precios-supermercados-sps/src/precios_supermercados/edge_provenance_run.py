@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import NoReturn, Sequence
 
 from precios_supermercados.cloudflare_trace_evidence import (
@@ -73,6 +74,16 @@ def _index(value: object, code: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         _fail(code)
     return value
+
+
+def _utc(value: object, code: str) -> datetime:
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        _fail(code)
+    return value.astimezone(timezone.utc)
+
+
+def _iso_z(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -141,6 +152,8 @@ class ProvenancePageRecord:
     custom_span_id: str
     fetch_span_id: str
     raw_response_sha256: str
+    physical_started_at_utc: datetime
+    response_completed_at_utc: datetime
 
     def __post_init__(self) -> None:
         if not isinstance(self.expected, ExpectedProvenancePage):
@@ -161,6 +174,12 @@ class ProvenancePageRecord:
             "raw_response_sha256",
         ):
             object.__setattr__(self, name, _sha256(getattr(self, name), f"page_record_{name}_invalid"))
+        started = _utc(self.physical_started_at_utc, "page_record_physical_started_at_invalid")
+        completed = _utc(self.response_completed_at_utc, "page_record_response_completed_at_invalid")
+        if completed < started:
+            _fail("page_record_time_order_invalid")
+        object.__setattr__(self, "physical_started_at_utc", started)
+        object.__setattr__(self, "response_completed_at_utc", completed)
 
     def canonical_dict(self) -> dict[str, object]:
         return {
@@ -169,10 +188,12 @@ class ProvenancePageRecord:
             "fetch_span_id": self.fetch_span_id,
             "nonce": self.nonce,
             "physical_evidence_id": self.physical_evidence_id,
+            "physical_started_at_utc": _iso_z(self.physical_started_at_utc),
             "raw_response_sha256": self.raw_response_sha256,
             "receipt_digest": self.receipt_digest,
             "request_id": self.request_id,
             "reservation_id": self.reservation_id,
+            "response_completed_at_utc": _iso_z(self.response_completed_at_utc),
             "trace_id": self.trace_id,
             "worker_evidence_id": self.worker_evidence_id,
         }
@@ -197,6 +218,8 @@ class EdgeProvenanceRunManifest:
     collector_signing_key_id: str
     primary_traversal_id: str
     reconciliation_traversal_id: str
+    primary_order_by: str
+    reconciliation_order_by: str
     pages: tuple[ProvenancePageRecord, ...]
     schema_version: str = RUN_MANIFEST_SCHEMA_VERSION
     production_authority: bool = False
@@ -218,6 +241,8 @@ class EdgeProvenanceRunManifest:
             "collector_signing_key_id",
             "primary_traversal_id",
             "reconciliation_traversal_id",
+            "primary_order_by",
+            "reconciliation_order_by",
         ):
             object.__setattr__(self, name, _text(getattr(self, name), f"run_manifest_{name}_invalid"))
         object.__setattr__(
@@ -232,6 +257,8 @@ class EdgeProvenanceRunManifest:
         )
         if self.primary_traversal_id == self.reconciliation_traversal_id:
             _fail("run_manifest_traversal_ids_not_distinct")
+        if self.primary_order_by == self.reconciliation_order_by:
+            _fail("run_manifest_order_by_not_distinct")
         if not self.pages:
             _fail("run_manifest_pages_empty")
         if any(not isinstance(page, ProvenancePageRecord) for page in self.pages):
@@ -254,7 +281,9 @@ class EdgeProvenanceRunManifest:
             "github_repository_id": self.github_repository_id,
             "github_workflow_ref": self.github_workflow_ref,
             "pages": [page.canonical_dict() for page in self.pages],
+            "primary_order_by": self.primary_order_by,
             "primary_traversal_id": self.primary_traversal_id,
+            "reconciliation_order_by": self.reconciliation_order_by,
             "reconciliation_traversal_id": self.reconciliation_traversal_id,
             "run_id": self.run_id,
             "schema_version": self.schema_version,
@@ -268,6 +297,10 @@ class EdgeProvenanceRunManifest:
     @property
     def request_count(self) -> int:
         return len(self.pages)
+
+    @property
+    def latest_response_completed_at_utc(self) -> datetime:
+        return max(page.response_completed_at_utc for page in self.pages)
 
 
 def _expected_from_page(page: PlatformReconciledEdgePage) -> ExpectedProvenancePage:
@@ -308,6 +341,8 @@ def _record_from_page(page: PlatformReconciledEdgePage) -> ProvenancePageRecord:
         custom_span_id=trace.custom_span_id,
         fetch_span_id=trace.fetch_span_id,
         raw_response_sha256=payload.raw_response_sha256,
+        physical_started_at_utc=payload.physical_started_at_utc,
+        response_completed_at_utc=payload.response_completed_at_utc,
     )
 
 
@@ -394,6 +429,19 @@ def build_edge_provenance_run_manifest(
     if primary_id == reconciliation_id:
         _fail("traversal_ids_not_distinct")
 
+    primary_orders = {item.order_by for item in expected if item.traversal_role == "primary"}
+    reconciliation_orders = {
+        item.order_by for item in expected if item.traversal_role == "reconciliation"
+    }
+    if len(primary_orders) != 1:
+        _fail("primary_order_by_not_unique")
+    if len(reconciliation_orders) != 1:
+        _fail("reconciliation_order_by_not_unique")
+    primary_order = next(iter(primary_orders))
+    reconciliation_order = next(iter(reconciliation_orders))
+    if primary_order == reconciliation_order:
+        _fail("traversal_order_by_not_distinct")
+
     ordered_records = tuple(sorted(records, key=lambda record: record.expected.identity))
     return EdgeProvenanceRunManifest(
         run_id=first_payload.run_id,
@@ -411,5 +459,7 @@ def build_edge_provenance_run_manifest(
         collector_signing_key_id=first_payload.signing_key_id,
         primary_traversal_id=primary_id,
         reconciliation_traversal_id=reconciliation_id,
+        primary_order_by=primary_order,
+        reconciliation_order_by=reconciliation_order,
         pages=ordered_records,
     )
