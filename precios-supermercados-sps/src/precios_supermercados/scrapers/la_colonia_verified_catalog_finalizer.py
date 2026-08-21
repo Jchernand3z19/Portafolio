@@ -195,6 +195,11 @@ class VerifiedCatalogProvenanceFinalizer:
                 ) from exc
             if not isinstance(page, PlatformReconciledEdgePage):
                 _fail("catalog_observability_result_invalid")
+            # El verifier de plataforma no puede sustituir la página que se le
+            # entregó por otra página válida. La identidad de objeto preserva la
+            # cadena exacta crypto/body → trace para este ordinal del plan.
+            if page.page is not observation.page:
+                _fail("catalog_observability_page_identity_mismatch")
             if page.platform_evidence_reconciled is not True:
                 _fail("catalog_observability_result_unreconciled")
             if page.production_authority is not False:
