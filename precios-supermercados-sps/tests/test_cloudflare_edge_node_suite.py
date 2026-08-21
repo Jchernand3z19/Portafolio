@@ -7,6 +7,10 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from precios_supermercados.scrapers.la_colonia_facet_discovery_adapter import (
+    CATEGORY_TREE_QUERY,
+    ROOT_TOTAL_QUERY,
+)
 from precios_supermercados.scrapers.la_colonia_graphql import (
     PRODUCT_SEARCH_QUERY,
     build_product_search_url,
@@ -44,6 +48,8 @@ def test_cloudflare_node_suite() -> None:
         "gateway-supervisor.test.mjs",
         "front-door-jwks-gate.test.mjs",
         "structural-trace-context.test.mjs",
+        "structural-gateway-runtime.test.mjs",
+        "structural-worker-adapter.test.mjs",
     ]
     result = subprocess.run(
         [
@@ -103,6 +109,23 @@ def test_worker_fixed_graphql_hash_matches_python_query() -> None:
     assert match.group(1) == hashlib.sha256(
         PRODUCT_SEARCH_QUERY.encode("utf-8")
     ).hexdigest()
+
+
+def test_worker_structural_hashes_match_python_queries() -> None:
+    policy_source = (EDGE_ROOT / "src" / "worker-policy.mjs").read_text(
+        encoding="utf-8"
+    )
+    root_match = re.search(
+        r'root_total:\s*"([0-9a-f]{64})"',
+        policy_source,
+    )
+    tree_match = re.search(
+        r'category_tree:\s*"([0-9a-f]{64})"',
+        policy_source,
+    )
+    assert root_match is not None and tree_match is not None
+    assert root_match.group(1) == hashlib.sha256(ROOT_TOTAL_QUERY.encode("utf-8")).hexdigest()
+    assert tree_match.group(1) == hashlib.sha256(CATEGORY_TREE_QUERY.encode("utf-8")).hexdigest()
 
 
 def test_wrangler_config_declares_sqlite_do_and_only_secret_names() -> None:
