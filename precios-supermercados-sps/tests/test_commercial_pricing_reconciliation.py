@@ -186,7 +186,7 @@ def test_period_wrapper_and_nested_offer_id_must_match():
     forged_validated = replace(history[0].validated_offer, offer=forged_offer)
     history[0] = replace(history[0], validated_offer=forged_validated)
 
-    with pytest.raises(CommercialPricingError, match="offer_id distintos"):
+    with pytest.raises(CommercialPricingError, match="offer_id"):
         evaluate_real_price_reduction(store.current(offer_id), history)
 
 
@@ -231,3 +231,80 @@ def test_closed_period_observation_cannot_be_after_its_close():
 
     with pytest.raises(CommercialPricingError, match="después de su cierre"):
         evaluate_real_price_reduction(store.current(offer_id), history)
+
+
+def test_closed_period_requires_closing_run_id():
+    store, offer_id = _store_three_periods()
+    history = list(store.history(offer_id))
+    history[0] = replace(history[0], closed_by_scrape_run_id=None)
+
+    with pytest.raises(CommercialPricingError, match="closed_by_scrape_run_id"):
+        evaluate_real_price_reduction(store.current(offer_id), history)
+
+
+def test_open_period_cannot_have_closing_run_id():
+    store, offer_id = _store_three_periods()
+    history = list(store.history(offer_id))
+    history[-1] = replace(history[-1], closed_by_scrape_run_id="run-forged")
+
+    with pytest.raises(CommercialPricingError, match="abierto tiene ejecución de cierre"):
+        evaluate_real_price_reduction(store.current(offer_id), history)
+
+
+def test_closing_run_must_match_next_period_opening_run():
+    store, offer_id = _store_three_periods()
+    history = list(store.history(offer_id))
+    history[0] = replace(history[0], closed_by_scrape_run_id="run-forged")
+
+    with pytest.raises(CommercialPricingError, match="cierre no coincide"):
+        evaluate_real_price_reduction(store.current(offer_id), history)
+
+
+def test_current_source_product_id_must_be_deterministic():
+    store, offer_id = _store_three_periods()
+    current = store.current(offer_id)
+    assert current is not None
+    forged_source_product_id = "sp_" + "f" * 32
+    forged_offer = replace(
+        current.validated_offer.offer,
+        source_product_id=forged_source_product_id,
+        offer_id=generate_offer_id(
+            current.validated_offer.offer.supermarket_id,
+            current.validated_offer.offer.location_id,
+            forged_source_product_id,
+        ),
+    )
+    forged_validated = replace(current.validated_offer, offer=forged_offer)
+    forged_current = replace(current, validated_offer=forged_validated)
+
+    with pytest.raises(CommercialPricingError, match="source_product_id no determinista"):
+        evaluate_real_price_reduction(forged_current, store.history(offer_id))
+
+
+def test_current_offer_id_must_be_deterministic():
+    store, offer_id = _store_three_periods()
+    current = store.current(offer_id)
+    assert current is not None
+    forged_offer = replace(
+        current.validated_offer.offer,
+        offer_id="of_" + "f" * 32,
+    )
+    forged_validated = replace(current.validated_offer, offer=forged_offer)
+    forged_current = replace(current, validated_offer=forged_validated)
+
+    with pytest.raises(CommercialPricingError, match="offer_id no determinista"):
+        evaluate_real_price_reduction(forged_current, store.history(offer_id))
+
+
+def test_current_validation_cannot_precede_observation():
+    store, offer_id = _store_three_periods()
+    current = store.current(offer_id)
+    assert current is not None
+    forged_validated = replace(
+        current.validated_offer,
+        validated_at_utc=current.validated_offer.offer.observed_at_utc - timedelta(seconds=1),
+    )
+    forged_current = replace(current, validated_offer=forged_validated)
+
+    with pytest.raises(CommercialPricingError, match="validated_at_utc anterior"):
+        evaluate_real_price_reduction(forged_current, store.history(offer_id))
