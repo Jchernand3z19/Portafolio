@@ -1,4 +1,4 @@
-"""Regresión: current debe reflejar la última evidencia aceptada del mismo estado."""
+"""Regresiones de coherencia entre current, histórico y state_hash canónico."""
 
 from __future__ import annotations
 
@@ -9,7 +9,13 @@ from precios_supermercados.commercial_state import (
     CommercialRunDecision,
     InMemoryCommercialState,
 )
-from precios_supermercados.enums import AvailabilityStatus, LocationStatus, RunStatus, SourceKeyType
+from precios_supermercados.enums import (
+    AvailabilityStatus,
+    ChangeType,
+    LocationStatus,
+    RunStatus,
+    SourceKeyType,
+)
 from precios_supermercados.identifiers import generate_state_hash
 from precios_supermercados.models import NormalizedOffer, ValidatedOffer
 
@@ -17,7 +23,13 @@ from precios_supermercados.models import NormalizedOffer, ValidatedOffer
 BASE_TIME = datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc)
 
 
-def _validated(run_id: str, observed_at: datetime) -> ValidatedOffer:
+def _validated(
+    run_id: str,
+    observed_at: datetime,
+    *,
+    current_price: str = "30",
+    brand: str = "Marca Demo",
+) -> ValidatedOffer:
     offer = NormalizedOffer(
         supermarket_id="la-colonia",
         location_id="unknown",
@@ -38,7 +50,7 @@ def _validated(run_id: str, observed_at: datetime) -> ValidatedOffer:
         extractor_version=f"extractor-{run_id}",
         schema_version="1",
         source_url=f"https://example.invalid/graphql?run={run_id}",
-        normalized_brand="Marca Demo",
+        normalized_brand=brand,
         category="Abarrotes",
         subcategory="General",
         variant="Base",
@@ -46,7 +58,7 @@ def _validated(run_id: str, observed_at: datetime) -> ValidatedOffer:
         content_per_unit=Decimal("1"),
         measurement_unit="unit",
         total_content=Decimal("1"),
-        current_price=Decimal("30"),
+        current_price=Decimal(current_price),
         reported_regular_price=Decimal("35"),
     )
     return ValidatedOffer(
@@ -91,3 +103,26 @@ def test_same_hash_refreshes_current_evidence_but_keeps_single_history_period():
     assert history[0].validated_offer == first
     assert history[0].last_confirmed_by_scrape_run_id == "run-2"
     assert history[0].last_observed_at_utc == second_time
+
+
+def test_changed_fields_uses_same_text_canonicalization_as_state_hash():
+    store = InMemoryCommercialState()
+    first = _validated("run-1", BASE_TIME, current_price="30", brand="Marca Demo")
+    second_time = BASE_TIME + timedelta(days=1)
+    second = _validated(
+        "run-2",
+        second_time,
+        current_price="29",
+        brand="  MARCA   DEMO  ",
+    )
+
+    store.apply_run(_decision("run-1", BASE_TIME + timedelta(minutes=1)), [first])
+    store.apply_run(
+        _decision("run-2", second_time + timedelta(minutes=1)),
+        [second],
+    )
+
+    history = store.history("of_001")
+    assert len(history) == 2
+    assert history[1].change_type is ChangeType.PRICE
+    assert history[1].changed_fields == ("current_price",)
