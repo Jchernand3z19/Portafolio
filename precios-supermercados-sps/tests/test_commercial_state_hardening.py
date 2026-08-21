@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -106,6 +107,70 @@ def test_replay_same_payload_with_different_decision_timestamp_is_conflict():
             accepted("run-1", T0 + timedelta(hours=2)),
             [item],
         )
+
+
+def test_replay_same_state_and_timestamps_with_different_source_url_is_conflict():
+    store = InMemoryCommercialState()
+    item = validated("run-1", "001", T0)
+    decision = accepted("run-1", T0 + timedelta(hours=1))
+    store.apply_run(decision, [item])
+
+    altered_offer = replace(
+        item.offer,
+        source_url="https://example.invalid/graphql-v2",
+    )
+    altered = ValidatedOffer(
+        offer=altered_offer,
+        state_hash=generate_state_hash(altered_offer),
+        validated_at_utc=item.validated_at_utc,
+    )
+
+    with pytest.raises(CommercialReplayConflict):
+        store.apply_run(decision, [altered])
+
+
+def test_replay_same_state_and_timestamps_with_different_quality_evidence_is_conflict():
+    store = InMemoryCommercialState()
+    item = validated("run-1", "001", T0)
+    decision = accepted("run-1", T0 + timedelta(hours=1))
+    store.apply_run(decision, [item])
+
+    altered = ValidatedOffer(
+        offer=item.offer,
+        state_hash=item.state_hash,
+        validated_at_utc=item.validated_at_utc,
+        quality_events=("quality:late_evidence",),
+    )
+
+    with pytest.raises(CommercialReplayConflict):
+        store.apply_run(decision, [altered])
+
+
+def test_running_status_does_not_consume_run_id_before_terminal_success():
+    store = InMemoryCommercialState()
+    item = validated("run-1", "001", T0)
+
+    running = CommercialRunDecision(
+        scrape_run_id="run-1",
+        run_status=RunStatus.RUNNING,
+        catalog_accepted=False,
+        decided_at_utc=T0 + timedelta(minutes=30),
+    )
+    first_result = store.apply_run(running, [item])
+
+    assert first_result.commercial_update_allowed is False
+    assert first_result.mutated is False
+    assert store.applied_run_count == 0
+
+    final_result = store.apply_run(
+        accepted("run-1", T0 + timedelta(hours=1)),
+        [item],
+    )
+
+    assert final_result.current_created == 1
+    assert final_result.replayed is False
+    assert store.applied_run_count == 1
+    assert store.current("of_001") is not None
 
 
 def test_offer_omitted_from_later_payload_is_not_inferred_as_deleted_or_out_of_stock():
