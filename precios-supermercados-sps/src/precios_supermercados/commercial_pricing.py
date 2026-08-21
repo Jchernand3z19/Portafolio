@@ -13,7 +13,12 @@ from decimal import Decimal
 from typing import Sequence
 
 from .commercial_state import CurrentCommercialOffer, OfferHistoryPeriod
-from .identifiers import generate_state_hash
+from .identifiers import (
+    generate_offer_id,
+    generate_source_product_id,
+    generate_state_hash,
+)
+from .models import ValidatedOffer
 
 
 class CommercialPricingError(ValueError):
@@ -58,8 +63,7 @@ def evaluate_real_price_reduction(
 
     validated = current.validated_offer
     offer = validated.offer
-    if generate_state_hash(offer) != validated.state_hash:
-        raise CommercialPricingError("current contiene state_hash inválido")
+    _validate_validated_evidence(validated, context="current")
     if offer.observed_at_utc != current.last_observed_at_utc:
         raise CommercialPricingError(
             "current y su evidencia discrepan en observación / última observación"
@@ -120,6 +124,46 @@ def evaluate_real_price_reduction(
     )
 
 
+def _validate_validated_evidence(
+    validated: ValidatedOffer,
+    *,
+    context: str,
+) -> None:
+    """Revalida evidencia persistida antes de usarla en una derivación."""
+
+    offer = validated.offer
+    expected_source_product_id = generate_source_product_id(
+        offer.supermarket_id,
+        offer.source_key_type,
+        offer.source_key,
+    )
+    if offer.source_product_id != expected_source_product_id:
+        raise CommercialPricingError(
+            f"{context} contiene source_product_id no determinista"
+        )
+    expected_offer_id = generate_offer_id(
+        offer.supermarket_id,
+        offer.location_id,
+        expected_source_product_id,
+    )
+    if offer.offer_id != expected_offer_id:
+        raise CommercialPricingError(f"{context} contiene offer_id no determinista")
+    if validated.validated_at_utc < offer.observed_at_utc:
+        raise CommercialPricingError(
+            f"{context} contiene validated_at_utc anterior a observed_at_utc"
+        )
+    if generate_state_hash(offer) != validated.state_hash:
+        if context == "current":
+            raise CommercialPricingError("current contiene state_hash inválido")
+        raise CommercialPricingError(f"{context} contiene state_hash inválido")
+
+
+def _require_run_id(value: str | None, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise CommercialPricingError(f"{field_name} no puede estar vacío")
+    return value.strip()
+
+
 def _validate_history_chain(
     offer_id: str,
     currency: str,
@@ -130,33 +174,52 @@ def _validate_history_chain(
     for index, period in enumerate(history):
         validated = period.validated_offer
         period_offer = validated.offer
+        _validate_validated_evidence(validated, context="periodo histórico")
         if period.offer_id != offer_id or period_offer.offer_id != period.offer_id:
             raise CommercialPricingError("current e histórico pertenecen a offer_id distintos")
         if period_offer.currency != currency:
             raise CommercialPricingError("current e histórico usan monedas distintas")
         if period_offer.observed_at_utc != period.valid_from_utc:
             raise CommercialPricingError("periodo y evidencia discrepan en apertura")
-        if period_offer.scrape_run_id != period.opened_by_scrape_run_id:
+        opened_by = _require_run_id(
+            period.opened_by_scrape_run_id,
+            "opened_by_scrape_run_id",
+        )
+        if period_offer.scrape_run_id != opened_by:
             raise CommercialPricingError("periodo y evidencia discrepan en ejecución de apertura")
+        _require_run_id(
+            period.last_confirmed_by_scrape_run_id,
+            "last_confirmed_by_scrape_run_id",
+        )
         if validated.state_hash != period.state_hash:
             raise CommercialPricingError("periodo y ValidatedOffer tienen state_hash distinto")
-        if generate_state_hash(period_offer) != period.state_hash:
-            raise CommercialPricingError("periodo histórico contiene state_hash inválido")
 
         if period.valid_to_utc is None:
             open_count += 1
             if index != len(history) - 1:
                 raise CommercialPricingError("existe un periodo histórico abierto intermedio")
-        elif period.valid_to_utc <= period.valid_from_utc:
-            raise CommercialPricingError("periodo histórico con intervalo no positivo")
+            if period.closed_by_scrape_run_id is not None:
+                raise CommercialPricingError("periodo histórico abierto tiene ejecución de cierre")
+        else:
+            if period.valid_to_utc <= period.valid_from_utc:
+                raise CommercialPricingError("periodo histórico con intervalo no positivo")
+            _require_run_id(
+                period.closed_by_scrape_run_id,
+                "closed_by_scrape_run_id",
+            )
 
         if period.last_observed_at_utc < period.valid_from_utc:
             raise CommercialPricingError("periodo histórico con última observación inválida")
         if period.valid_to_utc is not None and period.last_observed_at_utc > period.valid_to_utc:
             raise CommercialPricingError("periodo histórico observado después de su cierre")
 
-        if previous is not None and previous.valid_to_utc != period.valid_from_utc:
-            raise CommercialPricingError("los periodos históricos no son contiguos")
+        if previous is not None:
+            if previous.valid_to_utc != period.valid_from_utc:
+                raise CommercialPricingError("los periodos históricos no son contiguos")
+            if previous.closed_by_scrape_run_id != opened_by:
+                raise CommercialPricingError(
+                    "ejecución de cierre no coincide con la apertura del periodo siguiente"
+                )
         previous = period
 
     if open_count != 1 or history[-1].valid_to_utc is not None:
