@@ -329,6 +329,53 @@ def _require_utc(value: datetime, field_name: str) -> None:
         raise CommercialStateError(f"{field_name} debe expresarse en UTC")
 
 
+def _fingerprint_decimal(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    rendered = format(value.normalize(), "f")
+    return "0" if rendered in {"", "-0"} else rendered
+
+
+def _validated_evidence_payload(item: ValidatedOffer) -> dict[str, object]:
+    """Evidencia explícita que debe ser inmutable dentro de un scrape_run_id."""
+
+    offer = item.offer
+    return {
+        "supermarket_id": offer.supermarket_id,
+        "location_id": offer.location_id,
+        "source_product_id": offer.source_product_id,
+        "source_key_type": offer.source_key_type.value,
+        "source_key": offer.source_key,
+        "product_id": offer.product_id,
+        "offer_id": offer.offer_id,
+        "source_name": offer.source_name,
+        "product_url": offer.product_url,
+        "normalized_name": offer.normalized_name,
+        "currency": offer.currency,
+        "state_hash": item.state_hash,
+        "location_status": offer.location_status.value,
+        "observed_at_utc": offer.observed_at_utc.isoformat(),
+        "validated_at_utc": item.validated_at_utc.isoformat(),
+        "scrape_run_id": offer.scrape_run_id,
+        "extractor_version": offer.extractor_version,
+        "schema_version": offer.schema_version,
+        "source_url": offer.source_url,
+        "source_sku": offer.source_sku,
+        "source_brand": offer.source_brand,
+        "source_presentation": offer.source_presentation,
+        "source_category": offer.source_category,
+        "image_url": offer.image_url,
+        "barcode": offer.barcode,
+        "unit_price": _fingerprint_decimal(offer.unit_price),
+        "unit_price_basis": offer.unit_price_basis,
+        "location_evidence": offer.location_evidence,
+        "location_confidence": _fingerprint_decimal(offer.location_confidence),
+        "review_status": item.review_status.value,
+        "pending_fields": list(offer.pending_fields),
+        "quality_events": list(item.quality_events),
+    }
+
+
 def _run_fingerprint(
     decision: CommercialRunDecision,
     offers: tuple[ValidatedOffer, ...],
@@ -339,16 +386,11 @@ def _run_fingerprint(
         "catalog_accepted": decision.catalog_accepted,
         "decided_at_utc": decision.decided_at_utc.isoformat(),
         "offers": sorted(
-            (
-                item.offer.offer_id,
-                item.state_hash,
-                item.offer.observed_at_utc.isoformat(),
-                item.validated_at_utc.isoformat(),
-            )
-            for item in offers
+            (_validated_evidence_payload(item) for item in offers),
+            key=lambda value: str(value["offer_id"]),
         ),
     }
-    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
