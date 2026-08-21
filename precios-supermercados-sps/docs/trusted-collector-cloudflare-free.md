@@ -21,19 +21,16 @@ Cloudflare Workers puede actuar como **collector/proxy físico independiente**:
 7. devuelve los bytes originales y el receipt firmado;
 8. el repositorio/verifier sólo conoce la clave pública.
 
-A diferencia de un HMAC compartido con GitHub, la clave privada de provenance **no vive en GitHub**. Por tanto, GitHub puede solicitar una observación, pero no puede fabricar una firma válida sin que el Worker la emita.
+A diferencia de un HMAC compartido con GitHub, la clave privada de provenance **no vive en GitHub**. GitHub puede solicitar una observación, pero no puede fabricar una firma válida sin que el Worker la emita.
 
 ## 2. Capacidad y coste objetivo
 
-Según la documentación oficial de Cloudflare verificada en agosto de 2026:
+Según documentación oficial de Cloudflare verificada en agosto de 2026:
 
 - Workers Free permite hasta 100,000 requests por día;
-- cada invocación Free dispone de 10 ms de CPU;
-- cada invocación permite hasta 50 subrequests externos;
-- el cuerpo de respuesta no tiene un límite de tamaño impuesto por Workers;
-- el runtime expone Web Crypto con `SHA-256`, ECDSA y Ed25519;
+- el runtime expone Web Crypto con SHA-256 y Ed25519;
 - Durable Objects con backend SQLite están disponibles en Workers Free;
-- al exceder límites del plan Free, las operaciones fallan en lugar de convertirse automáticamente en uso ilimitado de pago.
+- si se exceden límites del plan Free, las operaciones fallan en vez de convertirse automáticamente en uso ilimitado de pago.
 
 Referencias oficiales:
 
@@ -44,7 +41,7 @@ Referencias oficiales:
 - https://developers.cloudflare.com/workers/configuration/secrets/
 - https://developers.cloudflare.com/durable-objects/platform/pricing/
 
-La carga esperada del proyecto está varios órdenes de magnitud por debajo del límite diario. La validación productiva deberá medir CPU real antes de declarar que el plan Free basta para el recorrido completo.
+La carga esperada del proyecto está muy por debajo del límite diario. Antes de declarar aptitud para un recorrido completo se medirá CPU y consumo real en un origen controlado, sin usar La Colonia.
 
 ## 3. Arquitectura
 
@@ -52,7 +49,7 @@ La carga esperada del proyecto está varios órdenes de magnitud por debajo del 
 GitHub Actions (controller protegido)
         |
         | GitHub OIDC token
-        | environment humana: la-colonia-live
+        | Environment humana: la-colonia-live
         v
 Cloudflare Worker: provenance-gateway
         |
@@ -68,43 +65,68 @@ La Colonia / VTEX
 Worker lee bytes exactos
         |
         +--> SHA-256(response bytes)
-        +--> receipt canónico
-        +--> firma asimétrica con Worker Secret
+        +--> receipt canónico v2
+        +--> firma Ed25519 con Worker Secret
         |
         v
 response bytes + receipt + signature
         |
         v
-verifier local/productivo con PUBLIC KEY
-        |
-        v
-SignedPhysicalReceipt
+verifier con PUBLIC KEY
         |
         v
 reconciliación primary + reconciliation
 ```
 
-## 4. Autenticación del controller
+## 4. Transporte canónico de La Colonia
+
+El extractor versionado actual construye una consulta **GET** a:
+
+```text
+https://www.lacolonia.com/_v/segment/graphql/v1
+```
+
+con `workspace`, `maxAge`, `appsEtag`, `domain`, `locale`, `operationName`, `query` y `variables` en el query string.
+
+Por tanto, el primer gateway Cloudflare debe preservar **GET**. No se cambia a POST por conveniencia arquitectónica porque POST no ha sido validado live dentro de la autorización actual.
+
+La regla productiva inicial será:
+
+```text
+scheme: https
+host: www.lacolonia.com
+path: /_v/segment/graphql/v1
+method: GET
+redirect: manual + reject 3xx
+```
+
+El contrato `edge_provenance.py` admite únicamente GET o POST para mantenerse neutral al proveedor/origen. Eso **no** significa que el caller pueda elegir libremente el método. Cada adapter/gateway productivo debe fijar uno. Para La Colonia, el método actual es GET hasta que una revisión técnica autorizada demuestre lo contrario.
+
+## 5. Autenticación del controller
 
 No se añadirá una API pública que firme cualquier request.
 
-El Worker debe exigir un token OIDC emitido por GitHub Actions y validar, como mínimo:
+El Worker debe exigir un token OIDC emitido por GitHub Actions y validar como mínimo:
 
 ```text
 iss == https://token.actions.githubusercontent.com
-aud == valor dedicado para provenance-gateway
+aud == audiencia dedicada del provenance-gateway
 repository == Jchernand3z19/Portafolio
+repository_id == 1282475205
 ref == refs/heads/main
-sha == commit aprobado/protegido
 workflow_ref == workflow live canónico esperado
 environment == la-colonia-live
+sha == commit aprobado/protegido
+event_name == workflow_dispatch durante la fase live manual
 ```
 
-El workflow live deberá usar un **GitHub Environment con aprobación humana requerida**. El job sólo obtiene el token y los secretos después de esa aprobación. Esto convierte cada ejecución live en una acción humana observable y evita que un PR o comentario sea autoridad.
+También se validan `exp`, `nbf`, `iat`, `jti`, firma JWT y `kid` contra el JWKS oficial de GitHub.
 
-El Worker también valida expiración (`exp`), not-before (`nbf`) y subject/actor esperados según la política final.
+GitHub documenta `repository_id`, `ref`, `workflow_ref`, `environment`, `run_id`, `run_attempt` y demás claims dentro del token OIDC. El repositorio fue creado antes del rollout automático de subjects inmutables de julio de 2026, por lo que la política debe basarse además en `repository_id` y no sólo en el texto de `sub`.
 
-## 5. Allowlist física
+El workflow live deberá usar un **GitHub Environment con aprobación humana requerida**. La presencia de OIDC no sustituye la autorización humana.
+
+## 6. Allowlist física y consulta GraphQL
 
 El Worker no acepta URL arbitraria del caller.
 
@@ -114,17 +136,27 @@ La versión inicial fija en código/configuración versionada:
 scheme: https
 host: www.lacolonia.com
 path: /_v/segment/graphql/v1
-method: POST
-redirects: reject/fail-closed
+method: GET
 ```
 
-Cualquier host, esquema, path o método distinto se rechaza antes del `fetch`.
+El gateway debe construir o validar los parámetros de búsqueda a partir de campos permitidos, no reenviar una URL completa suministrada por el caller.
 
-No se reenvían cookies, tokens de sesión, GPS, dirección, auth headers ni datos personales suministrados por el caller.
+Controles mínimos:
 
-## 6. Receipt físico
+- `operationName = productSearchV3`;
+- query GraphQL equivalente a la consulta versionada en `la_colonia_graphql.py`;
+- `hideUnavailableItems = false`;
+- `skusFilter = ALL`;
+- `orderBy` dentro del allowlist canónico;
+- `from` y `to` coherentes con el presupuesto autorizado;
+- redirects rechazados;
+- no reenvío de cookies, Authorization, GPS, dirección ni otros headers/datos personales del caller.
 
-El Worker debe generar un receipt compatible con `physical_provenance.py`, ligando como mínimo:
+## 7. Receipt físico v2
+
+La forma canónica vive en `src/precios_supermercados/edge_provenance.py`.
+
+Cada receipt liga al menos:
 
 ```text
 schema_version
@@ -133,55 +165,41 @@ request_id
 reservation_id
 authorization_id
 approved_commit_sha
-immutable_image_digest/requested code identity
 request_digest
-traversal_id
-traversal_role
-order_by
-partition_id
-from_index
-to_index
-http_method
-target_scheme
-target_host
-target_path
+traversal_id / traversal_role
+order_by / partition_id / from_index / to_index
+http_method / target_scheme / target_host / target_path
 canonical_request_sha256
 raw_response_sha256
-response_status
-response_body_bytes
-physical_started_at_utc
-response_completed_at_utc
-collector_execution
+response_status / response_body_bytes
+physical_started_at_utc / response_completed_at_utc
+github_repository / repository_id / ref / workflow_ref / environment
+github_run_id / run_attempt
+oidc_subject / oidc_jti
+collector_provider / collector_principal / collector_execution
+collector_release_id / collector_code_sha256
+signing_algorithm / signing_key_id
 nonce
-key_version
 ```
 
-Para la variante Cloudflare, `collector_service_account` del contrato GCP no se reutiliza literalmente como identidad falsa. Antes de integrar el adapter productivo, el contrato de provenance deberá versionarse o añadir una identidad de runtime neutral (`collector_principal`) fuera de los contratos protegidos `RawProduct`, `NormalizedOffer`, `ValidatedOffer`.
+La respuesta se devuelve sin reserializar para que `raw_response_sha256` corresponda exactamente a los bytes consumidos por el crawler.
 
-La firma cubre el receipt canónico completo. La respuesta se devuelve sin reserializar para que `raw_response_sha256` corresponda exactamente a los bytes consumidos por el crawler.
+`physical_provenance.py` v1 conserva el prototipo GCP anterior. No debe convertirse en contrato productivo nuevo; la ruta edge se construye sobre v2.
 
-## 7. Clave de firma
+## 8. Clave de firma
 
-La clave privada asimétrica se guarda como **Worker Secret**, nunca como `vars`, archivo del repositorio ni GitHub Secret.
+La clave privada Ed25519 se guarda como **Worker Secret**, nunca como `vars`, archivo del repositorio ni GitHub Secret.
 
 La clave pública/verificador sí puede vivir versionada en el repositorio.
 
-Algoritmo candidato:
-
-```text
-Ed25519
-```
-
-Cloudflare Workers soporta `sign()`/`verify()` para Ed25519 mediante Web Crypto. La elección final se congela con vectores de prueba cruzados Worker ↔ verifier antes de deploy.
-
 Rotación:
 
-- `key_id`/versión incluida en cada receipt;
+- `signing_key_id` incluido en cada receipt;
 - varias claves públicas pueden mantenerse durante una ventana de transición;
-- una clave revocada nunca vuelve a aceptar receipts nuevos;
-- no se reescribe evidencia histórica ya firmada.
+- una clave revocada nunca acepta receipts nuevos;
+- evidencia histórica firmada no se reescribe.
 
-## 8. One-shot / presupuesto / pacing con Durable Object
+## 9. One-shot / presupuesto / pacing con Durable Object
 
 Un Durable Object SQLite serializa el estado de cada ejecución autorizada.
 
@@ -204,39 +222,40 @@ state = active | consumed | rejected | expired
 
 Reglas:
 
-- `max_requests` cerrado antes del primer request;
-- ningún request puede incrementar el presupuesto;
-- cada `request_digest` y nonce es único;
+- presupuesto cerrado antes del primer request;
+- ningún request puede incrementarlo;
+- cada `request_digest`, `request_id`, `reservation_id` y nonce es único;
 - el Durable Object serializa reservas para evitar carreras;
-- mínimo 1.5 s entre inicios físicos mientras ese pacing siga siendo la política canónica;
-- al alcanzar presupuesto, queda `consumed`;
-- al expirar, falla cerrado;
-- un 403/429/captcha/auth/location/redirect inesperado detiene la ejecución y marca el estado no reutilizable según la política de seguridad.
+- pacing mínimo se aplica antes del inicio físico;
+- al alcanzar presupuesto queda `consumed`;
+- al expirar falla cerrado;
+- 403/429/captcha/auth/location/redirect inesperado detiene la ejecución según la política de seguridad;
+- pérdida/error de Durable Object => deny, nunca bypass directo.
 
-El Worker Free dispone de Durable Objects SQLite dentro de límites gratuitos. La validación previa al live debe confirmar que el consumo esperado queda dentro del plan Free.
-
-## 9. Flujo por request
+## 10. Flujo por request
 
 1. validar método de entrada y tamaño;
 2. verificar JWT OIDC y claims exactos;
-3. calcular request canónico y `request_digest`;
-4. reservar request en Durable Object;
-5. esperar/rechazar según pacing sin exceder la ventana autorizada;
-6. hacer exactamente un `fetch` al host/path allowlisted;
-7. rechazar redirects y señales stop;
-8. leer `ArrayBuffer` de respuesta;
-9. SHA-256 de bytes exactos;
-10. construir receipt;
-11. firmar receipt con clave privada Worker Secret;
-12. cerrar reserva en Durable Object;
-13. devolver bytes exactos + receipt + firma;
-14. el caller verifica firma antes de parsear/usar la evidencia.
+3. validar parámetros GraphQL permitidos;
+4. construir URL GET canónica;
+5. calcular `canonical_request_sha256` y `request_digest`;
+6. reservar request en Durable Object;
+7. aplicar pacing;
+8. hacer exactamente un `fetch` al origen allowlisted con `redirect: manual`;
+9. rechazar 3xx y señales stop;
+10. leer `ArrayBuffer` de respuesta;
+11. SHA-256 de bytes exactos;
+12. construir receipt v2;
+13. firmarlo con clave privada Worker Secret;
+14. cerrar reserva/evidencia en Durable Object;
+15. devolver bytes exactos + receipt + firma;
+16. el caller verifica firma antes de parsear o usar la evidencia.
 
-Si cualquier paso 6–13 queda incierto, no existe receipt aceptable.
+Si cualquier paso 8–15 queda incierto, no existe receipt aceptable.
 
-## 10. Formato de retorno
+## 11. Formato de retorno
 
-Preferido para no alterar los bytes del origen:
+Preferido mientras el receipt permanezca debajo de límites seguros de headers:
 
 ```text
 HTTP body: bytes exactos de La Colonia
@@ -245,67 +264,69 @@ X-PSPS-Signature: base64url(signature)
 X-PSPS-Key-Id: versión pública
 ```
 
-Antes de fijar esta forma se debe comprobar el tamaño máximo del receipt respecto a límites de headers. Si la evidencia crece, se usa un envelope multipart o una segunda respuesta de evidence-id; nunca se trunca silenciosamente.
+Antes de fijarlo definitivamente se prueba el tamaño máximo. Si crece, se usa un envelope explícito o evidence-id; nunca se trunca silenciosamente.
 
-## 11. Amenazas y controles
+## 12. Amenazas y controles
 
 | Amenaza | Control |
 |---|---|
 | caller inventa `trusted=true` | no existe ese parámetro |
 | caller fabrica receipt | no posee private signing key |
-| PR malicioso invoca Worker | OIDC exige `main` + workflow/environment canónicos |
-| replay de receipt | nonce/request digest + Durable Object |
-| replay de ejecución | run/authorization consumidos/expirados |
-| destino arbitrario | host/path/method allowlisted en Worker |
-| redirect a otro host | redirects fail-closed |
-| Worker devuelve evidencia sin request | implementación sólo firma después de `fetch` + hash de bytes; pruebas negativas obligatorias |
+| PR malicioso invoca Worker | OIDC exige repo ID + main + workflow/environment canónicos |
+| replay | nonce/request digest + Durable Object |
+| ejecución reutilizada | run/authorization consumidos/expirados |
+| destino arbitrario | host/path/method allowlisted |
+| redirect | `redirect: manual` + 3xx fail-closed |
+| consulta GraphQL arbitraria | operación/query/variables validadas |
 | GitHub modifica response | hash firmado deja de coincidir |
 | GitHub inventa status/body | receipt firmado cubre status/hash/bytes |
-| primary=reconciliation | traversals, requests, nonces y receipts distintos |
-| pérdida de estado | Durable Object ausente/error => deny |
+| primary = reconciliation | traversals, orderings, requests y nonces distintos |
+| pérdida de estado | Durable Object error => deny |
 | límite Free alcanzado | error/deny; no degradar a ruta directa |
 
-## 12. Lo que esta arquitectura NO demuestra por sí sola
+## 13. Lo que esta arquitectura NO demuestra
 
-- que Cloudflare sea inmune a compromiso de cuenta/administrador;
+- que Cloudflare sea inmune a compromiso administrativo;
 - que la fuente represente específicamente SPS;
 - que el catálogo esté completo;
 - que el sitio autorice un recorrido full;
 - que un receipt firmado sea automáticamente `catalog_accepted`.
 
-SPS sigue `UNCONFIRMED` y la completitud sigue dependiendo de la reconciliación canónica.
+SPS sigue `UNCONFIRMED` y la completitud depende de la reconciliación canónica.
 
-## 13. Pruebas obligatorias antes de live
+## 14. Pruebas obligatorias antes de live
 
 ### Offline
 
-- canonicalización Worker ↔ Python produce bytes idénticos;
+- canonicalización Worker ↔ Python idéntica;
 - vectores Ed25519 válidos/inválidos;
 - response alterada rompe hash;
 - receipt alterado rompe firma;
-- OIDC con repo/ref/workflow/environment incorrectos se rechaza;
-- URL/host/path/method fuera de allowlist se rechaza;
+- JWT OIDC inválido o claims incorrectos se rechazan;
+- host/path/method fuera de allowlist se rechazan;
+- GET canónico de La Colonia se construye exactamente desde variables permitidas;
+- POST no se usa para La Colonia sin evidencia/autorización nueva;
 - redirect se rechaza;
 - duplicate nonce/request digest se rechaza;
 - presupuesto agotado se rechaza;
 - concurrencia no excede pacing/budget;
-- `production_authority` del modelo local permanece false.
+- `production_authority` local permanece false.
 
 ### Edge sin La Colonia
 
-- desplegar Worker con origen de prueba controlado;
+- desplegar Worker contra origen de prueba controlado;
 - comprobar firma sobre bytes exactos;
 - comprobar Durable Object/replay;
 - comprobar límites/CPU del plan Free;
-- comprobar que GitHub sólo entra mediante OIDC esperado.
+- comprobar OIDC real de GitHub contra el Worker.
 
 ### Live
 
-Requiere autorización humana explícita nueva. Primero sólo una observación mínima. Ningún full crawl se habilita por el mero hecho de desplegar el Worker.
+Requiere autorización humana explícita nueva. Primero sólo observación mínima. Ningún full crawl se habilita por desplegar el Worker.
 
-## 14. Criterio para preferir Cloudflare frente a GCP
+## 15. Criterio de preferencia frente a GCP
 
-Cloudflare pasa a ser la ruta preferida únicamente si las pruebas offline + edge demuestran simultáneamente:
+Cloudflare pasa a ser ruta preferida sólo si las pruebas offline + edge demuestran:
 
 ```text
 coste = 0 dentro del plan Free
@@ -317,14 +338,16 @@ redirect/allowlist fail-closed = PASS
 sin bypass directo aceptable = PASS
 ```
 
-Si cualquiera falla, se conserva la arquitectura GCP como fallback y GATE-06/GATE-18 permanecen cerrados.
+Si cualquiera falla, la arquitectura GCP permanece como fallback y GATE-06/GATE-18 siguen cerrados.
 
-## 15. Estado actual
+## 16. Estado actual
 
 - diseño: definido;
-- código de contratos Python: disponible en `physical_provenance.py`;
+- contrato Python v2 provider-neutral: implementado offline;
+- transporte canónico La Colonia: GET, documentado desde código versionado;
 - Worker: no implementado todavía;
 - Cloudflare account/deploy: no configurado;
+- Google Cloud: proyecto creado, Billing no activado por prepago requerido;
 - tráfico live: 0;
 - autorización live activa: ninguna;
 - GATE-06: abierto;

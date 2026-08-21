@@ -38,6 +38,7 @@ def _receipt_payload(
     provider: str = "cloudflare_workers",
     principal: str = "cloudflare:worker:precios-sps-provenance",
     completed_offset: int = 1,
+    http_method: str = "GET",
 ) -> EdgeReceiptPayload:
     return EdgeReceiptPayload(
         run_id="run-001",
@@ -52,7 +53,7 @@ def _receipt_payload(
         partition_id="root",
         from_index=from_index,
         to_index=from_index + 9,
-        http_method="POST",
+        http_method=http_method,
         target_scheme="https",
         target_host="WWW.LACOLONIA.COM",
         target_path="/_v/segment/graphql/v1",
@@ -174,6 +175,7 @@ def test_cloudflare_receipt_normalizes_host_and_schema() -> None:
     assert payload.target_host == "www.lacolonia.com"
     assert payload.schema_version == EDGE_PROVENANCE_SCHEMA_VERSION
     assert payload.collector_provider == "cloudflare_workers"
+    assert payload.http_method == "GET"
 
 
 def test_google_cloud_provider_is_supported_without_service_account_field() -> None:
@@ -271,7 +273,7 @@ def test_response_chronology_is_fail_closed() -> None:
         )
 
 
-def test_target_transport_must_be_post_https_absolute_path() -> None:
+def test_target_transport_accepts_get_or_post_but_rejects_other_methods() -> None:
     payload = _receipt_payload(
         request_id="request-1",
         reservation_id="reservation-1",
@@ -282,8 +284,10 @@ def test_target_transport_must_be_post_https_absolute_path() -> None:
         from_index=0,
     )
 
-    with pytest.raises(ValueError, match="http_method"):
-        replace(payload, http_method="GET")
+    assert replace(payload, http_method="GET").http_method == "GET"
+    assert replace(payload, http_method="POST").http_method == "POST"
+    with pytest.raises(ValueError, match="GET o POST"):
+        replace(payload, http_method="PUT")
     with pytest.raises(ValueError, match="target_scheme"):
         replace(payload, target_scheme="http")
     with pytest.raises(ValueError, match="target_path"):
