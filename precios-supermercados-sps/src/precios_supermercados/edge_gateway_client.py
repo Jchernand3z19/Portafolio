@@ -13,15 +13,21 @@ import binascii
 import hashlib
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field as dataclass_field, fields
 from datetime import datetime
 from typing import NoReturn, Protocol, TypeAlias
-from urllib.parse import urlsplit
 
 from precios_supermercados.edge_provenance import (
     EdgeReceiptPayload,
     SignedEdgeReceipt,
     canonical_json_bytes,
+)
+from precios_supermercados.la_colonia_edge_request import (
+    LA_COLONIA_HOST,
+    LA_COLONIA_PATH,
+    LaColoniaEdgeRequestError,
+    ValidatedLaColoniaEdgeRequest,
+    validate_la_colonia_edge_request,
 )
 
 INITIALIZE_PATH = "/v1/initialize"
@@ -30,8 +36,6 @@ MAX_AUTHORIZATION_LIFETIME_MS = 45 * 60 * 1000
 MAX_REQUESTS = 1000
 MAX_RAW_BODY_BYTES = 1_500_000
 MIN_PACING_MS = 1500
-LA_COLONIA_HOST = "www.lacolonia.com"
-LA_COLONIA_PATH = "/_v/segment/graphql/v1"
 
 _SHA1 = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -140,23 +144,13 @@ def _worker_evidence_id(payload: Mapping[str, object], signature_b64url: str) ->
     return hashlib.sha256(material).hexdigest()
 
 
-def _validate_origin_url(value: object) -> str:
-    text = _text(value, "origin_url_invalid", max_length=20_000)
-    try:
-        parsed = urlsplit(text)
-    except ValueError as exc:
-        raise EdgeGatewayClientError("origin_url_invalid") from exc
-    if parsed.scheme != "https" or parsed.hostname != LA_COLONIA_HOST:
+def _validate_origin_request(value: object) -> ValidatedLaColoniaEdgeRequest:
+    if not isinstance(value, str):
         _fail("origin_url_invalid")
     try:
-        port = parsed.port
-    except ValueError as exc:
-        raise EdgeGatewayClientError("origin_url_invalid") from exc
-    if port is not None or parsed.username or parsed.password:
-        _fail("origin_url_invalid")
-    if parsed.path != LA_COLONIA_PATH or parsed.fragment or not parsed.query:
-        _fail("origin_url_invalid")
-    return text
+        return validate_la_colonia_edge_request(value)
+    except LaColoniaEdgeRequestError as exc:
+        raise EdgeGatewayClientError(f"origin_request_{exc.code}") from exc
 
 
 class EdgeGatewayTransport(Protocol):
@@ -257,11 +251,24 @@ class EdgeRequestContext:
 class EdgeExecutionRequest:
     origin_url: str
     context: EdgeRequestContext
+    _validated_origin: ValidatedLaColoniaEdgeRequest = dataclass_field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "origin_url", _validate_origin_url(self.origin_url))
         if not isinstance(self.context, EdgeRequestContext):
             _fail("request_context_invalid")
+        validated = _validate_origin_request(self.origin_url)
+        if validated.canonical_request_sha256 != self.context.request_digest:
+            _fail("request_digest_origin_mismatch")
+        object.__setattr__(self, "origin_url", validated.source_url)
+        object.__setattr__(self, "_validated_origin", validated)
+
+    @property
+    def validated_origin(self) -> ValidatedLaColoniaEdgeRequest:
+        return self._validated_origin
 
     def wire_payload(self) -> dict[str, object]:
         return {"originUrl": self.origin_url, "requestContext": self.context.wire_dict()}
@@ -582,6 +589,14 @@ class EdgeGatewayClient:
         for name, expected in expected_pairs.items():
             if getattr(payload, name) != expected:
                 _fail(f"receipt_{name}_context_mismatch")
+
+        independent = request.validated_origin
+        if payload.canonical_request_sha256 != independent.canonical_request_sha256:
+            _fail("receipt_canonical_request_independent_mismatch")
+        if payload.from_index != independent.from_index or payload.to_index != independent.to_index:
+            _fail("receipt_range_independent_mismatch")
+        if payload.order_by != independent.order_by:
+            _fail("receipt_order_by_independent_mismatch")
 
         if payload.collector_provider != "cloudflare_workers":
             _fail("receipt_collector_provider_mismatch")
