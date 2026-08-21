@@ -27,7 +27,7 @@ TRACE_ID = "trace-verifier-001"
 CUSTOM_SPAN_ID = "custom-verifier-001"
 VERSION_ID = "cf-version-trace-001"
 INVOCATION_ID = "invocation-verifier-001"
-START_MS = 1_787_340_800_000
+START_MS = 1_787_338_800_000
 
 
 def _signature() -> str:
