@@ -40,6 +40,7 @@ def test_cloudflare_node_suite() -> None:
         "durable-store.test.mjs",
         "gateway-runtime.test.mjs",
         "worker-adapter.test.mjs",
+        "worker-fencing.test.mjs",
     ]
     result = subprocess.run(
         [
