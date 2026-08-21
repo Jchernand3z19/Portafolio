@@ -13,7 +13,6 @@ from precios_supermercados.scrapers.la_colonia_catalog_coverage import CatalogCo
 from precios_supermercados.scrapers.la_colonia_verified_catalog_finalizer import (
     VerifiedCatalogProvenanceRun,
 )
-from precios_supermercados.structural_discovery_manifest import VerifiedStructuralDiscovery
 
 RUN = "32560000000:1"
 AUTH = "authorization-catalog-readiness"
@@ -31,15 +30,15 @@ TRUST_GATE = "trusted_collector_provenance_unavailable"
 AUTHORITY_BLOCKER = "production_authority_not_established"
 
 
-def _discovery() -> VerifiedStructuralDiscovery:
-    value = object.__new__(VerifiedStructuralDiscovery)
-    object.__setattr__(value, "run_id", RUN)
-    object.__setattr__(value, "authorization_id", AUTH)
-    object.__setattr__(value, "approved_commit_sha", COMMIT)
-    object.__setattr__(value, "tree_digest", TREE_DIGEST)
-    object.__setattr__(value, "structure", object())
-    object.__setattr__(value, "production_authority", False)
-    return value
+class _FakeDiscovery:
+    def __init__(self) -> None:
+        self.run_id = RUN
+        self.authorization_id = AUTH
+        self.approved_commit_sha = COMMIT
+        self.tree_digest = TREE_DIGEST
+        self.structure = object()
+        self.production_authority = False
+        self.digest = DISCOVERY_DIGEST
 
 
 def _plan():
@@ -143,10 +142,10 @@ def _provenance(plan=None) -> VerifiedCatalogProvenanceRun:
 
 
 def _prepare(monkeypatch, *, reasons=(TRUST_GATE,)):
-    discovery = _discovery()
+    monkeypatch.setattr(module, "VerifiedStructuralDiscovery", _FakeDiscovery)
+    discovery = _FakeDiscovery()
     plan = _plan()
     provenance = _provenance(plan)
-    object.__setattr__(discovery, "digest", DISCOVERY_DIGEST)
     monkeypatch.setattr(
         module,
         "derive_canonical_authenticated_catalog_plan",
