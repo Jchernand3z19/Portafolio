@@ -129,6 +129,35 @@ function replayResult(envelope) {
   });
 }
 
+async function verifyReplayEnvelope(envelope, verifyReceipt) {
+  if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) fail("replay_envelope_invalid");
+  if (!(envelope.rawBody instanceof Uint8Array)) fail("replay_raw_body_invalid");
+  if (envelope.rawBody.byteLength > MAX_REPLAY_BODY_BYTES) fail("replay_body_above_limit");
+  const bodyHash = await sha256Hex(envelope.rawBody);
+  if (bodyHash !== envelope.rawResponseSha256) fail("replay_raw_body_hash_mismatch");
+  if (envelope.receiptPayload?.raw_response_sha256 !== bodyHash) fail("replay_receipt_hash_mismatch");
+  if (envelope.receiptPayload?.response_body_bytes !== envelope.rawBody.byteLength) fail("replay_receipt_size_mismatch");
+  if (envelope.receiptPayload?.response_status !== envelope.responseStatus) fail("replay_receipt_status_mismatch");
+  if (envelope.receiptPayload?.reservation_id !== envelope.reservationId) fail("replay_receipt_reservation_mismatch");
+  if (envelope.receiptPayload?.signing_key_id !== envelope.signingKeyId) fail("replay_signing_key_mismatch");
+
+  let signatureValid = false;
+  try {
+    signatureValid = await verifyReceipt(
+      envelope.receiptPayload,
+      envelope.signatureB64Url,
+      envelope.signingKeyId,
+    );
+  } catch {
+    fail("replay_signature_verification_failed");
+  }
+  if (signatureValid !== true) fail("replay_signature_invalid");
+
+  const evidenceId = await sha256Hex(`${canonicalJson(envelope.receiptPayload)}\0${envelope.signatureB64Url}`);
+  if (evidenceId !== envelope.evidenceId) fail("replay_evidence_id_mismatch");
+  return replayResult(envelope);
+}
+
 function noFetchResult(reservation) {
   if (reservation.decision === "WAIT") {
     return Object.freeze({
@@ -159,6 +188,7 @@ export async function executeGatewayRequest(input, dependencies) {
   if (typeof dependencies.authenticate !== "function") fail("gateway_authenticator_missing");
   if (typeof dependencies.fetchOrigin !== "function") fail("gateway_fetch_missing");
   if (typeof dependencies.signReceipt !== "function") fail("gateway_signer_missing");
+  if (typeof dependencies.verifyReceipt !== "function") fail("gateway_verifier_missing");
   if (typeof dependencies.clock !== "function") fail("gateway_clock_missing");
   if (typeof dependencies.executionId !== "function") fail("gateway_execution_id_missing");
 
@@ -175,7 +205,9 @@ export async function executeGatewayRequest(input, dependencies) {
   const nowBeforeReserve = dependencies.clock();
   if (!(nowBeforeReserve instanceof Date) || Number.isNaN(nowBeforeReserve.getTime())) fail("gateway_clock_invalid");
   const reserved = store.reserve(context, nowBeforeReserve.getTime());
-  if (reserved.decision === "REPLAY_COMPLETED") return replayResult(reserved.replayEnvelope);
+  if (reserved.decision === "REPLAY_COMPLETED") {
+    return verifyReplayEnvelope(reserved.replayEnvelope, dependencies.verifyReceipt);
+  }
   if (reserved.decision !== "RESERVED") return noFetchResult(reserved);
 
   const physicalStartedAt = dependencies.clock();
@@ -255,6 +287,23 @@ export async function executeGatewayRequest(input, dependencies) {
     store.fail(context.reservationId, "receipt_signature_invalid", responseCompletedAt.getTime());
     fail("receipt_signature_invalid");
   }
+
+  let signatureValid = false;
+  try {
+    signatureValid = await dependencies.verifyReceipt(
+      receiptPayload,
+      signatureB64Url,
+      collector.signingKeyId,
+    );
+  } catch {
+    store.fail(context.reservationId, "receipt_signature_verification_failed", responseCompletedAt.getTime());
+    fail("receipt_signature_verification_failed");
+  }
+  if (signatureValid !== true) {
+    store.fail(context.reservationId, "receipt_signature_verification_failed", responseCompletedAt.getTime());
+    fail("receipt_signature_verification_failed");
+  }
+
   const evidenceId = await sha256Hex(`${canonicalJson(receiptPayload)}\0${signatureB64Url}`);
   const replayEnvelope = {
     reservationId: context.reservationId,
