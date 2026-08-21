@@ -12,12 +12,13 @@ Base histórica originalmente auditada de `main`:
 
 Ese SHA es evidencia histórica estable, no una declaración del HEAD mutable actual. El HEAD de `main` debe verificarse directamente en GitHub; no se fija como “SHA actual” dentro de este documento porque el propio merge que modifica esta fuente cambiaría ese valor.
 
-Desde esa base se integraron las revisiones de canonicalización y CI, frontera current/history, coherencia de evidencia `current`, canonicalización de `changed_fields`, replay terminal, identidad determinista, snapshots defensivos de evidencia y pricing histórico fail-closed.
+Desde esa base se integraron las revisiones de canonicalización y CI, frontera current/history, coherencia de evidencia `current`, canonicalización de `changed_fields`, replay terminal, identidad determinista, snapshots defensivos de evidencia, pricing histórico fail-closed y enforcement productivo del ruleset de `main`.
 
 Evidencia productiva verificada:
 
-- `main` continúa sin branch protection/ruleset efectivo;
-- no hay required status checks productivamente exigidos sobre la rama;
+- `main` está protegido por el ruleset productivo `main-protection`; GitHub reporta `protected: true`;
+- PR #29 demostró funcionalmente que GitHub rechaza el merge mientras `tests` está pendiente y también cuando existe una conversación de review sin resolver;
+- el ruleset declara PR obligatorio, `tests` requerido, resolución de conversaciones, bloqueo de force-pushes y borrado restringido, con cero aprobaciones obligatorias y bypass vacío;
 - todos los entrypoints live de La Colonia siguen globalmente bloqueados con `if: ${{ false }}`;
 - no existe autorización live nueva;
 - `SPS-context-and-root-facets-001` está consumida;
@@ -38,7 +39,8 @@ Validaciones verificadas:
 - PR #24 — IDs deterministas en frontera comercial: **808/808** + `compileall`;
 - PR #25 — snapshots defensivos de evidencia: **812/812** + `compileall`;
 - PR #26 — reducción real contra histórico aceptado: **844/844** + `compileall`;
-- PR #27 — integridad fail-closed de evidencia para pricing: **850/850** + `compileall`, GitHub Actions, Python 3.12.14.
+- PR #27 — integridad fail-closed de evidencia para pricing: **850/850** + `compileall`;
+- PR #29 — verificación productiva del ruleset: **850/850** + `compileall`; `tests` pendiente y conversaciones sin resolver bloquearon el merge de forma observable.
 
 Las variaciones de conteo entre revisiones corresponden a adición o reemplazo de regresiones, no a relajación de gates.
 
@@ -56,11 +58,11 @@ Las variaciones de conteo entre revisiones corresponden a adición o reemplazo d
 | Autorización live | BLOCKED_HUMAN_DECISION | Ninguna activa. |
 | Workflows live | DONE_FAIL_CLOSED | Jobs capaces de live permanecen `if: false`. |
 | Workflow supply chain | DONE_OFFLINE | Actions por SHA, permisos mínimos, checkout inmutable. |
-| CI | DONE_VERSIONED | PR, manual y pushes a `main`; auditoría estática protege esta cobertura. |
+| CI | DONE_VERSIONED | PR, manual y pushes a `main`; `tests` es required check productivo para merge. |
+| Protección de `main` / GATE-17 | DONE_PRODUCTIVE | `PASS_PRODUCTIVE_EVIDENCE`; enforcement demostrado en PR #29. |
 | Frontera current/history | DONE_OFFLINE | Atómica/idempotente, IDs deterministas, evidencia defensiva y replay terminal ligado. |
 | Pricing histórico | DONE_OFFLINE | Reducción real contra periodo aceptado anterior; reconciliación fail-closed. |
-| Backend comercial productivo | BLOCKED_DEPENDENCIES | No se conecta mientras aceptación/enforcement productivos sigan abiertos. |
-| GATE-17 | BLOCKED_EXTERNAL | `FAIL_PRODUCTIVE_EVIDENCE`: `main` sin protección/ruleset. |
+| Backend comercial productivo | BLOCKED_DEPENDENCIES | No se conecta mientras aceptación/enforcement productivos restantes sigan abiertos. |
 | Trusted collector físico | BLOCKED_EXTERNAL | No existe observer productivo independiente ligado a requests físicos. |
 | Egress/claim/fencing productivo | BLOCKED_EXTERNAL | El modelo offline no reemplaza enforcement real. |
 | Automatización diaria | BLOCKED_DEPENDENCIES | Espera readiness live + aceptación + backend comercial. |
@@ -200,7 +202,7 @@ Comentarios, PR comments, issue comments, archivos de comando, markers, logs y a
 
 El presupuesto canónico offline actual usa `max_retries = 0`. El pacing mínimo sigue 1.5 s.
 
-El modelo DNS/TLS niega comportamientos auxiliares conocidos, pero no constituye firewall/egress real. `IndependentFencingObserver` es un simulador offline; no cierra GATE-17 ni GATE-06 productivo.
+El modelo DNS/TLS niega comportamientos auxiliares conocidos, pero no constituye firewall/egress real. `IndependentFencingObserver` es un simulador offline; GATE-06 productivo continúa abierto.
 
 ## Workflows y CI
 
@@ -221,9 +223,12 @@ Controles:
 - `pull_request_target` no hace checkout de código no confiable;
 - `issue_comment` no es autoridad;
 - scripts capaces de red sólo viven en jobs globalmente bloqueados;
-- CI usa Python 3.12, compila `src`/`scripts` y ejecuta toda la suite.
+- CI usa Python 3.12, compila `src`/`scripts` y ejecuta toda la suite;
+- el ruleset productivo de `main` exige PR y el check `tests` antes de merge;
+- las conversaciones de review deben estar resueltas antes del merge;
+- PR #29 verificó ambos bloqueos mediante rechazos `405 Repository rule violations found` antes del merge final.
 
-La CI cubre PR/manual y pushes a `main` para `precios-supermercados-sps/**` y `.github/workflows/**`; `test_workflow_security_audit.py` exige esa cobertura. Esto no sustituye GATE-17: un push directo todavía puede entrar porque la rama no está protegida, aunque después ejecute CI.
+La CI cubre PR/manual y pushes a `main` para `precios-supermercados-sps/**` y `.github/workflows/**`; `test_workflow_security_audit.py` exige esa cobertura. La ejecución sobre push queda como defensa en profundidad; el ruleset productivo evita que cambios ordinarios entren a `main` sin pasar primero por PR y `tests`.
 
 ## Persistencia e histórico
 
@@ -240,7 +245,7 @@ El modelo lógico sigue definiendo:
 
 La lógica current/history y pricing ya existe offline; **el backend productivo no está seleccionado ni conectado**. No se introduce Sheets, BigQuery, SQLite o PostgreSQL sólo para avanzar artificialmente.
 
-Conectar almacenamiento real queda bloqueado hasta que `catalog_accepted` pueda provenir de una frontera autoritativa y GATE-17/productive enforcement estén resueltos. Esto evita construir una ruta donde un booleano caller-controlled pueda actualizar precios comerciales.
+Conectar almacenamiento real queda bloqueado hasta que `catalog_accepted` pueda provenir de una frontera autoritativa y exista enforcement físico productivo de egress/claim/fencing. Esto evita construir una ruta donde un booleano caller-controlled pueda actualizar precios comerciales.
 
 ## Matriz de gates
 
@@ -261,17 +266,17 @@ Conectar almacenamiento real queda bloqueado hasta que `catalog_accepted` pueda 
 | GATE-13 — STOP ON CAPTCHA / ANTIBOT | PASS_OFFLINE_MODEL |
 | GATE-14 — STOP ON AUTH / ADDRESS / GPS REQUIREMENT | PASS_OFFLINE_MODEL |
 | GATE-15 — EXCESSIVE LOAD STOP | PASS_OFFLINE_MODEL |
-| GATE-16 — TRUSTED WORKFLOW / CODE / SUPPLY CHAIN | PASS_OFFLINE_MODEL; readiness productivo bloqueado por GATE-17 |
-| GATE-17 — PRODUCTIVE RULESET / PROTECTION EVIDENCE | **FAIL_PRODUCTIVE_EVIDENCE** |
+| GATE-16 — TRUSTED WORKFLOW / CODE / SUPPLY CHAIN | PASS_OFFLINE_MODEL + branch governance productiva |
+| GATE-17 — PRODUCTIVE RULESET / PROTECTION EVIDENCE | **PASS_PRODUCTIVE_EVIDENCE** |
 | GATE-18 — EXACT FINAL VALIDATION | **FAIL_CLOSED**; trusted collector pendiente |
 | GATE-19 — ADVERSARIAL OFFLINE COVERAGE | PASS_OFFLINE_MODEL |
 | GATE-20 — COMMENTS NON-AUTHORITATIVE | PASS_OFFLINE_MODEL |
 
-Ningún `PASS_OFFLINE_MODEL` autoriza live.
+Ningún `PASS_OFFLINE_MODEL` ni el cierre de GATE-17 autorizan live.
 
 ## Inventario canónico y backlog
 
-### DONE / DONE_OFFLINE
+### DONE / DONE_OFFLINE / DONE_PRODUCTIVE
 
 - contratos comunes e identidad;
 - extractor/GraphQL/runner La Colonia;
@@ -281,6 +286,7 @@ Ningún `PASS_OFFLINE_MODEL` autoriza live.
 - observabilidad/dispatcher sin autoridad;
 - supply-chain/workflow audit;
 - CI en PR + `main`;
+- ruleset productivo de `main` con enforcement funcional verificado;
 - frontera comercial current/history atómica e idempotente;
 - continuidad y determinismo de identidad de oferta/producto fuente;
 - snapshots defensivos de evidencia mutable;
@@ -298,6 +304,7 @@ Ningún `PASS_OFFLINE_MODEL` autoriza live.
 - cuerpos históricos de PR como descripción del estado actual;
 - ramas ya integradas y detrás de `main` como posible fuente canónica;
 - gobernanza que exigía mantener PR #7/#17 abiertos;
+- cualquier estado histórico que describa GATE-17 como abierto o `main` como desprotegida;
 - publicar un SHA mutable de `main` dentro de documentación como si pudiera mantenerse autorreferencialmente actualizado.
 
 ### READY_TO_IMPLEMENT
@@ -306,7 +313,6 @@ Ningún `PASS_OFFLINE_MODEL` autoriza live.
 
 ### BLOCKED_EXTERNAL / BLOCKED_LIVE / BLOCKED_HUMAN_DECISION
 
-- configurar protección/ruleset productivo de `main` y required CI (GATE-17);
 - disponer de trusted collector con provenance física independiente;
 - disponer de enforcement productivo de egress/claim/fencing;
 - obtener autorización humana nueva para cualquier prueba live;

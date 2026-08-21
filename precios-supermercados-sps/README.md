@@ -10,12 +10,14 @@ Estado verificado al 2026-08-20:
 
 - Las revisiones de CI, frontera comercial, identidad, evidencia auditable y pricing histórico están integradas en `main`.
 - El HEAD mutable de `main` se verifica directamente en GitHub y no se fija como “SHA actual” dentro de este archivo, porque el propio merge de documentación cambiaría ese SHA.
+- `main` está protegido por el ruleset productivo `main-protection`; GitHub reporta `protected: true`.
+- PR #29 verificó funcionalmente el enforcement: GitHub rechazó el merge con `tests` pendiente y volvió a rechazarlo con una conversación de review sin resolver.
 - `main` conserva los entrypoints live con guard global fail-closed.
 - No existen autorizaciones live activas.
 - `SPS-context-and-root-facets-001` está consumida; `002` no está autorizada.
 - SPS technical context continúa `UNCONFIRMED`.
 - No se declara catálogo live completo.
-- GATE-17 continúa `FAIL_PRODUCTIVE_EVIDENCE`: la rama `main` no está protegida.
+- GATE-17 está `PASS_PRODUCTIVE_EVIDENCE`.
 - El collector autoritativo con provenance física independiente sigue pendiente; la aceptación canónica del catálogo permanece fail-closed.
 - `live_safety.py` es un modelo offline, no un enforcement productivo de red.
 - `commercial_state.py` implementa una frontera comercial offline atómica e idempotente: runs no aceptados no mutan estado y las ausencias no se convierten en bajas implícitas.
@@ -29,7 +31,7 @@ Estado verificado al 2026-08-20:
 - La última suite completa verificada contiene **850/850 pruebas aprobadas**, además de `compileall`, en GitHub Actions con Python 3.12.14.
 - No existe todavía un backend productivo conectado para current/history.
 
-La fuente canónica única del estado y los gates es [`docs/arquitectura.md`](docs/arquitectura.md). Los documentos bajo `docs/supermercados/` conservan evidencia e historia y no conceden autoridad operativa.
+La fuente canónica única del estado y los gates es [`docs/arquitectura.md`](docs/arquitectura.md). La evidencia específica de GATE-17 está en [`docs/gate-17-verification.md`](docs/gate-17-verification.md). Los documentos bajo `docs/supermercados/` conservan evidencia e historia y no conceden autoridad operativa.
 
 ## Contratos protegidos
 
@@ -83,6 +85,7 @@ precios-supermercados-sps/
 ├── docs/
 │   ├── arquitectura.md
 │   ├── decisiones-tecnicas.md
+│   ├── gate-17-verification.md
 │   ├── modelo-datos.md
 │   └── supermercados/
 ├── reports/discovery/
@@ -139,14 +142,14 @@ Hitos de validación verificados:
 - PR #24 — IDs deterministas revalidados en la frontera: **808/808**;
 - PR #25 — snapshots defensivos de evidencia: **812/812**;
 - PR #26 — reducción real contra histórico aceptado: **844/844**;
-- PR #27 — reconciliación fail-closed de evidencia de pricing: **850/850**, además de `compileall`, en GitHub Actions con Python 3.12.14.
+- PR #27 — reconciliación fail-closed de evidencia de pricing: **850/850**;
+- PR #29 — verificación productiva del ruleset: **850/850 + compileall**; además demostró que `tests` pendiente y conversaciones sin resolver bloquean el merge.
 
 Las variaciones de conteo entre revisiones corresponden a adición/reemplazo de regresiones, no a relajación de gates. La CI canónica se ejecuta en pull requests, manualmente y en pushes a `main` que afecten el proyecto o sus workflows.
 
 ## Bloqueos productivos actuales
 
 - autorización humana nueva antes de cualquier tráfico live;
-- GATE-17: protección/ruleset productivo de `main`;
 - trusted collector con provenance independiente y no controlable por caller;
 - enforcement físico productivo de egress/claim/fencing;
 - confirmación técnica SPS mediante evidencia live autorizada;
