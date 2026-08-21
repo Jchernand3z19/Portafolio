@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from .commercial_state import CurrentCommercialOffer, OfferHistoryPeriod
+from .identifiers import generate_state_hash
 
 
 class CommercialPricingError(ValueError):
@@ -24,6 +25,7 @@ class RealPriceReduction:
     """Comparación del precio actual contra el estado aceptado anterior."""
 
     offer_id: str
+    currency: str
     current_price: Decimal | None
     previous_accepted_price: Decimal | None
     reduction_amount: Decimal | None
@@ -54,11 +56,15 @@ def evaluate_real_price_reduction(
     if not history:
         raise CommercialPricingError("current no tiene periodo histórico abierto")
 
-    offer = current.validated_offer.offer
-    _validate_history_chain(offer.offer_id, history)
+    validated = current.validated_offer
+    offer = validated.offer
+    if generate_state_hash(offer) != validated.state_hash:
+        raise CommercialPricingError("current contiene state_hash inválido")
+
+    _validate_history_chain(offer.offer_id, offer.currency, history)
     open_period = history[-1]
 
-    if open_period.state_hash != current.validated_offer.state_hash:
+    if open_period.state_hash != validated.state_hash:
         raise CommercialPricingError("current y periodo abierto tienen state_hash distinto")
     if open_period.valid_from_utc != current.first_observed_at_utc:
         raise CommercialPricingError("current e histórico discrepan en apertura")
@@ -85,6 +91,7 @@ def evaluate_real_price_reduction(
 
     return RealPriceReduction(
         offer_id=offer.offer_id,
+        currency=offer.currency,
         current_price=current_price,
         previous_accepted_price=previous_price,
         reduction_amount=reduction_amount,
@@ -107,13 +114,23 @@ def evaluate_real_price_reduction(
 
 def _validate_history_chain(
     offer_id: str,
+    currency: str,
     history: Sequence[OfferHistoryPeriod],
 ) -> None:
     open_count = 0
     previous: OfferHistoryPeriod | None = None
     for index, period in enumerate(history):
-        if period.offer_id != offer_id:
+        validated = period.validated_offer
+        period_offer = validated.offer
+        if period.offer_id != offer_id or period_offer.offer_id != period.offer_id:
             raise CommercialPricingError("current e histórico pertenecen a offer_id distintos")
+        if period_offer.currency != currency:
+            raise CommercialPricingError("current e histórico usan monedas distintas")
+        if validated.state_hash != period.state_hash:
+            raise CommercialPricingError("periodo y ValidatedOffer tienen state_hash distinto")
+        if generate_state_hash(period_offer) != period.state_hash:
+            raise CommercialPricingError("periodo histórico contiene state_hash inválido")
+
         if period.valid_to_utc is None:
             open_count += 1
             if index != len(history) - 1:
@@ -126,9 +143,8 @@ def _validate_history_chain(
         if period.valid_to_utc is not None and period.last_observed_at_utc > period.valid_to_utc:
             raise CommercialPricingError("periodo histórico observado después de su cierre")
 
-        if previous is not None:
-            if previous.valid_to_utc != period.valid_from_utc:
-                raise CommercialPricingError("los periodos históricos no son contiguos")
+        if previous is not None and previous.valid_to_utc != period.valid_from_utc:
+            raise CommercialPricingError("los periodos históricos no son contiguos")
         previous = period
 
     if open_count != 1 or history[-1].valid_to_utc is not None:
