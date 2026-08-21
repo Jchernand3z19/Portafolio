@@ -19,7 +19,13 @@ from decimal import Decimal
 from typing import Iterable
 
 from .enums import ChangeType, RunStatus
-from .identifiers import canonicalize_text, canonicalize_url, generate_state_hash
+from .identifiers import (
+    canonicalize_text,
+    canonicalize_url,
+    generate_offer_id,
+    generate_source_product_id,
+    generate_state_hash,
+)
 from .models import ValidatedOffer
 
 _STATE_FIELDS = (
@@ -340,6 +346,25 @@ class InMemoryCommercialState:
             if offer.offer_id in offer_ids:
                 raise CommercialStateError("offer_id duplicado dentro del mismo run")
             offer_ids.add(offer.offer_id)
+
+            expected_source_product_id = generate_source_product_id(
+                offer.supermarket_id,
+                offer.source_key_type,
+                offer.source_key,
+            )
+            if offer.source_product_id != expected_source_product_id:
+                raise CommercialStateError(
+                    f"source_product_id no es determinista para {offer.offer_id}"
+                )
+            expected_offer_id = generate_offer_id(
+                offer.supermarket_id,
+                offer.location_id,
+                expected_source_product_id,
+            )
+            if offer.offer_id != expected_offer_id:
+                raise CommercialStateError(
+                    f"offer_id no es determinista para {offer.source_product_id}"
+                )
 
             offer_identity = _offer_logical_identity(validated)
             previous_offer_id = logical_identities.get(offer_identity)
