@@ -1,10 +1,9 @@
 """Cliente Python offline-first para el gateway edge de provenance.
 
-El módulo no contiene un transporte HTTP productivo ni una URL desplegada. El
-caller debe inyectar explícitamente un transporte. La capa valida el contrato
-del Worker, reconcilia la evidencia contra el request esperado y recalcula
-hashes/identificadores, pero NO convierte esa coherencia en autoridad
-productiva ni en aceptación comercial.
+No contiene transporte HTTP productivo ni URL desplegada. El caller debe
+inyectar explícitamente un transporte. Esta capa valida forma, identidad,
+contexto, hashes y fencing de la evidencia del Worker, pero deliberadamente NO
+concede autoridad productiva ni aceptación comercial.
 """
 
 from __future__ import annotations
@@ -16,7 +15,8 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from datetime import datetime
-from typing import Protocol, TypeAlias
+from typing import NoReturn, Protocol, TypeAlias
+from urllib.parse import urlsplit
 
 from precios_supermercados.edge_provenance import (
     EdgeReceiptPayload,
@@ -29,6 +29,9 @@ EXECUTE_PATH = "/v1/execute"
 MAX_AUTHORIZATION_LIFETIME_MS = 45 * 60 * 1000
 MAX_REQUESTS = 1000
 MAX_RAW_BODY_BYTES = 1_500_000
+MIN_PACING_MS = 1500
+LA_COLONIA_HOST = "www.lacolonia.com"
+LA_COLONIA_PATH = "/_v/segment/graphql/v1"
 
 _SHA1 = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -36,6 +39,7 @@ _OPAQUE = re.compile(r"[^\s]{1,256}\Z")
 _RUN_ID = re.compile(r"[0-9]+:[1-9][0-9]*\Z")
 _B64URL = re.compile(r"[A-Za-z0-9_-]+\Z")
 _ALLOWED_ROLES = {"primary", "reconciliation"}
+_TERMINAL_STATES = {"consumed", "rejected", "expired"}
 
 
 class EdgeGatewayClientError(ValueError):
@@ -46,27 +50,18 @@ class EdgeGatewayClientError(ValueError):
         self.code = code
 
 
-def _fail(code: str, message: str | None = None) -> "NoReturn":  # type: ignore[name-defined]
+def _fail(code: str, message: str | None = None) -> NoReturn:
     raise EdgeGatewayClientError(code, message)
 
 
-# Importado tarde sólo para no mezclarlo con las dependencias de runtime.
-from typing import NoReturn
-
-
 def _exact_keys(value: object, expected: set[str], code: str) -> Mapping[str, object]:
-    if not isinstance(value, Mapping):
-        _fail(code)
-    actual = set(value)
-    if actual != expected:
+    if not isinstance(value, Mapping) or set(value) != expected:
         _fail(code)
     return value
 
 
 def _text(value: object, code: str, *, max_length: int = 512) -> str:
-    if not isinstance(value, str) or not value or value.strip() != value:
-        _fail(code)
-    if len(value) > max_length:
+    if not isinstance(value, str) or not value or value.strip() != value or len(value) > max_length:
         _fail(code)
     return value
 
@@ -92,15 +87,25 @@ def _sha256(value: object, code: str) -> str:
     return text
 
 
-def _integer(value: object, code: str, *, minimum: int = 0, maximum: int = 2**53 - 1) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        _fail(code)
-    if value < minimum or value > maximum:
+def _integer(
+    value: object,
+    code: str,
+    *,
+    minimum: int = 0,
+    maximum: int = 2**53 - 1,
+) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
         _fail(code)
     return value
 
 
-def _canonical_b64url_decode(value: object, code: str, *, allow_empty: bool = False) -> bytes:
+def _optional_integer(value: object, code: str) -> int | None:
+    if value is None:
+        return None
+    return _integer(value, code, minimum=1)
+
+
+def _canonical_b64url_decode(value: object, code: str) -> bytes:
     text = _text(value, code, max_length=3_000_000)
     if "=" in text or "+" in text or "/" in text or not _B64URL.fullmatch(text):
         _fail(code)
@@ -109,7 +114,7 @@ def _canonical_b64url_decode(value: object, code: str, *, allow_empty: bool = Fa
         decoded = base64.b64decode(text + padding, altchars=b"-_", validate=True)
     except (ValueError, binascii.Error) as exc:
         raise EdgeGatewayClientError(code) from exc
-    if not decoded and not allow_empty:
+    if not decoded:
         _fail(code)
     canonical = base64.urlsafe_b64encode(decoded).decode("ascii").rstrip("=")
     if canonical != text:
@@ -135,8 +140,27 @@ def _worker_evidence_id(payload: Mapping[str, object], signature_b64url: str) ->
     return hashlib.sha256(material).hexdigest()
 
 
+def _validate_origin_url(value: object) -> str:
+    text = _text(value, "origin_url_invalid", max_length=20_000)
+    try:
+        parsed = urlsplit(text)
+    except ValueError as exc:
+        raise EdgeGatewayClientError("origin_url_invalid") from exc
+    if parsed.scheme != "https" or parsed.hostname != LA_COLONIA_HOST:
+        _fail("origin_url_invalid")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise EdgeGatewayClientError("origin_url_invalid") from exc
+    if port is not None or parsed.username or parsed.password:
+        _fail("origin_url_invalid")
+    if parsed.path != LA_COLONIA_PATH or parsed.fragment or not parsed.query:
+        _fail("origin_url_invalid")
+    return text
+
+
 class EdgeGatewayTransport(Protocol):
-    """Transporte explícitamente inyectado; este módulo nunca abre red por sí solo."""
+    """Transporte explícitamente inyectado; este módulo nunca abre red solo."""
 
     def post_json(
         self,
@@ -235,10 +259,7 @@ class EdgeExecutionRequest:
     context: EdgeRequestContext
 
     def __post_init__(self) -> None:
-        url = _text(self.origin_url, "origin_url_invalid", max_length=20_000)
-        if not url.startswith("https://"):
-            _fail("origin_url_invalid")
-        object.__setattr__(self, "origin_url", url)
+        object.__setattr__(self, "origin_url", _validate_origin_url(self.origin_url))
         if not isinstance(self.context, EdgeRequestContext):
             _fail("request_context_invalid")
 
@@ -299,7 +320,12 @@ class EdgeGatewayClient:
             _fail("bearer_token_invalid")
         return token
 
-    def initialize(self, authorization: EdgeAuthorizationRequest, *, bearer_token: str) -> EdgeGatewayInitialized:
+    def initialize(
+        self,
+        authorization: EdgeAuthorizationRequest,
+        *,
+        bearer_token: str,
+    ) -> EdgeGatewayInitialized:
         if not isinstance(authorization, EdgeAuthorizationRequest):
             _fail("authorization_request_invalid")
         response = self._transport.post_json(
@@ -309,7 +335,7 @@ class EdgeGatewayClient:
         )
         root = self._root_or_error(response)
         _exact_keys(root, {"ok", "decision", "authorization"}, "initialize_response_shape_invalid")
-        if root["ok"] is not True or root["decision"] != "INITIALIZED":
+        if root["decision"] != "INITIALIZED":
             _fail("initialize_response_invalid")
         summary = _exact_keys(
             root["authorization"],
@@ -332,16 +358,63 @@ class EdgeGatewayClient:
         run_id = _opaque(summary["runId"], "initialize_run_id_invalid")
         if authorization_id != authorization.authorization_id or run_id != authorization.run_id:
             _fail("initialize_context_mismatch")
-        max_requests = _integer(summary["maxRequests"], "initialize_max_requests_invalid", minimum=1, maximum=MAX_REQUESTS)
+        max_requests = _integer(
+            summary["maxRequests"],
+            "initialize_max_requests_invalid",
+            minimum=1,
+            maximum=MAX_REQUESTS,
+        )
         if max_requests != authorization.max_requests:
             _fail("initialize_budget_mismatch")
-        requests_used = _integer(summary["requestsUsed"], "initialize_requests_used_invalid", maximum=max_requests)
-        remaining = _integer(summary["remainingRequests"], "initialize_remaining_requests_invalid", maximum=max_requests)
+        requests_used = _integer(
+            summary["requestsUsed"],
+            "initialize_requests_used_invalid",
+            maximum=max_requests,
+        )
+        remaining = _integer(
+            summary["remainingRequests"],
+            "initialize_remaining_requests_invalid",
+            maximum=max_requests,
+        )
         if requests_used + remaining != max_requests:
             _fail("initialize_budget_accounting_invalid")
+        pacing = _integer(summary["minStartIntervalMs"], "initialize_pacing_invalid", minimum=MIN_PACING_MS)
+        if pacing != MIN_PACING_MS:
+            _fail("initialize_pacing_mismatch")
+
+        counts = _exact_keys(
+            summary["reservationCounts"],
+            {"reserved", "completed", "failed"},
+            "initialize_reservation_counts_shape_invalid",
+        )
+        counted = sum(
+            _integer(counts[name], f"initialize_{name}_count_invalid", maximum=max_requests)
+            for name in ("reserved", "completed", "failed")
+        )
+        if counted != requests_used:
+            _fail("initialize_reservation_count_mismatch")
+
+        last_start = _optional_integer(summary["lastPhysicalStartMs"], "initialize_last_start_invalid")
+        terminal_at = _optional_integer(summary["terminalAtMs"], "initialize_terminal_at_invalid")
+        terminal_reason_raw = summary["terminalReason"]
+        terminal_reason = (
+            None
+            if terminal_reason_raw is None
+            else _opaque(terminal_reason_raw, "initialize_terminal_reason_invalid")
+        )
+        if requests_used == 0 and last_start is not None:
+            _fail("initialize_last_start_without_requests")
+
         state = _text(summary["state"], "initialize_state_invalid", max_length=32)
-        if state not in {"active", "consumed", "rejected", "expired"}:
+        if state == "active":
+            if terminal_at is not None or terminal_reason is not None:
+                _fail("initialize_active_terminal_metadata_invalid")
+        elif state in _TERMINAL_STATES:
+            if terminal_at is None or terminal_reason is None:
+                _fail("initialize_terminal_metadata_missing")
+        else:
             _fail("initialize_state_invalid")
+
         return EdgeGatewayInitialized(
             authorization_id=authorization_id,
             run_id=run_id,
@@ -389,10 +462,22 @@ class EdgeGatewayClient:
         )
         reason = _opaque(value["reason"], "wait_reason_invalid")
         not_before_raw = value["notBeforeMs"]
-        not_before = None if not_before_raw is None else _integer(not_before_raw, "wait_not_before_invalid", minimum=1)
+        not_before = (
+            None
+            if not_before_raw is None
+            else _integer(not_before_raw, "wait_not_before_invalid", minimum=1)
+        )
         inflight_raw = value["inFlightReservationId"]
-        inflight = None if inflight_raw is None else _opaque(inflight_raw, "wait_inflight_reservation_invalid")
-        return EdgeGatewayWait(reason=reason, not_before_ms=not_before, in_flight_reservation_id=inflight)
+        inflight = (
+            None
+            if inflight_raw is None
+            else _opaque(inflight_raw, "wait_inflight_reservation_invalid")
+        )
+        return EdgeGatewayWait(
+            reason=reason,
+            not_before_ms=not_before,
+            in_flight_reservation_id=inflight,
+        )
 
     @staticmethod
     def _parse_deny(root: Mapping[str, object]) -> EdgeGatewayDenied:
@@ -400,7 +485,10 @@ class EdgeGatewayClient:
         return EdgeGatewayDenied(reason=_opaque(value["reason"], "deny_reason_invalid"))
 
     @staticmethod
-    def _parse_evidence(root: Mapping[str, object], request: EdgeExecutionRequest) -> EdgeGatewayEvidence:
+    def _parse_evidence(
+        root: Mapping[str, object],
+        request: EdgeExecutionRequest,
+    ) -> EdgeGatewayEvidence:
         value = _exact_keys(
             root,
             {
@@ -419,11 +507,12 @@ class EdgeGatewayClient:
         replayed = value["replayed"]
         if not isinstance(replayed, bool):
             _fail("evidence_replayed_invalid")
-        expected_replayed = value["decision"] == "REPLAY_COMPLETED"
-        if replayed is not expected_replayed:
+        if replayed is not (value["decision"] == "REPLAY_COMPLETED"):
             _fail("evidence_replay_decision_mismatch")
 
         status = _integer(value["responseStatus"], "evidence_status_invalid", minimum=100, maximum=599)
+        if status != 200:
+            _fail("evidence_status_not_success")
         raw_body = _canonical_b64url_decode(value["rawBodyB64Url"], "evidence_raw_body_invalid")
         if len(raw_body) > MAX_RAW_BODY_BYTES:
             _fail("evidence_raw_body_above_limit")
@@ -450,7 +539,9 @@ class EdgeGatewayClient:
             _fail("receipt_payload_noncanonical")
 
         signature = _text(value["signatureB64Url"], "receipt_signature_invalid", max_length=1024)
-        _canonical_b64url_decode(signature, "receipt_signature_invalid")
+        signature_bytes = _canonical_b64url_decode(signature, "receipt_signature_invalid")
+        if len(signature_bytes) != 64:
+            _fail("receipt_signature_length_invalid")
         signing_key_id = _opaque(value["signingKeyId"], "receipt_signing_key_id_invalid")
         if signing_key_id != payload.signing_key_id:
             _fail("receipt_signing_key_mismatch")
@@ -468,6 +559,12 @@ class EdgeGatewayClient:
             _fail("receipt_response_status_mismatch")
         if payload.canonical_request_sha256 != payload.request_digest:
             _fail("receipt_request_digest_mismatch")
+        if payload.http_method != "GET":
+            _fail("receipt_http_method_mismatch")
+        if payload.target_scheme != "https" or payload.target_host != LA_COLONIA_HOST:
+            _fail("receipt_target_mismatch")
+        if payload.target_path != LA_COLONIA_PATH:
+            _fail("receipt_target_mismatch")
 
         context = request.context
         expected_pairs = {
@@ -488,13 +585,11 @@ class EdgeGatewayClient:
 
         if payload.collector_provider != "cloudflare_workers":
             _fail("receipt_collector_provider_mismatch")
-        expected_run_id = f"{payload.github_run_id}:{payload.github_run_attempt}"
-        if payload.run_id != expected_run_id:
+        if payload.run_id != f"{payload.github_run_id}:{payload.github_run_attempt}":
             _fail("receipt_github_run_fence_mismatch")
 
         evidence_id = _sha256(value["evidenceId"], "evidence_id_invalid")
-        computed_evidence_id = _worker_evidence_id(payload_source, signature)
-        if evidence_id != computed_evidence_id:
+        if evidence_id != _worker_evidence_id(payload_source, signature):
             _fail("evidence_id_mismatch")
 
         return EdgeGatewayEvidence(
