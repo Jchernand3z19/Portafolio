@@ -8,7 +8,8 @@ Fundación técnica para recolectar, normalizar, validar y conservar cambios rel
 
 Estado verificado al 2026-08-20:
 
-- PR #17 y PR #7 están merged.
+- `main` = `6703fbc2d9c40cfd458da8e6ff829ecf223c2da0`.
+- PR #17, PR #7, PR #19 y PR #20 están merged.
 - `main` conserva los entrypoints live con guard global fail-closed.
 - No existen autorizaciones live activas.
 - `SPS-context-and-root-facets-001` está consumida; `002` no está autorizada.
@@ -18,6 +19,8 @@ Estado verificado al 2026-08-20:
 - El collector autoritativo con provenance física independiente sigue pendiente; la aceptación canónica del catálogo permanece fail-closed.
 - `live_safety.py` es un modelo offline, no un enforcement productivo de red.
 - Existe una frontera comercial offline en `commercial_state.py`: runs no aceptados no mutan estado, el histórico es idempotente y las ausencias no se convierten en bajas implícitas.
+- `current` conserva la evidencia del último run aceptado incluso cuando el `state_hash` no cambia; el histórico mantiene la evidencia de apertura del periodo.
+- `changed_fields` usa la misma canonicalización textual que `state_hash`, por lo que diferencias cosméticas no crean cambios falsos.
 - No existe todavía un backend productivo conectado para current/history.
 
 La fuente canónica única del estado y los gates es [`docs/arquitectura.md`](docs/arquitectura.md). Los documentos bajo `docs/supermercados/` conservan evidencia e historia y no conceden autoridad operativa.
@@ -40,7 +43,8 @@ La frontera offline actual además exige:
 - `state_hash` recalculado y válido antes de aplicar;
 - cronología cerrada `observed_at_utc <= validated_at_utc <= decided_at_utc`;
 - un `scrape_run_id` no puede reutilizarse con otra decisión, timestamps o contenido;
-- el mismo hash confirma el periodo abierto sin duplicar historial;
+- el mismo hash confirma el periodo abierto sin duplicar historial y refresca la evidencia de `current` al último run aceptado;
+- `changed_fields` compara textos con la canonicalización usada por `state_hash`;
 - un cambio cierra exactamente un periodo y abre exactamente uno nuevo;
 - una oferta ausente de un payload posterior no se interpreta como `not_listed`, `out_of_stock` ni eliminación.
 
@@ -112,7 +116,8 @@ pytest precios-supermercados-sps/tests
 Validaciones verificadas:
 
 - baseline integrado mediante PR #7: **770/770**;
-- revisión que incorporó frontera comercial, cronología y hardening de CI: **796/796**, además de `compileall`, en GitHub Actions con Python 3.12.14.
+- PR #19 — frontera comercial, cronología y hardening de CI: **796/796**, además de `compileall`;
+- PR #20 — coherencia de evidencia `current` y canonicalización de `changed_fields`: **798/798**, además de `compileall`, en GitHub Actions con Python 3.12.14.
 
 La CI canónica se ejecuta en pull requests, manualmente y en pushes a `main` que afecten el proyecto o sus workflows.
 
