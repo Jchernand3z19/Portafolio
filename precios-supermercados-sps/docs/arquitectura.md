@@ -28,7 +28,7 @@ Evidencia productiva verificada:
 Validaciones verificadas:
 
 - baseline previo integrado por PR #7: **770/770** pruebas;
-- revisión de canonicalización, CI y frontera comercial: **793/793** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14.
+- revisión de canonicalización, CI y frontera comercial: **796/796** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14.
 
 ## Estado operativo resumido
 
@@ -93,6 +93,7 @@ Propiedades verificadas:
 - sólo `success`/`warning` con `catalog_accepted = true` permiten mutación;
 - `running`, `rejected`, `failed`, `abandoned` y `catalog_accepted = false` son no-op comercial;
 - el `state_hash` se recalcula antes de aplicar;
+- la cronología exige `observed_at_utc <= validated_at_utc <= decided_at_utc`;
 - el payload de un run no admite `offer_id` duplicado ni ofertas de otro `scrape_run_id`;
 - el replay exacto es idempotente;
 - reutilizar el mismo `scrape_run_id` con otra decisión, timestamp o contenido falla cerrado;
@@ -231,7 +232,7 @@ Ningún `PASS_OFFLINE_MODEL` autoriza live.
 - supply-chain/workflow audit;
 - CI en PR + `main`;
 - frontera comercial current/history atómica e idempotente;
-- tests de replay, mismo hash, cambio de precio, precio regular reportado, estados no aceptados, atomicidad y ausencia sin inferencia;
+- pruebas de replay, mismo hash, cronología, cambio de precio, precio regular reportado, estados no aceptados, atomicidad y ausencia sin inferencia;
 - canonicalización de README/AGENTS/arquitectura.
 
 ### STALE / OBSOLETE
