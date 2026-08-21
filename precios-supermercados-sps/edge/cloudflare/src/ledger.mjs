@@ -9,6 +9,7 @@ const SHA1_RE = /^[0-9a-f]{40}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const ID_RE = /^[^\s]{1,256}$/;
 const ROLE_SET = new Set(["primary", "reconciliation"]);
+const RESERVATION_STATUS_SET = new Set(["reserved", "completed", "failed"]);
 const TERMINAL_STATES = new Set(["consumed", "rejected", "expired"]);
 
 function fail(code, message = code) {
@@ -26,8 +27,14 @@ function exactInt(value, code, min = 0, max = Number.MAX_SAFE_INTEGER) {
 }
 
 function uniqueStrings(values, code) {
-  if (!Array.isArray(values) || values.some((value) => typeof value !== "string")) fail(code);
+  if (!Array.isArray(values) || values.some((value) => typeof value !== "string" || !ID_RE.test(value))) fail(code);
   if (new Set(values).size !== values.length) fail(code);
+}
+
+function sameSet(left, right) {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((item) => rightSet.has(item));
 }
 
 function cloneReservation(value) {
@@ -49,6 +56,46 @@ function cloneState(state) {
   };
 }
 
+function validateEvidence(evidence) {
+  const normalized = {
+    evidenceId: id(evidence?.evidenceId, "evidence_id_invalid"),
+    rawResponseSha256: evidence?.rawResponseSha256,
+    responseStatus: exactInt(evidence?.responseStatus, "response_status_invalid", 100, 599),
+    responseBodyBytes: exactInt(evidence?.responseBodyBytes, "response_body_bytes_invalid", 0),
+  };
+  if (!SHA256_RE.test(normalized.rawResponseSha256 ?? "")) fail("raw_response_sha256_invalid");
+  return normalized;
+}
+
+function validatePersistedReservation(key, reservation, state) {
+  if (!reservation || typeof reservation !== "object" || Array.isArray(reservation)) fail("ledger_reservation_invalid");
+  if (key !== reservation.reservationId) fail("ledger_reservation_key_mismatch");
+  id(reservation.reservationId, "ledger_reservation_id_invalid");
+  id(reservation.requestId, "ledger_request_id_invalid");
+  if (!SHA256_RE.test(reservation.requestDigest ?? "")) fail("ledger_request_digest_invalid");
+  id(reservation.nonce, "ledger_nonce_invalid");
+  if (!ROLE_SET.has(reservation.traversalRole)) fail("ledger_traversal_role_invalid");
+  id(reservation.traversalId, "ledger_traversal_id_invalid");
+  id(reservation.partitionId, "ledger_partition_id_invalid");
+  exactInt(reservation.physicalStartMs, "ledger_physical_start_invalid", state.createdAtMs);
+  if (!RESERVATION_STATUS_SET.has(reservation.status)) fail("ledger_reservation_status_invalid");
+
+  if (reservation.status === "reserved") {
+    if (reservation.completedAtMs !== null || reservation.failureReason !== null || reservation.evidence !== null) {
+      fail("ledger_reserved_shape_invalid");
+    }
+  } else {
+    exactInt(reservation.completedAtMs, "ledger_completed_at_invalid", reservation.physicalStartMs);
+    if (reservation.status === "completed") {
+      if (reservation.failureReason !== null || reservation.evidence === null) fail("ledger_completed_shape_invalid");
+      validateEvidence(reservation.evidence);
+    } else {
+      id(reservation.failureReason, "ledger_failure_reason_invalid");
+      if (reservation.evidence !== null) fail("ledger_failed_shape_invalid");
+    }
+  }
+}
+
 function validateStateShape(state) {
   if (!state || typeof state !== "object" || Array.isArray(state)) fail("ledger_state_invalid");
   if (state.schemaVersion !== 1) fail("ledger_schema_invalid");
@@ -56,7 +103,8 @@ function validateStateShape(state) {
   id(state.runId, "ledger_run_id_invalid");
   if (!SHA1_RE.test(state.approvedCommitSha ?? "")) fail("ledger_commit_sha_invalid");
   exactInt(state.createdAtMs, "ledger_created_at_invalid", 1);
-  exactInt(state.expiresAtMs, "ledger_expires_at_invalid", 1);
+  exactInt(state.expiresAtMs, "ledger_expires_at_invalid", state.createdAtMs + 1);
+  if (state.expiresAtMs - state.createdAtMs > MAX_AUTHORIZATION_LIFETIME_MS) fail("ledger_lifetime_invalid");
   exactInt(state.maxRequests, "ledger_max_requests_invalid", 1, HARD_MAX_REQUESTS);
   exactInt(state.requestsUsed, "ledger_requests_used_invalid", 0, state.maxRequests);
   exactInt(state.minStartIntervalMs, "ledger_pacing_invalid", MIN_PACING_MS, MAX_PACING_MS);
@@ -64,12 +112,41 @@ function validateStateShape(state) {
   if (state.lastPhysicalStartMs !== null) exactInt(state.lastPhysicalStartMs, "ledger_last_start_invalid", state.createdAtMs);
   if (state.terminalAtMs !== null) exactInt(state.terminalAtMs, "ledger_terminal_at_invalid", state.createdAtMs);
   if (state.terminalReason !== null) id(state.terminalReason, "ledger_terminal_reason_invalid");
+  if (state.state === "active" && (state.terminalAtMs !== null || state.terminalReason !== null)) fail("ledger_active_terminal_metadata_invalid");
+  if (state.state !== "active" && (state.terminalAtMs === null || state.terminalReason === null)) fail("ledger_terminal_metadata_missing");
+  if (state.state === "consumed" && state.requestsUsed !== state.maxRequests) fail("ledger_consumed_budget_mismatch");
+
   if (!state.reservations || typeof state.reservations !== "object" || Array.isArray(state.reservations)) fail("ledger_reservations_invalid");
   uniqueStrings(state.usedRequestIds, "ledger_request_ids_invalid");
-  uniqueStrings(state.usedRequestDigests, "ledger_request_digests_invalid");
+  if (!Array.isArray(state.usedRequestDigests) || state.usedRequestDigests.some((value) => !SHA256_RE.test(value))) fail("ledger_request_digests_invalid");
+  if (new Set(state.usedRequestDigests).size !== state.usedRequestDigests.length) fail("ledger_request_digests_invalid");
   uniqueStrings(state.usedNonces, "ledger_nonces_invalid");
   uniqueStrings(state.usedEvidenceIds, "ledger_evidence_ids_invalid");
-  if (state.requestsUsed !== Object.keys(state.reservations).length) fail("ledger_reservation_count_mismatch");
+
+  const reservations = Object.entries(state.reservations);
+  if (state.requestsUsed !== reservations.length) fail("ledger_reservation_count_mismatch");
+  const requestIds = [];
+  const requestDigests = [];
+  const nonces = [];
+  const evidenceIds = [];
+  let maxPhysicalStart = null;
+  for (const [key, reservation] of reservations) {
+    validatePersistedReservation(key, reservation, state);
+    requestIds.push(reservation.requestId);
+    requestDigests.push(reservation.requestDigest);
+    nonces.push(reservation.nonce);
+    if (reservation.evidence) evidenceIds.push(reservation.evidence.evidenceId);
+    if (maxPhysicalStart === null || reservation.physicalStartMs > maxPhysicalStart) maxPhysicalStart = reservation.physicalStartMs;
+  }
+  if (new Set(requestIds).size !== requestIds.length) fail("ledger_duplicate_persisted_request_id");
+  if (new Set(requestDigests).size !== requestDigests.length) fail("ledger_duplicate_persisted_request_digest");
+  if (new Set(nonces).size !== nonces.length) fail("ledger_duplicate_persisted_nonce");
+  if (new Set(evidenceIds).size !== evidenceIds.length) fail("ledger_duplicate_persisted_evidence_id");
+  if (!sameSet(state.usedRequestIds, requestIds)) fail("ledger_request_id_index_mismatch");
+  if (!sameSet(state.usedRequestDigests, requestDigests)) fail("ledger_request_digest_index_mismatch");
+  if (!sameSet(state.usedNonces, nonces)) fail("ledger_nonce_index_mismatch");
+  if (!sameSet(state.usedEvidenceIds, evidenceIds)) fail("ledger_evidence_index_mismatch");
+  if (maxPhysicalStart !== state.lastPhysicalStartMs) fail("ledger_last_start_mismatch");
   return state;
 }
 
@@ -111,14 +188,13 @@ export function createAuthorizationState(config) {
 }
 
 function maybeExpire(state, nowMs) {
-  if (state.state === "active" && nowMs >= state.expiresAtMs) {
-    const next = cloneState(state);
+  const next = cloneState(state);
+  if (next.state === "active" && nowMs >= next.expiresAtMs) {
     next.state = "expired";
     next.terminalAtMs = nowMs;
     next.terminalReason = "authorization_expired";
-    return next;
   }
-  return cloneState(state);
+  return next;
 }
 
 function assertActiveContext(state, request) {
@@ -146,12 +222,32 @@ function validateReservationRequest(request) {
   return normalized;
 }
 
+function reservationMatches(reservation, request) {
+  return reservation.reservationId === request.reservationId
+    && reservation.requestId === request.requestId
+    && reservation.requestDigest === request.requestDigest
+    && reservation.nonce === request.nonce
+    && reservation.traversalRole === request.traversalRole
+    && reservation.traversalId === request.traversalId
+    && reservation.partitionId === request.partitionId;
+}
+
 export function reserveRequest(stateInput, requestInput, nowInput) {
   validateStateShape(stateInput);
   const nowMs = exactInt(nowInput, "reserve_now_invalid", 1);
   const request = validateReservationRequest(requestInput);
   let state = maybeExpire(stateInput, nowMs);
   assertActiveContext(state, request);
+
+  const existing = state.reservations[request.reservationId];
+  if (existing) {
+    if (!reservationMatches(existing, request)) fail("reservation_replay_conflict");
+    return Object.freeze({
+      decision: "REPLAY",
+      reservation: Object.freeze({ ...existing, evidence: existing.evidence ? Object.freeze({ ...existing.evidence }) : null }),
+      state: freezeState(state),
+    });
+  }
 
   if (state.state !== "active") {
     return Object.freeze({ decision: "DENY", reason: `authorization_${state.state}`, state: freezeState(state) });
@@ -162,7 +258,6 @@ export function reserveRequest(stateInput, requestInput, nowInput) {
     state.terminalReason = "request_budget_consumed";
     return Object.freeze({ decision: "DENY", reason: "request_budget_consumed", state: freezeState(state) });
   }
-  if (Object.hasOwn(state.reservations, request.reservationId)) fail("duplicate_reservation_id");
   if (state.usedRequestIds.includes(request.requestId)) fail("duplicate_request_id");
   if (state.usedRequestDigests.includes(request.requestDigest)) fail("duplicate_request_digest");
   if (state.usedNonces.includes(request.nonce)) fail("duplicate_nonce");
@@ -212,17 +307,6 @@ export function reserveRequest(stateInput, requestInput, nowInput) {
   });
 }
 
-function validateEvidence(evidence) {
-  const normalized = {
-    evidenceId: id(evidence?.evidenceId, "evidence_id_invalid"),
-    rawResponseSha256: evidence?.rawResponseSha256,
-    responseStatus: exactInt(evidence?.responseStatus, "response_status_invalid", 100, 599),
-    responseBodyBytes: exactInt(evidence?.responseBodyBytes, "response_body_bytes_invalid", 0),
-  };
-  if (!SHA256_RE.test(normalized.rawResponseSha256 ?? "")) fail("raw_response_sha256_invalid");
-  return normalized;
-}
-
 function evidenceEquals(left, right) {
   return left?.evidenceId === right.evidenceId
     && left?.rawResponseSha256 === right.rawResponseSha256
@@ -241,9 +325,7 @@ export function completeReservation(stateInput, reservationIdInput, evidenceInpu
   if (nowMs < reservation.physicalStartMs) fail("completion_precedes_start");
 
   if (reservation.status === "completed") {
-    if (!evidenceEquals(reservation.evidence, evidence) || reservation.completedAtMs !== nowMs) {
-      fail("reservation_completion_conflict");
-    }
+    if (!evidenceEquals(reservation.evidence, evidence)) fail("reservation_completion_conflict");
     return freezeState(state);
   }
   if (reservation.status !== "reserved") fail("reservation_not_completable");
@@ -266,9 +348,7 @@ export function failReservation(stateInput, reservationIdInput, reasonInput, now
   if (!reservation) fail("reservation_not_found");
   if (nowMs < reservation.physicalStartMs) fail("failure_precedes_start");
   if (reservation.status === "failed") {
-    if (reservation.failureReason !== reason || reservation.completedAtMs !== nowMs) {
-      fail("reservation_failure_conflict");
-    }
+    if (reservation.failureReason !== reason) fail("reservation_failure_conflict");
     return freezeState(state);
   }
   if (reservation.status !== "reserved") fail("reservation_not_failable");
@@ -288,7 +368,7 @@ export function rejectAuthorization(stateInput, reasonInput, nowInput) {
   const nowMs = exactInt(nowInput, "reject_now_invalid", 1);
   const state = maybeExpire(stateInput, nowMs);
   if (state.state === "rejected") {
-    if (state.terminalReason !== reason || state.terminalAtMs !== nowMs) fail("authorization_rejection_conflict");
+    if (state.terminalReason !== reason) fail("authorization_rejection_conflict");
     return freezeState(state);
   }
   if (TERMINAL_STATES.has(state.state)) fail("authorization_already_terminal");
