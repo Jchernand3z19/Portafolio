@@ -12,7 +12,7 @@ Base histórica originalmente auditada de `main`:
 
 Ese SHA es evidencia histórica estable, no una declaración del HEAD mutable actual. El HEAD de `main` debe verificarse directamente en GitHub; no se fija como “SHA actual” dentro de este documento porque el propio merge que modifica esta fuente cambiaría ese valor.
 
-Desde esa base se integraron las revisiones de canonicalización/CI/frontera comercial, coherencia de evidencia `current`, canonicalización de `changed_fields` y sincronización documental. Esta revisión endurece además la identidad de replay y la transición `running -> terminal`.
+Desde esa base se integraron las revisiones de canonicalización y CI, frontera current/history, coherencia de evidencia `current`, canonicalización de `changed_fields`, replay terminal, identidad determinista, snapshots defensivos de evidencia y pricing histórico fail-closed.
 
 Evidencia productiva verificada:
 
@@ -25,32 +25,41 @@ Evidencia productiva verificada:
 - SPS technical context sigue `UNCONFIRMED`;
 - `trusted_collector_provenance_unavailable` sigue cerrando la aceptación canónica;
 - `live_safety.py` sigue siendo un modelo offline, no enforcement físico productivo;
-- no se realizó tráfico live durante la auditoría ni durante los cambios derivados de ella.
+- no se realizó tráfico live durante la auditoría ni durante los cambios derivados de ella;
+- no existe backend comercial productivo conectado.
 
 Validaciones verificadas:
 
 - baseline previo integrado por PR #7: **770/770** pruebas;
-- PR #19 — canonicalización, CI y frontera comercial: **796/796** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14;
-- PR #20 — coherencia de evidencia `current` y canonicalización de `changed_fields`: **798/798** pruebas, más `compileall`;
-- esta revisión — replay ligado a evidencia persistible/auditable y `running` transitorio: **801/801** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14.
+- PR #19 — canonicalización, CI y frontera comercial: **796/796** + `compileall`;
+- PR #20 — coherencia de evidencia `current` y `changed_fields`: **798/798** + `compileall`;
+- PR #22 — replay persistible y `running` transitorio: **801/801** + `compileall`;
+- PR #23 — continuidad de identidad de oferta: **810/810** + `compileall`;
+- PR #24 — IDs deterministas en frontera comercial: **808/808** + `compileall`;
+- PR #25 — snapshots defensivos de evidencia: **812/812** + `compileall`;
+- PR #26 — reducción real contra histórico aceptado: **844/844** + `compileall`;
+- PR #27 — integridad fail-closed de evidencia para pricing: **850/850** + `compileall`, GitHub Actions, Python 3.12.14.
+
+Las variaciones de conteo entre revisiones corresponden a adición o reemplazo de regresiones, no a relajación de gates.
 
 ## Estado operativo resumido
 
 | Área | Estado | Evidencia / consecuencia |
 |---|---|---|
 | `RawProduct` / `NormalizedOffer` / `ValidatedOffer` | DONE | Contratos existentes preservados sin cambios. |
-| Identificadores y `state_hash` | DONE | Deterministas y cubiertos por tests. |
+| Identificadores y `state_hash` | DONE | Deterministas; revalidados también en la frontera comercial y pricing. |
 | Extractor / GraphQL VTEX de La Colonia | DONE_OFFLINE | Fixtures/tests; transporte externo niega red por defecto. |
 | Identidad VTEX | DONE_OFFLINE | Producto `productId -> productReference -> linkText`; SKU `itemId`. |
-| Particiones / facets / cobertura / reconciliación | DONE_OFFLINE_FAIL_CLOSED | Amplia cobertura adversarial; no concede aceptación autoritativa sin provenance. |
+| Particiones / facets / cobertura / reconciliación | DONE_OFFLINE_FAIL_CLOSED | Cobertura adversarial; no concede aceptación autoritativa sin provenance. |
 | Runner / CLI / métricas / diagnósticos | DONE_OFFLINE | No habilitan actualización comercial por sí solos. |
 | SPS technical context | BLOCKED_LIVE | `UNCONFIRMED`; requiere observación live autorizada. |
 | Autorización live | BLOCKED_HUMAN_DECISION | Ninguna activa. |
 | Workflows live | DONE_FAIL_CLOSED | Jobs capaces de live permanecen `if: false`. |
 | Workflow supply chain | DONE_OFFLINE | Actions por SHA, permisos mínimos, checkout inmutable. |
-| CI | DONE_VERSIONED | Pull requests, manual y pushes a `main`; auditoría estática impide perder esa cobertura silenciosamente. |
-| Frontera current/history | DONE_OFFLINE | Atómica/idempotente; `current` usa la última evidencia aceptada y el replay terminal queda ligado a evidencia persistible. |
-| Backend comercial productivo | BLOCKED_DEPENDENCIES | No se conecta mientras la aceptación autoritativa/productive readiness siga abierta. |
+| CI | DONE_VERSIONED | PR, manual y pushes a `main`; auditoría estática protege esta cobertura. |
+| Frontera current/history | DONE_OFFLINE | Atómica/idempotente, IDs deterministas, evidencia defensiva y replay terminal ligado. |
+| Pricing histórico | DONE_OFFLINE | Reducción real contra periodo aceptado anterior; reconciliación fail-closed. |
+| Backend comercial productivo | BLOCKED_DEPENDENCIES | No se conecta mientras aceptación/enforcement productivos sigan abiertos. |
 | GATE-17 | BLOCKED_EXTERNAL | `FAIL_PRODUCTIVE_EVIDENCE`: `main` sin protección/ruleset. |
 | Trusted collector físico | BLOCKED_EXTERNAL | No existe observer productivo independiente ligado a requests físicos. |
 | Egress/claim/fencing productivo | BLOCKED_EXTERNAL | El modelo offline no reemplaza enforcement real. |
@@ -68,6 +77,7 @@ EXTRACCIÓN CONFIABLE
 -> ESTADO ACTUAL
 -> HISTÓRICO
 -> DETECCIÓN DE CAMBIOS
+-> DERIVACIONES DE PRECIO
 -> AUTOMATIZACIÓN
 -> ANALÍTICA
 -> MÁS SUPERMERCADOS
@@ -85,36 +95,65 @@ Regla histórica vigente:
 
 - `reported_regular_price` es un dato informado por el supermercado;
 - no demuestra ahorro real;
-- la reducción real se compara contra el último `current_price` de una ejecución histórica aceptada;
-- `rejected`, `failed` y `abandoned` no alteran current/history.
+- la reducción real se compara contra el `current_price` del periodo histórico aceptado inmediatamente anterior;
+- `reported_regular_price` e `is_promotion` nunca participan en la fórmula de ahorro real;
+- si falta precio actual o baseline no se inventa una reducción;
+- una igualdad o subida produce reducción cero;
+- `rejected`, `failed` y `abandoned` no alteran current/history y por tanto no crean baselines comerciales falsos.
 
 ## Frontera comercial offline
 
-`src/precios_supermercados/commercial_state.py` implementa la mínima máquina de transición desacoplada del backend.
+`src/precios_supermercados/commercial_state.py` implementa la máquina de transición desacoplada del backend.
 
 Propiedades verificadas:
 
 - sólo `success`/`warning` con `catalog_accepted = true` permiten mutación;
 - `running`, `rejected`, `failed`, `abandoned` y `catalog_accepted = false` son no-op comercial;
-- `running` es transitorio y no consume el fingerprint terminal de `scrape_run_id`, por lo que puede evolucionar al estado final del mismo run;
-- decisiones terminales no comerciales sí consumen la identidad del run y no pueden reescribirse después como una decisión distinta;
+- `running` es transitorio y no consume el fingerprint terminal de `scrape_run_id`;
+- decisiones terminales no comerciales sí consumen la identidad del run y no pueden reescribirse como otra decisión;
+- `source_product_id` y `offer_id` se recalculan con los generadores canónicos antes de aplicar;
+- una identidad lógica de oferta no puede pertenecer a dos `offer_id` ni migrar de ubicación/producto fuente;
+- un producto fuente mantiene una llave fuente estable incluso entre ubicaciones;
+- la moneda permanece estable para una oferta existente; `product_id` puede cambiar por corrección legítima de mapeo normalizado;
 - el `state_hash` se recalcula antes de aplicar;
 - la cronología exige `observed_at_utc <= validated_at_utc <= decided_at_utc`;
-- el payload de un run no admite `offer_id` duplicado ni ofertas de otro `scrape_run_id`;
+- el payload no admite `offer_id` duplicado ni ofertas de otro `scrape_run_id`;
 - el replay exacto es idempotente;
-- el fingerprint terminal liga decisión, identidad de oferta, `state_hash`, timestamps, `source_url`, versiones, trazabilidad fuente explícita, ubicación, review/pending y `quality_events`;
+- el fingerprint terminal liga decisión, identidad, `state_hash`, timestamps, `source_url`, versiones, trazabilidad explícita, ubicación, review/pending y `quality_events`;
 - `raw_values` no forma parte del fingerprint terminal porque es un contenedor crudo arbitrario y no la identidad persistible definida por esta frontera;
+- `raw_values` sí se copia recursivamente al almacenar y al devolver current/history para impedir mutaciones por referencia;
+- evidencia no copiable falla cerrado antes del commit;
 - reutilizar un `scrape_run_id` terminal con otra decisión o evidencia persistible/auditable falla cerrado;
 - el mismo hash confirma el periodo abierto sin crear otro;
-- cuando el hash no cambia, `current.validated_offer` se refresca a la última evidencia aceptada y queda coherente con `last_scrape_run_id`;
+- cuando el hash no cambia, `current.validated_offer` se refresca a la última evidencia aceptada;
 - el periodo histórico abierto conserva la evidencia que lo abrió y sólo avanza `last_confirmed_by_scrape_run_id`/`last_observed_at_utc`;
-- `changed_fields` usa la misma canonicalización textual que `generate_state_hash`, por lo que cambios cosméticos de Unicode/espacios/mayúsculas no se clasifican como cambios reales;
+- `changed_fields` usa la misma canonicalización textual que `generate_state_hash`;
 - un cambio exige tiempo monotónico, cierra un periodo y abre exactamente uno;
 - `reported_regular_price` puede abrir `REGULAR_PRICE` sin confundirse con cambio de `current_price`;
 - la aplicación es atómica: un error posterior no deja mutaciones parciales;
-- una oferta ausente de un payload posterior **no** se infiere como `not_listed`, `out_of_stock` ni eliminación; esos estados requieren evidencia explícita.
+- una oferta ausente de un payload posterior **no** se infiere como `not_listed`, `out_of_stock` ni eliminación.
 
 Esta capa **no concede autoridad live**. Su `catalog_accepted` deberá provenir, en producción, del collector autoritativo. Mientras esa provenance no exista, no debe conectarse a un backend comercial productivo.
+
+## Derivación de reducción real
+
+`src/precios_supermercados/commercial_pricing.py` es una capa pura y backend-neutral sobre `CurrentCommercialOffer` y `OfferHistoryPeriod`.
+
+Antes de calcular revalida fail-closed:
+
+- `source_product_id` y `offer_id` deterministas;
+- `state_hash` contra el contenido de la oferta;
+- `validated_at_utc >= observed_at_utc`;
+- mismo `offer_id` y moneda a lo largo de la cadena;
+- evidencia de apertura coherente con `valid_from_utc` y `opened_by_scrape_run_id`;
+- un único periodo abierto al final;
+- periodos cerrados con intervalo positivo y `closed_by_scrape_run_id` presente;
+- periodo abierto sin run de cierre;
+- periodos contiguos;
+- `closed_by_scrape_run_id` del periodo anterior igual al `opened_by_scrape_run_id` del siguiente;
+- reconciliación entre current y periodo abierto para hash, apertura, última observación y último run confirmado.
+
+Una incoherencia produce `CommercialPricingError`; no se devuelve una cifra potencialmente falsa.
 
 ## La Colonia — identidad y completitud
 
@@ -159,9 +198,9 @@ Comentarios, PR comments, issue comments, archivos de comando, markers, logs y a
 
 `live_safety.py` es un modelo linealizable en memoria y no infraestructura productiva. Modela Request/Grant/Reservation, consumo one-shot, exclusión, deadlines, pacing, cierre/fencing y evidencia sellada para tests adversariales.
 
-El presupuesto canónico offline actual es más estricto que el máximo histórico en retries: `max_retries = 0`. El pacing mínimo sigue 1.5 s.
+El presupuesto canónico offline actual usa `max_retries = 0`. El pacing mínimo sigue 1.5 s.
 
-El modelo DNS/TLS niega comportamientos auxiliares conocidos, pero no constituye firewall/egress real. `IndependentFencingObserver` es explícitamente un simulador offline; no cierra GATE-17 ni GATE-06 productivo.
+El modelo DNS/TLS niega comportamientos auxiliares conocidos, pero no constituye firewall/egress real. `IndependentFencingObserver` es un simulador offline; no cierra GATE-17 ni GATE-06 productivo.
 
 ## Workflows y CI
 
@@ -199,7 +238,7 @@ El modelo lógico sigue definiendo:
 - `fact_offer_history`;
 - `fact_quality_events`.
 
-La lógica current/history ya existe offline; **el backend productivo no está seleccionado ni conectado**. No se introduce Sheets, BigQuery, SQLite o PostgreSQL sólo para avanzar artificialmente.
+La lógica current/history y pricing ya existe offline; **el backend productivo no está seleccionado ni conectado**. No se introduce Sheets, BigQuery, SQLite o PostgreSQL sólo para avanzar artificialmente.
 
 Conectar almacenamiento real queda bloqueado hasta que `catalog_accepted` pueda provenir de una frontera autoritativa y GATE-17/productive enforcement estén resueltos. Esto evita construir una ruta donde un booleano caller-controlled pueda actualizar precios comerciales.
 
@@ -242,13 +281,17 @@ Ningún `PASS_OFFLINE_MODEL` autoriza live.
 - observabilidad/dispatcher sin autoridad;
 - supply-chain/workflow audit;
 - CI en PR + `main`;
-- frontera comercial current/history atómica e idempotente;
+- frontera commercial current/history atómica e idempotente;
+- continuidad y determinismo de identidad de oferta/producto fuente;
+- snapshots defensivos de evidencia mutable;
 - `current` coherente con la última evidencia aceptada del mismo estado;
 - `changed_fields` alineado con la canonicalización del `state_hash`;
 - fingerprint terminal ligado a evidencia persistible/auditable;
 - transición `running -> terminal` sin consumir anticipadamente `scrape_run_id`;
-- pruebas de replay, mismo hash, cronología, cambio de precio, precio regular reportado, estados no aceptados, atomicidad, ausencia sin inferencia y counterexamples de auditoría;
-- canonicalización de README/AGENTS/arquitectura.
+- derivación de reducción real contra histórico aceptado;
+- reconciliación fail-closed de current/history antes de pricing;
+- pruebas adversariales de replay, cronología, identidad, cambios, snapshots, pricing, ausencia sin inferencia y auditoría de workflows;
+- canonicalización de README/AGENTS/arquitectura/decisiones.
 
 ### STALE / OBSOLETE
 
