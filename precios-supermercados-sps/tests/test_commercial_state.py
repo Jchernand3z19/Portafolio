@@ -21,7 +21,11 @@ from precios_supermercados.enums import (
     RunStatus,
     SourceKeyType,
 )
-from precios_supermercados.identifiers import generate_state_hash
+from precios_supermercados.identifiers import (
+    generate_offer_id,
+    generate_source_product_id,
+    generate_state_hash,
+)
 from precios_supermercados.models import NormalizedOffer, ValidatedOffer
 
 
@@ -40,14 +44,23 @@ def make_validated(
     brand: str = "Marca Demo",
     category: str = "Abarrotes",
 ) -> ValidatedOffer:
+    supermarket_id = "la-colonia"
+    location_id = "unknown"
+    source_key = f"SKU-{suffix}"
+    source_product_id = generate_source_product_id(
+        supermarket_id,
+        SourceKeyType.SKU,
+        source_key,
+    )
+    offer_id = generate_offer_id(supermarket_id, location_id, source_product_id)
     offer = NormalizedOffer(
-        supermarket_id="la-colonia",
-        location_id="unknown",
-        source_product_id=f"sp_{suffix}",
+        supermarket_id=supermarket_id,
+        location_id=location_id,
+        source_product_id=source_product_id,
         source_key_type=SourceKeyType.SKU,
-        source_key=f"SKU-{suffix}",
+        source_key=source_key,
         product_id=f"prod_{suffix}",
-        offer_id=f"of_{suffix}",
+        offer_id=offer_id,
         source_name=f"Producto {suffix}",
         product_url=f"https://example.invalid/producto-{suffix}",
         normalized_name=f"producto {suffix}",
@@ -338,7 +351,7 @@ def test_run_application_is_atomic_when_later_offer_is_invalid_by_chronology():
             [new_offer, invalid_existing],
         )
 
-    assert store.current("of_002") is None
+    assert store.current(new_offer.offer.offer_id) is None
     assert store.current_count == 1
     assert store.applied_run_count == 1
 

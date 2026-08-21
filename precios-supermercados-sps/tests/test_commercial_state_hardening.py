@@ -19,7 +19,11 @@ from precios_supermercados.enums import (
     RunStatus,
     SourceKeyType,
 )
-from precios_supermercados.identifiers import generate_state_hash
+from precios_supermercados.identifiers import (
+    generate_offer_id,
+    generate_source_product_id,
+    generate_state_hash,
+)
 from precios_supermercados.models import NormalizedOffer, ValidatedOffer
 
 
@@ -34,14 +38,23 @@ def validated(
     price: str | None = "30",
     availability: AvailabilityStatus = AvailabilityStatus.IN_STOCK,
 ) -> ValidatedOffer:
+    supermarket_id = "la-colonia"
+    location_id = "unknown"
+    source_key = f"SKU-{suffix}"
+    source_product_id = generate_source_product_id(
+        supermarket_id,
+        SourceKeyType.SKU,
+        source_key,
+    )
+    offer_id = generate_offer_id(supermarket_id, location_id, source_product_id)
     offer = NormalizedOffer(
-        supermarket_id="la-colonia",
-        location_id="unknown",
-        source_product_id=f"sp_{suffix}",
+        supermarket_id=supermarket_id,
+        location_id=location_id,
+        source_product_id=source_product_id,
         source_key_type=SourceKeyType.SKU,
-        source_key=f"SKU-{suffix}",
+        source_key=source_key,
         product_id=f"prod_{suffix}",
-        offer_id=f"of_{suffix}",
+        offer_id=offer_id,
         source_name=f"Producto {suffix}",
         product_url=f"https://example.invalid/{suffix}",
         normalized_name=f"producto {suffix}",
@@ -93,8 +106,8 @@ def test_replay_same_state_with_different_observation_timestamp_is_conflict():
             [forged_replay],
         )
 
-    assert store.current("of_001").last_observed_at_utc == T0
-    assert len(store.history("of_001")) == 1
+    assert store.current(first.offer.offer_id).last_observed_at_utc == T0
+    assert len(store.history(first.offer.offer_id)) == 1
 
 
 def test_replay_same_payload_with_different_decision_timestamp_is_conflict():
@@ -170,7 +183,7 @@ def test_running_status_does_not_consume_run_id_before_terminal_success():
     assert final_result.current_created == 1
     assert final_result.replayed is False
     assert store.applied_run_count == 1
-    assert store.current("of_001") is not None
+    assert store.current(item.offer.offer_id) is not None
 
 
 def test_offer_omitted_from_later_payload_is_not_inferred_as_deleted_or_out_of_stock():
@@ -186,11 +199,11 @@ def test_offer_omitted_from_later_payload_is_not_inferred_as_deleted_or_out_of_s
     second_a = validated("run-2", "001", t1)
     store.apply_run(accepted("run-2", t1 + timedelta(hours=1)), [second_a])
 
-    untouched = store.current("of_002")
+    untouched = store.current(first_b.offer.offer_id)
     assert untouched is not None
     assert untouched.validated_offer.offer.availability is AvailabilityStatus.IN_STOCK
     assert untouched.last_scrape_run_id == "run-1"
-    assert len(store.history("of_002")) == 1
+    assert len(store.history(first_b.offer.offer_id)) == 1
 
 
 def test_explicit_out_of_stock_observation_can_change_state_without_price():
@@ -208,7 +221,7 @@ def test_explicit_out_of_stock_observation_can_change_state_without_price():
     )
     store.apply_run(accepted("run-2", t1 + timedelta(hours=1)), [explicit])
 
-    current = store.current("of_001")
+    current = store.current(initial.offer.offer_id)
     assert current is not None
     assert current.validated_offer.offer.availability is AvailabilityStatus.OUT_OF_STOCK
     assert current.validated_offer.offer.current_price is None

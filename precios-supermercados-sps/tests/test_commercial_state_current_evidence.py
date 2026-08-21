@@ -16,7 +16,11 @@ from precios_supermercados.enums import (
     RunStatus,
     SourceKeyType,
 )
-from precios_supermercados.identifiers import generate_state_hash
+from precios_supermercados.identifiers import (
+    generate_offer_id,
+    generate_source_product_id,
+    generate_state_hash,
+)
 from precios_supermercados.models import NormalizedOffer, ValidatedOffer
 
 
@@ -30,14 +34,23 @@ def _validated(
     current_price: str = "30",
     brand: str = "Marca Demo",
 ) -> ValidatedOffer:
+    supermarket_id = "la-colonia"
+    location_id = "unknown"
+    source_key = "SKU-001"
+    source_product_id = generate_source_product_id(
+        supermarket_id,
+        SourceKeyType.SKU,
+        source_key,
+    )
+    offer_id = generate_offer_id(supermarket_id, location_id, source_product_id)
     offer = NormalizedOffer(
-        supermarket_id="la-colonia",
-        location_id="unknown",
-        source_product_id="sp_001",
+        supermarket_id=supermarket_id,
+        location_id=location_id,
+        source_product_id=source_product_id,
         source_key_type=SourceKeyType.SKU,
-        source_key="SKU-001",
+        source_key=source_key,
         product_id="prod_001",
-        offer_id="of_001",
+        offer_id=offer_id,
         source_name="Producto 001",
         product_url="https://example.invalid/producto-001",
         normalized_name="producto 001",
@@ -90,7 +103,7 @@ def test_same_hash_refreshes_current_evidence_but_keeps_single_history_period():
     )
 
     assert result.current_confirmed == 1
-    current = store.current("of_001")
+    current = store.current(first.offer.offer_id)
     assert current is not None
     assert current.validated_offer == second
     assert current.last_scrape_run_id == "run-2"
@@ -98,7 +111,7 @@ def test_same_hash_refreshes_current_evidence_but_keeps_single_history_period():
     assert current.first_observed_at_utc == BASE_TIME
     assert current.last_observed_at_utc == second_time
 
-    history = store.history("of_001")
+    history = store.history(first.offer.offer_id)
     assert len(history) == 1
     assert history[0].validated_offer == first
     assert history[0].last_confirmed_by_scrape_run_id == "run-2"
@@ -122,7 +135,7 @@ def test_changed_fields_uses_same_text_canonicalization_as_state_hash():
         [second],
     )
 
-    history = store.history("of_001")
+    history = store.history(first.offer.offer_id)
     assert len(history) == 2
     assert history[1].change_type is ChangeType.PRICE
     assert history[1].changed_fields == ("current_price",)

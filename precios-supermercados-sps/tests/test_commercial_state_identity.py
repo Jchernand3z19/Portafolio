@@ -18,7 +18,11 @@ from precios_supermercados.enums import (
     RunStatus,
     SourceKeyType,
 )
-from precios_supermercados.identifiers import generate_state_hash
+from precios_supermercados.identifiers import (
+    generate_offer_id,
+    generate_source_product_id,
+    generate_state_hash,
+)
 from precios_supermercados.models import NormalizedOffer, ValidatedOffer
 
 
@@ -29,22 +33,33 @@ def _validated(
     run_id: str,
     observed_at: datetime,
     *,
-    offer_id: str = "of_001",
+    offer_id: str | None = None,
     supermarket_id: str = "la-colonia",
     location_id: str = "unknown",
-    source_product_id: str = "sp_001",
+    source_product_id: str | None = None,
     source_key: str = "SKU-001",
     product_id: str = "prod_001",
     currency: str = "HNL",
 ) -> ValidatedOffer:
+    canonical_source_product_id = generate_source_product_id(
+        supermarket_id,
+        SourceKeyType.SKU,
+        source_key,
+    )
+    effective_source_product_id = source_product_id or canonical_source_product_id
+    effective_offer_id = offer_id or generate_offer_id(
+        supermarket_id,
+        location_id,
+        effective_source_product_id,
+    )
     offer = NormalizedOffer(
         supermarket_id=supermarket_id,
         location_id=location_id,
-        source_product_id=source_product_id,
+        source_product_id=effective_source_product_id,
         source_key_type=SourceKeyType.SKU,
         source_key=source_key,
         product_id=product_id,
-        offer_id=offer_id,
+        offer_id=effective_offer_id,
         source_name="Producto 001",
         product_url="https://example.invalid/producto-001",
         normalized_name="producto 001",
@@ -84,126 +99,91 @@ def _accepted(run_id: str, when: datetime) -> CommercialRunDecision:
     )
 
 
-def test_existing_offer_id_cannot_move_to_another_location():
+def test_forged_offer_id_cannot_move_existing_offer_to_another_location():
     store = InMemoryCommercialState()
     first = _validated("run-1", T0)
     store.apply_run(_accepted("run-1", T0 + timedelta(minutes=1)), [first])
 
     t1 = T0 + timedelta(days=1)
-    moved = _validated("run-2", t1, location_id="otra-ubicacion")
+    moved = _validated(
+        "run-2",
+        t1,
+        location_id="otra-ubicacion",
+        offer_id=first.offer.offer_id,
+    )
 
-    with pytest.raises(CommercialStateError, match="identidad lógica estable"):
+    with pytest.raises(CommercialStateError, match="offer_id no es determinista"):
         store.apply_run(_accepted("run-2", t1 + timedelta(minutes=1)), [moved])
 
-    assert store.current("of_001").validated_offer == first
-    assert len(store.history("of_001")) == 1
+    assert store.current(first.offer.offer_id).validated_offer == first
+    assert len(store.history(first.offer.offer_id)) == 1
     assert store.applied_run_count == 1
 
 
-def test_existing_offer_id_cannot_change_source_product():
+def test_forged_source_product_id_is_rejected_before_commercial_mutation():
     store = InMemoryCommercialState()
-    first = _validated("run-1", T0)
-    store.apply_run(_accepted("run-1", T0 + timedelta(minutes=1)), [first])
-
-    t1 = T0 + timedelta(days=1)
-    drifted = _validated(
-        "run-2",
-        t1,
-        source_product_id="sp_999",
+    forged = _validated(
+        "run-1",
+        T0,
+        source_product_id="sp_forged",
         source_key="SKU-999",
     )
 
-    with pytest.raises(CommercialStateError, match="identidad lógica estable"):
-        store.apply_run(_accepted("run-2", t1 + timedelta(minutes=1)), [drifted])
-
-    assert store.current_count == 1
-    assert store.applied_run_count == 1
-
-
-def test_existing_source_product_cannot_change_source_key():
-    store = InMemoryCommercialState()
-    first = _validated("run-1", T0)
-    store.apply_run(_accepted("run-1", T0 + timedelta(minutes=1)), [first])
-
-    t1 = T0 + timedelta(days=1)
-    drifted_key = _validated("run-2", t1, source_key="SKU-999")
-
-    with pytest.raises(CommercialStateError, match="source_key estable"):
-        store.apply_run(
-            _accepted("run-2", t1 + timedelta(minutes=1)),
-            [drifted_key],
-        )
-
-    assert store.current("of_001").validated_offer == first
-
-
-def test_same_logical_offer_identity_cannot_gain_second_offer_id_later():
-    store = InMemoryCommercialState()
-    first = _validated("run-1", T0, offer_id="of_001")
-    store.apply_run(_accepted("run-1", T0 + timedelta(minutes=1)), [first])
-
-    t1 = T0 + timedelta(days=1)
-    duplicate_identity = _validated("run-2", t1, offer_id="of_002")
-
-    with pytest.raises(CommercialStateError, match="otro offer_id"):
-        store.apply_run(
-            _accepted("run-2", t1 + timedelta(minutes=1)),
-            [duplicate_identity],
-        )
-
-    assert store.current_count == 1
-    assert store.current("of_002") is None
-
-
-def test_same_run_rejects_duplicate_logical_identity_under_distinct_offer_ids():
-    store = InMemoryCommercialState()
-    first = _validated("run-1", T0, offer_id="of_001")
-    duplicate = _validated("run-1", T0, offer_id="of_002")
-
-    with pytest.raises(CommercialStateError, match="duplicada"):
+    with pytest.raises(CommercialStateError, match="source_product_id no es determinista"):
         store.apply_run(
             _accepted("run-1", T0 + timedelta(minutes=1)),
-            [first, duplicate],
+            [forged],
         )
 
     assert store.current_count == 0
     assert store.applied_run_count == 0
 
 
-def test_same_source_product_across_locations_must_keep_same_source_key():
+def test_existing_source_product_cannot_keep_id_while_source_key_changes():
     store = InMemoryCommercialState()
-    first = _validated(
-        "run-1",
-        T0,
-        offer_id="of_location_a",
-        location_id="location-a",
-    )
+    first = _validated("run-1", T0)
     store.apply_run(_accepted("run-1", T0 + timedelta(minutes=1)), [first])
 
     t1 = T0 + timedelta(days=1)
-    second_location = _validated(
+    drifted_key = _validated(
         "run-2",
         t1,
-        offer_id="of_location_b",
-        location_id="location-b",
         source_key="SKU-999",
+        source_product_id=first.offer.source_product_id,
+        offer_id=first.offer.offer_id,
     )
 
-    with pytest.raises(CommercialStateError, match="source_key estable"):
+    with pytest.raises(CommercialStateError, match="source_product_id no es determinista"):
         store.apply_run(
             _accepted("run-2", t1 + timedelta(minutes=1)),
-            [second_location],
+            [drifted_key],
+        )
+
+    assert store.current(first.offer.offer_id).validated_offer == first
+
+
+def test_same_logical_offer_identity_cannot_gain_forged_second_offer_id():
+    store = InMemoryCommercialState()
+    first = _validated("run-1", T0)
+    store.apply_run(_accepted("run-1", T0 + timedelta(minutes=1)), [first])
+
+    t1 = T0 + timedelta(days=1)
+    duplicate_identity = _validated("run-2", t1, offer_id="of_forged")
+
+    with pytest.raises(CommercialStateError, match="offer_id no es determinista"):
+        store.apply_run(
+            _accepted("run-2", t1 + timedelta(minutes=1)),
+            [duplicate_identity],
         )
 
     assert store.current_count == 1
 
 
-def test_same_source_product_across_locations_is_allowed_with_same_source_key():
+def test_same_source_product_across_locations_is_allowed_with_canonical_offer_ids():
     store = InMemoryCommercialState()
     first = _validated(
         "run-1",
         T0,
-        offer_id="of_location_a",
         location_id="location-a",
     )
     store.apply_run(_accepted("run-1", T0 + timedelta(minutes=1)), [first])
@@ -212,7 +192,6 @@ def test_same_source_product_across_locations_is_allowed_with_same_source_key():
     second_location = _validated(
         "run-2",
         t1,
-        offer_id="of_location_b",
         location_id="location-b",
     )
     result = store.apply_run(
@@ -220,6 +199,8 @@ def test_same_source_product_across_locations_is_allowed_with_same_source_key():
         [second_location],
     )
 
+    assert first.offer.source_product_id == second_location.offer.source_product_id
+    assert first.offer.offer_id != second_location.offer.offer_id
     assert result.current_created == 1
     assert store.current_count == 2
 
@@ -237,10 +218,10 @@ def test_product_mapping_can_change_without_changing_source_identity():
     )
 
     assert result.current_confirmed == 1
-    current = store.current("of_001")
+    current = store.current(first.offer.offer_id)
     assert current is not None
     assert current.validated_offer.offer.product_id == "prod_reviewed"
-    assert len(store.history("of_001")) == 1
+    assert len(store.history(first.offer.offer_id)) == 1
 
 
 def test_currency_is_stable_for_the_same_offer_identity():
@@ -257,4 +238,4 @@ def test_currency_is_stable_for_the_same_offer_identity():
             [changed_currency],
         )
 
-    assert store.current("of_001").validated_offer.offer.currency == "HNL"
+    assert store.current(first.offer.offer_id).validated_offer.offer.currency == "HNL"
