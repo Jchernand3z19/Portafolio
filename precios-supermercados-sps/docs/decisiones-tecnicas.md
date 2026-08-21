@@ -92,9 +92,9 @@ No se modifica Mundial 2026, `js/main.js`, el registro de proyectos ni la págin
 
 Una oferta ausente de un payload posterior no se interpreta como eliminación, `not_listed` ni `out_of_stock`; esos estados requieren evidencia explícita. El booleano `catalog_accepted` de esta capa no concede autoridad live: en producción debe provenir de un collector autoritativo con provenance independiente.
 
-## DT-023 — CI también valida `main`
+## DT-023 — CI en PR y defensa en profundidad sobre `main`
 
-La suite offline corre en pull requests, manualmente y en pushes a `main` que afecten `precios-supermercados-sps/**` o `.github/workflows/**`. Esto reduce el riesgo de falso verde mientras GATE-17 siga abierto y `main` no tenga protección productiva. La auditoría de workflows prueba que esta cobertura no desaparezca silenciosamente.
+La suite offline corre en pull requests, manualmente y en pushes a `main` que afecten `precios-supermercados-sps/**` o `.github/workflows/**`. El ruleset productivo exige el check `tests` antes de fusionar un PR a `main`; la ejecución adicional sobre push permanece como defensa en profundidad. La auditoría de workflows prueba que esta cobertura no desaparezca silenciosamente.
 
 ## DT-024 — Replay terminal liga evidencia persistible
 
@@ -129,3 +129,11 @@ Sin precio actual o baseline no se inventa reducción. Una igualdad o subida pro
 Una derivación de precio no asume que un backend futuro conserve intactos los wrappers recibidos. Antes de calcular se revalidan IDs deterministas, `state_hash`, cronología, moneda, `offer_id`, apertura, última observación, contigüidad y la existencia de un único periodo abierto al final.
 
 Todo periodo cerrado debe registrar `closed_by_scrape_run_id`; un periodo abierto no puede tener run de cierre. El run que cierra un periodo debe ser el mismo que abre el siguiente periodo contiguo. Las incoherencias impiden calcular ahorro y producen `CommercialPricingError` en vez de una cifra potencialmente falsa.
+
+## DT-030 — `main` protegido con enforcement funcional verificable
+
+GATE-17 no se considera cerrado sólo porque exista un ruleset configurado. La evidencia productiva exige observar a GitHub bloquear merges reales.
+
+En PR #29, con `main` reportado como `protected: true`, GitHub rechazó un intento de merge mientras `tests` estaba en progreso (`Required status check "tests" is in progress.`). Después de que el check terminó en `success`, un segundo intento fue rechazado por una conversación de review sin resolver (`A conversation must be resolved before this pull request can be merged.`). Tras resolver el hilo y volver a validar el head final, el merge fue permitido.
+
+Por esa evidencia, `GATE-17 = PASS_PRODUCTIVE_EVIDENCE`. Esto protege la gobernanza de `main`, pero no concede autoridad live ni sustituye el trusted collector o el enforcement físico de egress/claim/fencing.
