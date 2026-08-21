@@ -1,4 +1,4 @@
-import { DurableObject } from "cloudflare:workers";
+import { DurableObject, tracing } from "cloudflare:workers";
 
 import { EdgePolicyError } from "./core.mjs";
 import { DurableAuthorizationStore } from "./durable-store.mjs";
@@ -7,6 +7,10 @@ import { assertGitHubRunFence } from "./github-run-fence.mjs";
 import { runSupervisedExecuteOperation } from "./gateway-supervisor.mjs";
 import { createJwksFetchGate } from "./jwks-fetch-gate.mjs";
 import { validateReceiptKeyPair } from "./receipt-key-preflight.mjs";
+import {
+  annotateExecutionSpan,
+  ORIGIN_EXECUTION_SPAN_NAME,
+} from "./trace-context.mjs";
 import {
   createGitHubOidcAuthenticator,
   createPublicWorkerHandler,
@@ -60,13 +64,16 @@ export class AuthorizationGateway extends DurableObject {
       this.assertNamedAuthorization(input?.execution?.requestContext?.authorizationId);
       assertGitHubRunFence(input?.claims, input?.execution?.requestContext?.runId);
       await this.ensureKeyPairReady();
-      return await runSupervisedExecuteOperation(
-        this.store,
-        input.execution,
-        input.claims,
-        this.env,
-        { fetchOrigin: (...args) => fetch(...args) },
-      );
+      return await tracing.enterSpan(ORIGIN_EXECUTION_SPAN_NAME, async (span) => {
+        annotateExecutionSpan(span, input.execution);
+        return runSupervisedExecuteOperation(
+          this.store,
+          input.execution,
+          input.claims,
+          this.env,
+          { fetchOrigin: (...args) => fetch(...args) },
+        );
+      });
     } catch (error) {
       return durableErrorEnvelope(error);
     }
