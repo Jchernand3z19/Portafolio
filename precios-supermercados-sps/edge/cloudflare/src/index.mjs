@@ -2,18 +2,24 @@ import { DurableObject } from "cloudflare:workers";
 
 import { EdgePolicyError } from "./core.mjs";
 import { DurableAuthorizationStore } from "./durable-store.mjs";
+import { assertPublicFrontDoor } from "./front-door.mjs";
 import { assertGitHubRunFence } from "./github-run-fence.mjs";
 import { runSupervisedExecuteOperation } from "./gateway-supervisor.mjs";
+import { createJwksFetchGate } from "./jwks-fetch-gate.mjs";
 import { validateReceiptKeyPair } from "./receipt-key-preflight.mjs";
 import {
   createGitHubOidcAuthenticator,
   createPublicWorkerHandler,
   durableErrorEnvelope,
+  publicErrorResponse,
   runInitializeOperation,
 } from "./worker-adapter.mjs";
 
-const authenticateGitHub = createGitHubOidcAuthenticator({
+const gatedGitHubJwksFetch = createJwksFetchGate({
   fetchImpl: (...args) => fetch(...args),
+});
+const authenticateGitHub = createGitHubOidcAuthenticator({
+  fetchImpl: gatedGitHubJwksFetch,
 });
 
 export class AuthorizationGateway extends DurableObject {
@@ -69,6 +75,11 @@ export class AuthorizationGateway extends DurableObject {
 
 export default {
   async fetch(request, env) {
+    try {
+      assertPublicFrontDoor(request);
+    } catch (error) {
+      return publicErrorResponse(error);
+    }
     const handler = createPublicWorkerHandler({
       namespace: env.AUTHORIZATION_GATEWAY,
       authenticate: authenticateGitHub,
