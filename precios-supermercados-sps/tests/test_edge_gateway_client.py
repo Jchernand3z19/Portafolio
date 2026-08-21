@@ -20,6 +20,8 @@ from precios_supermercados.edge_gateway_client import (
     EdgeRequestContext,
 )
 from precios_supermercados.edge_provenance import canonical_json_bytes
+from precios_supermercados.la_colonia_edge_request import validate_la_colonia_edge_request
+from precios_supermercados.scrapers.la_colonia_graphql import build_product_search_url
 
 
 SHA = "a" * 40
@@ -50,24 +52,32 @@ def context(**overrides: object) -> EdgeRequestContext:
 
 
 def execution(**context_overrides: object) -> EdgeExecutionRequest:
+    origin_url = build_product_search_url(
+        page=1,
+        page_size=50,
+        order_by="OrderByNameASC",
+    )
+    digest = validate_la_colonia_edge_request(origin_url).canonical_request_sha256
+    effective_overrides = {"request_digest": digest, **context_overrides}
     return EdgeExecutionRequest(
-        origin_url="https://www.lacolonia.com/_v/segment/graphql/v1?synthetic=offline",
-        context=context(**context_overrides),
+        origin_url=origin_url,
+        context=context(**effective_overrides),
     )
 
 
 def receipt_payload(request: EdgeExecutionRequest, **overrides: object) -> dict[str, object]:
     ctx = request.context
+    origin = request.validated_origin
     payload: dict[str, object] = {
         "approved_commit_sha": ctx.approved_commit_sha,
         "authorization_id": ctx.authorization_id,
-        "canonical_request_sha256": ctx.request_digest,
+        "canonical_request_sha256": origin.canonical_request_sha256,
         "collector_code_sha256": "c" * 64,
         "collector_execution": "execution-edge-001",
         "collector_principal": "cloudflare-worker:precios-sps-provenance",
         "collector_provider": "cloudflare_workers",
         "collector_release_id": "release-edge-001",
-        "from_index": 0,
+        "from_index": origin.from_index,
         "github_environment": "la-colonia-live",
         "github_ref": "refs/heads/main",
         "github_repository": "Jchernand3z19/Portafolio",
@@ -79,7 +89,7 @@ def receipt_payload(request: EdgeExecutionRequest, **overrides: object) -> dict[
         "nonce": ctx.nonce,
         "oidc_jti": "oidc-jti-001",
         "oidc_subject": "repo:Jchernand3z19/Portafolio:environment:la-colonia-live",
-        "order_by": "OrderByNameASC",
+        "order_by": origin.order_by,
         "partition_id": ctx.partition_id,
         "physical_started_at_utc": "2026-08-21T17:40:00.123000Z",
         "raw_response_sha256": hashlib.sha256(RAW).hexdigest(),
@@ -96,7 +106,7 @@ def receipt_payload(request: EdgeExecutionRequest, **overrides: object) -> dict[
         "target_host": "www.lacolonia.com",
         "target_path": "/_v/segment/graphql/v1",
         "target_scheme": "https",
-        "to_index": 49,
+        "to_index": origin.to_index,
         "traversal_id": ctx.traversal_id,
         "traversal_role": ctx.traversal_role,
     }
