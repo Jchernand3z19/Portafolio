@@ -61,9 +61,13 @@ def evaluate_real_price_reduction(
     if generate_state_hash(offer) != validated.state_hash:
         raise CommercialPricingError("current contiene state_hash inválido")
     if offer.observed_at_utc != current.last_observed_at_utc:
-        raise CommercialPricingError("current y su evidencia discrepan en observación")
+        raise CommercialPricingError(
+            "current y su evidencia discrepan en observación / última observación"
+        )
     if offer.scrape_run_id != current.last_scrape_run_id:
-        raise CommercialPricingError("current y su evidencia discrepan en ejecución")
+        raise CommercialPricingError(
+            "current y su evidencia discrepan en ejecución / última ejecución"
+        )
 
     _validate_history_chain(offer.offer_id, offer.currency, history)
     open_period = history[-1]
