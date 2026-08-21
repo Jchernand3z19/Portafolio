@@ -1,6 +1,8 @@
 .env
 .env.*
 !.env.example
+.dev.vars
+.dev.vars.*
 service_account.json
 __pycache__/
 *.py[cod]
@@ -9,3 +11,5 @@ __pycache__/
 htmlcov/
 .venv/
 venv/
+node_modules/
+.wrangler/
