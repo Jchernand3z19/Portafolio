@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -38,6 +39,7 @@ def test_cloudflare_node_suite() -> None:
         "authorization-ledger.test.mjs",
         "durable-store.test.mjs",
         "gateway-runtime.test.mjs",
+        "worker-adapter.test.mjs",
     ]
     result = subprocess.run(
         [
@@ -83,3 +85,43 @@ def test_python_graphql_url_is_accepted_by_cloudflare_core() -> None:
     assert parsed["to"] == 149
     assert parsed["orderBy"] == "OrderByPriceDESC"
     assert len(parsed["canonicalRequestSha256"]) == 64
+
+
+def test_worker_fixed_graphql_hash_matches_python_query() -> None:
+    policy_source = (EDGE_ROOT / "src" / "worker-policy.mjs").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(
+        r'FIXED_GRAPHQL_QUERY_SHA256\s*=\s*"([0-9a-f]{64})"',
+        policy_source,
+    )
+    assert match is not None, "El Worker debe fijar el hash GraphQL en código"
+    assert match.group(1) == hashlib.sha256(
+        PRODUCT_SEARCH_QUERY.encode("utf-8")
+    ).hexdigest()
+
+
+def test_wrangler_config_declares_sqlite_do_and_only_secret_names() -> None:
+    config = json.loads((EDGE_ROOT / "wrangler.json").read_text(encoding="utf-8"))
+    assert config["main"] == "src/index.mjs"
+    assert config["preview_urls"] is False
+    assert "migrations" not in config
+    assert config["durable_objects"]["bindings"] == [
+        {
+            "name": "AUTHORIZATION_GATEWAY",
+            "class_name": "AuthorizationGateway",
+        }
+    ]
+    assert config["exports"]["AuthorizationGateway"] == {
+        "type": "durable-object",
+        "storage": "sqlite",
+    }
+    assert config["version_metadata"]["binding"] == "CF_VERSION_METADATA"
+    assert set(config["secrets"]["required"]) == {
+        "EDGE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL",
+        "EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL",
+        "EDGE_COLLECTOR_CODE_SHA256",
+    }
+    serialized = json.dumps(config)
+    assert "BEGIN PRIVATE KEY" not in serialized
+    assert "PRIVATE_KEY_PKCS8_B64URL\":" not in serialized
