@@ -307,6 +307,14 @@ class InMemoryCommercialState:
             offer_ids.add(offer.offer_id)
             if generate_state_hash(offer) != validated.state_hash:
                 raise CommercialStateError(f"state_hash inválido para {offer.offer_id}")
+            if validated.validated_at_utc < offer.observed_at_utc:
+                raise CommercialStateError(
+                    "validated_at_utc no puede ser anterior a observed_at_utc"
+                )
+            if validated.validated_at_utc > decision.decided_at_utc:
+                raise CommercialStateError(
+                    "validated_at_utc no puede ser posterior a decided_at_utc"
+                )
             if offer.observed_at_utc > decision.decided_at_utc:
                 raise CommercialStateError(
                     "una oferta no puede observarse después de decided_at_utc"
