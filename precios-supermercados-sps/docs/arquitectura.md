@@ -6,29 +6,34 @@ Este documento es la **fuente canónica única** del estado técnico actual del 
 
 Fecha: **2026-08-20**.
 
-Base de `main` auditada:
+Base originalmente auditada de `main`:
 
 `1c6aca3318fc1f830f2d43a77cc27c4ba845ab26`
 
-Ese commit integra **PR #7 — La Colonia full crawl validation (fail-closed)**. **PR #17 — observabilidad del facet discovery** ya estaba integrado. Los textos históricos que todavía describen esos PR como abiertos, draft o pendientes son obsoletos como estado operativo.
+Estado integrado verificado después de PR #19 y PR #20:
+
+`main = 6703fbc2d9c40cfd458da8e6ff829ecf223c2da0`
+
+El commit base auditado integraba **PR #7 — La Colonia full crawl validation (fail-closed)** y **PR #17 — observabilidad del facet discovery** ya estaba integrado. Posteriormente se integraron **PR #19 — canonicalización/CI/frontera comercial** y **PR #20 — coherencia de evidencia current y canonicalización de changed_fields**. Los textos históricos que todavía describen esos PR como abiertos, draft o pendientes son obsoletos como estado operativo.
 
 Evidencia productiva verificada:
 
-- `main` estaba sin branch protection/ruleset efectivo;
-- no había required status checks sobre la rama;
-- todos los entrypoints live de La Colonia seguían globalmente bloqueados con `if: ${{ false }}`;
-- no existía autorización live nueva;
-- `SPS-context-and-root-facets-001` estaba consumida;
+- `main` continúa sin branch protection/ruleset efectivo;
+- no hay required status checks productivamente exigidos sobre la rama;
+- todos los entrypoints live de La Colonia siguen globalmente bloqueados con `if: ${{ false }}`;
+- no existe autorización live nueva;
+- `SPS-context-and-root-facets-001` está consumida;
 - no existe evidencia de creación/autorización de `002`;
-- SPS technical context seguía `UNCONFIRMED`;
-- `trusted_collector_provenance_unavailable` seguía cerrando la aceptación canónica;
-- `live_safety.py` seguía siendo un modelo offline, no enforcement físico productivo;
+- SPS technical context sigue `UNCONFIRMED`;
+- `trusted_collector_provenance_unavailable` sigue cerrando la aceptación canónica;
+- `live_safety.py` sigue siendo un modelo offline, no enforcement físico productivo;
 - no se realizó tráfico live durante la auditoría ni durante los cambios derivados de ella.
 
 Validaciones verificadas:
 
 - baseline previo integrado por PR #7: **770/770** pruebas;
-- revisión de canonicalización, CI y frontera comercial: **796/796** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14.
+- PR #19 — canonicalización, CI y frontera comercial: **796/796** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14;
+- PR #20 — coherencia de evidencia `current` y canonicalización de `changed_fields`: **798/798** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14.
 
 ## Estado operativo resumido
 
@@ -45,7 +50,7 @@ Validaciones verificadas:
 | Workflows live | DONE_FAIL_CLOSED | Jobs capaces de live permanecen `if: false`. |
 | Workflow supply chain | DONE_OFFLINE | Actions por SHA, permisos mínimos, checkout inmutable. |
 | CI | DONE_VERSIONED | Pull requests, manual y pushes a `main`; auditoría estática impide perder esa cobertura silenciosamente. |
-| Frontera current/history | DONE_OFFLINE | `commercial_state.py` aplica runs aceptados de forma atómica/idempotente y conserva histórico. |
+| Frontera current/history | DONE_OFFLINE | `commercial_state.py` aplica runs aceptados de forma atómica/idempotente, mantiene `current` en la última evidencia aceptada y conserva histórico. |
 | Backend comercial productivo | BLOCKED_DEPENDENCIES | No se conecta mientras la aceptación autoritativa/productive readiness siga abierta. |
 | GATE-17 | BLOCKED_EXTERNAL | `FAIL_PRODUCTIVE_EVIDENCE`: `main` sin protección/ruleset. |
 | Trusted collector físico | BLOCKED_EXTERNAL | No existe observer productivo independiente ligado a requests físicos. |
@@ -96,8 +101,11 @@ Propiedades verificadas:
 - la cronología exige `observed_at_utc <= validated_at_utc <= decided_at_utc`;
 - el payload de un run no admite `offer_id` duplicado ni ofertas de otro `scrape_run_id`;
 - el replay exacto es idempotente;
-- reutilizar el mismo `scrape_run_id` con otra decisión, timestamp o contenido falla cerrado;
+- reutilizar el mismo `scrape_run_id` con otra decisión, timestamp o contenido comercial falla cerrado;
 - el mismo hash confirma el periodo abierto sin crear otro;
+- cuando el hash no cambia, `current.validated_offer` se refresca a la última evidencia aceptada y queda coherente con `last_scrape_run_id`;
+- el periodo histórico abierto conserva la evidencia que lo abrió y sólo avanza `last_confirmed_by_scrape_run_id`/`last_observed_at_utc`;
+- `changed_fields` usa la misma canonicalización textual que `generate_state_hash`, por lo que cambios cosméticos de Unicode/espacios/mayúsculas no se clasifican como cambios reales;
 - un cambio exige tiempo monotónico, cierra un periodo y abre exactamente uno;
 - `reported_regular_price` puede abrir `REGULAR_PRICE` sin confundirse con cambio de `current_price`;
 - la aplicación es atómica: un error posterior no deja mutaciones parciales;
@@ -232,12 +240,14 @@ Ningún `PASS_OFFLINE_MODEL` autoriza live.
 - supply-chain/workflow audit;
 - CI en PR + `main`;
 - frontera comercial current/history atómica e idempotente;
-- pruebas de replay, mismo hash, cronología, cambio de precio, precio regular reportado, estados no aceptados, atomicidad y ausencia sin inferencia;
+- `current` coherente con la última evidencia aceptada del mismo estado;
+- `changed_fields` alineado con la canonicalización del `state_hash`;
+- pruebas de replay, mismo hash, cronología, cambio de precio, precio regular reportado, estados no aceptados, atomicidad, ausencia sin inferencia y regresiones de PR #20;
 - canonicalización de README/AGENTS/arquitectura.
 
 ### STALE / OBSOLETE
 
-- cuerpos de PR #7/#17 como descripción del estado actual;
+- cuerpos de PR #7/#17/#19/#20 como descripción del estado actual;
 - ramas ya integradas y detrás de `main` como posible fuente canónica;
 - gobernanza que exigía mantener PR #7/#17 abiertos;
 - README antiguo que omitía gran parte del runtime.
