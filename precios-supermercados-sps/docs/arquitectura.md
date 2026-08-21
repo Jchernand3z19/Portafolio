@@ -6,47 +6,55 @@ Este documento es la **fuente canónica única** del estado técnico actual del 
 
 Fecha: **2026-08-20**.
 
-Base auditada de `main`:
+Base de `main` auditada:
 
 `1c6aca3318fc1f830f2d43a77cc27c4ba845ab26`
 
-Ese commit es el merge de **PR #7 — La Colonia full crawl validation (fail-closed)**. **PR #17 — observabilidad del facet discovery** ya había sido integrado antes. Los textos históricos que todavía describen esos PR como abiertos, draft o pendientes son obsoletos.
+Ese commit integra **PR #7 — La Colonia full crawl validation (fail-closed)**. **PR #17 — observabilidad del facet discovery** ya estaba integrado. Los textos históricos que todavía describen esos PR como abiertos, draft o pendientes son obsoletos como estado operativo.
 
-Evidencia productiva verificada durante la auditoría:
+Evidencia productiva verificada:
 
-- `main` existe y apunta al SHA anterior;
-- `main` está actualmente **sin branch protection**;
-- no hay required status checks configurados sobre la rama;
-- los entrypoints live de La Colonia continúan globalmente bloqueados con `if: ${{ false }}`;
-- no hay autorización live nueva;
-- no se realizó tráfico live durante esta auditoría.
+- `main` estaba sin branch protection/ruleset efectivo;
+- no había required status checks sobre la rama;
+- todos los entrypoints live de La Colonia seguían globalmente bloqueados con `if: ${{ false }}`;
+- no existía autorización live nueva;
+- `SPS-context-and-root-facets-001` estaba consumida;
+- no existe evidencia de creación/autorización de `002`;
+- SPS technical context seguía `UNCONFIRMED`;
+- `trusted_collector_provenance_unavailable` seguía cerrando la aceptación canónica;
+- `live_safety.py` seguía siendo un modelo offline, no enforcement físico productivo;
+- no se realizó tráfico live durante la auditoría ni durante los cambios derivados de ella.
 
-Última suite histórica verificada antes de esta actualización: **770/770 pruebas aprobadas** en GitHub Actions sobre el head integrado mediante PR #7, con Python 3.12. El workflow de CI debe validar también esta actualización antes de integrarse.
+Validaciones verificadas:
+
+- baseline previo integrado por PR #7: **770/770** pruebas;
+- revisión de canonicalización, CI y frontera comercial: **793/793** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14.
 
 ## Estado operativo resumido
 
 | Área | Estado | Evidencia / consecuencia |
 |---|---|---|
-| Contratos `RawProduct` / `NormalizedOffer` / `ValidatedOffer` | DONE | Implementados y protegidos en `models.py`. |
-| Identidad fuente común | DONE | IDs deterministas y reglas conservadoras implementadas. |
-| Extractor La Colonia / GraphQL VTEX | DONE_OFFLINE | Implementado y cubierto por fixtures/tests; red real cerrada. |
-| Identidad VTEX producto/SKU | DONE_OFFLINE | Producto `productId -> productReference -> linkText`; SKU `itemId`. |
-| Particiones / facets / cobertura / reconciliación | DONE_OFFLINE_FAIL_CLOSED | Evaluador adversarial implementado; no concede aceptación autoritativa sin provenance confiable. |
-| Runner / CLI / métricas / artefactos sanitizados | DONE_OFFLINE | Implementados; aceptación comercial permanece cerrada. |
-| SPS technical context | BLOCKED_LIVE | `UNCONFIRMED`; requiere evidencia live autorizada. |
-| Autorizaciones live | BLOCKED_HUMAN_DECISION | Ninguna activa. `001` consumida; `002` no autorizada. |
-| Workflows live | DONE_FAIL_CLOSED | Entry points presentes pero jobs cerrados globalmente. |
-| Workflow supply chain | DONE_OFFLINE | Actions externas fijadas a SHA completo y permisos mínimos auditados. |
-| CI del proyecto | PARTIAL -> HARDENING | Suite completa existe; se corrige cobertura para que también corra en pushes a `main`. |
-| GATE-17 | BLOCKED_EXTERNAL | `FAIL_PRODUCTIVE_EVIDENCE`; `main` sin protección/ruleset efectivo. |
-| Trusted collector con provenance física | MISSING / BLOCKED_EXTERNAL | El collector local marca evidencia internamente, pero no es un observador productivo independiente. |
-| `live_safety.py` | DONE_OFFLINE_MODEL | Modelo linealizable/adversarial; no es enforcement físico productivo. |
-| Persistencia / histórico | PARTIAL | Modelo de datos y reglas documentados; backend/engine productivo todavía no conectado. |
-| Automatización diaria | BLOCKED_DEPENDENCIES | No debe activarse antes de aceptación/persistencia confiables y readiness live. |
-| Power BI / analítica | BLOCKED_DEPENDENCIES | Espera estado comercial confiable. |
-| Segundo supermercado | BLOCKED_DEPENDENCIES | No iniciar si heredaría los mismos bloqueos comunes. |
+| `RawProduct` / `NormalizedOffer` / `ValidatedOffer` | DONE | Contratos existentes preservados sin cambios. |
+| Identificadores y `state_hash` | DONE | Deterministas y cubiertos por tests. |
+| Extractor / GraphQL VTEX de La Colonia | DONE_OFFLINE | Fixtures/tests; transporte externo niega red por defecto. |
+| Identidad VTEX | DONE_OFFLINE | Producto `productId -> productReference -> linkText`; SKU `itemId`. |
+| Particiones / facets / cobertura / reconciliación | DONE_OFFLINE_FAIL_CLOSED | Amplia cobertura adversarial; no concede aceptación autoritativa sin provenance. |
+| Runner / CLI / métricas / diagnósticos | DONE_OFFLINE | No habilitan actualización comercial por sí solos. |
+| SPS technical context | BLOCKED_LIVE | `UNCONFIRMED`; requiere observación live autorizada. |
+| Autorización live | BLOCKED_HUMAN_DECISION | Ninguna activa. |
+| Workflows live | DONE_FAIL_CLOSED | Jobs capaces de live permanecen `if: false`. |
+| Workflow supply chain | DONE_OFFLINE | Actions por SHA, permisos mínimos, checkout inmutable. |
+| CI | DONE_VERSIONED | Pull requests, manual y pushes a `main`; auditoría estática impide perder esa cobertura silenciosamente. |
+| Frontera current/history | DONE_OFFLINE | `commercial_state.py` aplica runs aceptados de forma atómica/idempotente y conserva histórico. |
+| Backend comercial productivo | BLOCKED_DEPENDENCIES | No se conecta mientras la aceptación autoritativa/productive readiness siga abierta. |
+| GATE-17 | BLOCKED_EXTERNAL | `FAIL_PRODUCTIVE_EVIDENCE`: `main` sin protección/ruleset. |
+| Trusted collector físico | BLOCKED_EXTERNAL | No existe observer productivo independiente ligado a requests físicos. |
+| Egress/claim/fencing productivo | BLOCKED_EXTERNAL | El modelo offline no reemplaza enforcement real. |
+| Automatización diaria | BLOCKED_DEPENDENCIES | Espera readiness live + aceptación + backend comercial. |
+| Power BI | BLOCKED_DEPENDENCIES | Espera estado comercial confiable. |
+| Segundo supermercado | BLOCKED_DEPENDENCIES | No debe heredar estos bloqueos comunes. |
 
-## Flujo funcional objetivo
+## Flujo funcional
 
 ```text
 EXTRACCIÓN CONFIABLE
@@ -61,24 +69,44 @@ EXTRACCIÓN CONFIABLE
 -> MÁS SUPERMERCADOS
 ```
 
-La frontera crítica es entre **ejecución técnica** y **ejecución comercialmente aceptada**. Una ejecución incompleta, fallida o no autoritativa puede producir métricas y evidencia diagnóstica, pero no puede modificar precios actuales ni histórico.
+La frontera crítica es **ejecución técnica vs. ejecución comercialmente aceptada**. Una ejecución incompleta, fallida o no autoritativa puede producir diagnóstico, pero nunca debe modificar precios actuales ni histórico.
 
 ## Contratos y regla comercial
 
-`RawProduct`, `NormalizedOffer` y `ValidatedOffer` permanecen protegidos e intactos.
+`RawProduct`, `NormalizedOffer` y `ValidatedOffer` permanecen protegidos.
 
-Una oferta `in_stock` exige `current_price > 0`. Los estados `out_of_stock`, `not_listed` y `unknown` pueden conservar `current_price = null`. Campos de normalización no demostrables pueden permanecer nulos y generar `needs_review`; no se inventan datos.
+Una oferta `in_stock` exige `current_price > 0`; `out_of_stock`, `not_listed` y `unknown` pueden conservar precio nulo. La normalización puede dejar campos nulos si la fuente no los demuestra.
 
-La regla de histórico permanece:
+Regla histórica vigente:
 
-- `reported_regular_price` es lo informado por el supermercado;
-- no prueba ahorro real;
-- la reducción real se compara contra el último `current_price` de una ejecución histórica **aceptada**;
-- una ejecución `rejected`, `failed` o `abandoned` no altera estado comercial ni crea falsos cambios.
+- `reported_regular_price` es un dato informado por el supermercado;
+- no demuestra ahorro real;
+- la reducción real se compara contra el último `current_price` de una ejecución histórica aceptada;
+- `rejected`, `failed` y `abandoned` no alteran current/history.
 
-## La Colonia — extracción, identidad y completitud
+## Frontera comercial offline
 
-La ubicación de las observaciones de La Colonia continúa `LocationStatus.UNKNOWN`. El estado técnico SPS vive por separado como `SpsTechnicalContextStatus(CONFIRMED, UNCONFIRMED, UNAVAILABLE)`.
+`src/precios_supermercados/commercial_state.py` implementa la mínima máquina de transición desacoplada del backend.
+
+Propiedades verificadas:
+
+- sólo `success`/`warning` con `catalog_accepted = true` permiten mutación;
+- `running`, `rejected`, `failed`, `abandoned` y `catalog_accepted = false` son no-op comercial;
+- el `state_hash` se recalcula antes de aplicar;
+- el payload de un run no admite `offer_id` duplicado ni ofertas de otro `scrape_run_id`;
+- el replay exacto es idempotente;
+- reutilizar el mismo `scrape_run_id` con otra decisión, timestamp o contenido falla cerrado;
+- el mismo hash confirma el periodo abierto sin crear otro;
+- un cambio exige tiempo monotónico, cierra un periodo y abre exactamente uno;
+- `reported_regular_price` puede abrir `REGULAR_PRICE` sin confundirse con cambio de `current_price`;
+- la aplicación es atómica: un error posterior no deja mutaciones parciales;
+- una oferta ausente de un payload posterior **no** se infiere como `not_listed`, `out_of_stock` ni eliminación; esos estados requieren evidencia explícita.
+
+Esta capa **no concede autoridad live**. Su `catalog_accepted` deberá provenir, en producción, del collector autoritativo. Mientras esa provenance no exista, no debe conectarse a un backend comercial productivo.
+
+## La Colonia — identidad y completitud
+
+Las observaciones siguen con `LocationStatus.UNKNOWN`; la certeza de ciudad técnica vive por separado.
 
 Identidad VTEX:
 
@@ -87,111 +115,68 @@ Producto: productId -> productReference -> linkText
 SKU:      itemId
 ```
 
-Ruta de completitud offline:
-
-```text
-facets sintéticos / evidencia estructural
--> árbol
--> hojas deterministas
--> plan cerrado
--> ventanas primarias
--> recovery/overlap cuando corresponde
--> segunda travesía independiente
--> reconciliación de producto, SKU y mapping producto-SKU
--> unión global
--> COMPLETE o INCOMPLETE (fail-closed)
-```
-
-`COMPLETE` lógico exige simultáneamente, entre otros controles:
-
-- árbol y hojas estructuralmente válidos;
-- ausencia de positive leaves malformadas o faltantes;
-- membership válido;
-- totales estables;
-- ventanas planificadas y continuas;
-- respuestas no truncadas;
-- ausencia de repeated windows y gaps;
-- recuperación completa de omisiones cuando aplica;
-- reconciliación por otra traversal y otro orden;
-- igualdad de uniones de productos;
-- igualdad de uniones de SKU;
-- igualdad del mapping producto-SKU;
-- ausencia de conflictos de owner de SKU;
-- unión global igual al total estructural.
+El recorrido offline valida árbol, hojas, membership, totals, ventanas, gaps, truncamiento, repeated windows, recovery, segunda travesía, unión de producto/SKU, mapping producto-SKU y conflictos de owner.
 
 **Deduplicar nunca demuestra completitud.**
 
-### Frontera del trusted collector
+### Trusted collector
 
-El módulo `la_colonia_catalog_coverage.py` deriva totales y productos desde respuestas crudas y emite objetos internos de evidencia. Sin embargo, el evaluador canónico añade deliberadamente:
+`la_colonia_catalog_coverage.py` construye evidencia desde respuestas crudas y evita falsificaciones triviales dentro del proceso, pero el evaluador canónico añade deliberadamente:
 
 `trusted_collector_provenance_unavailable`
 
-por lo que `accepted=True` no es alcanzable hoy desde evidencia caller-controlled/offline. El issuer privado del módulo impide falsificaciones triviales dentro del proceso, pero **no demuestra provenance física independiente** ni que dos traversals provengan realmente de solicitudes distintas observadas por un enforcer productivo.
+El issuer local no demuestra que dos traversals procedan de solicitudes físicas distintas observadas por un enforcer independiente. Por eso la aceptación final continúa fail-closed y GATE-18 no puede cerrarse con datos caller-controlled, labels, digests u orden declarados por el caller.
 
-Por tanto:
+## SPS y autorización live
 
-`GATE-18 = FAIL_CLOSED`
+La evidencia histórica de `SPS-context-and-root-facets-001` concluyó sin establecer contexto SPS técnico. El total previo observado sin tienda seleccionada no es un total SPS. La autorización `001` está consumida.
 
-hasta que exista un collector ligado a observaciones físicas independientes y a la identidad runtime/request correspondiente. Cambiar labels, digests, orden o extensiones aportadas por el caller no concede autoridad.
-
-## Autoridad y frontera física — modelo offline
-
-`live_safety.py` es un modelo linealizable en memoria, no infraestructura productiva. Canonical JSON UTF-8 versionado y domain-separated liga `request_id`, SHA aprobado inmutable, plan, presupuesto cerrado y epoch.
-
-Transiciones principales:
+Estado:
 
 ```text
-Grant: ACTIVE -> CONSUMED | REVOKED
-Reservation: RESERVED -> ACTIVATED -> CLOSING -> CLOSED
-                         -> UNCERTAIN -> FENCING_REQUIRED -> FENCED
+ACTIVE_AUTHORIZATION_IDS = []
+READY_FOR_LIVE = NO
+SPS_TECHNICAL_CONTEXT = UNCONFIRMED
 ```
-
-El modelo offline cubre consumo one-shot, reserva global, deadlines monotónicos, pacing start-to-start, cierre/fencing CAS, evidencia ligada a reserva/epoch/request/fase y estados de incertidumbre. El pacing mínimo es 1.5 s y la implementación de runner usa 0 retries, más estricta que el máximo histórico permitido de 1.
-
-El contrato DNS/TLS offline es cerrado: peer dentro de resolución controlada, host/SNI/Host exactos, puerto 443 y verificación TLS; niega fallback DNS, Happy Eyeballs, proxies, redirects, pooling/reuse, HTTP/2, HTTP/3, QUIC, retries ocultos y red auxiliar conocida. Esto sigue siendo `PASS_OFFLINE_MODEL`, no evidencia de firewall/egress real.
-
-Adapters reales legacy niegan red por defecto; wrappers de test operan sólo con fixtures/local/loopback. Playwright live también permanece globalmente bloqueado. Ningún harness se presenta como aislamiento físico productivo.
-
-## Autorización live — default deny
-
-Estado vigente:
-
-- `SPS-context-and-root-facets-001`: consumida;
-- `SPS-context-and-root-facets-002`: no creada/no autorizada;
-- `ACTIVE_AUTHORIZATION_IDS`: vacío;
-- `READY_FOR_LIVE = NO`.
 
 Sin autorización humana explícita nueva están prohibidos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl y cualquier otro tráfico hacia La Colonia.
 
-Comentarios, issue comments, PR comments, archivos de comando, markers, logs y artefactos son **observabilidad solamente**. No crean Request, Approval, Grant, Claim, Capability, Reservation ni autoridad física.
+Comentarios, PR comments, issue comments, archivos de comando, markers, logs y artefactos son observabilidad; no crean autoridad.
+
+## Frontera física
+
+`live_safety.py` es un modelo linealizable en memoria y no infraestructura productiva. Modela Request/Grant/Reservation, consumo one-shot, exclusión, deadlines, pacing, cierre/fencing y evidencia sellada para tests adversariales.
+
+El presupuesto canónico offline actual es más estricto que el máximo histórico en retries: `max_retries = 0`. El pacing mínimo sigue 1.5 s.
+
+El modelo DNS/TLS niega comportamientos auxiliares conocidos, pero no constituye firewall/egress real. `IndependentFencingObserver` es explícitamente un simulador offline; no cierra GATE-17 ni GATE-06 productivo.
 
 ## Workflows y CI
 
-Workflows SPS auditados:
+Workflows auditados:
 
-- `precios-supermercados-sps-tests.yml` — CI offline;
-- `precios-supermercados-sps-la-colonia-command.yml` — controlador por archivo, bloqueado;
-- `precios-supermercados-sps-la-colonia-dispatch-recovery.yml` — recuperación observable, bloqueada;
-- `precios-supermercados-sps-la-colonia-diagnostic.yml` — diagnóstico live, bloqueado;
-- `precios-supermercados-sps-la-colonia-facet-discovery.yml` — discovery live, bloqueado;
-- `precios-supermercados-sps-la-colonia-live.yml` — crawl live, bloqueado.
+- `precios-supermercados-sps-tests.yml`;
+- `precios-supermercados-sps-la-colonia-command.yml`;
+- `precios-supermercados-sps-la-colonia-dispatch-recovery.yml`;
+- `precios-supermercados-sps-la-colonia-diagnostic.yml`;
+- `precios-supermercados-sps-la-colonia-facet-discovery.yml`;
+- `precios-supermercados-sps-la-colonia-live.yml`.
 
-Controles vigentes:
+Controles:
 
-- Actions externas fijadas a SHA completo conocido;
-- `persist-credentials: false` en checkout;
-- permisos explícitos y mínimos;
-- `pull_request_target` no hace checkout del PR head y su job está cerrado;
-- no existe `issue_comment` como autoridad;
-- scripts capaces de red sólo aparecen en jobs live bloqueados;
-- CI compila `src` y `scripts` y ejecuta toda la suite con Python 3.12.
+- Actions externas por SHA completo conocido;
+- `persist-credentials: false`;
+- permisos explícitos/mínimos;
+- `pull_request_target` no hace checkout de código no confiable;
+- `issue_comment` no es autoridad;
+- scripts capaces de red sólo viven en jobs globalmente bloqueados;
+- CI usa Python 3.12, compila `src`/`scripts` y ejecuta toda la suite.
 
-Hallazgo de auditoría 2026-08-20: la CI sólo tenía `pull_request` y `workflow_dispatch`. Como `main` no está protegida, un push directo podía evitar la suite. La corrección versionada añade `push` sobre `main` con los mismos paths y una prueba estática que obliga a conservar esa cobertura.
+Hallazgo corregido: la CI sólo corría en PR/manual. Dado que `main` no está protegida, un push directo podía evadir la suite. El workflow ahora cubre también pushes a `main` para `precios-supermercados-sps/**` y `.github/workflows/**`, y `test_workflow_security_audit.py` exige esa cobertura.
 
 ## Persistencia e histórico
 
-El contrato de datos sigue definiendo, entre otras entidades:
+El modelo lógico sigue definiendo:
 
 - `cfg_supermarkets`;
 - `cfg_locations`;
@@ -202,75 +187,77 @@ El contrato de datos sigue definiendo, entre otras entidades:
 - `fact_offer_history`;
 - `fact_quality_events`.
 
-Hoy esto es principalmente **modelo/documentación**, no un backend comercial conectado. La regla `commercial_update_allowed` está definida conceptualmente en el modelo de datos, pero todavía falta una frontera de aplicación persistente que garantice de forma idempotente que sólo ejecuciones aceptadas muten current/history.
+La lógica current/history ya existe offline; **el backend productivo no está seleccionado ni conectado**. No se introduce Sheets, BigQuery, SQLite o PostgreSQL sólo para avanzar artificialmente.
 
-Trabajo offline permitido y prioritario una vez cerrada la canonicalización/CI: implementar la **mínima máquina de transición de estado comercial e histórico** reutilizando `ValidatedOffer`, sin elegir aún Google Sheets, BigQuery, SQLite o PostgreSQL como backend definitivo. Debe probar idempotencia y rechazo de runs no aceptados antes de conectar cualquier almacenamiento externo.
+Conectar almacenamiento real queda bloqueado hasta que `catalog_accepted` pueda provenir de una frontera autoritativa y GATE-17/productive enforcement estén resueltos. Esto evita construir una ruta donde un booleano caller-controlled pueda actualizar precios comerciales.
 
-## Matriz de gates canónicos
+## Matriz de gates
 
-| Gate | Significado canónico | Estado actual |
-|---|---|---|
-| GATE-01 | DEFAULT DENY | PASS_OFFLINE_MODEL integrado en `main`; live sigue cerrado |
-| GATE-02 | UNIQUE LIVE ENTRY / BLOCK ALTERNATIVES | PASS_OFFLINE_MODEL integrado; productivo depende de enforcement externo |
-| GATE-03 | AUTHORIZATION SEPARATE FROM CONTRACT VALIDITY | PASS_OFFLINE_MODEL |
-| GATE-04 | IMMUTABLE SHA / REQUEST IDENTITY | PASS_OFFLINE_MODEL |
-| GATE-05 | ONE-SHOT ATOMIC CONSUMPTION / REPLAY | PASS_OFFLINE_MODEL |
-| GATE-06 | PHYSICAL EGRESS GUARD | PASS_OFFLINE_MODEL; **FAIL productivo / pendiente** |
-| GATE-07 | GLOBAL LIVE EXCLUSION | PASS_OFFLINE_MODEL y workflows cerrados |
-| GATE-08 | PHYSICAL DELAY >= 1.5s | PASS_OFFLINE_MODEL |
-| GATE-09 | PHYSICAL RETRIES <= 1 | PASS_OFFLINE_MODEL; runner vigente usa 0 |
-| GATE-10 | CLOSED FAIL-CLOSED BUDGET | PASS_OFFLINE_MODEL |
-| GATE-11 | STOP ON 403 | PASS_OFFLINE_MODEL |
-| GATE-12 | STOP ON 429 | PASS_OFFLINE_MODEL |
-| GATE-13 | STOP ON CAPTCHA / ANTIBOT | PASS_OFFLINE_MODEL |
-| GATE-14 | STOP ON AUTH / ADDRESS / GPS REQUIREMENT | PASS_OFFLINE_MODEL |
-| GATE-15 | EXCESSIVE LOAD STOP | PASS_OFFLINE_MODEL |
-| GATE-16 | TRUSTED WORKFLOW / CODE / SUPPLY CHAIN | PASS_OFFLINE_MODEL integrado; GATE-17 impide readiness productivo |
-| GATE-17 | PRODUCTIVE RULESET / PROTECTION EVIDENCE | **FAIL_PRODUCTIVE_EVIDENCE** (`main` sin protección) |
-| GATE-18 | EXACT FINAL VALIDATION | **FAIL-CLOSED**; trusted collector productivo pendiente |
-| GATE-19 | ADVERSARIAL OFFLINE COVERAGE | PASS_OFFLINE_MODEL; aceptación autoritativa bloqueada |
-| GATE-20 | COMMENTS NON-AUTHORITATIVE | PASS_OFFLINE_MODEL |
+| Gate | Estado actual |
+|---|---|
+| GATE-01 — DEFAULT DENY | PASS_OFFLINE_MODEL; live cerrado |
+| GATE-02 — UNIQUE LIVE ENTRY / BLOCK ALTERNATIVES | PASS_OFFLINE_MODEL; productivo depende de enforcement |
+| GATE-03 — AUTHORIZATION SEPARATE FROM CONTRACT VALIDITY | PASS_OFFLINE_MODEL |
+| GATE-04 — IMMUTABLE SHA / REQUEST IDENTITY | PASS_OFFLINE_MODEL |
+| GATE-05 — ONE-SHOT ATOMIC CONSUMPTION / REPLAY | PASS_OFFLINE_MODEL |
+| GATE-06 — PHYSICAL EGRESS GUARD | FAIL productivo / PASS_OFFLINE_MODEL |
+| GATE-07 — GLOBAL LIVE EXCLUSION | PASS_OFFLINE_MODEL + workflows bloqueados |
+| GATE-08 — PHYSICAL DELAY >= 1.5s | PASS_OFFLINE_MODEL |
+| GATE-09 — PHYSICAL RETRIES <= 1 | PASS_OFFLINE_MODEL; runtime usa 0 |
+| GATE-10 — CLOSED FAIL-CLOSED BUDGET | PASS_OFFLINE_MODEL |
+| GATE-11 — STOP ON 403 | PASS_OFFLINE_MODEL |
+| GATE-12 — STOP ON 429 | PASS_OFFLINE_MODEL |
+| GATE-13 — STOP ON CAPTCHA / ANTIBOT | PASS_OFFLINE_MODEL |
+| GATE-14 — STOP ON AUTH / ADDRESS / GPS REQUIREMENT | PASS_OFFLINE_MODEL |
+| GATE-15 — EXCESSIVE LOAD STOP | PASS_OFFLINE_MODEL |
+| GATE-16 — TRUSTED WORKFLOW / CODE / SUPPLY CHAIN | PASS_OFFLINE_MODEL; readiness productivo bloqueado por GATE-17 |
+| GATE-17 — PRODUCTIVE RULESET / PROTECTION EVIDENCE | **FAIL_PRODUCTIVE_EVIDENCE** |
+| GATE-18 — EXACT FINAL VALIDATION | **FAIL_CLOSED**; trusted collector pendiente |
+| GATE-19 — ADVERSARIAL OFFLINE COVERAGE | PASS_OFFLINE_MODEL |
+| GATE-20 — COMMENTS NON-AUTHORITATIVE | PASS_OFFLINE_MODEL |
 
 Ningún `PASS_OFFLINE_MODEL` autoriza live.
 
-## Backlog dependency-driven actual
+## Inventario canónico y backlog
 
-### DONE / integrado
+### DONE / DONE_OFFLINE
 
 - contratos comunes e identidad;
-- extractor/GraphQL/runner La Colonia offline;
+- extractor/GraphQL/runner La Colonia;
 - facets/partitions/coverage/reconciliation adversarial;
-- SPS diagnostics offline;
+- diagnósticos SPS offline;
 - live safety state machine offline;
 - observabilidad/dispatcher sin autoridad;
-- workflow pinning y auditoría de seguridad;
-- PR #17 y PR #7 integrados.
-
-### READY_TO_IMPLEMENT offline
-
-1. terminar canonicalización documental y CI sobre `main`;
-2. implementar frontera mínima de aceptación/persistencia comercial en memoria, desacoplada del backend, con idempotencia e histórico sólo para runs aceptados;
-3. añadir pruebas adversariales del histórico: reintento, mismo hash, cambio de precio, reported regular price sin ahorro real, rejected/failed/abandoned sin mutación.
-
-### BLOCKED_EXTERNAL / BLOCKED_LIVE
-
-- GATE-17 productivo;
-- trusted collector con provenance física independiente;
-- egress/claim/fencing productivo;
-- confirmación técnica SPS;
-- cualquier nueva ejecución live;
-- backend productivo externo y scheduling diario mientras no exista aceptación comercial autoritativa.
+- supply-chain/workflow audit;
+- CI en PR + `main`;
+- frontera comercial current/history atómica e idempotente;
+- tests de replay, mismo hash, cambio de precio, precio regular reportado, estados no aceptados, atomicidad y ausencia sin inferencia;
+- canonicalización de README/AGENTS/arquitectura.
 
 ### STALE / OBSOLETE
 
-- cuerpos históricos de PR #7/#17 que los describen como abiertos o draft;
-- ramas históricas ya integradas que estén detrás de `main` y no contengan trabajo canónico nuevo;
-- estructura antigua del README que omitía la mayor parte del runtime La Colonia.
+- cuerpos de PR #7/#17 como descripción del estado actual;
+- ramas ya integradas y detrás de `main` como posible fuente canónica;
+- gobernanza que exigía mantener PR #7/#17 abiertos;
+- README antiguo que omitía gran parte del runtime.
+
+### READY_TO_IMPLEMENT
+
+`0` tareas técnicas independientes de las fronteras siguientes.
+
+### BLOCKED_EXTERNAL / BLOCKED_LIVE / BLOCKED_HUMAN_DECISION
+
+- configurar protección/ruleset productivo de `main` y required CI (GATE-17);
+- disponer de trusted collector con provenance física independiente;
+- disponer de enforcement productivo de egress/claim/fencing;
+- obtener autorización humana nueva para cualquier prueba live;
+- confirmar SPS técnicamente mediante prueba live autorizada;
+- sólo después conectar backend productivo, scheduling diario y analítica comercial.
 
 ## Criterio de avance
 
 Orden canónico:
 
-`CORRECTNESS -> COMMERCIAL ACCEPTANCE/PERSISTENCE -> AUTOMATION -> ANALYTICS`.
+`CORRECTNESS -> AUTHORITATIVE ACCEPTANCE -> PERSISTENCE -> AUTOMATION -> ANALYTICS`.
 
-Un bloqueo live no impide desarrollar interfaces y lógica puramente offline que no inventen evidencia ni muten estado comercial real. No se introduce infraestructura paga o distribuida para satisfacer un modelo teórico; cada nueva dependencia debe resolver un problema real del proyecto.
+No se usa un bloqueo live como excusa para omitir trabajo offline necesario, pero tampoco se construye infraestructura productiva alrededor de una aceptación que aún puede ser controlada por el caller.
