@@ -137,3 +137,13 @@ GATE-17 no se considera cerrado sólo porque exista un ruleset configurado. La e
 En PR #29, con `main` reportado como `protected: true`, GitHub rechazó un intento de merge mientras `tests` estaba en progreso (`Required status check "tests" is in progress.`). Después de que el check terminó en `success`, un segundo intento fue rechazado por una conversación de review sin resolver (`A conversation must be resolved before this pull request can be merged.`). Tras resolver el hilo y volver a validar el head final, el merge fue permitido.
 
 Por esa evidencia, `GATE-17 = PASS_PRODUCTIVE_EVIDENCE`. Esto protege la gobernanza de `main`, pero no concede autoridad live ni sustituye el trusted collector o el enforcement físico de egress/claim/fencing.
+
+## DT-031 — Frontera física productiva en Google Cloud
+
+La arquitectura elegida para cerrar provenance física usa Cloud Run para el collector autoritativo, Direct VPC egress `all-traffic`, una subred dedicada y Secure Web Proxy en modo next-hop con política default-deny. Secure Web Proxy aporta un registro independiente de las transacciones físicas en Cloud Logging.
+
+El collector emite recibos canónicos firmados mediante una clave asimétrica de Cloud KMS y un verifier separado reconcilia esos recibos contra los transaction logs del proxy. El verifier produce una attestation final con una segunda clave KMS; sólo esa attestation podrá retirar `trusted_collector_provenance_unavailable` en la ruta productiva.
+
+GitHub Actions actúa sólo como controller mediante OIDC/Workload Identity Federation y no recibe permisos para firmar. Collector y verifier usan service accounts y claves separadas. No se aceptan booleanos caller-controlled, HMAC local, archivos/markers ni un proxy explícito que la aplicación pueda omitir como sustituto de evidencia física.
+
+El diseño completo, threat model, esquema de receipts, IAM, pruebas negativas y secuencia de despliegue vive en `docs/trusted-collector-productivo.md`. El diseño no implica que los recursos estén desplegados ni autoriza tráfico live; GATE-06 y GATE-18 continúan cerrados hasta evidencia productiva real.
