@@ -1,5 +1,10 @@
 export const FIXED_GRAPHQL_QUERY_SHA256 = "72576e0296de646a532e197886f2468f6a87234964109e982ca27af4ba5c1663";
 
+export const STRUCTURAL_GRAPHQL_QUERY_SHA256_BY_KIND = Object.freeze({
+  root_total: "00441ce39ffbb02803351b96826fb86feafad3b3870137f01f074b11260e8163",
+  category_tree: "0a9265b63af869850fac217238fc82aaa3b9fa396ca77f35ee98679e4bb066cb",
+});
+
 export const GITHUB_OIDC_JWKS_URL = "https://token.actions.githubusercontent.com/.well-known/jwks";
 export const GITHUB_OIDC_AUDIENCE = "urn:precios-sps:cloudflare:collector:v1";
 
@@ -19,6 +24,7 @@ export const WORKER_POLICY = Object.freeze({
 export const WORKER_ROUTES = Object.freeze({
   initialize: "/v1/initialize",
   execute: "/v1/execute",
+  structuralExecute: "/v1/structural-execute",
 });
 
 export const AUTHORIZATION_LIMITS = Object.freeze({
