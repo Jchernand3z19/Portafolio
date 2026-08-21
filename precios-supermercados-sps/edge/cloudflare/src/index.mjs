@@ -8,6 +8,14 @@ import { runSupervisedExecuteOperation } from "./gateway-supervisor.mjs";
 import { createJwksFetchGate } from "./jwks-fetch-gate.mjs";
 import { validateReceiptKeyPair } from "./receipt-key-preflight.mjs";
 import {
+  annotateStructuralExecutionSpan,
+  STRUCTURAL_EXECUTION_SPAN_NAME,
+} from "./structural-trace-context.mjs";
+import {
+  createStructuralPublicWorkerHandler,
+  runStructuralExecuteOperation,
+} from "./structural-worker-adapter.mjs";
+import {
   annotateExecutionSpan,
   ORIGIN_EXECUTION_SPAN_NAME,
 } from "./trace-context.mjs";
@@ -18,6 +26,7 @@ import {
   publicErrorResponse,
   runInitializeOperation,
 } from "./worker-adapter.mjs";
+import { WORKER_ROUTES } from "./worker-policy.mjs";
 
 const gatedGitHubJwksFetch = createJwksFetchGate({
   fetchImpl: (...args) => fetch(...args),
@@ -78,6 +87,27 @@ export class AuthorizationGateway extends DurableObject {
       return durableErrorEnvelope(error);
     }
   }
+
+  async structuralExecute(input) {
+    try {
+      this.assertNamedAuthorization(input?.execution?.requestContext?.authorizationId);
+      assertGitHubRunFence(input?.claims, input?.execution?.requestContext?.runId);
+      await this.ensureKeyPairReady();
+      return await tracing.enterSpan(STRUCTURAL_EXECUTION_SPAN_NAME, async (span) => {
+        annotateStructuralExecutionSpan(span, input.execution);
+        return runSupervisedExecuteOperation(
+          this.store,
+          input.execution,
+          input.claims,
+          this.env,
+          { fetchOrigin: (...args) => fetch(...args) },
+          runStructuralExecuteOperation,
+        );
+      });
+    } catch (error) {
+      return durableErrorEnvelope(error);
+    }
+  }
 }
 
 export default {
@@ -86,6 +116,14 @@ export default {
       assertPublicFrontDoor(request);
     } catch (error) {
       return publicErrorResponse(error);
+    }
+    const path = new URL(request.url).pathname;
+    if (path === WORKER_ROUTES.structuralExecute) {
+      const handler = createStructuralPublicWorkerHandler({
+        namespace: env.AUTHORIZATION_GATEWAY,
+        authenticate: authenticateGitHub,
+      });
+      return handler(request);
     }
     const handler = createPublicWorkerHandler({
       namespace: env.AUTHORIZATION_GATEWAY,
