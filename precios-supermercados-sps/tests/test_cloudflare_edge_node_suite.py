@@ -31,18 +31,23 @@ def _node() -> str:
 
 
 def test_cloudflare_node_suite() -> None:
+    test_files = [
+        "core.test.mjs",
+        "ledger.test.mjs",
+        "authorization-ledger.test.mjs",
+        "durable-store.test.mjs",
+        "gateway-runtime.test.mjs",
+    ]
     result = subprocess.run(
         [
             _node(),
             "--test",
-            str(EDGE_ROOT / "test" / "core.test.mjs"),
-            str(EDGE_ROOT / "test" / "ledger.test.mjs"),
-            str(EDGE_ROOT / "test" / "authorization-ledger.test.mjs"),
+            *(str(EDGE_ROOT / "test" / name) for name in test_files),
         ],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=90,
     )
     assert result.returncode == 0, (
         "La suite Node del gateway Cloudflare falló.\n"
