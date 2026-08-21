@@ -1,0 +1,11 @@
+{
+  "name": "precios-sps-cloudflare-edge",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/core.test.mjs"
+  }
+}
