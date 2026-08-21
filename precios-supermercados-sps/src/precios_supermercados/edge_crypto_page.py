@@ -98,9 +98,16 @@ class EdgeCatalogPageCryptoVerifier:
             raise EdgeCryptoPageError(f"request_{exc.code}") from exc
 
         try:
-            body = validate_la_colonia_edge_body(evidence.raw_body, request)
-        except LaColoniaEdgeBodyError as exc:
-            raise EdgeCryptoPageError(f"body_{exc.code}") from exc
+            verified_receipt = self._receipt_verifier.verify(receipt)
+        except EdgeReceiptCryptoError as exc:
+            raise EdgeCryptoPageError(f"receipt_crypto_{exc.code}") from exc
+
+        expected_evidence_id = _worker_evidence_id(
+            payload.canonical_dict(),
+            receipt.signature_b64url,
+        )
+        if evidence.worker_evidence_id != expected_evidence_id:
+            _fail("worker_evidence_id_mismatch")
 
         body_hash = hashlib.sha256(evidence.raw_body).hexdigest()
         if body_hash != payload.raw_response_sha256:
@@ -128,17 +135,10 @@ class EdgeCatalogPageCryptoVerifier:
         ):
             _fail("receipt_target_mismatch")
 
-        expected_evidence_id = _worker_evidence_id(
-            payload.canonical_dict(),
-            receipt.signature_b64url,
-        )
-        if evidence.worker_evidence_id != expected_evidence_id:
-            _fail("worker_evidence_id_mismatch")
-
         try:
-            verified_receipt = self._receipt_verifier.verify(receipt)
-        except EdgeReceiptCryptoError as exc:
-            raise EdgeCryptoPageError(f"receipt_crypto_{exc.code}") from exc
+            body = validate_la_colonia_edge_body(evidence.raw_body, request)
+        except LaColoniaEdgeBodyError as exc:
+            raise EdgeCryptoPageError(f"body_{exc.code}") from exc
 
         return CryptographicallyVerifiedEdgeCatalogPage(
             request=request,
