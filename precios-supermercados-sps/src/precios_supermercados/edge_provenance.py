@@ -26,6 +26,7 @@ _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _OPAQUE_ID = re.compile(r"[^\s]{1,256}\Z")
 _ALLOWED_PROVIDERS = {"cloudflare_workers", "google_cloud_run"}
 _ALLOWED_SIGNATURE_ALGORITHMS = {"Ed25519"}
+_ALLOWED_HTTP_METHODS = {"GET", "POST"}
 
 
 def _required_text(value: object, label: str, *, max_length: int = 512) -> str:
@@ -224,8 +225,8 @@ class EdgeReceiptPayload:
         if self.to_index < self.from_index:
             raise ValueError("to_index no puede preceder from_index")
 
-        if self.http_method != "POST":
-            raise ValueError("http_method debe ser POST")
+        if self.http_method not in _ALLOWED_HTTP_METHODS:
+            raise ValueError("http_method debe ser GET o POST")
         if self.target_scheme != "https":
             raise ValueError("target_scheme debe ser https")
         target_host = _required_text(self.target_host, "target_host", max_length=253).lower()
