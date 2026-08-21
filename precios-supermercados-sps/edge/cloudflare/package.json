@@ -6,6 +6,6 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test test/core.test.mjs test/canonical-time.test.mjs test/ledger.test.mjs test/authorization-ledger.test.mjs test/durable-store.test.mjs test/gateway-runtime.test.mjs test/worker-adapter.test.mjs test/worker-fencing.test.mjs test/gateway-supervisor.test.mjs"
+    "test": "node --test test/core.test.mjs test/canonical-time.test.mjs test/ledger.test.mjs test/authorization-ledger.test.mjs test/durable-store.test.mjs test/gateway-runtime.test.mjs test/worker-adapter.test.mjs test/worker-fencing.test.mjs test/gateway-supervisor.test.mjs test/front-door-jwks-gate.test.mjs"
   }
 }
