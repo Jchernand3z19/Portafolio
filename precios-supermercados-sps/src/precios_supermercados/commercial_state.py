@@ -19,7 +19,7 @@ from decimal import Decimal
 from typing import Iterable
 
 from .enums import ChangeType, RunStatus
-from .identifiers import canonicalize_text, generate_state_hash
+from .identifiers import canonicalize_text, canonicalize_url, generate_state_hash
 from .models import ValidatedOffer
 
 _STATE_FIELDS = (
@@ -197,12 +197,30 @@ class InMemoryCommercialState:
 
         staged_current = dict(self._current)
         staged_history = {key: list(periods) for key, periods in self._history.items()}
+        identity_owners, source_keys = _current_identity_indexes(staged_current)
         created = changed = confirmed = 0
 
         for validated in values:
             offer = validated.offer
+            offer_identity = _offer_logical_identity(validated)
+            source_product_identity = _source_product_identity(validated)
+            source_key_identity = _source_key_identity(validated)
+
+            identity_owner = identity_owners.get(offer_identity)
+            if identity_owner is not None and identity_owner != offer.offer_id:
+                raise CommercialStateError(
+                    "identidad lógica de oferta ya pertenece a otro offer_id"
+                )
+            known_source_key = source_keys.get(source_product_identity)
+            if known_source_key is not None and known_source_key != source_key_identity:
+                raise CommercialStateError(
+                    "source_product_id cambió su source_key estable"
+                )
+
             existing = staged_current.get(offer.offer_id)
             if existing is None:
+                identity_owners[offer_identity] = offer.offer_id
+                source_keys[source_product_identity] = source_key_identity
                 observed_at = offer.observed_at_utc
                 staged_current[offer.offer_id] = CurrentCommercialOffer(
                     validated_offer=validated,
@@ -215,6 +233,19 @@ class InMemoryCommercialState:
                 ]
                 created += 1
                 continue
+
+            if _offer_logical_identity(existing.validated_offer) != offer_identity:
+                raise CommercialStateError(
+                    f"offer_id {offer.offer_id} cambió su identidad lógica estable"
+                )
+            if _source_key_identity(existing.validated_offer) != source_key_identity:
+                raise CommercialStateError(
+                    f"offer_id {offer.offer_id} cambió su source_key estable"
+                )
+            if existing.validated_offer.offer.currency != offer.currency:
+                raise CommercialStateError(
+                    f"offer_id {offer.offer_id} cambió su moneda estable"
+                )
 
             observed_at = offer.observed_at_utc
             if validated.state_hash == existing.validated_offer.state_hash:
@@ -296,6 +327,8 @@ class InMemoryCommercialState:
                 "un run comercialmente aceptado no puede aplicar un payload vacío"
             )
         offer_ids: set[str] = set()
+        logical_identities: dict[tuple[str | None, ...], str] = {}
+        source_keys: dict[tuple[str | None, ...], tuple[str, str]] = {}
         for validated in offers:
             if not isinstance(validated, ValidatedOffer):
                 raise CommercialStateError("offers debe contener ValidatedOffer")
@@ -307,6 +340,24 @@ class InMemoryCommercialState:
             if offer.offer_id in offer_ids:
                 raise CommercialStateError("offer_id duplicado dentro del mismo run")
             offer_ids.add(offer.offer_id)
+
+            offer_identity = _offer_logical_identity(validated)
+            previous_offer_id = logical_identities.get(offer_identity)
+            if previous_offer_id is not None and previous_offer_id != offer.offer_id:
+                raise CommercialStateError(
+                    "identidad lógica de oferta duplicada bajo offer_id distintos"
+                )
+            logical_identities[offer_identity] = offer.offer_id
+
+            source_product_identity = _source_product_identity(validated)
+            source_key_identity = _source_key_identity(validated)
+            previous_source_key = source_keys.get(source_product_identity)
+            if previous_source_key is not None and previous_source_key != source_key_identity:
+                raise CommercialStateError(
+                    "source_product_id asociado a source_key conflictivos dentro del run"
+                )
+            source_keys[source_product_identity] = source_key_identity
+
             if generate_state_hash(offer) != validated.state_hash:
                 raise CommercialStateError(f"state_hash inválido para {offer.offer_id}")
             if validated.validated_at_utc < offer.observed_at_utc:
@@ -328,6 +379,62 @@ def _require_utc(value: datetime, field_name: str) -> None:
         raise CommercialStateError(f"{field_name} debe incluir zona horaria UTC")
     if value.utcoffset().total_seconds() != 0:
         raise CommercialStateError(f"{field_name} debe expresarse en UTC")
+
+
+def _offer_logical_identity(validated: ValidatedOffer) -> tuple[str | None, ...]:
+    """Componentes canónicos que determinan offer_id, sin exigir su hash exacto."""
+
+    offer = validated.offer
+    return (
+        canonicalize_text(offer.supermarket_id),
+        canonicalize_text(offer.location_id),
+        canonicalize_text(offer.source_product_id),
+    )
+
+
+def _source_product_identity(validated: ValidatedOffer) -> tuple[str | None, ...]:
+    offer = validated.offer
+    return (
+        canonicalize_text(offer.supermarket_id),
+        canonicalize_text(offer.source_product_id),
+    )
+
+
+def _source_key_identity(validated: ValidatedOffer) -> tuple[str, str]:
+    offer = validated.offer
+    source_key = offer.source_key
+    if offer.source_key_type.value == "stable_url":
+        source_key = canonicalize_url(source_key)
+    return (offer.source_key_type.value, source_key)
+
+
+def _current_identity_indexes(
+    current: dict[str, CurrentCommercialOffer],
+) -> tuple[
+    dict[tuple[str | None, ...], str],
+    dict[tuple[str | None, ...], tuple[str, str]],
+]:
+    offer_owners: dict[tuple[str | None, ...], str] = {}
+    source_keys: dict[tuple[str | None, ...], tuple[str, str]] = {}
+    for offer_id, state in current.items():
+        validated = state.validated_offer
+        offer_identity = _offer_logical_identity(validated)
+        previous_owner = offer_owners.get(offer_identity)
+        if previous_owner is not None and previous_owner != offer_id:
+            raise CommercialStateError(
+                "estado current contiene identidad lógica duplicada"
+            )
+        offer_owners[offer_identity] = offer_id
+
+        source_product_identity = _source_product_identity(validated)
+        source_key_identity = _source_key_identity(validated)
+        previous_source_key = source_keys.get(source_product_identity)
+        if previous_source_key is not None and previous_source_key != source_key_identity:
+            raise CommercialStateError(
+                "estado current contiene source_key conflictivos para source_product_id"
+            )
+        source_keys[source_product_identity] = source_key_identity
+    return offer_owners, source_keys
 
 
 def _fingerprint_decimal(value: Decimal | None) -> str | None:
