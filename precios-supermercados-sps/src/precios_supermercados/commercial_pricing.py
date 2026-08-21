@@ -63,7 +63,7 @@ def evaluate_real_price_reduction(
 
     validated = current.validated_offer
     offer = validated.offer
-    _validate_validated_evidence(validated, context="current")
+    _validate_deterministic_identity(validated, context="current")
     if offer.observed_at_utc != current.last_observed_at_utc:
         raise CommercialPricingError(
             "current y su evidencia discrepan en observación / última observación"
@@ -72,6 +72,7 @@ def evaluate_real_price_reduction(
         raise CommercialPricingError(
             "current y su evidencia discrepan en ejecución / última ejecución"
         )
+    _validate_evidence_integrity(validated, context="current")
 
     _validate_history_chain(offer.offer_id, offer.currency, history)
     open_period = history[-1]
@@ -124,12 +125,12 @@ def evaluate_real_price_reduction(
     )
 
 
-def _validate_validated_evidence(
+def _validate_deterministic_identity(
     validated: ValidatedOffer,
     *,
     context: str,
 ) -> None:
-    """Revalida evidencia persistida antes de usarla en una derivación."""
+    """Recalcula las identidades que una persistencia no puede redefinir."""
 
     offer = validated.offer
     expected_source_product_id = generate_source_product_id(
@@ -148,6 +149,16 @@ def _validate_validated_evidence(
     )
     if offer.offer_id != expected_offer_id:
         raise CommercialPricingError(f"{context} contiene offer_id no determinista")
+
+
+def _validate_evidence_integrity(
+    validated: ValidatedOffer,
+    *,
+    context: str,
+) -> None:
+    """Revalida cronología y contenido tras reconciliar el wrapper persistido."""
+
+    offer = validated.offer
     if validated.validated_at_utc < offer.observed_at_utc:
         raise CommercialPricingError(
             f"{context} contiene validated_at_utc anterior a observed_at_utc"
@@ -169,12 +180,15 @@ def _validate_history_chain(
     currency: str,
     history: Sequence[OfferHistoryPeriod],
 ) -> None:
+    if history[-1].valid_to_utc is not None:
+        raise CommercialPricingError("el último periodo histórico no está abierto")
+
     open_count = 0
     previous: OfferHistoryPeriod | None = None
     for index, period in enumerate(history):
         validated = period.validated_offer
         period_offer = validated.offer
-        _validate_validated_evidence(validated, context="periodo histórico")
+        _validate_deterministic_identity(validated, context="periodo histórico")
         if period.offer_id != offer_id or period_offer.offer_id != period.offer_id:
             raise CommercialPricingError("current e histórico pertenecen a offer_id distintos")
         if period_offer.currency != currency:
@@ -193,6 +207,7 @@ def _validate_history_chain(
         )
         if validated.state_hash != period.state_hash:
             raise CommercialPricingError("periodo y ValidatedOffer tienen state_hash distinto")
+        _validate_evidence_integrity(validated, context="periodo histórico")
 
         if period.valid_to_utc is None:
             open_count += 1
@@ -222,5 +237,5 @@ def _validate_history_chain(
                 )
         previous = period
 
-    if open_count != 1 or history[-1].valid_to_utc is not None:
+    if open_count != 1:
         raise CommercialPricingError("el último periodo histórico no está abierto")
