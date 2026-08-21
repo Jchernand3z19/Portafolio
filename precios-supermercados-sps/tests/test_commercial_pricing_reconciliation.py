@@ -95,6 +95,20 @@ def _store_three_periods() -> tuple[InMemoryCommercialState, str]:
     return store, first.offer.offer_id
 
 
+def test_successful_reconciliation_exposes_currency():
+    store, offer_id = _store_three_periods()
+
+    result = evaluate_real_price_reduction(
+        store.current(offer_id),
+        store.history(offer_id),
+    )
+
+    assert result is not None
+    assert result.currency == "HNL"
+    assert result.previous_accepted_price == Decimal("25")
+    assert result.current_price == Decimal("20")
+
+
 def test_current_opening_timestamp_must_match_open_period():
     store, offer_id = _store_three_periods()
     current = store.current(offer_id)
@@ -116,6 +130,64 @@ def test_current_last_run_must_match_open_period_confirmation():
 
     with pytest.raises(CommercialPricingError, match="última ejecución"):
         evaluate_real_price_reduction(altered, store.history(offer_id))
+
+
+def test_current_state_hash_is_revalidated():
+    store, offer_id = _store_three_periods()
+    current = store.current(offer_id)
+    assert current is not None
+    forged_validated = replace(current.validated_offer, state_hash="f" * 64)
+    forged_current = replace(current, validated_offer=forged_validated)
+
+    with pytest.raises(CommercialPricingError, match="current contiene state_hash inválido"):
+        evaluate_real_price_reduction(forged_current, store.history(offer_id))
+
+
+def test_currency_mismatch_between_current_and_history_fails_closed():
+    store, offer_id = _store_three_periods()
+    current = store.current(offer_id)
+    assert current is not None
+    usd_offer = replace(current.validated_offer.offer, currency="USD")
+    usd_validated = replace(current.validated_offer, offer=usd_offer)
+    usd_current = replace(current, validated_offer=usd_validated)
+
+    with pytest.raises(CommercialPricingError, match="monedas distintas"):
+        evaluate_real_price_reduction(usd_current, store.history(offer_id))
+
+
+def test_period_and_validated_offer_state_hash_must_match():
+    store, offer_id = _store_three_periods()
+    history = list(store.history(offer_id))
+    forged_validated = replace(history[0].validated_offer, state_hash="f" * 64)
+    history[0] = replace(history[0], validated_offer=forged_validated)
+
+    with pytest.raises(CommercialPricingError, match="ValidatedOffer tienen state_hash distinto"):
+        evaluate_real_price_reduction(store.current(offer_id), history)
+
+
+def test_period_state_hash_is_recomputed_from_offer_content():
+    store, offer_id = _store_three_periods()
+    history = list(store.history(offer_id))
+    forged_offer = replace(
+        history[0].validated_offer.offer,
+        current_price=Decimal("999"),
+    )
+    forged_validated = replace(history[0].validated_offer, offer=forged_offer)
+    history[0] = replace(history[0], validated_offer=forged_validated)
+
+    with pytest.raises(CommercialPricingError, match="state_hash inválido"):
+        evaluate_real_price_reduction(store.current(offer_id), history)
+
+
+def test_period_wrapper_and_nested_offer_id_must_match():
+    store, offer_id = _store_three_periods()
+    history = list(store.history(offer_id))
+    forged_offer = replace(history[0].validated_offer.offer, offer_id="of_forged")
+    forged_validated = replace(history[0].validated_offer, offer=forged_offer)
+    history[0] = replace(history[0], validated_offer=forged_validated)
+
+    with pytest.raises(CommercialPricingError, match="offer_id distintos"):
+        evaluate_real_price_reduction(store.current(offer_id), history)
 
 
 def test_intermediate_open_period_fails_closed():
