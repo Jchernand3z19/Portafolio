@@ -5,6 +5,7 @@ import {
   sha256Hex,
   validateLaColoniaGetUrl,
 } from "./core.mjs";
+import { canonicalEdgeTimestamp } from "./canonical-time.mjs";
 import { MAX_REPLAY_BODY_BYTES } from "./durable-store.mjs";
 
 const SHA1_RE = /^[0-9a-f]{40}$/u;
@@ -277,8 +278,8 @@ export async function executeGatewayRequest(input, dependencies) {
       ...collector,
       execution: exactText(dependencies.executionId(), "collector_execution_invalid", 256),
     },
-    physicalStartedAt: physicalStartedAt.toISOString(),
-    responseCompletedAt: responseCompletedAt.toISOString(),
+    physicalStartedAt: canonicalEdgeTimestamp(physicalStartedAt),
+    responseCompletedAt: canonicalEdgeTimestamp(responseCompletedAt),
     rawResponseSha256,
     responseBodyBytes: rawBody.byteLength,
   });

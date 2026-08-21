@@ -33,6 +33,7 @@ def _node() -> str:
 def test_cloudflare_node_suite() -> None:
     test_files = [
         "core.test.mjs",
+        "canonical-time.test.mjs",
         "ledger.test.mjs",
         "authorization-ledger.test.mjs",
         "durable-store.test.mjs",

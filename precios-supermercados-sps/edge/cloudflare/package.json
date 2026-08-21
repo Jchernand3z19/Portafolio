@@ -6,6 +6,6 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test test/core.test.mjs test/ledger.test.mjs test/authorization-ledger.test.mjs test/durable-store.test.mjs test/gateway-runtime.test.mjs"
+    "test": "node --test test/core.test.mjs test/canonical-time.test.mjs test/ledger.test.mjs test/authorization-ledger.test.mjs test/durable-store.test.mjs test/gateway-runtime.test.mjs"
   }
 }
