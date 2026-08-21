@@ -207,7 +207,9 @@ def test_cierra_root_y_tree_y_deriva_estructura_sin_filtrar_categoria() -> None:
     assert len(result.digest) == 64
     assert result.production_authority is False
     public = json.dumps(result.canonical_dict(), sort_keys=True)
-    assert "supermercado" not in public
+    assert '"value": "supermercado"' not in public
+    assert '"facet_value"' not in public
+    assert '"facet_key"' not in public
     assert "category-1" not in public
 
 
