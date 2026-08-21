@@ -2,6 +2,8 @@ import { DurableObject } from "cloudflare:workers";
 
 import { EdgePolicyError } from "./core.mjs";
 import { DurableAuthorizationStore } from "./durable-store.mjs";
+import { assertGitHubRunFence } from "./github-run-fence.mjs";
+import { validateReceiptKeyPair } from "./receipt-key-preflight.mjs";
 import {
   createGitHubOidcAuthenticator,
   createPublicWorkerHandler,
@@ -18,6 +20,7 @@ export class AuthorizationGateway extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.store = new DurableAuthorizationStore(ctx.storage);
+    this.keyPairReady = null;
   }
 
   assertNamedAuthorization(authorizationId) {
@@ -26,9 +29,20 @@ export class AuthorizationGateway extends DurableObject {
     }
   }
 
+  async ensureKeyPairReady() {
+    if (!this.keyPairReady) {
+      this.keyPairReady = validateReceiptKeyPair(this.env).catch((error) => {
+        this.keyPairReady = null;
+        throw error;
+      });
+    }
+    return this.keyPairReady;
+  }
+
   async initialize(input) {
     try {
       this.assertNamedAuthorization(input?.authorization?.authorizationId);
+      assertGitHubRunFence(input?.claims, input?.authorization?.runId);
       return runInitializeOperation(this.store, input.authorization, input.claims);
     } catch (error) {
       return durableErrorEnvelope(error);
@@ -38,6 +52,8 @@ export class AuthorizationGateway extends DurableObject {
   async execute(input) {
     try {
       this.assertNamedAuthorization(input?.execution?.requestContext?.authorizationId);
+      assertGitHubRunFence(input?.claims, input?.execution?.requestContext?.runId);
+      await this.ensureKeyPairReady();
       return await runExecuteOperation(
         this.store,
         input.execution,
