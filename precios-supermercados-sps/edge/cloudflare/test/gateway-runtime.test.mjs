@@ -166,6 +166,10 @@ async function harness({ fetchOrigin, authenticate, start = T0 + 100 } = {}) {
       });
     },
     signReceipt: signer.sign,
+    verifyReceipt: (payload, signature, keyId) => {
+      if (keyId !== collector().signingKeyId) return false;
+      return verifyReceiptSignature(payload, signature, signer.publicB64);
+    },
     clock: clock(start),
     executionId: () => "cf-execution-test-001",
   };
@@ -323,7 +327,7 @@ test("Content-Length sobre el límite falla cerrado sin materializar body", asyn
   assert.equal(h.store.summary(T0 + 5000).state, "rejected");
 });
 
-test("firma inválida nunca completa ni devuelve evidencia", async () => {
+test("firma con formato inválido nunca completa ni devuelve evidencia", async () => {
   const origin = await makeOrigin(1);
   const h = await harness();
   h.deps.signReceipt = async () => "not+base64";
@@ -334,7 +338,18 @@ test("firma inválida nunca completa ni devuelve evidencia", async () => {
   assert.equal(h.store.summary(T0 + 5000).state, "rejected");
 });
 
-test("corrupción del replay persistido no provoca un refetch", async () => {
+test("firma bien formada pero criptográficamente inválida rechaza autorización", async () => {
+  const origin = await makeOrigin(1);
+  const h = await harness();
+  h.deps.verifyReceipt = async () => false;
+  await assert.rejects(
+    executeGatewayRequest(input(origin, context(origin, 1)), h.deps),
+    (error) => expectPolicyError(error, "receipt_signature_verification_failed"),
+  );
+  assert.equal(h.store.summary(T0 + 5000).state, "rejected");
+});
+
+test("corrupción estructural del replay persistido no provoca un refetch", async () => {
   const origin = await makeOrigin(1);
   const h = await harness();
   await executeGatewayRequest(input(origin, context(origin, 1)), h.deps);
@@ -344,6 +359,21 @@ test("corrupción del replay persistido no provoca un refetch", async () => {
   await assert.rejects(
     executeGatewayRequest(input(origin, context(origin, 1)), h.deps),
     (error) => expectPolicyError(error, "completed_replay_evidence_missing_or_corrupt"),
+  );
+  assert.equal(h.fetchCalls(), 1);
+});
+
+test("corrupción same-length de bytes persistidos se detecta criptográficamente sin refetch", async () => {
+  const origin = await makeOrigin(1);
+  const h = await harness();
+  await executeGatewayRequest(input(origin, context(origin, 1)), h.deps);
+  const key = "response:reservation-1";
+  const envelope = h.storage.data.get(key);
+  envelope.rawBody[0] ^= 1;
+
+  await assert.rejects(
+    executeGatewayRequest(input(origin, context(origin, 1)), h.deps),
+    (error) => expectPolicyError(error, "replay_raw_body_hash_mismatch"),
   );
   assert.equal(h.fetchCalls(), 1);
 });
