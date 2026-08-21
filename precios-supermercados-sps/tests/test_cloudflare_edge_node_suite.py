@@ -43,6 +43,7 @@ def test_cloudflare_node_suite() -> None:
         "worker-fencing.test.mjs",
         "gateway-supervisor.test.mjs",
         "front-door-jwks-gate.test.mjs",
+        "structural-trace-context.test.mjs",
     ]
     result = subprocess.run(
         [
