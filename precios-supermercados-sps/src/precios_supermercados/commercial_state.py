@@ -223,6 +223,7 @@ class InMemoryCommercialState:
                     )
                 staged_current[offer.offer_id] = replace(
                     existing,
+                    validated_offer=validated,
                     last_observed_at_utc=max(existing.last_observed_at_utc, observed_at),
                     last_scrape_run_id=decision.scrape_run_id,
                 )
