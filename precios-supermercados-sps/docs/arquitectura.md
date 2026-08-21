@@ -6,15 +6,13 @@ Este documento es la **fuente canónica única** del estado técnico actual del 
 
 Fecha: **2026-08-20**.
 
-Base originalmente auditada de `main`:
+Base histórica originalmente auditada de `main`:
 
 `1c6aca3318fc1f830f2d43a77cc27c4ba845ab26`
 
-Estado integrado verificado después de PR #19 y PR #20:
+Ese SHA es evidencia histórica estable, no una declaración del HEAD mutable actual. El HEAD de `main` debe verificarse directamente en GitHub; no se fija como “SHA actual” dentro de este documento porque el propio merge que modifica esta fuente cambiaría ese valor.
 
-`main = 6703fbc2d9c40cfd458da8e6ff829ecf223c2da0`
-
-El commit base auditado integraba **PR #7 — La Colonia full crawl validation (fail-closed)** y **PR #17 — observabilidad del facet discovery** ya estaba integrado. Posteriormente se integraron **PR #19 — canonicalización/CI/frontera comercial** y **PR #20 — coherencia de evidencia current y canonicalización de changed_fields**. Los textos históricos que todavía describen esos PR como abiertos, draft o pendientes son obsoletos como estado operativo.
+Desde esa base se integraron las revisiones de canonicalización/CI/frontera comercial, coherencia de evidencia `current`, canonicalización de `changed_fields` y sincronización documental. Esta revisión endurece además la identidad de replay y la transición `running -> terminal`.
 
 Evidencia productiva verificada:
 
@@ -33,7 +31,8 @@ Validaciones verificadas:
 
 - baseline previo integrado por PR #7: **770/770** pruebas;
 - PR #19 — canonicalización, CI y frontera comercial: **796/796** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14;
-- PR #20 — coherencia de evidencia `current` y canonicalización de `changed_fields`: **798/798** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14.
+- PR #20 — coherencia de evidencia `current` y canonicalización de `changed_fields`: **798/798** pruebas, más `compileall`;
+- esta revisión — replay ligado a evidencia persistible/auditable y `running` transitorio: **801/801** pruebas, más `compileall`, en GitHub Actions con Python 3.12.14.
 
 ## Estado operativo resumido
 
@@ -50,7 +49,7 @@ Validaciones verificadas:
 | Workflows live | DONE_FAIL_CLOSED | Jobs capaces de live permanecen `if: false`. |
 | Workflow supply chain | DONE_OFFLINE | Actions por SHA, permisos mínimos, checkout inmutable. |
 | CI | DONE_VERSIONED | Pull requests, manual y pushes a `main`; auditoría estática impide perder esa cobertura silenciosamente. |
-| Frontera current/history | DONE_OFFLINE | `commercial_state.py` aplica runs aceptados de forma atómica/idempotente, mantiene `current` en la última evidencia aceptada y conserva histórico. |
+| Frontera current/history | DONE_OFFLINE | Atómica/idempotente; `current` usa la última evidencia aceptada y el replay terminal queda ligado a evidencia persistible. |
 | Backend comercial productivo | BLOCKED_DEPENDENCIES | No se conecta mientras la aceptación autoritativa/productive readiness siga abierta. |
 | GATE-17 | BLOCKED_EXTERNAL | `FAIL_PRODUCTIVE_EVIDENCE`: `main` sin protección/ruleset. |
 | Trusted collector físico | BLOCKED_EXTERNAL | No existe observer productivo independiente ligado a requests físicos. |
@@ -97,11 +96,15 @@ Propiedades verificadas:
 
 - sólo `success`/`warning` con `catalog_accepted = true` permiten mutación;
 - `running`, `rejected`, `failed`, `abandoned` y `catalog_accepted = false` son no-op comercial;
+- `running` es transitorio y no consume el fingerprint terminal de `scrape_run_id`, por lo que puede evolucionar al estado final del mismo run;
+- decisiones terminales no comerciales sí consumen la identidad del run y no pueden reescribirse después como una decisión distinta;
 - el `state_hash` se recalcula antes de aplicar;
 - la cronología exige `observed_at_utc <= validated_at_utc <= decided_at_utc`;
 - el payload de un run no admite `offer_id` duplicado ni ofertas de otro `scrape_run_id`;
 - el replay exacto es idempotente;
-- reutilizar el mismo `scrape_run_id` con otra decisión, timestamp o contenido comercial falla cerrado;
+- el fingerprint terminal liga decisión, identidad de oferta, `state_hash`, timestamps, `source_url`, versiones, trazabilidad fuente explícita, ubicación, review/pending y `quality_events`;
+- `raw_values` no forma parte del fingerprint terminal porque es un contenedor crudo arbitrario y no la identidad persistible definida por esta frontera;
+- reutilizar un `scrape_run_id` terminal con otra decisión o evidencia persistible/auditable falla cerrado;
 - el mismo hash confirma el periodo abierto sin crear otro;
 - cuando el hash no cambia, `current.validated_offer` se refresca a la última evidencia aceptada y queda coherente con `last_scrape_run_id`;
 - el periodo histórico abierto conserva la evidencia que lo abrió y sólo avanza `last_confirmed_by_scrape_run_id`/`last_observed_at_utc`;
@@ -181,7 +184,7 @@ Controles:
 - scripts capaces de red sólo viven en jobs globalmente bloqueados;
 - CI usa Python 3.12, compila `src`/`scripts` y ejecuta toda la suite.
 
-Hallazgo corregido: la CI sólo corría en PR/manual. Dado que `main` no está protegida, un push directo podía evadir la suite. El workflow ahora cubre también pushes a `main` para `precios-supermercados-sps/**` y `.github/workflows/**`, y `test_workflow_security_audit.py` exige esa cobertura.
+La CI cubre PR/manual y pushes a `main` para `precios-supermercados-sps/**` y `.github/workflows/**`; `test_workflow_security_audit.py` exige esa cobertura. Esto no sustituye GATE-17: un push directo todavía puede entrar porque la rama no está protegida, aunque después ejecute CI.
 
 ## Persistencia e histórico
 
@@ -242,19 +245,21 @@ Ningún `PASS_OFFLINE_MODEL` autoriza live.
 - frontera comercial current/history atómica e idempotente;
 - `current` coherente con la última evidencia aceptada del mismo estado;
 - `changed_fields` alineado con la canonicalización del `state_hash`;
-- pruebas de replay, mismo hash, cronología, cambio de precio, precio regular reportado, estados no aceptados, atomicidad, ausencia sin inferencia y regresiones de PR #20;
+- fingerprint terminal ligado a evidencia persistible/auditable;
+- transición `running -> terminal` sin consumir anticipadamente `scrape_run_id`;
+- pruebas de replay, mismo hash, cronología, cambio de precio, precio regular reportado, estados no aceptados, atomicidad, ausencia sin inferencia y counterexamples de auditoría;
 - canonicalización de README/AGENTS/arquitectura.
 
 ### STALE / OBSOLETE
 
-- cuerpos de PR #7/#17/#19/#20 como descripción del estado actual;
+- cuerpos históricos de PR como descripción del estado actual;
 - ramas ya integradas y detrás de `main` como posible fuente canónica;
 - gobernanza que exigía mantener PR #7/#17 abiertos;
-- README antiguo que omitía gran parte del runtime.
+- publicar un SHA mutable de `main` dentro de documentación como si pudiera mantenerse autorreferencialmente actualizado.
 
 ### READY_TO_IMPLEMENT
 
-`0` tareas técnicas independientes de las fronteras siguientes.
+`0` tareas técnicas independientes de las fronteras siguientes, sujeto a nuevos bugs concretos que una revisión adversarial reproduzca.
 
 ### BLOCKED_EXTERNAL / BLOCKED_LIVE / BLOCKED_HUMAN_DECISION
 
