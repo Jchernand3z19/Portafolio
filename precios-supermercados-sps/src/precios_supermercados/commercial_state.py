@@ -1,0 +1,433 @@
+"""Frontera offline entre una ejecución técnica y el estado comercial persistible.
+
+No concede autoridad live ni implementa almacenamiento externo. Recibe una
+decisión upstream y aplica de forma atómica/idempotente sólo runs comercialmente
+aceptados. Una integración productiva DEBE derivar ``catalog_accepted`` del
+collector autoritativo; un booleano de caller no sustituye esa evidencia.
+
+Las ofertas ausentes del payload nunca se interpretan aquí como ``not_listed``,
+``out_of_stock`` ni eliminación. Esas transiciones requieren evidencia explícita.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass, replace
+from datetime import datetime
+from decimal import Decimal
+from typing import Iterable
+
+from .enums import ChangeType, RunStatus
+from .identifiers import generate_state_hash
+from .models import ValidatedOffer
+
+_STATE_FIELDS = (
+    "current_price",
+    "reported_regular_price",
+    "is_promotion",
+    "availability",
+    "normalized_brand",
+    "category",
+    "subcategory",
+    "variant",
+    "unit_count",
+    "content_per_unit",
+    "measurement_unit",
+    "total_content",
+)
+_PRODUCT_ATTRIBUTE_FIELDS = frozenset(
+    {
+        "normalized_brand",
+        "category",
+        "subcategory",
+        "variant",
+        "unit_count",
+        "content_per_unit",
+        "measurement_unit",
+        "total_content",
+    }
+)
+_COMMERCIAL_STATUSES = frozenset({RunStatus.SUCCESS, RunStatus.WARNING})
+
+
+class CommercialStateError(ValueError):
+    """Base para errores que deben abortar una transición comercial."""
+
+
+class CommercialReplayConflict(CommercialStateError):
+    """El mismo scrape_run_id reapareció con evidencia o decisión distinta."""
+
+
+class OutOfOrderCommercialObservation(CommercialStateError):
+    """Una observación aceptada intentó reescribir un estado posterior."""
+
+
+@dataclass(frozen=True, slots=True)
+class CommercialRunDecision:
+    """Decisión upstream; no es por sí misma una prueba de autoridad live."""
+
+    scrape_run_id: str
+    run_status: RunStatus | str
+    catalog_accepted: bool
+    decided_at_utc: datetime
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.scrape_run_id, str) or not self.scrape_run_id.strip():
+            raise CommercialStateError("scrape_run_id no puede estar vacío")
+        object.__setattr__(self, "scrape_run_id", self.scrape_run_id.strip())
+        try:
+            status = (
+                self.run_status
+                if isinstance(self.run_status, RunStatus)
+                else RunStatus(self.run_status)
+            )
+        except (TypeError, ValueError) as exc:
+            raise CommercialStateError("run_status no es válido") from exc
+        object.__setattr__(self, "run_status", status)
+        if not isinstance(self.catalog_accepted, bool):
+            raise CommercialStateError("catalog_accepted debe ser booleano")
+        _require_utc(self.decided_at_utc, "decided_at_utc")
+
+    @property
+    def commercial_update_allowed(self) -> bool:
+        """Sólo success/warning + catálogo aceptado puede mutar current/history."""
+
+        return self.catalog_accepted and self.run_status in _COMMERCIAL_STATUSES
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentCommercialOffer:
+    validated_offer: ValidatedOffer
+    first_observed_at_utc: datetime
+    last_observed_at_utc: datetime
+    last_scrape_run_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class OfferHistoryPeriod:
+    offer_history_id: str
+    offer_id: str
+    state_hash: str
+    change_type: ChangeType
+    changed_fields: tuple[str, ...]
+    validated_offer: ValidatedOffer
+    valid_from_utc: datetime
+    valid_to_utc: datetime | None
+    opened_by_scrape_run_id: str
+    closed_by_scrape_run_id: str | None
+    last_confirmed_by_scrape_run_id: str
+    last_observed_at_utc: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ApplyRunResult:
+    scrape_run_id: str
+    commercial_update_allowed: bool
+    replayed: bool
+    mutated: bool
+    current_created: int
+    current_changed: int
+    current_confirmed: int
+    offers_ignored: int
+
+
+class InMemoryCommercialState:
+    """Motor de transición atómico/idempotente desacoplado del backend."""
+
+    def __init__(self) -> None:
+        self._current: dict[str, CurrentCommercialOffer] = {}
+        self._history: dict[str, list[OfferHistoryPeriod]] = {}
+        self._run_fingerprints: dict[str, str] = {}
+
+    def current(self, offer_id: str) -> CurrentCommercialOffer | None:
+        return self._current.get(offer_id)
+
+    def history(self, offer_id: str) -> tuple[OfferHistoryPeriod, ...]:
+        return tuple(self._history.get(offer_id, ()))
+
+    @property
+    def current_count(self) -> int:
+        return len(self._current)
+
+    @property
+    def applied_run_count(self) -> int:
+        return len(self._run_fingerprints)
+
+    def apply_run(
+        self,
+        decision: CommercialRunDecision,
+        offers: Iterable[ValidatedOffer],
+    ) -> ApplyRunResult:
+        """Aplica todo el run o nada; jamás infiere estados por ausencia."""
+
+        values = tuple(offers)
+        self._validate_run_payload(decision, values)
+        fingerprint = _run_fingerprint(decision, values)
+        previous_fingerprint = self._run_fingerprints.get(decision.scrape_run_id)
+        if previous_fingerprint is not None:
+            if previous_fingerprint != fingerprint:
+                raise CommercialReplayConflict(
+                    "scrape_run_id reutilizado con decisión o evidencia distinta"
+                )
+            return ApplyRunResult(
+                scrape_run_id=decision.scrape_run_id,
+                commercial_update_allowed=decision.commercial_update_allowed,
+                replayed=True,
+                mutated=False,
+                current_created=0,
+                current_changed=0,
+                current_confirmed=0,
+                offers_ignored=(0 if decision.commercial_update_allowed else len(values)),
+            )
+
+        if not decision.commercial_update_allowed:
+            self._run_fingerprints[decision.scrape_run_id] = fingerprint
+            return ApplyRunResult(
+                scrape_run_id=decision.scrape_run_id,
+                commercial_update_allowed=False,
+                replayed=False,
+                mutated=False,
+                current_created=0,
+                current_changed=0,
+                current_confirmed=0,
+                offers_ignored=len(values),
+            )
+
+        staged_current = dict(self._current)
+        staged_history = {key: list(periods) for key, periods in self._history.items()}
+        created = changed = confirmed = 0
+
+        for validated in values:
+            offer = validated.offer
+            existing = staged_current.get(offer.offer_id)
+            if existing is None:
+                observed_at = offer.observed_at_utc
+                staged_current[offer.offer_id] = CurrentCommercialOffer(
+                    validated_offer=validated,
+                    first_observed_at_utc=observed_at,
+                    last_observed_at_utc=observed_at,
+                    last_scrape_run_id=decision.scrape_run_id,
+                )
+                staged_history[offer.offer_id] = [
+                    _new_period(validated, decision.scrape_run_id, ChangeType.INITIAL, ())
+                ]
+                created += 1
+                continue
+
+            observed_at = offer.observed_at_utc
+            if validated.state_hash == existing.validated_offer.state_hash:
+                if observed_at < existing.last_observed_at_utc:
+                    raise OutOfOrderCommercialObservation(
+                        f"observación anterior para {offer.offer_id}"
+                    )
+                staged_current[offer.offer_id] = replace(
+                    existing,
+                    last_observed_at_utc=max(existing.last_observed_at_utc, observed_at),
+                    last_scrape_run_id=decision.scrape_run_id,
+                )
+                periods = staged_history[offer.offer_id]
+                open_period = _require_single_open_period(periods, offer.offer_id)
+                periods[-1] = replace(
+                    open_period,
+                    last_confirmed_by_scrape_run_id=decision.scrape_run_id,
+                    last_observed_at_utc=max(open_period.last_observed_at_utc, observed_at),
+                )
+                confirmed += 1
+                continue
+
+            if observed_at <= existing.last_observed_at_utc:
+                raise OutOfOrderCommercialObservation(
+                    f"cambio no monotónico para {offer.offer_id}"
+                )
+
+            changed_fields = _changed_fields(existing.validated_offer, validated)
+            if not changed_fields:
+                raise CommercialStateError(
+                    "state_hash cambió sin diferencias en campos canónicos"
+                )
+            change_type = _classify_change(changed_fields)
+            periods = staged_history[offer.offer_id]
+            open_period = _require_single_open_period(periods, offer.offer_id)
+            periods[-1] = replace(
+                open_period,
+                valid_to_utc=observed_at,
+                closed_by_scrape_run_id=decision.scrape_run_id,
+            )
+            periods.append(
+                _new_period(
+                    validated,
+                    decision.scrape_run_id,
+                    change_type,
+                    changed_fields,
+                )
+            )
+            staged_current[offer.offer_id] = CurrentCommercialOffer(
+                validated_offer=validated,
+                first_observed_at_utc=observed_at,
+                last_observed_at_utc=observed_at,
+                last_scrape_run_id=decision.scrape_run_id,
+            )
+            changed += 1
+
+        self._current = staged_current
+        self._history = staged_history
+        self._run_fingerprints[decision.scrape_run_id] = fingerprint
+        return ApplyRunResult(
+            scrape_run_id=decision.scrape_run_id,
+            commercial_update_allowed=True,
+            replayed=False,
+            mutated=bool(created or changed or confirmed),
+            current_created=created,
+            current_changed=changed,
+            current_confirmed=confirmed,
+            offers_ignored=0,
+        )
+
+    @staticmethod
+    def _validate_run_payload(
+        decision: CommercialRunDecision,
+        offers: tuple[ValidatedOffer, ...],
+    ) -> None:
+        if decision.commercial_update_allowed and not offers:
+            raise CommercialStateError(
+                "un run comercialmente aceptado no puede aplicar un payload vacío"
+            )
+        offer_ids: set[str] = set()
+        for validated in offers:
+            if not isinstance(validated, ValidatedOffer):
+                raise CommercialStateError("offers debe contener ValidatedOffer")
+            offer = validated.offer
+            if offer.scrape_run_id != decision.scrape_run_id:
+                raise CommercialStateError(
+                    "todas las ofertas deben pertenecer al scrape_run_id de la decisión"
+                )
+            if offer.offer_id in offer_ids:
+                raise CommercialStateError("offer_id duplicado dentro del mismo run")
+            offer_ids.add(offer.offer_id)
+            if generate_state_hash(offer) != validated.state_hash:
+                raise CommercialStateError(f"state_hash inválido para {offer.offer_id}")
+            if validated.validated_at_utc < offer.observed_at_utc:
+                raise CommercialStateError(
+                    "validated_at_utc no puede ser anterior a observed_at_utc"
+                )
+            if validated.validated_at_utc > decision.decided_at_utc:
+                raise CommercialStateError(
+                    "validated_at_utc no puede ser posterior a decided_at_utc"
+                )
+            if offer.observed_at_utc > decision.decided_at_utc:
+                raise CommercialStateError(
+                    "una oferta no puede observarse después de decided_at_utc"
+                )
+
+
+def _require_utc(value: datetime, field_name: str) -> None:
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise CommercialStateError(f"{field_name} debe incluir zona horaria UTC")
+    if value.utcoffset().total_seconds() != 0:
+        raise CommercialStateError(f"{field_name} debe expresarse en UTC")
+
+
+def _run_fingerprint(
+    decision: CommercialRunDecision,
+    offers: tuple[ValidatedOffer, ...],
+) -> str:
+    payload = {
+        "scrape_run_id": decision.scrape_run_id,
+        "run_status": decision.run_status.value,
+        "catalog_accepted": decision.catalog_accepted,
+        "decided_at_utc": decision.decided_at_utc.isoformat(),
+        "offers": sorted(
+            (
+                item.offer.offer_id,
+                item.state_hash,
+                item.offer.observed_at_utc.isoformat(),
+                item.validated_at_utc.isoformat(),
+            )
+            for item in offers
+        ),
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _history_id(offer_id: str, state_hash: str, valid_from: datetime) -> str:
+    payload = f"{offer_id}\x1f{state_hash}\x1f{valid_from.isoformat()}"
+    return "oh_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
+
+
+def _new_period(
+    validated: ValidatedOffer,
+    scrape_run_id: str,
+    change_type: ChangeType,
+    changed_fields: tuple[str, ...],
+) -> OfferHistoryPeriod:
+    offer = validated.offer
+    observed_at = offer.observed_at_utc
+    return OfferHistoryPeriod(
+        offer_history_id=_history_id(offer.offer_id, validated.state_hash, observed_at),
+        offer_id=offer.offer_id,
+        state_hash=validated.state_hash,
+        change_type=change_type,
+        changed_fields=changed_fields,
+        validated_offer=validated,
+        valid_from_utc=observed_at,
+        valid_to_utc=None,
+        opened_by_scrape_run_id=scrape_run_id,
+        closed_by_scrape_run_id=None,
+        last_confirmed_by_scrape_run_id=scrape_run_id,
+        last_observed_at_utc=observed_at,
+    )
+
+
+def _require_single_open_period(
+    periods: list[OfferHistoryPeriod],
+    offer_id: str,
+) -> OfferHistoryPeriod:
+    if not periods or periods[-1].valid_to_utc is not None:
+        raise CommercialStateError(f"histórico sin periodo abierto para {offer_id}")
+    if sum(period.valid_to_utc is None for period in periods) != 1:
+        raise CommercialStateError(f"histórico con múltiples periodos abiertos para {offer_id}")
+    return periods[-1]
+
+
+def _comparable(value: object) -> object:
+    if hasattr(value, "value"):
+        return getattr(value, "value")
+    if isinstance(value, Decimal):
+        return value.normalize()
+    return value
+
+
+def _changed_fields(
+    previous: ValidatedOffer,
+    current: ValidatedOffer,
+) -> tuple[str, ...]:
+    before = previous.offer
+    after = current.offer
+    return tuple(
+        field_name
+        for field_name in _STATE_FIELDS
+        if _comparable(getattr(before, field_name))
+        != _comparable(getattr(after, field_name))
+    )
+
+
+def _classify_change(changed_fields: tuple[str, ...]) -> ChangeType:
+    categories: set[ChangeType] = set()
+    for field_name in changed_fields:
+        if field_name == "current_price":
+            categories.add(ChangeType.PRICE)
+        elif field_name == "reported_regular_price":
+            categories.add(ChangeType.REGULAR_PRICE)
+        elif field_name == "is_promotion":
+            categories.add(ChangeType.PROMOTION)
+        elif field_name == "availability":
+            categories.add(ChangeType.AVAILABILITY)
+        elif field_name in _PRODUCT_ATTRIBUTE_FIELDS:
+            categories.add(ChangeType.PRODUCT_ATTRIBUTE)
+        else:  # pragma: no cover - _STATE_FIELDS es cerrado
+            raise CommercialStateError(f"campo de estado no clasificado: {field_name}")
+    if len(categories) == 1:
+        return next(iter(categories))
+    return ChangeType.MULTIPLE

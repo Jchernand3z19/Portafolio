@@ -1,12 +1,12 @@
-# Decisiones técnicas iniciales
+# Decisiones técnicas
 
 ## DT-001 — Monorepositorio
 
-El proyecto vive en `precios-supermercados-sps/`. Solo el workflow está en `.github/workflows/`.
+El proyecto vive en `precios-supermercados-sps/`. Los workflows viven en `.github/workflows/`.
 
-## DT-002 — Contratos con biblioteca estándar
+## DT-002 — Contratos Python conservadores y dependencias explícitas
 
-Se usan `dataclass`, `StrEnum`, `Decimal`, `datetime` y validaciones propias. La única dependencia externa continúa siendo `pytest`.
+Los contratos de dominio usan `dataclass`, `StrEnum`, `Decimal`, `datetime` y validaciones propias. Las dependencias externas del proyecto se declaran en `requirements.txt`; actualmente incluyen `pytest`, `playwright` y `PyYAML`. No se presenta la biblioteca estándar como única dependencia del proyecto completo.
 
 ## DT-003 — Nomenclatura única
 
@@ -78,10 +78,20 @@ Cada periodo registra `change_type`, `changed_fields`, ejecución de apertura/ci
 
 `fact_scrape_runs` conserva workflow, run ID, intento, commit SHA y ref ejecutada.
 
-## DT-020 — Google Sheets es un contrato
+## DT-020 — Google Sheets es contrato histórico, no backend elegido
 
-Esta fase documenta las ocho tabs, pero no conecta Google Sheets ni solicita credenciales.
+El modelo documenta ocho tabs compatibles con una primera etapa en Google Sheets, pero no conecta Google Sheets ni solicita credenciales. Esa documentación no obliga a escoger Sheets, BigQuery, SQLite o PostgreSQL como backend productivo antes de cerrar la frontera de aceptación autoritativa.
 
 ## DT-021 — Sitio público fuera de alcance
 
 No se modifica Mundial 2026, `js/main.js`, el registro de proyectos ni la página pública.
+
+## DT-022 — Frontera comercial fail-closed y backend-neutral
+
+`commercial_state.py` implementa la transición current/history sin almacenamiento externo. Sólo un run `success` o `warning` con catálogo aceptado puede mutar estado. `running`, `rejected`, `failed`, `abandoned` o catálogo no aceptado no mutan. La capa revalida `state_hash`, exige cronología `observed_at_utc <= validated_at_utc <= decided_at_utc`, hace replay idempotente y rechaza reutilización conflictiva de `scrape_run_id`.
+
+Una oferta ausente de un payload posterior no se interpreta como eliminación, `not_listed` ni `out_of_stock`; esos estados requieren evidencia explícita. El booleano `catalog_accepted` de esta capa no concede autoridad live: en producción debe provenir de un collector autoritativo con provenance independiente.
+
+## DT-023 — CI también valida `main`
+
+La suite offline corre en pull requests, manualmente y en pushes a `main` que afecten `precios-supermercados-sps/**` o `.github/workflows/**`. Esto reduce el riesgo de falso verde mientras GATE-17 siga abierto y `main` no tenga protección productiva. La auditoría de workflows prueba que esta cobertura no desaparezca silenciosamente.
