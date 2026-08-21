@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from precios_supermercados.commercial_pricing import evaluate_real_price_reduction
-from precios_supermercados.commercial_state import CommercialRunDecision, InMemoryCommercialState
-from precios_supermercados.enums import AvailabilityStatus, LocationStatus, RunStatus, SourceKeyType
+import pytest
+
+from precios_supermercados.commercial_pricing import (
+    CommercialPricingError,
+    evaluate_real_price_reduction,
+)
+from precios_supermercados.commercial_state import (
+    CommercialRunDecision,
+    InMemoryCommercialState,
+)
+from precios_supermercados.enums import (
+    AvailabilityStatus,
+    LocationStatus,
+    RunStatus,
+    SourceKeyType,
+)
 from precios_supermercados.identifiers import (
     generate_offer_id,
     generate_source_product_id,
@@ -94,12 +108,35 @@ def _decision(
     )
 
 
+def _evaluate(store: InMemoryCommercialState, offer_id: str):
+    return evaluate_real_price_reduction(
+        store.current(offer_id),
+        store.history(offer_id),
+    )
+
+
+def _store_with_price_change() -> tuple[InMemoryCommercialState, str]:
+    store = InMemoryCommercialState()
+    first = _validated("run-1", T0, current_price="30")
+    store.apply_run(_decision("run-1", T0 + timedelta(minutes=1)), [first])
+    t1 = T0 + timedelta(days=1)
+    second = _validated("run-2", t1, current_price="25")
+    store.apply_run(_decision("run-2", t1 + timedelta(minutes=1)), [second])
+    return store, first.offer.offer_id
+
+
 def test_initial_offer_has_no_real_reduction_even_if_source_reports_large_regular_price():
     store = InMemoryCommercialState()
-    first = _validated("run-1", T0, current_price="30", reported_regular_price="100", is_promotion=True)
+    first = _validated(
+        "run-1",
+        T0,
+        current_price="30",
+        reported_regular_price="100",
+        is_promotion=True,
+    )
     store.apply_run(_decision("run-1", T0 + timedelta(minutes=1)), [first])
 
-    result = evaluate_real_price_reduction(store, first.offer.offer_id)
+    result = _evaluate(store, first.offer.offer_id)
 
     assert result is not None
     assert result.current_price == Decimal("30")
@@ -124,7 +161,7 @@ def test_real_reduction_uses_previous_accepted_current_price_not_reported_regula
     )
     store.apply_run(_decision("run-2", t1 + timedelta(minutes=1)), [second])
 
-    result = evaluate_real_price_reduction(store, first.offer.offer_id)
+    result = _evaluate(store, first.offer.offer_id)
 
     assert result is not None
     assert result.previous_accepted_price == Decimal("30")
@@ -151,7 +188,7 @@ def test_source_promotion_without_historical_price_drop_is_not_real_reduction():
     )
     store.apply_run(_decision("run-2", t1 + timedelta(minutes=1)), [second])
 
-    result = evaluate_real_price_reduction(store, first.offer.offer_id)
+    result = _evaluate(store, first.offer.offer_id)
 
     assert result is not None
     assert result.previous_accepted_price == Decimal("25")
@@ -167,10 +204,16 @@ def test_price_increase_is_not_real_reduction_even_with_reported_regular_price()
     store.apply_run(_decision("run-1", T0 + timedelta(minutes=1)), [first])
 
     t1 = T0 + timedelta(days=1)
-    second = _validated("run-2", t1, current_price="25", reported_regular_price="50", is_promotion=True)
+    second = _validated(
+        "run-2",
+        t1,
+        current_price="25",
+        reported_regular_price="50",
+        is_promotion=True,
+    )
     store.apply_run(_decision("run-2", t1 + timedelta(minutes=1)), [second])
 
-    result = evaluate_real_price_reduction(store, first.offer.offer_id)
+    result = _evaluate(store, first.offer.offer_id)
 
     assert result is not None
     assert result.previous_accepted_price == Decimal("20")
@@ -192,7 +235,7 @@ def test_same_hash_confirmation_keeps_previous_period_as_real_reduction_baseline
     confirmed = _validated("run-3", t2, current_price="25")
     store.apply_run(_decision("run-3", t2 + timedelta(minutes=1)), [confirmed])
 
-    result = evaluate_real_price_reduction(store, first.offer.offer_id)
+    result = _evaluate(store, first.offer.offer_id)
 
     assert result is not None
     assert result.previous_accepted_price == Decimal("30")
@@ -220,7 +263,7 @@ def test_non_price_state_change_with_same_price_becomes_new_immediate_baseline()
     )
     store.apply_run(_decision("run-3", t2 + timedelta(minutes=1)), [source_reference_changed])
 
-    result = evaluate_real_price_reduction(store, first.offer.offer_id)
+    result = _evaluate(store, first.offer.offer_id)
 
     assert result is not None
     assert result.previous_accepted_price == Decimal("25")
@@ -235,7 +278,13 @@ def test_rejected_run_cannot_create_a_fake_real_reduction():
     store.apply_run(_decision("run-1", T0 + timedelta(minutes=1)), [first])
 
     t1 = T0 + timedelta(days=1)
-    rejected = _validated("run-2", t1, current_price="10", reported_regular_price="100", is_promotion=True)
+    rejected = _validated(
+        "run-2",
+        t1,
+        current_price="10",
+        reported_regular_price="100",
+        is_promotion=True,
+    )
     store.apply_run(
         _decision(
             "run-2",
@@ -246,7 +295,7 @@ def test_rejected_run_cannot_create_a_fake_real_reduction():
         [rejected],
     )
 
-    result = evaluate_real_price_reduction(store, first.offer.offer_id)
+    result = _evaluate(store, first.offer.offer_id)
 
     assert result is not None
     assert result.current_price == Decimal("30")
@@ -269,7 +318,7 @@ def test_out_of_stock_current_state_does_not_invent_reduction():
     )
     store.apply_run(_decision("run-2", t1 + timedelta(minutes=1)), [unavailable])
 
-    result = evaluate_real_price_reduction(store, first.offer.offer_id)
+    result = _evaluate(store, first.offer.offer_id)
 
     assert result is not None
     assert result.current_price is None
@@ -280,4 +329,77 @@ def test_out_of_stock_current_state_does_not_invent_reduction():
 
 
 def test_unknown_offer_has_no_price_comparison():
-    assert evaluate_real_price_reduction(InMemoryCommercialState(), "of_missing") is None
+    assert evaluate_real_price_reduction(None, ()) is None
+
+
+def test_history_without_current_fails_closed():
+    store, offer_id = _store_with_price_change()
+
+    with pytest.raises(CommercialPricingError, match="histórico sin current"):
+        evaluate_real_price_reduction(None, store.history(offer_id))
+
+
+def test_current_without_history_fails_closed():
+    store, offer_id = _store_with_price_change()
+
+    with pytest.raises(CommercialPricingError, match="periodo histórico"):
+        evaluate_real_price_reduction(store.current(offer_id), ())
+
+
+def test_mismatched_current_and_history_offer_ids_fail_closed():
+    store, offer_id = _store_with_price_change()
+    current = store.current(offer_id)
+    history = list(store.history(offer_id))
+    history[-1] = replace(history[-1], offer_id="of_forged")
+
+    with pytest.raises(CommercialPricingError, match="offer_id distintos"):
+        evaluate_real_price_reduction(current, history)
+
+
+def test_closed_last_history_period_fails_closed():
+    store, offer_id = _store_with_price_change()
+    current = store.current(offer_id)
+    history = list(store.history(offer_id))
+    history[-1] = replace(
+        history[-1],
+        valid_to_utc=history[-1].valid_from_utc + timedelta(minutes=1),
+    )
+
+    with pytest.raises(CommercialPricingError, match="no está abierto"):
+        evaluate_real_price_reduction(current, history)
+
+
+def test_current_and_open_period_state_hash_mismatch_fails_closed():
+    store, offer_id = _store_with_price_change()
+    current = store.current(offer_id)
+    history = list(store.history(offer_id))
+    history[-1] = replace(history[-1], state_hash="f" * 64)
+
+    with pytest.raises(CommercialPricingError, match="state_hash distinto"):
+        evaluate_real_price_reduction(current, history)
+
+
+def test_current_and_open_period_last_observation_mismatch_fails_closed():
+    store, offer_id = _store_with_price_change()
+    current = store.current(offer_id)
+    assert current is not None
+    altered_current = replace(
+        current,
+        last_observed_at_utc=current.last_observed_at_utc + timedelta(seconds=1),
+    )
+
+    with pytest.raises(CommercialPricingError, match="última observación"):
+        evaluate_real_price_reduction(altered_current, store.history(offer_id))
+
+
+def test_noncontiguous_previous_period_fails_closed():
+    store, offer_id = _store_with_price_change()
+    current = store.current(offer_id)
+    history = list(store.history(offer_id))
+    history[0] = replace(
+        history[0],
+        valid_to_utc=history[1].valid_from_utc - timedelta(seconds=1),
+    )
+
+    with pytest.raises(CommercialPricingError, match="no son contiguos"):
+        evaluate_real_price_reduction(current, history)
