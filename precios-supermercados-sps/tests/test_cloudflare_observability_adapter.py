@@ -381,7 +381,7 @@ def test_body_size_no_entero_falla() -> None:
     assert captured.value.code == "fetch_body_size_invalid"
 
 
-def test_source_custom_fabricado_como_string_falla() -> None:
+def test_source_string_sin_atributos_top_level_falla_por_contexto_ausente() -> None:
     custom = _custom_event()
     custom["source"] = "not-structured"
 
@@ -390,7 +390,7 @@ def test_source_custom_fabricado_como_string_falla() -> None:
             _response([custom, _fetch_event()]),
             expected_trace_id=TRACE_ID,
         )
-    assert captured.value.code == "custom_source_invalid"
+    assert captured.value.code == "custom_invocation_id_invalid"
 
 
 def test_response_unsuccessful_falla() -> None:
