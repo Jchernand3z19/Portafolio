@@ -95,3 +95,13 @@ Una oferta ausente de un payload posterior no se interpreta como eliminación, `
 ## DT-023 — CI también valida `main`
 
 La suite offline corre en pull requests, manualmente y en pushes a `main` que afecten `precios-supermercados-sps/**` o `.github/workflows/**`. Esto reduce el riesgo de falso verde mientras GATE-17 siga abierto y `main` no tenga protección productiva. La auditoría de workflows prueba que esta cobertura no desaparezca silenciosamente.
+
+## DT-024 — Replay terminal liga evidencia persistible
+
+`running` es un estado transitorio y no consume la identidad terminal de `scrape_run_id`. El mismo run puede evolucionar de `running` a su decisión final. En cambio, una decisión terminal aplicada o descartada comercialmente queda ligada de forma idempotente a su decisión, `state_hash`, timestamps, identidad de oferta y evidencia persistible/auditable (`source_url`, versiones, trazabilidad fuente explícita, ubicación, review/pending y eventos de calidad).
+
+Reutilizar un `scrape_run_id` terminal con evidencia distinta falla cerrado. `raw_values` no participa en ese fingerprint porque es un contenedor crudo arbitrario y no forma parte de la identidad persistible definida por esta frontera. Esto no altera `state_hash`: los cambios comerciales siguen determinados exclusivamente por los campos canónicos del estado.
+
+## DT-025 — No fijar el HEAD mutable dentro de la fuente canónica
+
+Los SHAs históricos usados como evidencia de auditoría pueden documentarse. El HEAD “actual” de `main` se consulta en GitHub y no se intenta mantener autorreferencialmente dentro de README/arquitectura, porque cualquier merge que actualice esos archivos produciría inmediatamente un nuevo HEAD y volvería obsoleto el valor escrito.
