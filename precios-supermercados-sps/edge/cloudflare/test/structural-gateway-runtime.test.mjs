@@ -87,7 +87,7 @@ function clockSequence(...dates) {
 }
 
 function fakeStore() {
-  const store = {
+  return {
     reservations: [],
     completed: [],
     failed: [],
@@ -113,7 +113,6 @@ function fakeStore() {
       this.failed.push({ reservationId, reason, nowMs });
     },
   };
-  return store;
 }
 
 function dependencies(store, { fetchOrigin } = {}) {
@@ -154,7 +153,7 @@ test("root_total usa el mismo ledger sin exponer traversal al caller", async () 
 test("requestKind no puede reetiquetar el URL raíz", async () => {
   const store = fakeStore();
   await assert.rejects(
-    () => executeStructuralGatewayRequest(await input({ requestKind: "category_tree" }), dependencies(store)),
+    async () => executeStructuralGatewayRequest(await input({ requestKind: "category_tree" }), dependencies(store)),
     (error) => error?.code === "structural_request_kind_origin_mismatch",
   );
   assert.equal(store.reservations.length, 0);
@@ -164,7 +163,7 @@ test("digest incorrecto falla antes de reservar o hacer fetch", async () => {
   const store = fakeStore();
   let fetches = 0;
   await assert.rejects(
-    () => executeStructuralGatewayRequest(
+    async () => executeStructuralGatewayRequest(
       await input({ requestDigest: "f".repeat(64) }),
       dependencies(store, { fetchOrigin: async () => { fetches += 1; throw new Error("unexpected"); } }),
     ),
@@ -193,7 +192,7 @@ test("body replay alterado falla sin refetch", async () => {
   store.replayEnvelope.rawBody = new TextEncoder().encode('{"tampered":true}');
   let fetches = 0;
   await assert.rejects(
-    () => executeStructuralGatewayRequest(
+    async () => executeStructuralGatewayRequest(
       await input(),
       dependencies(store, { fetchOrigin: async () => { fetches += 1; throw new Error("unexpected"); } }),
     ),
@@ -205,7 +204,7 @@ test("body replay alterado falla sin refetch", async () => {
 test("HTTP no 200 cierra reserva y no firma evidencia", async () => {
   const store = fakeStore();
   await assert.rejects(
-    () => executeStructuralGatewayRequest(
+    async () => executeStructuralGatewayRequest(
       await input(),
       dependencies(store, {
         fetchOrigin: async () => new Response("blocked", { status: 429, headers: { "content-type": "text/plain" } }),
