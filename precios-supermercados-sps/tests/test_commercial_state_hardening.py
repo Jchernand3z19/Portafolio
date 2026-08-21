@@ -146,6 +146,33 @@ def test_replay_same_state_and_timestamps_with_different_quality_evidence_is_con
         store.apply_run(decision, [altered])
 
 
+def test_running_status_does_not_consume_run_id_before_terminal_success():
+    store = InMemoryCommercialState()
+    item = validated("run-1", "001", T0)
+
+    running = CommercialRunDecision(
+        scrape_run_id="run-1",
+        run_status=RunStatus.RUNNING,
+        catalog_accepted=False,
+        decided_at_utc=T0 + timedelta(minutes=30),
+    )
+    first_result = store.apply_run(running, [item])
+
+    assert first_result.commercial_update_allowed is False
+    assert first_result.mutated is False
+    assert store.applied_run_count == 0
+
+    final_result = store.apply_run(
+        accepted("run-1", T0 + timedelta(hours=1)),
+        [item],
+    )
+
+    assert final_result.current_created == 1
+    assert final_result.replayed is False
+    assert store.applied_run_count == 1
+    assert store.current("of_001") is not None
+
+
 def test_offer_omitted_from_later_payload_is_not_inferred_as_deleted_or_out_of_stock():
     store = InMemoryCommercialState()
     first_a = validated("run-1", "001", T0)
