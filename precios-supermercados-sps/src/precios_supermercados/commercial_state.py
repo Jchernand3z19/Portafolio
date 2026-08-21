@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal
+from collections.abc import Mapping
 from typing import Iterable
 
 from .enums import ChangeType, RunStatus
@@ -147,10 +149,14 @@ class InMemoryCommercialState:
         self._run_fingerprints: dict[str, str] = {}
 
     def current(self, offer_id: str) -> CurrentCommercialOffer | None:
-        return self._current.get(offer_id)
+        state = self._current.get(offer_id)
+        return _snapshot_current(state) if state is not None else None
 
     def history(self, offer_id: str) -> tuple[OfferHistoryPeriod, ...]:
-        return tuple(self._history.get(offer_id, ()))
+        return tuple(
+            _snapshot_history_period(period)
+            for period in self._history.get(offer_id, ())
+        )
 
     @property
     def current_count(self) -> int:
@@ -225,17 +231,23 @@ class InMemoryCommercialState:
 
             existing = staged_current.get(offer.offer_id)
             if existing is None:
+                validated_snapshot = _snapshot_validated_offer(validated)
                 identity_owners[offer_identity] = offer.offer_id
                 source_keys[source_product_identity] = source_key_identity
                 observed_at = offer.observed_at_utc
                 staged_current[offer.offer_id] = CurrentCommercialOffer(
-                    validated_offer=validated,
+                    validated_offer=validated_snapshot,
                     first_observed_at_utc=observed_at,
                     last_observed_at_utc=observed_at,
                     last_scrape_run_id=decision.scrape_run_id,
                 )
                 staged_history[offer.offer_id] = [
-                    _new_period(validated, decision.scrape_run_id, ChangeType.INITIAL, ())
+                    _new_period(
+                        validated_snapshot,
+                        decision.scrape_run_id,
+                        ChangeType.INITIAL,
+                        (),
+                    )
                 ]
                 created += 1
                 continue
@@ -259,9 +271,10 @@ class InMemoryCommercialState:
                     raise OutOfOrderCommercialObservation(
                         f"observación anterior para {offer.offer_id}"
                     )
+                validated_snapshot = _snapshot_validated_offer(validated)
                 staged_current[offer.offer_id] = replace(
                     existing,
-                    validated_offer=validated,
+                    validated_offer=validated_snapshot,
                     last_observed_at_utc=max(existing.last_observed_at_utc, observed_at),
                     last_scrape_run_id=decision.scrape_run_id,
                 )
@@ -285,6 +298,7 @@ class InMemoryCommercialState:
                 raise CommercialStateError(
                     "state_hash cambió sin diferencias en campos canónicos"
                 )
+            validated_snapshot = _snapshot_validated_offer(validated)
             change_type = _classify_change(changed_fields)
             periods = staged_history[offer.offer_id]
             open_period = _require_single_open_period(periods, offer.offer_id)
@@ -295,14 +309,14 @@ class InMemoryCommercialState:
             )
             periods.append(
                 _new_period(
-                    validated,
+                    validated_snapshot,
                     decision.scrape_run_id,
                     change_type,
                     changed_fields,
                 )
             )
             staged_current[offer.offer_id] = CurrentCommercialOffer(
-                validated_offer=validated,
+                validated_offer=validated_snapshot,
                 first_observed_at_utc=observed_at,
                 last_observed_at_utc=observed_at,
                 last_scrape_run_id=decision.scrape_run_id,
@@ -404,6 +418,52 @@ def _require_utc(value: datetime, field_name: str) -> None:
         raise CommercialStateError(f"{field_name} debe incluir zona horaria UTC")
     if value.utcoffset().total_seconds() != 0:
         raise CommercialStateError(f"{field_name} debe expresarse en UTC")
+
+
+def _clone_audit_value(value: object) -> object:
+    """Copia recursivamente evidencia para romper referencias mutables externas."""
+
+    if isinstance(value, Mapping):
+        return {key: _clone_audit_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_clone_audit_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_clone_audit_value(item) for item in value)
+    if isinstance(value, set):
+        return {_clone_audit_value(item) for item in value}
+    if isinstance(value, frozenset):
+        return frozenset(_clone_audit_value(item) for item in value)
+    try:
+        return deepcopy(value)
+    except Exception as exc:  # pragma: no cover - depende de objetos caller-defined
+        raise CommercialStateError("raw_values contiene evidencia no copiable") from exc
+
+
+def _snapshot_validated_offer(validated: ValidatedOffer) -> ValidatedOffer:
+    raw_values = _clone_audit_value(validated.offer.raw_values)
+    if not isinstance(raw_values, Mapping):  # pragma: no cover - raíz validada por modelo
+        raise CommercialStateError("raw_values debe conservar forma de mapping")
+    offer = replace(validated.offer, raw_values=raw_values)
+    return ValidatedOffer(
+        offer=offer,
+        state_hash=validated.state_hash,
+        validated_at_utc=validated.validated_at_utc,
+        quality_events=validated.quality_events,
+    )
+
+
+def _snapshot_current(state: CurrentCommercialOffer) -> CurrentCommercialOffer:
+    return replace(
+        state,
+        validated_offer=_snapshot_validated_offer(state.validated_offer),
+    )
+
+
+def _snapshot_history_period(period: OfferHistoryPeriod) -> OfferHistoryPeriod:
+    return replace(
+        period,
+        validated_offer=_snapshot_validated_offer(period.validated_offer),
+    )
 
 
 def _offer_logical_identity(validated: ValidatedOffer) -> tuple[str | None, ...]:
