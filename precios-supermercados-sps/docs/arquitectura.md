@@ -281,7 +281,7 @@ Ningún `PASS_OFFLINE_MODEL` autoriza live.
 - observabilidad/dispatcher sin autoridad;
 - supply-chain/workflow audit;
 - CI en PR + `main`;
-- frontera commercial current/history atómica e idempotente;
+- frontera comercial current/history atómica e idempotente;
 - continuidad y determinismo de identidad de oferta/producto fuente;
 - snapshots defensivos de evidencia mutable;
 - `current` coherente con la última evidencia aceptada del mismo estado;
