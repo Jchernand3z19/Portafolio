@@ -41,10 +41,10 @@ def evaluate_real_price_reduction(
 ) -> RealPriceReduction | None:
     """Calcula ahorro real sin usar el precio regular reportado por la fuente.
 
-    El último periodo debe ser el periodo abierto del ``current`` suministrado.
-    Si existe un periodo previo, su ``current_price`` es la única referencia
-    histórica. Sin ambos precios no se inventa una reducción. Una subida o un
-    precio igual producen reducción 0.
+    ``history`` debe ser una cadena íntegra y ordenada de periodos aceptados, con
+    exactamente un periodo abierto al final y reconciliado con ``current``. Si
+    existe un periodo previo, su ``current_price`` es la única referencia. Sin
+    ambos precios no se inventa una reducción. Una subida o igualdad produce 0.
     """
 
     if current is None:
@@ -55,23 +55,19 @@ def evaluate_real_price_reduction(
         raise CommercialPricingError("current no tiene periodo histórico abierto")
 
     offer = current.validated_offer.offer
+    _validate_history_chain(offer.offer_id, history)
     open_period = history[-1]
-    if open_period.offer_id != offer.offer_id:
-        raise CommercialPricingError("current e histórico pertenecen a offer_id distintos")
-    if open_period.valid_to_utc is not None:
-        raise CommercialPricingError("el último periodo histórico no está abierto")
+
     if open_period.state_hash != current.validated_offer.state_hash:
         raise CommercialPricingError("current y periodo abierto tienen state_hash distinto")
+    if open_period.valid_from_utc != current.first_observed_at_utc:
+        raise CommercialPricingError("current e histórico discrepan en apertura")
     if open_period.last_observed_at_utc != current.last_observed_at_utc:
         raise CommercialPricingError("current e histórico discrepan en última observación")
+    if open_period.last_confirmed_by_scrape_run_id != current.last_scrape_run_id:
+        raise CommercialPricingError("current e histórico discrepan en última ejecución")
 
     previous_period = history[-2] if len(history) >= 2 else None
-    if previous_period is not None:
-        if previous_period.offer_id != offer.offer_id:
-            raise CommercialPricingError("el periodo previo pertenece a otro offer_id")
-        if previous_period.valid_to_utc != open_period.valid_from_utc:
-            raise CommercialPricingError("los periodos históricos no son contiguos")
-
     current_price = offer.current_price
     previous_price = (
         previous_period.validated_offer.offer.current_price
@@ -107,3 +103,33 @@ def evaluate_real_price_reduction(
             else None
         ),
     )
+
+
+def _validate_history_chain(
+    offer_id: str,
+    history: Sequence[OfferHistoryPeriod],
+) -> None:
+    open_count = 0
+    previous: OfferHistoryPeriod | None = None
+    for index, period in enumerate(history):
+        if period.offer_id != offer_id:
+            raise CommercialPricingError("current e histórico pertenecen a offer_id distintos")
+        if period.valid_to_utc is None:
+            open_count += 1
+            if index != len(history) - 1:
+                raise CommercialPricingError("existe un periodo histórico abierto intermedio")
+        elif period.valid_to_utc <= period.valid_from_utc:
+            raise CommercialPricingError("periodo histórico con intervalo no positivo")
+
+        if period.last_observed_at_utc < period.valid_from_utc:
+            raise CommercialPricingError("periodo histórico con última observación inválida")
+        if period.valid_to_utc is not None and period.last_observed_at_utc > period.valid_to_utc:
+            raise CommercialPricingError("periodo histórico observado después de su cierre")
+
+        if previous is not None:
+            if previous.valid_to_utc != period.valid_from_utc:
+                raise CommercialPricingError("los periodos históricos no son contiguos")
+        previous = period
+
+    if open_count != 1 or history[-1].valid_to_utc is not None:
+        raise CommercialPricingError("el último periodo histórico no está abierto")
