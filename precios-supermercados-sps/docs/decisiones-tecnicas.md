@@ -52,7 +52,7 @@ La URL estable elimina fragmentos y solo parámetros inequívocos de tracking: `
 
 ## DT-013 — Promoción declarada versus reducción real
 
-`is_promotion` conserva la condición observada. `reported_regular_price` no demuestra ahorro. La reducción real se calculará contra el último `current_price` histórico aceptado. No existe `promotion_text`.
+`is_promotion` conserva la condición observada. `reported_regular_price` no demuestra ahorro. La reducción real se calcula contra el `current_price` del periodo histórico aceptado inmediatamente anterior. No existe `promotion_text`.
 
 ## DT-014 — Ubicación auditable
 
@@ -105,3 +105,27 @@ Reutilizar un `scrape_run_id` terminal con evidencia distinta falla cerrado. `ra
 ## DT-025 — No fijar el HEAD mutable dentro de la fuente canónica
 
 Los SHAs históricos usados como evidencia de auditoría pueden documentarse. El HEAD “actual” de `main` se consulta en GitHub y no se intenta mantener autorreferencialmente dentro de README/arquitectura, porque cualquier merge que actualice esos archivos produciría inmediatamente un nuevo HEAD y volvería obsoleto el valor escrito.
+
+## DT-026 — Identidad determinista revalidada en la frontera comercial
+
+La persistencia comercial no confía en IDs suministrados por el caller. Antes de mutar current/history se recalculan `source_product_id = generate_source_product_id(supermarket_id, source_key_type, source_key)` y `offer_id = generate_offer_id(supermarket_id, location_id, source_product_id)`.
+
+Además, una identidad lógica de oferta no puede pertenecer a dos `offer_id`, un `offer_id` existente no puede migrar a otra identidad, y la relación entre producto fuente y llave fuente debe permanecer estable incluso entre ubicaciones. La moneda permanece estable para un `offer_id`; `product_id` sí puede cambiar por una corrección legítima de mapeo normalizado.
+
+## DT-027 — Evidencia mutable aislada mediante snapshots defensivos
+
+Los contratos protegidos no se modifican para resolver mutabilidad anidada de `raw_values`. La frontera comercial copia recursivamente esa evidencia antes de almacenarla y devuelve snapshots defensivos desde `current()` y `history()`.
+
+Una mutación posterior del objeto caller-defined o de una vista devuelta no puede alterar current/history ya aceptado. Si una evidencia no puede copiarse de forma segura, la transición falla cerrada antes del commit.
+
+## DT-028 — Pricing derivado es puro y usa el periodo aceptado anterior
+
+`commercial_pricing.py` es una capa backend-neutral que deriva `RealPriceReduction` a partir de current/history ya aceptados. El baseline es exclusivamente el `current_price` del periodo histórico inmediatamente anterior; `reported_regular_price` e `is_promotion` nunca participan en la fórmula de ahorro real.
+
+Sin precio actual o baseline no se inventa reducción. Una igualdad o subida produce reducción cero. Un run rechazado no puede crear un baseline comercial porque no muta current/history.
+
+## DT-029 — Pricing revalida evidencia persistida y falla cerrado
+
+Una derivación de precio no asume que un backend futuro conserve intactos los wrappers recibidos. Antes de calcular se revalidan IDs deterministas, `state_hash`, cronología, moneda, `offer_id`, apertura, última observación, contigüidad y la existencia de un único periodo abierto al final.
+
+Todo periodo cerrado debe registrar `closed_by_scrape_run_id`; un periodo abierto no puede tener run de cierre. El run que cierra un periodo debe ser el mismo que abre el siguiente periodo contiguo. Las incoherencias impiden calcular ahorro y producen `CommercialPricingError` en vez de una cifra potencialmente falsa.
