@@ -244,10 +244,10 @@ test("OIDC de otro commit falla antes de tocar el presupuesto", async () => {
   assert.equal(h.store.summary(T0 + 1000).requestsUsed, 0);
 });
 
-test("single-flight retorna WAIT y no ejecuta segundo fetch", async () => {
+test("single-flight retorna WAIT y no ejecuta segundo fetch después de vencer pacing", async () => {
   const firstOrigin = await makeOrigin(1);
   const secondOrigin = await makeOrigin(2);
-  const h = await harness();
+  const h = await harness({ start: T0 + 5000 });
   h.store.reserve(context(firstOrigin, 1), T0 + 100);
 
   const result = await executeGatewayRequest(input(secondOrigin, context(secondOrigin, 2)), h.deps);
