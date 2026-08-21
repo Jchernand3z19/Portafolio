@@ -3,12 +3,12 @@ import { DurableObject } from "cloudflare:workers";
 import { EdgePolicyError } from "./core.mjs";
 import { DurableAuthorizationStore } from "./durable-store.mjs";
 import { assertGitHubRunFence } from "./github-run-fence.mjs";
+import { runSupervisedExecuteOperation } from "./gateway-supervisor.mjs";
 import { validateReceiptKeyPair } from "./receipt-key-preflight.mjs";
 import {
   createGitHubOidcAuthenticator,
   createPublicWorkerHandler,
   durableErrorEnvelope,
-  runExecuteOperation,
   runInitializeOperation,
 } from "./worker-adapter.mjs";
 
@@ -54,7 +54,7 @@ export class AuthorizationGateway extends DurableObject {
       this.assertNamedAuthorization(input?.execution?.requestContext?.authorizationId);
       assertGitHubRunFence(input?.claims, input?.execution?.requestContext?.runId);
       await this.ensureKeyPairReady();
-      return await runExecuteOperation(
+      return await runSupervisedExecuteOperation(
         this.store,
         input.execution,
         input.claims,
