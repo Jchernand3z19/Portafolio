@@ -146,28 +146,27 @@ export class DurableAuthorizationStore {
     });
   }
 
-  complete(reservationId, replayEnvelope, nowMs) {
+  async complete(reservationId, replayEnvelope, nowMs) {
+    const evidence = evidenceFromReplayEnvelope(replayEnvelope);
+    if (typeof evidence.evidenceId !== "string" || evidence.evidenceId.length === 0 || /\s/u.test(evidence.evidenceId)) {
+      fail("evidence_id_invalid");
+    }
+    validateReplayEnvelope(replayEnvelope, evidence, reservationId);
+    const computedHash = await sha256Hex(replayEnvelope.rawBody);
+    if (computedHash !== evidence.rawResponseSha256) fail("replay_raw_body_hash_mismatch");
+
     return this.storage.transactionSync(() => {
       const current = this.storage.kv.get(AUTHORIZATION_STATE_KEY);
       if (current === undefined) fail("authorization_state_missing");
-      const evidence = evidenceFromReplayEnvelope(replayEnvelope);
-      if (typeof evidence.evidenceId !== "string" || evidence.evidenceId.length === 0 || /\s/u.test(evidence.evidenceId)) {
-        fail("evidence_id_invalid");
-      }
-      validateReplayEnvelope(replayEnvelope, evidence, reservationId);
-      const expectedHash = this.storage.kv.get(responseKey(reservationId));
-      if (expectedHash !== undefined) {
+      const existingEnvelope = this.storage.kv.get(responseKey(reservationId));
+      if (existingEnvelope !== undefined) {
         const reservation = current.reservations?.[reservationId];
-        if (!reservation || !replayMatchesReservation(expectedHash, reservation)) {
+        if (!reservation || !replayMatchesReservation(existingEnvelope, reservation)) {
           fail("existing_replay_evidence_corrupt");
         }
       }
 
       const completed = completeReservation(current, reservationId, evidence, nowMs);
-      const bodyHashPromise = sha256Hex(replayEnvelope.rawBody);
-      if (!(bodyHashPromise instanceof Promise)) fail("response_hash_runtime_invalid");
-      // El hash criptográfico se verifica fuera de esta transacción síncrona.
-      // Aquí sólo persistimos una envelope ya validada por el runtime.
       this.storage.kv.put(AUTHORIZATION_STATE_KEY, clone(completed));
       this.storage.kv.put(responseKey(reservationId), clone(replayEnvelope));
       return clone(completed);
