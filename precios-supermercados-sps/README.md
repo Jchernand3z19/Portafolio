@@ -38,6 +38,7 @@ La frontera offline actual además exige:
 
 - `success` o `warning` más `catalog_accepted = true` para permitir mutación comercial;
 - `state_hash` recalculado y válido antes de aplicar;
+- cronología cerrada `observed_at_utc <= validated_at_utc <= decided_at_utc`;
 - un `scrape_run_id` no puede reutilizarse con otra decisión, timestamps o contenido;
 - el mismo hash confirma el periodo abierto sin duplicar historial;
 - un cambio cierra exactamente un periodo y abre exactamente uno nuevo;
@@ -111,7 +112,7 @@ pytest precios-supermercados-sps/tests
 Validaciones verificadas:
 
 - baseline integrado mediante PR #7: **770/770**;
-- revisión que incorporó la frontera comercial y hardening de CI: **793/793**, además de `compileall`, en GitHub Actions con Python 3.12.14.
+- revisión que incorporó frontera comercial, cronología y hardening de CI: **796/796**, además de `compileall`, en GitHub Actions con Python 3.12.14.
 
 La CI canónica se ejecuta en pull requests, manualmente y en pushes a `main` que afecten el proyecto o sus workflows.
 
