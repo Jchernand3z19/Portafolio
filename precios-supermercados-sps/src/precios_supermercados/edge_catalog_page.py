@@ -18,10 +18,12 @@ from precios_supermercados.edge_gateway_client import (
     EdgeGatewayWait,
 )
 from precios_supermercados.la_colonia_edge_body import (
+    LaColoniaEdgeBodyError,
     ValidatedLaColoniaEdgeBody,
     validate_la_colonia_edge_body,
 )
 from precios_supermercados.la_colonia_edge_request import (
+    LaColoniaEdgeRequestError,
     ValidatedLaColoniaEdgeRequest,
     validate_la_colonia_edge_request,
 )
@@ -89,14 +91,21 @@ class EdgeCatalogPageFetcher:
         if not isinstance(result, EdgeGatewayEvidence):
             _fail("edge_gateway_result_invalid")
 
-        validated_request = validate_la_colonia_edge_request(request.origin_url)
+        try:
+            validated_request = validate_la_colonia_edge_request(request.origin_url)
+        except LaColoniaEdgeRequestError as exc:
+            raise EdgeCatalogPageError(f"edge_request_{exc.code}") from exc
         if validated_request.canonical_request_sha256 != request.context.request_digest:
             _fail("edge_request_digest_mismatch")
 
-        validated_body = validate_la_colonia_edge_body(
-            result.raw_body,
-            validated_request,
-        )
+        try:
+            validated_body = validate_la_colonia_edge_body(
+                result.raw_body,
+                validated_request,
+            )
+        except LaColoniaEdgeBodyError as exc:
+            raise EdgeCatalogPageError(f"edge_body_{exc.code}") from exc
+
         return ValidatedEdgeCatalogPage(
             request=validated_request,
             evidence=result,
