@@ -11,6 +11,7 @@ import {
   CONTROLLED_PROBE_SPAN_NAME,
   CONTROLLED_PROBE_WORKER_POLICY,
 } from "./probe-policy.mjs";
+import { controlledProbeFailureEnvelope } from "./probe-rpc-error.mjs";
 import { annotateControlledProbeSpan } from "./probe-trace-context.mjs";
 import { runControlledOriginProbe } from "./probe-runtime.mjs";
 
@@ -21,10 +22,6 @@ function fail(code) {
 function exactProbeId(value) {
   if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(value)) fail("probe_id_invalid");
   return value;
-}
-
-function failureCode(error) {
-  return error instanceof EdgePolicyError ? error.code : "probe_execution_failed";
 }
 
 const gatedGitHubJwksFetch = createJwksFetchGate({
@@ -60,24 +57,28 @@ export class ProbeLedger extends DurableObject {
   }
 
   async execute(input) {
-    const probeId = exactProbeId(input?.probeId);
-    const durableObjectName = this.assertRunFence(input?.claims);
-    const key = this.replayKey(probeId);
-
-    const existing = this.ctx.storage.transactionSync(() => this.ctx.storage.kv.get(key));
-    if (existing?.state === "completed") {
-      return Object.freeze({ ...structuredClone(existing.result), replayed: true });
-    }
-    if (existing?.state === "in_flight") return Object.freeze({ ok: false, error: "probe_replay_in_flight" });
-    if (existing?.state === "failed") return Object.freeze({ ok: false, error: "probe_replay_failed" });
-    if (existing !== undefined) return Object.freeze({ ok: false, error: "probe_replay_state_invalid" });
-
-    this.ctx.storage.transactionSync(() => {
-      if (this.ctx.storage.kv.get(key) !== undefined) fail("probe_replay_race_detected");
-      this.ctx.storage.kv.put(key, { state: "in_flight" });
-    });
+    let key = null;
+    let inFlightStarted = false;
 
     try {
+      const probeId = exactProbeId(input?.probeId);
+      const durableObjectName = this.assertRunFence(input?.claims);
+      key = this.replayKey(probeId);
+
+      const existing = this.ctx.storage.transactionSync(() => this.ctx.storage.kv.get(key));
+      if (existing?.state === "completed") {
+        return Object.freeze({ ...structuredClone(existing.result), replayed: true });
+      }
+      if (existing?.state === "in_flight") return Object.freeze({ ok: false, error: "probe_replay_in_flight" });
+      if (existing?.state === "failed") return Object.freeze({ ok: false, error: "probe_replay_failed" });
+      if (existing !== undefined) return Object.freeze({ ok: false, error: "probe_replay_state_invalid" });
+
+      this.ctx.storage.transactionSync(() => {
+        if (this.ctx.storage.kv.get(key) !== undefined) fail("probe_replay_race_detected");
+        this.ctx.storage.kv.put(key, { state: "in_flight" });
+      });
+      inFlightStarted = true;
+
       const result = await tracing.enterSpan(CONTROLLED_PROBE_SPAN_NAME, async (span) => {
         annotateControlledProbeSpan(span, {
           probeId,
@@ -104,19 +105,23 @@ export class ProbeLedger extends DurableObject {
         if (current?.state !== "in_flight") fail("probe_replay_state_changed");
         this.ctx.storage.kv.put(key, { state: "completed", result: structuredClone(result) });
       });
+      inFlightStarted = false;
       return result;
     } catch (error) {
-      try {
-        this.ctx.storage.transactionSync(() => {
-          const current = this.ctx.storage.kv.get(key);
-          if (current?.state === "in_flight") {
-            this.ctx.storage.kv.put(key, { state: "failed", error: failureCode(error) });
-          }
-        });
-      } catch {
-        // Se conserva el error primario y jamás se repite el fetch automáticamente.
+      const failure = controlledProbeFailureEnvelope(error);
+      if (key !== null && inFlightStarted) {
+        try {
+          this.ctx.storage.transactionSync(() => {
+            const current = this.ctx.storage.kv.get(key);
+            if (current?.state === "in_flight") {
+              this.ctx.storage.kv.put(key, { state: "failed", error: failure.error });
+            }
+          });
+        } catch {
+          // Se conserva el error primario y jamás se repite el fetch automáticamente.
+        }
       }
-      throw error;
+      return failure;
     }
   }
 }
