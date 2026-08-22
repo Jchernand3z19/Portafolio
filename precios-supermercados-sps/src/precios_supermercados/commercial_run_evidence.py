@@ -20,7 +20,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from .commercial_state import CommercialRunDecision, _run_fingerprint
+from .commercial_state import (
+    CommercialRunDecision,
+    CommercialStateError,
+    InMemoryCommercialState,
+    _run_fingerprint,
+)
 from .enums import RunStatus
 from .models import ValidatedOffer
 from .tabular_persistence import FACT_SCRAPE_RUNS
@@ -97,6 +102,43 @@ def _quality_event_payload(event: QualityEventRecord) -> Mapping[str, object]:
     }
 
 
+def _validate_bound_context(
+    *,
+    decision: CommercialRunDecision,
+    offers: tuple[ValidatedOffer, ...],
+    quality_events: tuple[QualityEventRecord, ...],
+    supermarket_id: str,
+    location_id: str,
+) -> None:
+    """Reaplica invariantes que un replay no volverá a ejecutar en el state engine."""
+
+    try:
+        InMemoryCommercialState._validate_run_payload(decision, offers)
+    except CommercialStateError as exc:
+        raise CommercialRunEvidenceError("commercial_run_payload_invalid") from exc
+
+    for item in offers:
+        offer = item.offer
+        if offer.supermarket_id != supermarket_id:
+            raise CommercialRunEvidenceError("offer_supermarket_mismatch")
+        if offer.location_id != location_id:
+            raise CommercialRunEvidenceError("offer_location_mismatch")
+
+    event_ids: set[str] = set()
+    for event in quality_events:
+        if not isinstance(event, QualityEventRecord):
+            raise CommercialRunEvidenceError("quality_event_type_invalid")
+        if event.quality_event_id in event_ids:
+            raise CommercialRunEvidenceError("quality_event_id_duplicate")
+        event_ids.add(event.quality_event_id)
+        if event.scrape_run_id != decision.scrape_run_id:
+            raise CommercialRunEvidenceError("quality_event_run_mismatch")
+        if event.supermarket_id != supermarket_id:
+            raise CommercialRunEvidenceError("quality_event_supermarket_mismatch")
+        if event.location_id != location_id:
+            raise CommercialRunEvidenceError("quality_event_location_mismatch")
+
+
 def derive_bound_run_evidence_id(
     *,
     authority_evidence_id: str,
@@ -136,8 +178,7 @@ def derive_bound_run_evidence_id(
     location = _required_text(location_id, "location_id_invalid")
     started = _utc_text(started_at_utc, "started_at_utc_invalid")
     finished = _utc_text(finished_at_utc, "finished_at_utc_invalid")
-    if finished < started:
-        # ISO UTC con precisión homogénea preserva el orden cronológico.
+    if finished_at_utc < started_at_utc:
         raise CommercialRunEvidenceError("run_time_order_invalid")
     products_count = _non_negative_int(products_observed, "products_observed_invalid")
     offers_count = _non_negative_int(offers_observed, "offers_observed_invalid")
@@ -146,6 +187,13 @@ def derive_bound_run_evidence_id(
     if any(not isinstance(item, ValidatedOffer) for item in offer_values):
         raise CommercialRunEvidenceError("validated_offer_type_invalid")
     event_values = tuple(quality_events)
+    _validate_bound_context(
+        decision=decision,
+        offers=offer_values,
+        quality_events=event_values,
+        supermarket_id=supermarket,
+        location_id=location,
+    )
     event_payloads = tuple(_quality_event_payload(item) for item in event_values)
 
     try:
