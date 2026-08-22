@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 
 concurrency:
   group: cloudflare-controlled-probe-observability-shape
@@ -81,7 +82,7 @@ jobs:
           import json
           import os
           from collections import Counter
-          from collections.abc import Mapping, Sequence
+          from collections.abc import Mapping
           from datetime import datetime, timedelta, timezone
           from pathlib import Path
 
@@ -116,6 +117,7 @@ jobs:
           )
 
           receipt = artifact["receiptPayload"]
+
           def parse_utc(value):
               if not isinstance(value, str) or not value.endswith("Z"):
                   raise SystemExit("receipt timestamp invalid")
@@ -169,6 +171,12 @@ jobs:
                   current = current[part]
               return current
 
+          def safe_keys(values):
+              return sorted(
+                  key for key in {str(value) for value in values}
+                  if 0 < len(key) <= 128 and "\n" not in key and "\r" not in key
+              )[:100]
+
           def summarize(events):
               top_keys = set()
               metadata_keys = set()
@@ -183,19 +191,19 @@ jobs:
               precios_key_locations = set()
 
               for event in events:
-                  top_keys.update(str(key) for key in event.keys())
+                  top_keys.update(event.keys())
                   metadata = mapping(event.get("$metadata"))
                   workers = mapping(event.get("$workers"))
-                  metadata_keys.update(str(key) for key in metadata.keys())
-                  workers_keys.update(str(key) for key in workers.keys())
+                  metadata_keys.update(metadata.keys())
+                  workers_keys.update(workers.keys())
                   source = event.get("source")
                   if isinstance(source, Mapping):
                       source_types["mapping"] += 1
-                      source_keys.update(str(key) for key in source.keys())
+                      source_keys.update(source.keys())
                       attrs = mapping(source.get("attributes"))
                       resource = mapping(source.get("resource"))
-                      source_attributes_keys.update(str(key) for key in attrs.keys())
-                      source_resource_keys.update(str(key) for key in resource.keys())
+                      source_attributes_keys.update(attrs.keys())
+                      source_resource_keys.update(resource.keys())
                   elif isinstance(source, str):
                       source_types["string"] += 1
                   elif source is None:
@@ -222,22 +230,22 @@ jobs:
                           if key in container:
                               standard_presence[f"{label}:{key}"] += 1
                       for key in container.keys():
-                          if isinstance(key, str) and key.startswith("precios."):
+                          if isinstance(key, str) and key.startswith("precios.") and len(key) <= 128:
                               precios_key_locations.add(f"{label}:{key}")
 
               return {
                   "event_count": len(events),
-                  "top_keys": sorted(top_keys),
-                  "metadata_keys": sorted(metadata_keys),
-                  "workers_keys": sorted(workers_keys),
-                  "source_keys": sorted(source_keys),
-                  "source_attributes_keys": sorted(source_attributes_keys),
-                  "source_resource_keys": sorted(source_resource_keys),
+                  "top_keys": safe_keys(top_keys),
+                  "metadata_keys": safe_keys(metadata_keys),
+                  "workers_keys": safe_keys(workers_keys),
+                  "source_keys": safe_keys(source_keys),
+                  "source_attributes_keys": safe_keys(source_attributes_keys),
+                  "source_resource_keys": safe_keys(source_resource_keys),
                   "source_types": dict(sorted(source_types.items())),
                   "metadata_presence_counts": dict(sorted(metadata_presence.items())),
                   "expected_custom_span_match_counts": dict(sorted(match_paths.items())),
                   "standard_attribute_presence_counts": dict(sorted(standard_presence.items())),
-                  "precios_attribute_key_locations": sorted(precios_key_locations),
+                  "precios_attribute_key_locations": sorted(precios_key_locations)[:100],
               }
 
           summaries = []
@@ -270,4 +278,21 @@ jobs:
               "## Sanitized Workers Observability shape diagnostic\n\n```json\n" + rendered + "\n```\n",
               encoding="utf-8",
           )
+          Path(".probe-shape-comment.json").write_text(
+              json.dumps({
+                  "body": "## Sanitized Workers Observability shape diagnostic\n\n```json\n" + rendered + "\n```"
+              }),
+              encoding="utf-8",
+          )
           PY
+
+      - name: Publish sanitized diagnostic to technical PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/103/comments" \
+            --input .probe-shape-comment.json
