@@ -50,6 +50,7 @@ RECOVERY_WORKFLOW = "precios-supermercados-sps-la-colonia-dispatch-recovery.yml"
 LA_DIAGNOSTIC_WORKFLOW = "precios-supermercados-sps-la-colonia-diagnostic.yml"
 FACET_WORKFLOW = "precios-supermercados-sps-la-colonia-facet-discovery.yml"
 LIVE_WORKFLOW = "precios-supermercados-sps-la-colonia-live.yml"
+LOCATION_BINDING_WORKFLOW = "precios-supermercados-sps-la-colonia-location-binding.yml"
 GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storage.yml"
 PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
 PROBE_OBSERVABILITY_SECRET = "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN"
@@ -65,6 +66,7 @@ EXPECTED_PERMISSIONS = {
     LA_DIAGNOSTIC_WORKFLOW: {"contents": "read"},
     FACET_WORKFLOW: {"contents": "read"},
     LIVE_WORKFLOW: {"contents": "read"},
+    LOCATION_BINDING_WORKFLOW: {"contents": "read"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"contents": "read"},
     TEST_WORKFLOW: {"contents": "read"},
 }
@@ -82,6 +84,7 @@ EXPECTED_TRIGGERS = {
     RECOVERY_WORKFLOW: {"workflow_run"},
     FACET_WORKFLOW: {"workflow_dispatch"},
     LIVE_WORKFLOW: {"workflow_dispatch"},
+    LOCATION_BINDING_WORKFLOW: {"workflow_dispatch"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch"},
     TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
 }
@@ -92,6 +95,7 @@ BLOCKED_ENTRYPOINTS = {
     RECOVERY_WORKFLOW,
     FACET_WORKFLOW,
     LIVE_WORKFLOW,
+    LOCATION_BINDING_WORKFLOW,
 }
 
 ALLOWED_SECRET_REFERENCES = {
@@ -333,6 +337,7 @@ def test_network_capable_scripts_exist_only_inside_blocked_jobs():
         "scripts/probar_la_colonia.py",
         "scripts/diagnosticar_ventanas_la_colonia.py",
         "scripts/descubrir_facets_la_colonia.py",
+        "scripts/diagnosticar_binding_ubicacion_la_colonia.py",
     }
     for path, workflow in workflows():
         commands = "\n".join(str(step.get("run", "")) for step in steps(workflow))
