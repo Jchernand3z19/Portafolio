@@ -11,6 +11,24 @@ WRANGLER_VERSION = "4.125.0"
 PINNED_WRANGLER = f"npx --yes wrangler@{WRANGLER_VERSION}"
 
 
+def _bash_commands(markdown: str) -> tuple[str, ...]:
+    commands: list[str] = []
+    in_bash = False
+    for raw_line in markdown.splitlines():
+        line = raw_line.strip()
+        if line == "```bash":
+            assert not in_bash
+            in_bash = True
+            continue
+        if line == "```" and in_bash:
+            in_bash = False
+            continue
+        if in_bash and line and not line.startswith("#"):
+            commands.append(line)
+    assert not in_bash, "bloque bash sin cerrar en runbook"
+    return tuple(commands)
+
+
 def test_wrangler_cli_is_pinned_and_no_productive_deploy_script_exists() -> None:
     package = json.loads((EDGE_ROOT / "package.json").read_text(encoding="utf-8"))
     scripts = package["scripts"]
@@ -26,16 +44,20 @@ def test_wrangler_cli_is_pinned_and_no_productive_deploy_script_exists() -> None
 
 def test_probe_runbook_uses_only_the_pinned_wrangler_entrypoint() -> None:
     raw = RUNBOOK.read_text(encoding="utf-8")
+    commands = _bash_commands(raw)
 
     assert f"wrangler = {PINNED_WRANGLER}" in raw
-    assert "npm run wrangler -- --version" in raw
-    assert "npm run deploy:probe-origin" in raw
-    assert (
-        "npm run wrangler -- deploy --config wrangler.probe.json --secrets-file"
-        in raw
+    assert "npm run wrangler -- --version" in commands
+    assert "npm run deploy:probe-origin" in commands
+    assert any(
+        command.startswith(
+            "npm run wrangler -- deploy --config wrangler.probe.json --secrets-file "
+        )
+        for command in commands
     )
-    assert "npx wrangler deploy" not in raw
-    assert "npx wrangler@latest" not in raw
+    assert all(not command.startswith("npx wrangler") for command in commands)
+    assert all("wrangler@latest" not in command for command in commands)
+    assert all("--config wrangler.json" not in command for command in commands)
     assert "4.125.0" in raw
 
 
