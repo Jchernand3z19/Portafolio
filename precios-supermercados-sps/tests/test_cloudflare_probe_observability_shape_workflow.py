@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "cloudflare-controlled-probe-observability-shape.yml"
 MARKER = "precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json"
 SCRIPT_NAME = "diagnosticar_observability_sonda_cloudflare.py"
+STATUS_SCRIPT_NAME = "publicar_fingerprint_observability_sonda.py"
 TARGET_PR = "117"
 STATUS_CONTEXT = "precios-sps/observability-shape-trigger"
 DIAGNOSTIC_STATUS_CONTEXT = "precios-sps/observability-shape-diagnostic"
@@ -84,7 +85,7 @@ def test_main_marker_is_verified_before_environment_or_observability_access():
     assert '"schema": "cloudflare-controlled-probe-observability-diagnostic-request-1"' in script
     assert '"sourceRunId": "32551882793"' in script
     assert '"purpose": "sanitized-shape-observation-only"' in script
-    assert '"requestSequence": 5' in script
+    assert '"requestSequence": 6' in script
     assert '"authority": False' in script
     assert "payload != expected" in script
     assert "controlled_observability_marker_mismatch" in script
@@ -187,6 +188,8 @@ def test_diagnostic_requires_verified_marker_and_executes_only_main_code():
     assert "git checkout" not in raw
     assert "git fetch" not in raw
     assert f"*/scripts/{SCRIPT_NAME}" in raw
+    assert f'project / "scripts" / "{STATUS_SCRIPT_NAME}"' in raw
+    assert 'env.write(f"STATUS_SCRIPT={status_script}\\n")' in raw
     assert 'python "$DIAGNOSTIC_SCRIPT"' in raw
 
 
@@ -207,6 +210,17 @@ def test_diagnostic_outcome_has_independent_sanitized_commit_status():
     assert "state=failure" in script
     assert "PROBE_OBSERVABILITY_TOKEN" not in script
     assert "event" not in script.lower()
+
+
+def test_sanitized_shape_fingerprint_is_published_without_cloudflare_token():
+    _, workflow = _load()
+    job = workflow["jobs"]["inspect-observability-shape"]
+    publish = next(step for step in job["steps"] if step["name"] == "Publish sanitized shape fingerprint statuses")
+    assert publish["if"] == "${{ always() }}"
+    assert publish["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert publish["run"].strip().endswith('python "$STATUS_SCRIPT"')
+    assert "PROBE_OBSERVABILITY_TOKEN" not in str(publish)
+    assert ".probe-evidence" not in str(publish)
 
 
 def test_shape_diagnostic_has_no_gateway_oidc_or_physical_probe_capability():
