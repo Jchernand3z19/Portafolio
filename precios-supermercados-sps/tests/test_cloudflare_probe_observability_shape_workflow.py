@@ -63,7 +63,7 @@ def test_shape_diagnostic_has_no_gateway_or_physical_fetch_capability():
     assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" in raw
 
 
-def test_shape_diagnostic_is_bound_to_existing_signed_evidence_and_sanitized():
+def test_shape_diagnostic_reads_raw_shapes_without_reusing_strict_normalizers():
     raw, _ = _load()
     assert 'SOURCE_RUN_ID: "32551882793"' in raw
     assert 'SOURCE_RUN_ATTEMPT: "1"' in raw
@@ -72,6 +72,10 @@ def test_shape_diagnostic_is_bound_to_existing_signed_evidence_and_sanitized():
     assert "build_trace_summary_query" in raw
     assert "build_trace_events_query" in raw
     assert "build_trace_invocations_query" in raw
+    assert "normalize_events_response" not in raw
+    assert "normalize_invocations_response" not in raw
+    assert "raw_events_shape" in raw
+    assert "raw_invocations_shape" in raw
     assert '"contains_no_event_values": True' in raw
     assert '"production_authority": False' in raw
     assert '"catalog_accepted": False' in raw
@@ -81,22 +85,33 @@ def test_shape_diagnostic_is_bound_to_existing_signed_evidence_and_sanitized():
     assert "safe_keys" in raw
     assert "print(event" not in raw
     assert "json.dumps(artifact" not in raw
+    assert "trace_id" not in raw.split('"candidate_shapes"', 1)[-1] if '"candidate_shapes"' in raw else True
 
 
-def test_shape_diagnostic_publishes_only_generated_sanitized_summary_to_fixed_pr():
+def test_shape_diagnostic_always_prepares_and_publishes_only_sanitized_comment():
     raw, workflow = _load()
     steps = workflow["jobs"]["inspect-observability-shape"]["steps"]
+    assert steps[0]["name"] == "Prepare sanitized fallback comment"
+    assert "started_without_summary" in steps[0]["run"]
+    assert 'Path(os.environ["RUNNER_TEMP"], "probe-shape-comment.json")' in steps[0]["run"]
+
+    inspect = next(step for step in steps if step["name"] == "Inspect raw telemetry shape without trusting event schema")
+    assert "ControlledProbeObservabilityError" in inspect["run"]
+    assert '"error_code": exc.code' in inspect["run"]
+    assert '"error_type": type(exc).__name__[:64]' in inspect["run"]
+    assert "str(exc)" not in inspect["run"]
+    assert "traceback" not in inspect["run"]
+
     publish = next(step for step in steps if step["name"] == "Publish sanitized diagnostic to technical PR")
+    assert publish["if"] == "${{ always() }}"
     assert publish["env"] == {"GH_TOKEN": "${{ github.token }}"}
     script = publish["run"]
     assert 'repos/${GITHUB_REPOSITORY}/issues/103/comments' in script
-    assert "--input .probe-shape-comment.json" in script
+    assert '--input "$RUNNER_TEMP/probe-shape-comment.json"' in script
     assert "--method POST" in script
     assert "curl " not in script
     assert ".probe-evidence" not in script
     assert "PROBE_OBSERVABILITY_TOKEN" not in script
-    assert 'Path(".probe-shape-comment.json").write_text' in raw
-    assert '"body": "## Sanitized Workers Observability shape diagnostic' in raw
 
 
 def test_shape_diagnostic_actions_are_pinned_and_checkout_is_immutable():
