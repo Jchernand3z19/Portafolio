@@ -17,6 +17,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  publish-trigger-heartbeat:
+    if: >-
+      ${{ github.repository == 'Jchernand3z19/Portafolio' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.user.login == 'Jchernand3z19' &&
+          github.event.pull_request.base.ref == 'main' &&
+          github.event.pull_request.changed_files == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      TARGET_PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Publish sanitized trigger heartbeat
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]; then
+            echo "Invalid PR number" >&2
+            exit 1
+          fi
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR_NUMBER}/comments" \
+            -f body='## Sanitized Workers Observability diagnostic
+
+```json
+{
+  "diagnostic_status": "trigger_observed",
+  "contains_no_event_values": true,
+  "production_authority": false,
+  "catalog_accepted": false
+}
+```'
+
   inspect-observability-shape:
     if: >-
       ${{ github.repository == 'Jchernand3z19/Portafolio' &&
