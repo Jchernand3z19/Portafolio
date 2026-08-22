@@ -45,3 +45,61 @@ jobs:
 
       - name: Ejecutar suite completa
         run: pytest precios-supermercados-sps/tests
+
+  observability-marker-heartbeat:
+    if: >-
+      ${{ github.event_name == 'pull_request' &&
+          github.repository == 'Jchernand3z19/Portafolio' &&
+          github.event.pull_request.number == 117 &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.head.ref == 'diag/precios-sps-observability-request-007' &&
+          github.event.pull_request.base.ref == 'main' &&
+          github.event.pull_request.changed_files == 1 }}
+    permissions:
+      contents: read
+      issues: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      TARGET_PR_NUMBER: "117"
+      HEARTBEAT_PATH: ${{ runner.temp }}/observability-ci-heartbeat.json
+
+    steps:
+      - name: Preparar heartbeat sanitizado de CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+              "diagnostic_status": "ci_route_observed",
+              "contains_no_event_values": True,
+              "production_authority": False,
+              "catalog_accepted": False,
+          }
+          rendered = json.dumps(payload, sort_keys=True, indent=2)
+          Path(os.environ["HEARTBEAT_PATH"]).write_text(
+              json.dumps({
+                  "body": "## Sanitized Workers Observability CI heartbeat\n\n```json\n" + rendered + "\n```"
+              }),
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Publicar heartbeat sanitizado de CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]; then
+            echo "Invalid PR number" >&2
+            exit 1
+          fi
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR_NUMBER}/comments" \
+            --input "$HEARTBEAT_PATH"
