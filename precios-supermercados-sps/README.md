@@ -1,143 +1,116 @@
 # Precios de Supermercados de San Pedro Sula
 
-Proyecto para recolectar, normalizar, validar y conservar cambios relevantes de precios y disponibilidad de supermercados, con alcance inicial en San Pedro Sula.
+Proyecto para recolectar, normalizar, validar, historizar y comparar precios de supermercados con alcance inicial en San Pedro Sula.
+
+> Estado operativo vigente: [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)  
+> Arquitectura estable: [`docs/arquitectura.md`](docs/arquitectura.md)
 
 ## Estado actual
 
-**La ingeniería offline de La Colonia y de la frontera Cloudflare está avanzada; el acceso live a La Colonia sigue cerrado y no existe aceptación productiva del catálogo.**
+Corte verificado al **2026-08-22 (America/Tegucigalpa)**:
 
-Estado verificado al **2026-08-21 (America/Tegucigalpa)**:
+- `main`: `b4588d7425601963cc64cc6eec779fdbe9492b05` al abrir este corte documental;
+- último PR técnico integrado: **#148**;
+- última suite completa observada: **1418/1418 pruebas aprobadas** + `compileall`;
+- GATE-17: `PASS_PRODUCTIVE_EVIDENCE`;
+- no existe autorización live activa para La Colonia;
+- `READY_FOR_LIVE=NO`;
+- SPS technical context: `UNCONFIRMED`;
+- `production_authority=false`;
+- `catalog_accepted=false`.
 
-- `main` está protegida; GATE-17 permanece `PASS_PRODUCTIVE_EVIDENCE`.
-- La revisión offline más reciente integrada es PR #91.
-- CI observada en PR #91: **1234/1234 pruebas aprobadas** + `compileall`.
-- No existen autorizaciones live activas.
-- `SPS-context-and-root-facets-001` está consumida; `002` no está autorizada.
-- SPS technical context continúa `UNCONFIRMED`.
-- Los entrypoints live hacia La Colonia permanecen globalmente bloqueados.
-- **Requests live a La Colonia durante estas fases: 0.**
-- Cloudflare Workers/Durable Objects/OIDC/Ed25519/Workers Observability están implementados y probados **offline**, pero no desplegados.
-- Structural discovery, transporte de catálogo, reconciliación de observability y manifest de run están conectados offline.
-- La readiness técnica del catálogo se distingue de autoridad productiva: puede comprobarse completitud técnica sin producir `catalog_accepted=true` ni `production_authority=true`.
-- `trusted_collector_provenance_unavailable` permanece en la aceptación canónica hasta evidencia productiva real.
-- `commercial_state.py` y `commercial_pricing.py` implementan current/history y reducción real offline; no existe backend productivo conectado.
-- La sonda Cloudflare no-La-Colonia está integrada offline con origen controlado, OIDC, Durable Object, receipt Ed25519, verificación criptográfica independiente y reconciliación contra Workers Observability. **No ha sido desplegada ni ejecutada físicamente.**
-- Wrangler está fijado a `4.125.0`; el runbook evita CLI mutable y el directorio edge ignora estado local/secrets temporales.
-- En el barrido posterior a PR #91 no quedó una tarea de implementación offline conocida que pueda cerrar honestamente la frontera productiva sin acceso externo a Cloudflare.
+La sonda Cloudflare contra infraestructura propia **sí fue ejecutada físicamente**. El run `32551882793` demostró OIDC, Durable Object, fetch al origen controlado y receipt Ed25519; un verifier-only posterior revalidó firma/bytes/identidad. La reconciliación estricta del custom span contra la API pública de Workers Observability permanece sin cerrar porque esa API no expone el detalle requerido. El verificador no se rebajó para fabricar un PASS.
 
-La fuente canónica del estado es [`docs/arquitectura.md`](docs/arquitectura.md). El procedimiento de la primera prueba externa está en [`docs/cloudflare-controlled-probe-runbook.md`](docs/cloudflare-controlled-probe-runbook.md). La evidencia de GATE-17 está en [`docs/gate-17-verification.md`](docs/gate-17-verification.md).
+La persistencia Google Sheets está implementada **offline** hasta el adapter read-modify-write, rehidratación durable, bootstrap manual y batch comercial. No se considera productiva todavía porque no se ha observado una escritura real con la configuración externa prevista.
+
+La Colonia SPS continúa deliberadamente bloqueada:
+
+```text
+granularity = unknown
+technical_binding_confirmed = false
+source_location_key = null
+extraction_enabled = false
+```
+
+PR #145–#148 dejaron preparada una radiografía mínima y sanitizada para decidir si el contexto comercial varía por `city` o por `store`. Su workflow sigue con `if: ${{ false }}`, el fuse live está apagado y la allow-list de autorizaciones está vacía.
+
+**El siguiente paso que requiere intervención humana es una nueva autorización explícita para esa única radiografía de ubicación.** Esa autorización no cubriría crawl, smoke, facets, GraphQL replay ni persistencia de precios.
 
 ## Contratos protegidos
 
 - `RawProduct`: observación fiel a la fuente.
 - `NormalizedOffer`: formato común sin inventar datos faltantes.
-- `ValidatedOffer`: oferta validada con `state_hash`, revisión y evidencia de calidad.
+- `ValidatedOffer`: oferta validada con identidad, `state_hash`, revisión y evidencia de calidad.
 
-No se modifican estos contratos sin necesidad demostrada y una tarea explícita que lo requiera.
-
-Una oferta `in_stock` exige `current_price > 0`. `out_of_stock`, `not_listed` y `unknown` pueden conservar precio nulo.
+Una oferta `in_stock` exige `current_price > 0`. Estados `out_of_stock`, `not_listed` y `unknown` pueden conservar precio nulo.
 
 ## Regla comercial del histórico
 
 `reported_regular_price` es un dato informado por el supermercado; **no demuestra ahorro real**.
 
-La reducción real se calcula contra el `current_price` del periodo histórico **aceptado inmediatamente anterior**. `reported_regular_price` e `is_promotion` no forman parte de esa fórmula. Si no existe baseline confiable, no se inventa una reducción.
+La reducción real se calcula contra el `current_price` del periodo histórico **aceptado inmediatamente anterior**. `reported_regular_price` e `is_promotion` no participan en esa fórmula. Si no existe baseline confiable, no se inventa una reducción.
 
 Runs `rejected`, `failed`, `abandoned` o no autoritativos no alteran current/history.
 
-## La Colonia
+## Ubicaciones
 
-Identidad VTEX:
+Todos los supermercados comparten el mismo modelo de ubicación. Para La Colonia se conocen San Pedro Sula y Tegucigalpa; únicamente SPS está dentro del alcance inicial.
 
-```text
-Producto: productId -> productReference -> linkText
-SKU:      itemId
-```
+Registrar una ciudad visible no demuestra granularidad comercial. Antes de habilitar extracción debe saberse si el precio/inventario cambia por ciudad, tienda u otro nivel y debe existir un binding técnico verificable.
 
-Deduplicar no demuestra completitud. La validación offline comprueba árbol/facets, membership, totals, ventanas, gaps, truncamiento, repetición, reconciliación independiente, unión producto/SKU y conflictos de owner.
+## Persistencia inicial
 
-## Cadena Cloudflare offline
-
-La ruta de ingeniería actual es:
+Google Sheets es el almacenamiento temporal estructurado previsto para la primera fase. Las tablas comunes son:
 
 ```text
-GitHub Actions
--> GitHub OIDC
--> Cloudflare Worker
--> Durable Object
--> request físico permitido
--> receipt Ed25519 + hash de respuesta
--> verificación criptográfica Python
--> Workers Observability
--> manifest estructural / catálogo
--> readiness técnica
+cfg_supermarkets
+cfg_locations
+fact_offers_current
+fact_offer_history
+fact_scrape_runs
+fact_quality_events
 ```
 
-Ya existen offline:
+El diseño ya protege estas reglas:
 
-- política OIDC cerrada a repo/ref/workflow/environment/run;
-- JWKS de GitHub con origen fijo;
-- allowlist exacto del endpoint GraphQL de La Colonia en el Worker productivo;
-- presupuesto, pacing, single-flight, replay y fencing en Durable Object;
-- firmas Ed25519 y release ligada a `CF_VERSION_METADATA`;
-- observability por request;
-- discovery estructural autenticado;
-- plan de catálogo derivado internamente, no elegido por caller;
-- collector de páginas que reconstruye las URLs canónicas;
-- finalizador que reconcilia cada página con observability y crea un manifest de run;
-- evaluación de readiness que **nunca** convierte evidencia offline en autoridad productiva.
+- una sola estructura para todos los supermercados;
+- current/history rehidratables entre runners;
+- nuevo periodo sólo ante un cambio comercial relevante;
+- todo run final queda registrado aunque no haya cambios;
+- runs rechazados/fallidos no contaminan current/history;
+- materialización del workbook como snapshot completo;
+- escritura atómica planificada mediante `spreadsheets.batchUpdate`.
 
-Nada de esto equivale a un despliegue real. No hay Worker productivo remoto, Durable Object productivo remoto, clave privada productiva real en Cloudflare ni spans productivos verificados.
+BigQuery y Cloud Run se reservan para una fase posterior, cuando el proceso esté estable.
 
-## Sonda controlada antes de La Colonia
+## Power BI
 
-La sonda integrada usa una cadena separada:
+Power BI será el dashboard del proyecto. El dataset deberá permitir, como mínimo:
+
+- producto, marca y presentación;
+- supermercado y ubicación comercial correcta;
+- precio actual;
+- precio histórico anterior;
+- precio regular/referencia declarado por la tienda como dato separado;
+- promoción y disponibilidad;
+- fecha de observación;
+- historial de cambios;
+- detección de ofertas reales por comparación histórica.
+
+No se conecta Power BI a datos de La Colonia hasta cerrar binding, aceptación y persistencia productiva.
+
+## Orden de avance
 
 ```text
-workflow manual cloudflare-probe
--> OIDC de sonda
--> Worker precios-sps-controlled-probe
--> ProbeLedger
--> Worker precios-sps-controlled-origin (*.workers.dev)
--> challenge/body exactos
--> receipt probe-1 Ed25519
--> verifier GitHub sin OIDC
--> Workers Observability
--> custom span + único child fetch
--> PlatformReconciledControlledProbe
+radiografía y binding de ubicación
+-> validación live exacta del catálogo
+-> aceptación autoritativa
+-> Google Sheets productivo
+-> ejecución diaria
+-> Power BI
+-> cerrar La Colonia end-to-end
+-> supermercado #2
 ```
-
-Separaciones obligatorias:
-
-- origen, gateway y Durable Object distintos de producción;
-- audience/environment/llaves/signing key/schema/dominio criptográfico distintos;
-- caller sin input de origin URL;
-- sólo HTTPS `*.workers.dev` y path exacto;
-- La Colonia rechazada antes de cualquier fetch;
-- el job con OIDC no hace checkout;
-- el job que verifica código no tiene `id-token: write`;
-- el verifier usa public key confiable fuera del Worker;
-- el token de Workers Observability está separado del job OIDC;
-- cualquier resultado mantiene `catalog_accepted=false` y `production_authority=false`.
-
-La sonda está `DONE_OFFLINE / READY_FOR_EXTERNAL_DEPLOYMENT`; todavía **NO DESPLEGADA / NO EJECUTADA**.
-
-## Persistencia
-
-La lógica comercial actual es backend-neutral y offline. El modelo lógico contempla:
-
-- `cfg_supermarkets`;
-- `cfg_locations`;
-- `dim_products`;
-- `map_source_products`;
-- `fact_scrape_runs`;
-- `fact_offers_current`;
-- `fact_offer_history`;
-- `fact_quality_events`.
-
-No existe almacenamiento productivo seleccionado/conectado. Google Sheets y BigQuery permanecen como opciones históricas/evolutivas, no como infraestructura activa.
-
-Un backend productivo no debe recibir un booleano `catalog_accepted` controlable por caller; debe consumir una decisión autoritativa verificable cuando esa frontera exista.
 
 ## Pruebas
 
@@ -148,27 +121,17 @@ python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scr
 pytest precios-supermercados-sps/tests
 ```
 
-La CI también ejecuta la suite Node de `edge/cloudflare` y auditoría fail-closed de workflows.
+La suite también cubre componentes Node del edge Cloudflare y auditoría fail-closed de GitHub Actions.
 
-Último resultado observado para PR #91:
+Último resultado completo observado antes de esta actualización documental:
 
 ```text
-1234 passed
+1418 passed
 compileall PASS
 ```
 
-## Bloqueos actuales
+## Seguridad live
 
-Antes de scraping comercial productivo todavía faltan, en este orden:
+Sin una autorización humana explícita y vigente están prohibidos nuevos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl hacia La Colonia.
 
-1. conectar/configurar una cuenta Cloudflare para la sonda;
-2. desplegar `precios-sps-controlled-origin` y `precios-sps-controlled-probe` con llaves exclusivas de sonda;
-3. configurar el Environment GitHub `cloudflare-probe` y ejecutar una sonda física;
-4. demostrar físicamente OIDC, Durable Object, Version Metadata, Ed25519 y Workers Observability, manteniendo La Colonia en 0 requests;
-5. preparar la frontera productiva real sin invocarla todavía contra La Colonia;
-6. obtener autorización humana nueva para cualquier request a La Colonia;
-7. confirmar SPS mediante una observación live mínima autorizada;
-8. ejecutar validación exacta del catálogo bajo presupuesto cerrado;
-9. sólo entonces conectar persistencia, automatización diaria y Power BI.
-
-El segundo supermercado espera a que esta plataforma común quede estable.
+No se inventan ni reutilizan authorization IDs. `production_authority` y `catalog_accepted` sólo pueden cambiar por una frontera explícita que aporte evidencia suficiente; una prueba offline o una radiografía de ubicación no los concede.
