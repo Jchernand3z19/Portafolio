@@ -356,7 +356,7 @@ def rehydrate_commercial_snapshot(
             raise TabularRehydrationError("durable_current_history_last_observed_mismatch")
         if open_period.last_confirmed_by_scrape_run_id != live.last_scrape_run_id:
             raise TabularRehydrationError("durable_current_history_last_run_mismatch")
-        if periods[0].valid_from_utc != live.first_observed_at_utc:
+        if open_period.valid_from_utc != live.first_observed_at_utc:
             raise TabularRehydrationError("durable_current_history_first_observed_mismatch")
         normalized_history[offer_id] = tuple(periods)
 
