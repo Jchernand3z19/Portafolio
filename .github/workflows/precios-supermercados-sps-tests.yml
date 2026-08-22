@@ -45,3 +45,31 @@ jobs:
 
       - name: Ejecutar suite completa
         run: pytest precios-supermercados-sps/tests
+
+  audit-historical-branches:
+    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'audit/precios-sps-historical-branches' }}
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Obtener todas las ramas remotas
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
+
+      - name: Clasificar ramas precios-sps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 precios-supermercados-sps/scripts/auditar_ramas_historicas.py \
+            --json-output "$RUNNER_TEMP/precios-sps-branch-audit.json" \
+            --markdown-output "$RUNNER_TEMP/precios-sps-branch-audit.md"
+          cat "$RUNNER_TEMP/precios-sps-branch-audit.md" >> "$GITHUB_STEP_SUMMARY"
