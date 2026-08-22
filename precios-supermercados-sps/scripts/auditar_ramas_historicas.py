@@ -7,12 +7,14 @@ La clasificación automática es deliberadamente conservadora:
   commits no-merge tienen patch equivalente en main según ``git cherry``.
 * OPEN_CURRENT: todavía conserva cambios únicos y existe un PR abierto para el
   head exacto.
-* UNIQUE_UNMERGED: conserva cambios únicos y no existe PR abierto. Estos son los
-  únicos candidatos que requieren inspección manual para decidir si el trabajo
-  sigue siendo útil o si corresponde reclasificarlo como CLOSED_SUPERSEDED.
+* UNIQUE_UNMERGED: conserva cambios únicos y no existe PR abierto.
+* CLOSED_SUPERSEDED: un candidato UNIQUE_UNMERGED fue inspeccionado y existe una
+  decisión manual versionada que explica por qué no debe recuperarse.
 
 El script no borra, fusiona ni modifica ramas. Usa sólo git local y, cuando se
 proporciona GITHUB_TOKEN, la API de GitHub para consultar PRs del head exacto.
+Las decisiones manuales se cargan desde un archivo versionado y sólo pueden
+reclasificar candidatos UNIQUE_UNMERGED del snapshot exacto de main auditado.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,13 @@ CATEGORIES = {
     "OPEN_CURRENT",
     "UNIQUE_UNMERGED",
 }
+OVERRIDE_SCHEMA = "precios-sps-historical-branch-overrides-1"
+DEFAULT_OVERRIDES = (
+    Path(__file__).resolve().parents[1]
+    / "docs"
+    / "audits"
+    / "precios-sps-historical-branch-overrides.json"
+)
 
 
 class AuditError(RuntimeError):
@@ -257,6 +266,67 @@ def _branches(remote_prefix: str, pattern: str) -> list[str]:
     )
 
 
+def _load_overrides(path: Path, *, expected_main_sha: str) -> dict[str, str]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AuditError(f"cannot load override file {path}: {type(exc).__name__}") from exc
+    if not isinstance(payload, dict) or payload.get("schema") != OVERRIDE_SCHEMA:
+        raise AuditError("historical branch override schema invalid")
+    if payload.get("as_of_main") != expected_main_sha:
+        raise AuditError(
+            "historical branch overrides were not inspected against the current main snapshot"
+        )
+    raw_overrides = payload.get("overrides")
+    if not isinstance(raw_overrides, dict) or not raw_overrides:
+        raise AuditError("historical branch overrides missing")
+
+    overrides: dict[str, str] = {}
+    for branch, raw in raw_overrides.items():
+        if not isinstance(branch, str) or not branch or not isinstance(raw, dict):
+            raise AuditError("historical branch override entry invalid")
+        if raw.get("category") != "CLOSED_SUPERSEDED":
+            raise AuditError(f"override category invalid for {branch}")
+        reason = raw.get("reason")
+        if not isinstance(reason, str) or not reason.strip() or reason.strip() != reason:
+            raise AuditError(f"override reason invalid for {branch}")
+        overrides[branch] = reason
+    return overrides
+
+
+def _apply_overrides(
+    rows: list[BranchAudit],
+    overrides: dict[str, str],
+) -> list[BranchAudit]:
+    by_branch = {row.branch: row for row in rows}
+    missing = sorted(set(overrides) - set(by_branch))
+    if missing:
+        raise AuditError(f"override branches are absent from remote inventory: {missing}")
+
+    result: list[BranchAudit] = []
+    used: set[str] = set()
+    for row in rows:
+        reason = overrides.get(row.branch)
+        if reason is None:
+            result.append(row)
+            continue
+        if row.category != "UNIQUE_UNMERGED":
+            raise AuditError(
+                f"override for {row.branch} is stale: automatic category is {row.category}"
+            )
+        used.add(row.branch)
+        result.append(
+            replace(
+                row,
+                category="CLOSED_SUPERSEDED",
+                reason=f"manual inspection: {reason}",
+            )
+        )
+    if used != set(overrides):
+        raise AuditError("not all historical branch overrides were applied")
+    return result
+
+
 def _short(values: tuple[str, ...], limit: int = 12) -> str:
     visible = values[:limit]
     rendered = "; ".join(visible)
@@ -265,19 +335,20 @@ def _short(values: tuple[str, ...], limit: int = 12) -> str:
     return rendered or "—"
 
 
-def _markdown(rows: list[BranchAudit]) -> str:
+def _markdown(rows: list[BranchAudit], *, main_sha: str) -> str:
     counts = {category: 0 for category in sorted(CATEGORIES)}
     for row in rows:
         counts[row.category] += 1
     lines = [
-        "# Inventario preliminar de ramas precios-sps",
+        "# Inventario de ramas históricas precios-sps",
         "",
+        f"Snapshot de `main`: `{main_sha}`",
         f"Total: **{len(rows)}**",
         "",
     ]
     lines.extend(f"- {category}: **{counts[category]}**" for category in sorted(counts))
     candidates = [row for row in rows if row.category != "MERGED_OR_SUBSUMED"]
-    lines.extend(["", "## Ramas que requieren atención", ""])
+    lines.extend(["", "## Ramas no clasificadas como merged/subsumed", ""])
     if not candidates:
         lines.append("Ninguna.")
     else:
@@ -289,7 +360,7 @@ def _markdown(rows: list[BranchAudit]) -> str:
             lines.append(
                 f"| `{row.branch}` | {row.category} | {row.unique_patch_count} | {open_prs} | {closed_prs} |"
             )
-        lines.extend(["", "## Evidencia de candidatos", ""])
+        lines.extend(["", "## Evidencia de ramas no merged/subsumed", ""])
         for row in candidates:
             lines.extend(
                 [
@@ -302,9 +373,16 @@ def _markdown(rows: list[BranchAudit]) -> str:
                     "",
                 ]
             )
+    unresolved = [row.branch for row in rows if row.category == "UNIQUE_UNMERGED"]
     lines.extend(
         [
-            "> `UNIQUE_UNMERGED` es deliberadamente conservador: se inspecciona manualmente antes de decidir si es trabajo útil perdido o `CLOSED_SUPERSEDED`.",
+            "## Cierre",
+            "",
+            (
+                "No quedan ramas UNIQUE_UNMERGED pendientes de inspección."
+                if not unresolved
+                else "Persisten ramas UNIQUE_UNMERGED: " + ", ".join(f"`{branch}`" for branch in unresolved)
+            ),
             "",
         ]
     )
@@ -316,21 +394,32 @@ def main() -> int:
     parser.add_argument("--main-ref", default="origin/main")
     parser.add_argument("--remote-prefix", default="origin")
     parser.add_argument("--pattern", default="precios-sps")
+    parser.add_argument("--overrides", type=Path, default=DEFAULT_OVERRIDES)
     parser.add_argument("--json-output", type=Path, default=Path("branch-audit.json"))
     parser.add_argument("--markdown-output", type=Path, default=Path("branch-audit.md"))
     args = parser.parse_args()
 
     _git("rev-parse", "--verify", args.main_ref)
+    main_sha = _ref_sha(args.main_ref)
     branches = _branches(args.remote_prefix, args.pattern)
     if not branches:
         raise AuditError(f"no remote branches matched {args.pattern!r}")
 
     rows = [_classify(args.main_ref, args.remote_prefix, branch) for branch in branches]
+    overrides = _load_overrides(args.overrides, expected_main_sha=main_sha)
+    rows = _apply_overrides(rows, overrides)
+    unresolved = [row.branch for row in rows if row.category == "UNIQUE_UNMERGED"]
+    if unresolved:
+        raise AuditError(
+            "historical branch inventory still has UNIQUE_UNMERGED candidates: "
+            + ", ".join(unresolved)
+        )
+
     args.json_output.write_text(
         json.dumps([asdict(row) for row in rows], indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    markdown = _markdown(rows)
+    markdown = _markdown(rows, main_sha=main_sha)
     args.markdown_output.write_text(markdown, encoding="utf-8")
     print(markdown)
     return 0
