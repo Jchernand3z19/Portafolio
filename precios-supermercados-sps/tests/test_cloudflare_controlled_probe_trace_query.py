@@ -88,14 +88,8 @@ def test_detail_uses_invocations_view_and_trace_id_filter():
     }
 
 
-def test_trace_summary_parser_requires_controlled_service_and_unique_trace_ids():
+def test_trace_summary_parser_is_discovery_only_and_requires_unique_trace_ids():
     assert trace_query.parse_trace_summary_response(_summary_response()) == (TRACE_ID,)
-
-    wrong = _summary_response()
-    wrong["result"]["traces"][0]["service"] = ["other-worker"]
-    with pytest.raises(ControlledProbeObservabilityError) as exc:
-        trace_query.parse_trace_summary_response(wrong)
-    assert exc.value.code == "probe_trace_summary_service_mismatch"
 
     duplicate = _summary_response()
     duplicate["result"]["traces"].append(dict(duplicate["result"]["traces"][0]))
@@ -104,18 +98,36 @@ def test_trace_summary_parser_requires_controlled_service_and_unique_trace_ids()
     assert exc.value.code == "probe_trace_summary_duplicate_id"
 
 
-def test_trace_summary_parser_accepts_scalar_service_observed_from_api():
+def test_trace_summary_parser_does_not_trust_optional_service_shape():
+    for observed_service in (
+        CONTROLLED_PROBE_SERVICE,
+        [CONTROLLED_PROBE_SERVICE],
+        ["other-worker"],
+        {"name": CONTROLLED_PROBE_SERVICE},
+        None,
+    ):
+        payload = _summary_response()
+        payload["result"]["traces"][0]["service"] = observed_service
+        assert trace_query.parse_trace_summary_response(payload) == (TRACE_ID,)
+
     payload = _summary_response()
-    payload["result"]["traces"][0]["service"] = CONTROLLED_PROBE_SERVICE
+    del payload["result"]["traces"][0]["service"]
     assert trace_query.parse_trace_summary_response(payload) == (TRACE_ID,)
 
 
-def test_trace_summary_parser_rejects_non_text_non_sequence_service_shape():
-    payload = _summary_response()
-    payload["result"]["traces"][0]["service"] = {"name": CONTROLLED_PROBE_SERVICE}
+def test_trace_summary_parser_still_enforces_structural_limits_and_time_order():
+    invalid_spans = _summary_response()
+    invalid_spans["result"]["traces"][0]["spans"] = 0
     with pytest.raises(ControlledProbeObservabilityError) as exc:
-        trace_query.parse_trace_summary_response(payload)
-    assert exc.value.code == "probe_trace_summary_0_service_invalid"
+        trace_query.parse_trace_summary_response(invalid_spans)
+    assert exc.value.code == "probe_trace_summary_0_spans_invalid"
+
+    invalid_time = _summary_response()
+    trace = invalid_time["result"]["traces"][0]
+    trace["traceEndMs"] = trace["traceStartMs"] - 1
+    with pytest.raises(ControlledProbeObservabilityError) as exc:
+        trace_query.parse_trace_summary_response(invalid_time)
+    assert exc.value.code == "probe_trace_summary_time_order_invalid"
 
 
 def test_invocations_are_flattened_without_rewriting_span_events():
