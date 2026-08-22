@@ -8,6 +8,10 @@ requiere simultáneamente:
 2. un authorization-id presente en ``ACTIVE_AUTHORIZATION_IDS``;
 3. invocación explícita con ``network_policy='live'``.
 
+Los parámetros inyectables de allow-list/fuse existen exclusivamente para tests
+``local_only``. En modo live se rechaza cualquier override runtime: la autoridad
+sólo puede provenir de constantes versionadas y revisadas.
+
 El artefacto sólo contiene nombres públicos de ciudades/tiendas, nombres de
 mecanismos de contexto y SHA-256 de valores opacos. No guarda precios, productos,
 URLs con parámetros, cookies en claro ni payloads GraphQL.
@@ -64,8 +68,12 @@ _CONTEXT_ALIASES = {
     "vtex-session": "vtex_session",
     "vtex_session": "vtex_session",
     "x-vtex-binding": "binding",
+    "x-vtex-pickup-point": "pickupPoint",
     "x-vtex-region": "regionId",
     "x-vtex-sales-channel": "salesChannel",
+    "x-vtex-seller": "seller",
+    "x-vtex-store": "store",
+    "x-vtex-store-id": "storeId",
     "x-vtex-segment": "vtex_segment",
     "x-vtex-session": "vtex_session",
 }
@@ -113,7 +121,11 @@ class LocationBindingCaptureResult:
         value = asdict(self)
         if value["raw_values_exposed"]:
             raise LocationBindingCaptureError("raw_values_must_never_be_exposed")
-        if value["production_authority"] or value["catalog_accepted"] or value["extraction_enabled"]:
+        if (
+            value["production_authority"]
+            or value["catalog_accepted"]
+            or value["extraction_enabled"]
+        ):
             raise LocationBindingCaptureError("capture_cannot_grant_commercial_authority")
         return value
 
@@ -143,7 +155,10 @@ class RequestContextCollector:
         except Exception:
             pass
         try:
-            for key, value in parse_qsl(urlsplit(str(request.url)).query, keep_blank_values=True):
+            for key, value in parse_qsl(
+                urlsplit(str(request.url)).query,
+                keep_blank_values=True,
+            ):
                 self.add(key, value)
         except Exception:
             pass
@@ -168,7 +183,12 @@ class RequestContextCollector:
 
 def _stable_marker(value: Any) -> str:
     try:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
     except (TypeError, ValueError):
         return repr(value)
 
@@ -214,7 +234,12 @@ def _cookies(context: Any) -> dict[str, Any]:
     return values
 
 
-def _stage(page: Any, context: Any, collector: RequestContextCollector, name: str) -> ContextStage:
+def _stage(
+    page: Any,
+    context: Any,
+    collector: RequestContextCollector,
+    name: str,
+) -> ContextStage:
     local, session = _storage(page)
     return ContextStage(
         name=name,
@@ -248,9 +273,16 @@ def _option_label(locator: Any) -> str | None:
 
 
 def _open_location_selector(page: Any) -> None:
-    pattern = re.compile(r"selecciona\s+tu\s+tienda|selecciona\s+una\s+tienda|ubicaci[oó]n", re.I)
+    pattern = re.compile(
+        r"selecciona\s+tu\s+tienda|selecciona\s+una\s+tienda|ubicaci[oó]n",
+        re.I,
+    )
     candidates = page.get_by_role("button", name=pattern)
-    visible = [candidates.nth(index) for index in range(candidates.count()) if candidates.nth(index).is_visible()]
+    visible = [
+        candidates.nth(index)
+        for index in range(candidates.count())
+        if candidates.nth(index).is_visible()
+    ]
     if len(visible) != 1:
         raise LocationBindingCaptureError(
             "location_selector_not_unique" if visible else "location_selector_not_found"
@@ -272,7 +304,9 @@ def _city_select_and_options(page: Any, city_name: str) -> tuple[Any, list[str]]
             continue
     if len(visible_or_select_options) != 1:
         raise LocationBindingCaptureError(
-            "target_city_not_unique" if visible_or_select_options else "target_city_not_found"
+            "target_city_not_unique"
+            if visible_or_select_options
+            else "target_city_not_found"
         )
     option = visible_or_select_options[0]
     parent = option.locator("xpath=ancestor::select[1]")
@@ -284,7 +318,7 @@ def _city_select_and_options(page: Any, city_name: str) -> tuple[Any, list[str]]
             if label and label.casefold() not in _IGNORED_OPTION_LABELS:
                 city_names.append(label)
         return option, sorted(set(city_names), key=str.casefold)
-    # Custom listbox: enumerate visible sibling options from the nearest listbox.
+
     listbox = option.locator("xpath=ancestor::*[@role='listbox'][1]")
     if listbox.count() == 1:
         all_options = listbox.get_by_role("option")
@@ -308,7 +342,10 @@ def _activate_option(option: Any, label: str) -> None:
         option.click()
 
 
-def _discover_store_options(page: Any, known_cities: Sequence[str]) -> tuple[Any | None, list[str]]:
+def _discover_store_options(
+    page: Any,
+    known_cities: Sequence[str],
+) -> tuple[Any | None, list[str]]:
     city_names = {name.casefold() for name in known_cities}
     options = page.get_by_role("option")
     found: list[tuple[Any, str]] = []
@@ -317,7 +354,6 @@ def _discover_store_options(page: Any, known_cities: Sequence[str]) -> tuple[Any
         try:
             if not option.is_visible():
                 continue
-            # Opciones de un select de ciudad cerrado no se consideran tiendas.
             parent_select = option.locator("xpath=ancestor::select[1]")
             if parent_select.count() == 1:
                 continue
@@ -339,7 +375,9 @@ def _discover_store_options(page: Any, known_cities: Sequence[str]) -> tuple[Any
             if store_combobox.nth(index).is_visible()
         ]
         if visible_controls:
-            raise LocationBindingCaptureError("store_selector_present_but_options_unresolved")
+            raise LocationBindingCaptureError(
+                "store_selector_present_but_options_unresolved"
+            )
         return None, []
 
     labels = sorted({label for _, label in found}, key=str.casefold)
@@ -352,25 +390,60 @@ def _discover_store_options(page: Any, known_cities: Sequence[str]) -> tuple[Any
     return matches[0], labels
 
 
+def _validate_live_target(target_url: str) -> None:
+    parts = urlsplit(target_url)
+    try:
+        port = parts.port
+    except ValueError as exc:
+        raise LocationBindingCaptureError("live_target_not_exact_la_colonia_home") from exc
+    if (
+        parts.scheme.casefold() != "https"
+        or (parts.hostname or "").casefold() != "www.lacolonia.com"
+        or port not in {None, 443}
+        or parts.username is not None
+        or parts.password is not None
+        or parts.path not in {"", "/"}
+        or bool(parts.query)
+        or bool(parts.fragment)
+    ):
+        raise LocationBindingCaptureError("live_target_not_exact_la_colonia_home")
+
+
 def validate_capture_authorization(
     *,
     authorization_id: str | None,
     network_policy: str,
-    active_ids: Iterable[str] = ACTIVE_AUTHORIZATION_IDS,
-    consumed_ids: Iterable[str] = CONSUMED_AUTHORIZATION_IDS,
-    live_execution_enabled: bool = LIVE_EXECUTION_ENABLED,
+    active_ids: Iterable[str] | None = None,
+    consumed_ids: Iterable[str] | None = None,
+    live_execution_enabled: bool | None = None,
 ) -> None:
     if network_policy not in {"live", "local_only"}:
         raise LocationBindingCaptureError("network_policy_invalid")
+
+    if network_policy == "live":
+        if (
+            active_ids is not None
+            or consumed_ids is not None
+            or live_execution_enabled is not None
+        ):
+            raise LocationBindingCaptureError("live_runtime_overrides_forbidden")
+        effective_active_ids = ACTIVE_AUTHORIZATION_IDS
+        effective_consumed_ids = CONSUMED_AUTHORIZATION_IDS
+        effective_live_enabled = LIVE_EXECUTION_ENABLED
+    else:
+        effective_active_ids = frozenset(active_ids or ())
+        effective_consumed_ids = frozenset(consumed_ids or ())
+        effective_live_enabled = False
+
     if not authorization_id:
         raise LocationBindingCaptureError("authorization_id_required")
     if not AUTHORIZATION_PATTERN.fullmatch(authorization_id):
         raise LocationBindingCaptureError("authorization_id_invalid_format")
-    if authorization_id in set(consumed_ids):
+    if authorization_id in effective_consumed_ids:
         raise LocationBindingCaptureError("authorization_id_consumed")
-    if authorization_id not in set(active_ids):
+    if authorization_id not in effective_active_ids:
         raise LocationBindingCaptureError("authorization_id_not_active")
-    if network_policy == "live" and not live_execution_enabled:
+    if network_policy == "live" and not effective_live_enabled:
         raise LocationBindingCaptureError("live_execution_disabled")
 
 
@@ -379,7 +452,8 @@ def _persist(result: LocationBindingCaptureResult, output_path: Path | None) -> 
         return
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
-        json.dumps(result.public_dict(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(result.public_dict(), ensure_ascii=False, indent=2, sort_keys=True)
+        + "\n",
         encoding="utf-8",
     )
 
@@ -392,6 +466,9 @@ def _stop_reason(error: BaseException) -> str:
         "authorization_id_consumed",
         "authorization_id_not_active",
         "live_execution_disabled",
+        "live_runtime_overrides_forbidden",
+        "live_target_not_exact_la_colonia_home",
+        "network_policy_invalid",
         "location_selector_not_found",
         "location_selector_not_unique",
         "target_city_not_found",
@@ -399,6 +476,8 @@ def _stop_reason(error: BaseException) -> str:
         "store_selector_present_but_options_unresolved",
         "store_option_count_unreasonable",
         "store_option_not_unique",
+        "browser_storage_shape_invalid",
+        "playwright_not_installed",
     }
     if message in known:
         return message
@@ -414,18 +493,19 @@ def run_capture(
     authorization_id: str | None,
     output_path: Path | None = None,
     budget: DiagnosticBudget | None = None,
-    active_ids: Iterable[str] = ACTIVE_AUTHORIZATION_IDS,
-    consumed_ids: Iterable[str] = CONSUMED_AUTHORIZATION_IDS,
-    live_execution_enabled: bool = LIVE_EXECUTION_ENABLED,
+    active_ids: Iterable[str] | None = None,
+    consumed_ids: Iterable[str] | None = None,
+    live_execution_enabled: bool | None = None,
     network_policy: str = "live",
     target_url: str = TARGET_URL,
     city_name: str = TARGET_CITY,
 ) -> LocationBindingCaptureResult:
-    """Ejecuta la captura sólo tras todos los gates; local_only sirve a CI.
+    """Ejecuta la captura sólo tras todos los gates; ``local_only`` sirve a CI.
 
-    La función no realiza replay GraphQL ni visita páginas de producto. El máximo
-    son cuatro acciones lógicas: abrir home, abrir selector, elegir ciudad y,
-    únicamente si aparece, elegir una tienda.
+    En modo live no se admiten overrides de autorización/fuse. La función no
+    realiza replay GraphQL ni visita páginas de producto. El máximo son cuatro
+    acciones lógicas: abrir home, abrir selector, elegir ciudad y, únicamente si
+    aparece, elegir una tienda.
     """
 
     budget = budget or DiagnosticBudget(max_logical_requests=4)
@@ -439,6 +519,8 @@ def run_capture(
     browser = None
     context = None
     try:
+        if network_policy == "live":
+            _validate_live_target(target_url)
         validate_capture_authorization(
             authorization_id=authorization_id,
             network_policy=network_policy,
@@ -446,10 +528,6 @@ def run_capture(
             consumed_ids=consumed_ids,
             live_execution_enabled=live_execution_enabled,
         )
-        if network_policy == "live":
-            parts = urlsplit(target_url)
-            if parts.scheme != "https" or (parts.hostname or "").casefold() != "www.lacolonia.com":
-                raise LocationBindingCaptureError("live_target_not_exact_la_colonia_home")
 
         try:
             from playwright.sync_api import sync_playwright
