@@ -104,6 +104,20 @@ def test_trace_summary_parser_requires_controlled_service_and_unique_trace_ids()
     assert exc.value.code == "probe_trace_summary_duplicate_id"
 
 
+def test_trace_summary_parser_accepts_scalar_service_observed_from_api():
+    payload = _summary_response()
+    payload["result"]["traces"][0]["service"] = CONTROLLED_PROBE_SERVICE
+    assert trace_query.parse_trace_summary_response(payload) == (TRACE_ID,)
+
+
+def test_trace_summary_parser_rejects_non_text_non_sequence_service_shape():
+    payload = _summary_response()
+    payload["result"]["traces"][0]["service"] = {"name": CONTROLLED_PROBE_SERVICE}
+    with pytest.raises(ControlledProbeObservabilityError) as exc:
+        trace_query.parse_trace_summary_response(payload)
+    assert exc.value.code == "probe_trace_summary_0_service_invalid"
+
+
 def test_invocations_are_flattened_without_rewriting_span_events():
     custom = _event(CONTROLLED_PROBE_SPAN_NAME, span_id="custom")
     fetch = _event("fetch", span_id="fetch", parent_span_id="custom")
