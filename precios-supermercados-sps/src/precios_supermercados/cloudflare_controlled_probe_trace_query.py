@@ -200,6 +200,20 @@ def _successful_result(payload: Mapping[str, object]) -> Mapping[str, object]:
     return _mapping(envelope.get("result"), "probe_observability_result_invalid")
 
 
+def _trace_services(value: object, code: str) -> set[str]:
+    """Normaliza la forma documentada (array) y la forma escalar observada."""
+
+    if isinstance(value, str):
+        return {_text(value, code, maximum=256)}
+    services = _sequence(value, code)
+    if not services:
+        _fail(code)
+    return {
+        _text(item, code, maximum=256)
+        for item in services
+    }
+
+
 def parse_trace_summary_response(
     payload: Mapping[str, object],
     *,
@@ -221,14 +235,10 @@ def parse_trace_summary_response(
             f"probe_trace_summary_{index}_id_invalid",
             maximum=512,
         )
-        services = _sequence(
+        normalized_services = _trace_services(
             trace.get("service"),
-            f"probe_trace_summary_{index}_services_invalid",
+            f"probe_trace_summary_{index}_service_invalid",
         )
-        normalized_services = {
-            _text(item, f"probe_trace_summary_{index}_service_invalid", maximum=256)
-            for item in services
-        }
         if service not in normalized_services:
             _fail("probe_trace_summary_service_mismatch")
         _integer(trace.get("spans"), f"probe_trace_summary_{index}_spans_invalid", minimum=1)
