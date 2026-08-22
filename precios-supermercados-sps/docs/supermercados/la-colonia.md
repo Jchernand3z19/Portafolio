@@ -4,16 +4,16 @@
 
 **SNAPSHOT HISTÓRICO DE LA FASE INICIAL (PR #6). NO ES LA FUENTE DE ESTADO ACTUAL NI UNA AUTORIZACIÓN LIVE.**
 
-Este documento conserva la evidencia técnica de la primera prueba controlada del extractor. El estado vigente del proyecto, autorizaciones, Cloudflare, SPS, cobertura y gates se consulta únicamente en `../arquitectura.md`.
+Este documento conserva la evidencia técnica de la primera prueba controlada del extractor. El estado vigente del proyecto, autorizaciones, Cloudflare, SPS, cobertura y gates se consulta únicamente en [`../PROJECT_STATE.md`](../PROJECT_STATE.md).
 
-Estado vigente al momento de esta reclasificación:
+La arquitectura estable vive en [`../arquitectura.md`](../arquitectura.md).
 
-- no existe autorización live activa;
+Reglas al leer este snapshot:
+
 - una autorización histórica consumida no puede reutilizarse;
-- SPS continúa `UNCONFIRMED`;
-- los entrypoints live de La Colonia permanecen globalmente bloqueados;
-- la suite integrada actual ya no es la de 67 pruebas de este snapshot;
-- no ejecutar los comandos históricos de este archivo sin una nueva autorización humana explícita.
+- no asumir que los conteos, bloqueos o componentes descritos aquí siguen siendo los actuales;
+- no ejecutar los comandos históricos de este archivo sin una nueva autorización humana explícita;
+- el estado SPS/binding/granularidad vigente se toma de `PROJECT_STATE.md`, no de esta evidencia antigua.
 
 ## Fuente observada en la fase histórica
 
@@ -65,7 +65,7 @@ Estos parámetros tienen responsabilidades diferentes:
 
 `ALL_AVAILABLE` no permanece como valor predeterminado ni como variable del extractor.
 
-## Ubicación provisional
+## Ubicación provisional histórica
 
 ```text
 location_id = la_colonia_online
@@ -74,9 +74,9 @@ location_evidence = Catálogo público en línea sin selección obligatoria de c
 location_confidence = null
 ```
 
-El extractor no relaciona el catálogo con una tienda física, seller regional ni `regionId`.
+El extractor de aquella fase no relacionó el catálogo con una tienda física, seller regional ni `regionId`.
 
-Esa conclusión histórica es coherente con el estado vigente: SPS permanece `UNCONFIRMED` hasta una nueva observación mínima expresamente autorizada.
+Esto se conserva como evidencia histórica. La granularidad y el binding técnico actuales de SPS se consultan en `PROJECT_STATE.md`.
 
 ## Contrato
 
@@ -90,7 +90,7 @@ Cada SKU válido produce el `RawProduct` existente. Precio, precio regular infor
 - falta de precio, seller o evidencia concluyente: `unknown`;
 - una ausencia en una página parcial nunca produce `not_listed`.
 
-La cantidad cero junto a un precio positivo no se considera evidencia inequívoca de agotado porque el catálogo se consulta sin contexto regional confirmado.
+La cantidad cero junto a un precio positivo no se considera evidencia inequívoca de agotado cuando no existe contexto regional confirmado.
 
 ## Pruebas offline de aquella fase
 
@@ -107,9 +107,7 @@ Resultado histórico:
 67 passed in 0.35s
 ```
 
-Ese conteo **no representa la suite actual**. Se conserva únicamente como evidencia de la fase PR #6. El conteo vigente está documentado en `../arquitectura.md`.
-
-Las pruebas de aquella fase incluían productos de un SKU y varios SKU, cinco productos con el primero multi-SKU, preservación de productos posteriores, SKU disponible, sin precio y agotado, deduplicación por llave estable, filtro `ALL` y métricas separadas.
+Ese conteo **no representa la suite actual**. Se conserva únicamente como evidencia de la fase PR #6. El conteo vigente está documentado en `../PROJECT_STATE.md`.
 
 ## Prueba live histórica de diez productos
 
@@ -147,7 +145,7 @@ Promociones observadas en aquella consulta:
 | `18142` | Churro Zambos Camote Con Sal Marina 100 Gr | 36.85 | 40.95 |
 | `18141` | Churro Yummies Taqueritos Lava Extra Picante 180Gr | 35.05 | 38.95 |
 
-Los precios son evidencia histórica de esa observación, no precios actuales. La ausencia de un caso pesable o multi-SKU se registró como limitación; no se amplió la búsqueda ni se recorrió el catálogo.
+Los precios son evidencia histórica de esa observación, no precios actuales.
 
 ## Comando histórico — no ejecutar sin autorización nueva
 
@@ -160,9 +158,7 @@ python precios-supermercados-sps/scripts/probar_la_colonia.py \
   --directed-limit 3
 ```
 
-Se conserva sólo para reproducibilidad histórica. **No debe ejecutarse contra La Colonia mientras `ACTIVE_AUTHORIZATION_IDS` esté vacío.**
-
-La existencia de `workflow_dispatch`, un archivo de comando, un comentario o este documento no crea autoridad live.
+Se conserva sólo para reproducibilidad histórica. La existencia de `workflow_dispatch`, un archivo de comando, un comentario o este documento no crea autoridad live.
 
 ## Fuera de alcance de aquella fase
 
@@ -174,4 +170,4 @@ La existencia de `workflow_dispatch`, un archivo de comando, un comentario o est
 - comparación entre supermercados;
 - Power BI.
 
-Varias de esas áreas avanzaron posteriormente offline; consultar `../arquitectura.md` para el estado real actual.
+Varias de esas áreas avanzaron posteriormente. Consultar `../PROJECT_STATE.md` para el estado real actual.
