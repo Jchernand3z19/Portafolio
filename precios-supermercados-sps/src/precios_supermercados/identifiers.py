@@ -125,6 +125,21 @@ def generate_source_product_id(
     )
 
 
+def generate_pending_product_id(source_product_id: str) -> str:
+    """Crea un singleton provisional sin afirmar equivalencia entre supermercados.
+
+    Mientras no exista un mapping normalizado explícito, cada producto fuente ocupa
+    su propio grupo provisional. El ID puede reemplazarse después por un
+    ``product_id`` revisado sin alterar ``source_product_id`` ni ``offer_id``.
+    """
+
+    source_product = _required_component(source_product_id, "source_product_id")
+    return _stable_digest(
+        "prod_pending_",
+        {"source_product_id": canonicalize_text(source_product)},
+    )
+
+
 def generate_offer_id(supermarket_id: str, location_id: str, source_product_id: str) -> str:
     """Genera la identidad de una oferta por supermercado, ubicación y producto fuente."""
 
