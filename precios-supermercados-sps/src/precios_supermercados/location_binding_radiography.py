@@ -75,7 +75,6 @@ def _stable_json(value: Any) -> str:
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
-            default=str,
         )
     except (TypeError, ValueError) as exc:
         raise LocationBindingRadiographyError("context_value_not_serializable") from exc
@@ -187,14 +186,22 @@ def _flatten(stage: ContextStage) -> dict[tuple[str, str], Any]:
             key_text = _required_text(str(key), "context_key")
             if _known_strength(key_text) is None:
                 continue
-            identity = (channel, key_text)
+            canonical = _canonical_key(key_text)
+            identity = (channel, canonical)
             if identity in flattened:
                 raise LocationBindingRadiographyError("duplicate_context_identity")
+            # Validar serialización aquí hace fail-closed el snapshot aunque el valor
+            # finalmente no cambie entre etapas.
+            _stable_json(value)
             flattened[identity] = value
     return flattened
 
 
-def _value_changed(before: Mapping[tuple[str, str], Any], after: Mapping[tuple[str, str], Any], identity: tuple[str, str]) -> bool:
+def _value_changed(
+    before: Mapping[tuple[str, str], Any],
+    after: Mapping[tuple[str, str], Any],
+    identity: tuple[str, str],
+) -> bool:
     before_present = identity in before
     after_present = identity in after
     if before_present != after_present:
@@ -204,7 +211,10 @@ def _value_changed(before: Mapping[tuple[str, str], Any], after: Mapping[tuple[s
     return _fingerprint(before[identity]) != _fingerprint(after[identity])
 
 
-def _stage_digest(values: Mapping[tuple[str, str], Any], identity: tuple[str, str]) -> str | None:
+def _stage_digest(
+    values: Mapping[tuple[str, str], Any],
+    identity: tuple[str, str],
+) -> str | None:
     if identity not in values:
         return None
     return _fingerprint(values[identity])
@@ -213,8 +223,7 @@ def _stage_digest(values: Mapping[tuple[str, str], Any], identity: tuple[str, st
 def _candidate_key(signal: BindingSignal, fingerprint: str) -> str:
     # No valor fuente en claro. El prefijo identifica el mecanismo; el hash
     # identifica de forma estable el contexto observado sin convertirlo en secreto.
-    canonical = _canonical_key(signal.key)
-    return f"{signal.channel}:{canonical}:sha256:{fingerprint}"
+    return f"{signal.channel}:{signal.key}:sha256:{fingerprint}"
 
 
 def analyze_location_binding(
@@ -230,8 +239,10 @@ def analyze_location_binding(
 
     Reglas:
     - una señal fuerte que cambia al seleccionar tienda implica granularidad store;
-    - si hay señal fuerte al seleccionar ciudad y ninguna señal fuerte adicional al
-      seleccionar tienda, la granularidad candidata es city;
+    - cualquier cambio débil posterior a seleccionar tienda impide confirmar city,
+      porque podría esconder contexto de tienda dentro de una sesión opaca;
+    - si hay señal fuerte al seleccionar ciudad y después de tienda no cambia ni
+      una señal fuerte ni una débil, la granularidad candidata es city;
     - cambios sólo en vtex_session/vtex_segment se consideran débiles y no bastan
       para confirmar city/store;
     - si existe selector de tienda se requiere snapshot posterior a la tienda.
@@ -288,6 +299,12 @@ def analyze_location_binding(
         and signal.changed_after_store
         and signal.store_fingerprint is not None
     ]
+    weak_store = [
+        signal
+        for signal in signals
+        if signal.strength is BindingConfidence.WEAK
+        and signal.changed_after_store
+    ]
     strong_city = [
         signal
         for signal in signals
@@ -295,11 +312,11 @@ def analyze_location_binding(
         and signal.changed_after_city
         and signal.city_fingerprint is not None
     ]
-    weak_any = [
+    weak_city = [
         signal
         for signal in signals
         if signal.strength is BindingConfidence.WEAK
-        and (signal.changed_after_city or signal.changed_after_store)
+        and signal.changed_after_city
     ]
 
     granularity = BindingGranularity.UNKNOWN
@@ -316,19 +333,19 @@ def analyze_location_binding(
         granularity = BindingGranularity.STORE
         confidence = BindingConfidence.STRONG
         decisive_stage = "after_store"
+    elif weak_store:
+        # No confirmar city cuando la selección de tienda sí mutó una sesión opaca.
+        confidence = BindingConfidence.WEAK
+        decisive_stage = "after_store"
     elif strong_city:
         decisive = strong_city[0]
         decisive_fingerprint = decisive.city_fingerprint
         granularity = BindingGranularity.CITY
         confidence = BindingConfidence.STRONG
         decisive_stage = "after_city"
-    elif weak_any:
+    elif weak_city:
         confidence = BindingConfidence.WEAK
-        decisive_stage = (
-            "after_store"
-            if any(signal.changed_after_store for signal in weak_any)
-            else "after_city"
-        )
+        decisive_stage = "after_city"
 
     candidate = (
         _candidate_key(decisive, decisive_fingerprint)
