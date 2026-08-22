@@ -1,0 +1,139 @@
+name: Precios SPS - Sonda Cloudflare controlada
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: precios-sps-cloudflare-controlled-probe
+  cancel-in-progress: false
+
+jobs:
+  controlled-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: cloudflare-probe
+
+    env:
+      PROBE_GATEWAY_URL: ${{ secrets.CLOUDFLARE_PROBE_GATEWAY_URL }}
+      PROBE_AUDIENCE: urn:precios-sps:cloudflare:probe:v1
+
+    steps:
+      - name: Validar destino fijo de la sonda
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+
+          raw = os.environ.get("PROBE_GATEWAY_URL", "")
+          if not raw or raw != raw.strip():
+              raise SystemExit("CLOUDFLARE_PROBE_GATEWAY_URL ausente o inválida")
+          parsed = urlsplit(raw)
+          if parsed.scheme != "https":
+              raise SystemExit("La sonda requiere HTTPS")
+          if parsed.username or parsed.password or parsed.port:
+              raise SystemExit("Credenciales o puerto explícito no permitidos")
+          host = (parsed.hostname or "").lower()
+          if not host.endswith(".workers.dev"):
+              raise SystemExit("El gateway de sonda debe vivir en workers.dev")
+          if host == "www.lacolonia.com" or host.endswith(".lacolonia.com"):
+              raise SystemExit("La Colonia está prohibida en la sonda")
+          if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+              raise SystemExit("La URL secreta debe contener sólo el origen del gateway")
+          PY
+
+      - name: Autenticar y ejecutar una única sonda física
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          token_response="$(curl --fail --silent --show-error --retry 0 \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${PROBE_AUDIENCE}")"
+          id_token="$(python -c 'import json,sys; value=json.load(sys.stdin).get("value"); assert isinstance(value,str) and value; print(value)' <<<"$token_response")"
+          echo "::add-mask::$id_token"
+
+          payload="$(python - <<'PY'
+          import json
+          import os
+          print(json.dumps({
+              "probeId": f"github-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}",
+              "approvedCommitSha": os.environ["GITHUB_SHA"],
+          }, separators=(",", ":")))
+          PY
+          )"
+
+          curl --fail-with-body --silent --show-error --retry 0 \
+            --connect-timeout 10 --max-time 60 \
+            -H "Authorization: Bearer ${id_token}" \
+            -H "Content-Type: application/json" \
+            --data "$payload" \
+            "${PROBE_GATEWAY_URL%/}/v1/probe" \
+            --output cloudflare-probe-result.json
+
+          unset id_token token_response
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          result = json.loads(Path("cloudflare-probe-result.json").read_text(encoding="utf-8"))
+          if result.get("ok") is not True or result.get("decision") != "PROBE_COMPLETED":
+              raise SystemExit(f"La sonda no cerró correctamente: {result.get('error') or result.get('decision')}")
+          if result.get("replayed") is not False:
+              raise SystemExit("La primera ejecución no puede ser replay")
+          if result.get("purpose") != "precios-sps-controlled-origin-probe-v1":
+              raise SystemExit("Propósito de evidencia inesperado")
+          receipt = result.get("receiptPayload")
+          if not isinstance(receipt, dict):
+              raise SystemExit("Recibo ausente")
+          if receipt.get("schema_version") != "probe-1":
+              raise SystemExit("Schema de sonda inesperado")
+          target = receipt.get("target_host", "")
+          if not isinstance(target, str) or not target.endswith(".workers.dev"):
+              raise SystemExit("Destino físico no es workers.dev")
+          if target == "www.lacolonia.com" or target.endswith(".lacolonia.com"):
+              raise SystemExit("La Colonia apareció como destino de la sonda")
+          if receipt.get("github_environment") != "cloudflare-probe":
+              raise SystemExit("Environment OIDC inesperado")
+          expected_workflow = (
+              "Jchernand3z19/Portafolio/.github/workflows/"
+              "precios-supermercados-sps-cloudflare-probe.yml@refs/heads/main"
+          )
+          if receipt.get("github_workflow_ref") != expected_workflow:
+              raise SystemExit("workflow_ref OIDC inesperado")
+          if receipt.get("approved_commit_sha") != os.environ["GITHUB_SHA"]:
+              raise SystemExit("Commit del recibo no coincide con el run")
+          for key in ("signatureB64Url", "evidenceId"):
+              value = result.get(key)
+              if not isinstance(value, str) or not value:
+                  raise SystemExit(f"{key} ausente")
+
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          summary.write_text(
+              "## Sonda Cloudflare controlada\n\n"
+              f"- Estado: PASS\n"
+              f"- Commit: `{os.environ['GITHUB_SHA']}`\n"
+              f"- Run: `{os.environ['GITHUB_RUN_ID']}` / intento `{os.environ['GITHUB_RUN_ATTEMPT']}`\n"
+              f"- Destino físico: `{target}`\n"
+              f"- Release Cloudflare: `{receipt.get('collector_release_id')}`\n"
+              f"- Evidence ID: `{result['evidenceId']}`\n"
+              "- La Colonia: **0 requests**\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Publicar evidencia sanitizada
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: precios-sps-cloudflare-controlled-probe
+          path: cloudflare-probe-result.json
+          if-no-files-found: warn
+          retention-days: 14

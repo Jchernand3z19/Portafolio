@@ -43,7 +43,14 @@ PINNED_ACTIONS = {
     "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
 }
 
+PROBE_WORKFLOW = "precios-supermercados-sps-cloudflare-probe.yml"
+PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
+
 EXPECTED_PERMISSIONS = {
+    PROBE_WORKFLOW: {
+        "contents": "read",
+        "id-token": "write",
+    },
     "precios-supermercados-sps-la-colonia-command.yml": {
         "contents": "read",
         "pull-requests": "read",
@@ -59,6 +66,7 @@ EXPECTED_PERMISSIONS = {
 }
 
 EXPECTED_TRIGGERS = {
+    PROBE_WORKFLOW: {"workflow_dispatch"},
     "precios-supermercados-sps-la-colonia-command.yml": {"pull_request_target"},
     "precios-supermercados-sps-la-colonia-diagnostic.yml": {"workflow_dispatch"},
     "precios-supermercados-sps-la-colonia-dispatch-recovery.yml": {"workflow_run"},
@@ -77,6 +85,10 @@ BLOCKED_ENTRYPOINTS = {
     "precios-supermercados-sps-la-colonia-dispatch-recovery.yml",
     "precios-supermercados-sps-la-colonia-facet-discovery.yml",
     "precios-supermercados-sps-la-colonia-live.yml",
+}
+
+ALLOWED_SECRET_REFERENCES = {
+    PROBE_WORKFLOW: {PROBE_GATEWAY_SECRET},
 }
 
 
@@ -125,6 +137,11 @@ def action_references(value: dict[str, Any]) -> tuple[str, ...]:
     return tuple(references)
 
 
+def secret_references(path: Path) -> set[str]:
+    raw = path.read_text(encoding="utf-8")
+    return set(re.findall(r"\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}", raw))
+
+
 def all_jobs_blocked(value: dict[str, Any]) -> bool:
     return all(job.get("if") == "${{ false }}" for job in jobs(value).values())
 
@@ -137,15 +154,22 @@ def test_all_external_actions_are_pinned_to_verified_full_shas():
             assert PINNED_ACTIONS.get(action) == revision, (path.name, reference)
 
 
-def test_permissions_are_exact_without_job_override_or_secrets():
+def test_permissions_are_exact_without_job_override_or_unapproved_secrets():
     for path, workflow in workflows():
         assert workflow["permissions"] == EXPECTED_PERMISSIONS[path.name]
         assert all("permissions" not in job for job in jobs(workflow).values())
-        assert "${{ secrets." not in path.read_text(encoding="utf-8")
+        assert secret_references(path) == ALLOWED_SECRET_REFERENCES.get(path.name, set())
 
 
 def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
     for path, workflow in workflows():
+        checkout_steps = [
+            step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
+        ]
+        if path.name == PROBE_WORKFLOW:
+            assert checkout_steps == [], "La sonda privilegiada no debe ejecutar código del repositorio"
+            continue
+
         expected_ref = (
             "${{ github.workflow_sha }}"
             if path.name
@@ -155,9 +179,6 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
             }
             else "${{ github.sha }}"
         )
-        checkout_steps = [
-            step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
-        ]
         assert checkout_steps, path.name
         for step in checkout_steps:
             inputs = step.get("with")
@@ -182,6 +203,47 @@ def test_privileged_and_live_entrypoints_are_globally_blocked():
     assert "GLOBAL LIVE BLOCKED" in controller
     assert "/actions/workflows/{workflow_id}/dispatches" not in controller
     assert "github.request(" not in controller
+
+
+def test_controlled_probe_is_manual_isolated_and_has_no_caller_target_input():
+    path = WORKFLOW_DIR / PROBE_WORKFLOW
+    workflow = load_workflow(path)
+    triggers = workflow["on"]
+    assert isinstance(triggers, dict)
+    assert set(triggers) == {"workflow_dispatch"}
+    assert triggers["workflow_dispatch"] in ("", None)
+
+    probe_jobs = jobs(workflow)
+    assert set(probe_jobs) == {"controlled-probe"}
+    job = probe_jobs["controlled-probe"]
+    assert job.get("environment") == "cloudflare-probe"
+    assert job.get("if") != "${{ false }}"
+    assert "permissions" not in job
+    assert workflow["permissions"] == {"contents": "read", "id-token": "write"}
+
+    raw = path.read_text(encoding="utf-8")
+    assert secret_references(path) == {PROBE_GATEWAY_SECRET}
+    assert "actions/checkout@" not in raw
+    assert "${{ inputs." not in raw
+    assert "github.event.inputs" not in raw
+    assert "originUrl" not in raw
+    assert "scripts/probar_la_colonia.py" not in raw
+    assert "scripts/diagnosticar_ventanas_la_colonia.py" not in raw
+    assert "scripts/descubrir_facets_la_colonia.py" not in raw
+    assert "urn:precios-sps:cloudflare:probe:v1" in raw
+    assert "environment: cloudflare-probe" in raw
+    assert ".workers.dev" in raw
+    assert "--retry 0" in raw
+    assert "${PROBE_GATEWAY_URL%/}/v1/probe" in raw
+
+
+def test_only_probe_workflow_can_request_oidc_write_permission():
+    for path, workflow in workflows():
+        permissions = workflow["permissions"]
+        if path.name == PROBE_WORKFLOW:
+            assert permissions.get("id-token") == "write"
+        else:
+            assert "id-token" not in permissions
 
 
 def test_trigger_sets_are_closed_without_issue_comment_authority():
