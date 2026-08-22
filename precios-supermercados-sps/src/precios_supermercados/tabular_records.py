@@ -142,7 +142,7 @@ class ScrapeRunRecord:
     ) -> "ScrapeRunRecord":
         if not isinstance(apply_result, ApplyRunResult):
             raise TabularPersistenceError("apply_result debe ser ApplyRunResult")
-        return cls(
+        record = cls(
             scrape_run_id=apply_result.scrape_run_id,
             supermarket_id=supermarket_id,
             location_id=location_id,
@@ -159,6 +159,25 @@ class ScrapeRunRecord:
             quality_event_count=quality_event_count,
             run_evidence_id=run_evidence_id,
         )
+        expected_commercial_update = (
+            record.catalog_accepted
+            and record.run_status in {RunStatus.SUCCESS, RunStatus.WARNING}
+        )
+        if apply_result.commercial_update_allowed != expected_commercial_update:
+            raise TabularPersistenceError(
+                "apply_result contradice la decisión comercial del run"
+            )
+        if not expected_commercial_update and any(
+            (
+                apply_result.current_created,
+                apply_result.current_changed,
+                apply_result.current_confirmed,
+            )
+        ):
+            raise TabularPersistenceError(
+                "run no comercial no puede reportar mutaciones/confirmaciones current"
+            )
+        return record
 
 
 @dataclass(frozen=True, slots=True)
