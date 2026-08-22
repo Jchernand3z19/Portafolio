@@ -48,7 +48,6 @@ DIAGNOSTIC_WORKFLOW = "cloudflare-controlled-probe-observability-shape.yml"
 DIAGNOSTIC_MARKER_PATH = (
     "precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json"
 )
-DIAGNOSTIC_DIRECT_BRANCH = "diag/precios-sps-observability-direct"
 PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
 PROBE_OBSERVABILITY_SECRET = "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN"
 PROBE_PUBLIC_KEY_VAR = "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL"
@@ -60,7 +59,6 @@ EXPECTED_PERMISSIONS = {
         "contents": "read",
         "actions": "read",
         "issues": "write",
-        "statuses": "write",
     },
     "precios-supermercados-sps-la-colonia-command.yml": {
         "contents": "read",
@@ -87,7 +85,7 @@ ALLOWED_JOB_PERMISSIONS = {
 
 EXPECTED_TRIGGERS = {
     PROBE_WORKFLOW: {"workflow_dispatch"},
-    DIAGNOSTIC_WORKFLOW: {"push"},
+    DIAGNOSTIC_WORKFLOW: {"pull_request_target"},
     "precios-supermercados-sps-la-colonia-command.yml": {"pull_request_target"},
     "precios-supermercados-sps-la-colonia-diagnostic.yml": {"workflow_dispatch"},
     "precios-supermercados-sps-la-colonia-dispatch-recovery.yml": {"workflow_run"},
@@ -228,13 +226,13 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
         checkout_steps = [
             step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
         ]
-        if path.name in {
+        if path.name == DIAGNOSTIC_WORKFLOW:
+            expected_ref = "${{ github.event.pull_request.base.sha }}"
+        elif path.name in {
             "precios-supermercados-sps-la-colonia-command.yml",
             "precios-supermercados-sps-la-colonia-dispatch-recovery.yml",
         }:
             expected_ref = "${{ github.workflow_sha }}"
-        elif path.name == DIAGNOSTIC_WORKFLOW:
-            expected_ref = "${{ github.ref == 'refs/heads/main' && github.sha || github.event.before }}"
         else:
             expected_ref = "${{ github.sha }}"
         assert checkout_steps, path.name
@@ -329,45 +327,6 @@ def test_trigger_sets_are_closed_without_issue_comment_authority():
         assert "issue_comment" not in triggers
 
 
-def test_diagnostic_push_is_scoped_to_controlled_branches_and_fixed_marker():
-    path = WORKFLOW_DIR / DIAGNOSTIC_WORKFLOW
-    workflow = load_workflow(path)
-    triggers = workflow["on"]
-    assert isinstance(triggers, dict)
-    assert set(triggers) == {"push"}
-    push = triggers["push"]
-    assert isinstance(push, dict)
-    assert push["branches"] == ["main", DIAGNOSTIC_DIRECT_BRANCH]
-    assert push["paths"] == [DIAGNOSTIC_MARKER_PATH]
-    assert not all_jobs_blocked(workflow)
-
-    raw = path.read_text(encoding="utf-8")
-    assert "pull_request_target" not in raw
-    assert "workflow_run" not in raw
-    assert "workflow_dispatch" not in raw
-    assert "github.event.pull_request" not in raw
-    assert "github.head_ref" not in raw
-    assert "github.workflow_sha" not in raw
-    assert "github.event.workflow_run" not in raw
-    assert f"refs/heads/{DIAGNOSTIC_DIRECT_BRANCH}" in raw
-    assert "github.actor == 'Jchernand3z19'" in raw
-    assert "statuses: write" in raw
-    assert "precios-sps/observability-diagnostic" in raw
-    assert 'actions/runs/${GITHUB_RUN_ID}' in raw
-
-    checkout = [
-        step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
-    ]
-    assert checkout
-    assert all(
-        step["with"] == {
-            "ref": "${{ github.ref == 'refs/heads/main' && github.sha || github.event.before }}",
-            "persist-credentials": "false",
-        }
-        for step in checkout
-    )
-
-
 def test_pull_request_target_never_checks_out_untrusted_pr_code():
     for path, workflow in workflows():
         triggers = workflow["on"]
@@ -379,6 +338,34 @@ def test_pull_request_target_never_checks_out_untrusted_pr_code():
         checkout = [
             step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
         ]
+
+        if path.name == DIAGNOSTIC_WORKFLOW:
+            trigger = triggers["pull_request_target"]
+            assert isinstance(trigger, dict)
+            assert trigger["types"] == ["opened", "synchronize", "reopened"]
+            assert trigger["branches"] == ["main"]
+            assert trigger["paths"] == [DIAGNOSTIC_MARKER_PATH]
+            assert not all_jobs_blocked(workflow)
+            assert len(jobs(workflow)) == 1
+            diagnostic_job = next(iter(jobs(workflow).values()))
+            condition = str(diagnostic_job.get("if", ""))
+            assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
+            assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
+            assert "github.event.pull_request.user.login == 'Jchernand3z19'" in condition
+            assert "github.event.pull_request.base.ref == 'main'" in condition
+            assert raw.count("github.event.pull_request.head") == 1
+            assert "github.event.pull_request.head.sha" not in raw
+            assert "github.event.pull_request.head.ref" not in raw
+            assert checkout
+            assert all(
+                step["with"] == {
+                    "ref": "${{ github.event.pull_request.base.sha }}",
+                    "persist-credentials": "false",
+                }
+                for step in checkout
+            )
+            continue
+
         assert all_jobs_blocked(workflow)
         assert "github.event.pull_request.head" not in raw
         assert all(step["with"]["ref"] == "${{ github.workflow_sha }}" for step in checkout)
