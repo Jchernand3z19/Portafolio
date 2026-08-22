@@ -3,11 +3,12 @@
 Sirve como contrato ejecutable para el futuro adapter de Google Sheets. No hace
 red ni I/O externo. Las filas de configuración/current/history son upserts; los
 runs y eventos de calidad son registros inmutables y un replay sólo se acepta si
-la fila es byte-lógicamente equivalente.
+la fila es lógicamente equivalente.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -17,7 +18,6 @@ from .tabular_persistence import (
     FACT_SCRAPE_RUNS,
     TABLE_SPECS,
     TableSpec,
-    TabularPersistenceError,
 )
 
 
@@ -44,6 +44,16 @@ def _primary_key(spec: TableSpec, row: Mapping[str, Any]) -> tuple[Any, ...]:
     return key
 
 
+def _validate_cell(value: Any, table_name: str, column: str) -> None:
+    if value is None or isinstance(value, (str, bool, int)):
+        return
+    if isinstance(value, float) and math.isfinite(value):
+        return
+    raise TabularStoreError(
+        f"celda no escalar/finita en {table_name}.{column}: {type(value).__name__}"
+    )
+
+
 def _normalize_row(spec: TableSpec, row: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(row, Mapping):
         raise TabularStoreError(f"fila de {spec.name} debe ser mapping")
@@ -55,6 +65,8 @@ def _normalize_row(spec: TableSpec, row: Mapping[str, Any]) -> dict[str, Any]:
             f"unknown={sorted(unknown)}"
         )
     normalized = {column: row[column] for column in spec.columns}
+    for column, value in normalized.items():
+        _validate_cell(value, spec.name, column)
     _primary_key(spec, normalized)
     return normalized
 
@@ -157,11 +169,9 @@ class InMemoryTabularStore:
         )
 
     def rows(self, table_name: str) -> tuple[Mapping[str, Any], ...]:
-        try:
-            spec = TABLE_SPECS[table_name]
-            table = self._tables[table_name]
-        except KeyError as exc:
-            raise TabularStoreError(f"tabla desconocida: {table_name}") from exc
+        if table_name not in TABLE_SPECS:
+            raise TabularStoreError(f"tabla desconocida: {table_name}")
+        table = self._tables[table_name]
         return tuple(
             MappingProxyType(dict(table[key]))
             for key in sorted(table, key=lambda value: tuple(str(item) for item in value))
