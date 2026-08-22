@@ -92,7 +92,11 @@ class ScrapeRunRecord:
                 _required_text(getattr(self, field_name), field_name),
             )
         try:
-            status = self.run_status if isinstance(self.run_status, RunStatus) else RunStatus(self.run_status)
+            status = (
+                self.run_status
+                if isinstance(self.run_status, RunStatus)
+                else RunStatus(self.run_status)
+            )
         except (TypeError, ValueError) as exc:
             raise TabularPersistenceError("run_status no es válido") from exc
         object.__setattr__(self, "run_status", status)
@@ -100,6 +104,10 @@ class ScrapeRunRecord:
             raise TabularPersistenceError("ScrapeRunRecord requiere un estado final")
         if not isinstance(self.catalog_accepted, bool):
             raise TabularPersistenceError("catalog_accepted debe ser booleano")
+        if self.catalog_accepted and status not in {RunStatus.SUCCESS, RunStatus.WARNING}:
+            raise TabularPersistenceError(
+                "catalog_accepted sólo es válido para success/warning"
+            )
         _utc(self.started_at_utc, "started_at_utc")
         _utc(self.finished_at_utc, "finished_at_utc")
         if self.finished_at_utc < self.started_at_utc:
@@ -182,8 +190,16 @@ class QualityEventRecord:
             )
         object.__setattr__(self, "offer_id", _optional_text(self.offer_id))
         try:
-            category = self.category if isinstance(self.category, QualityEventCategory) else QualityEventCategory(self.category)
-            severity = self.severity if isinstance(self.severity, QualityEventSeverity) else QualityEventSeverity(self.severity)
+            category = (
+                self.category
+                if isinstance(self.category, QualityEventCategory)
+                else QualityEventCategory(self.category)
+            )
+            severity = (
+                self.severity
+                if isinstance(self.severity, QualityEventSeverity)
+                else QualityEventSeverity(self.severity)
+            )
         except (TypeError, ValueError) as exc:
             raise TabularPersistenceError("category/severity no son válidos") from exc
         object.__setattr__(self, "category", category)
@@ -205,21 +221,54 @@ class QualityEventRecord:
         offer_id: str | None = None,
     ) -> "QualityEventRecord":
         sequence = _non_negative_int(sequence, "sequence")
+        try:
+            normalized_category = (
+                category
+                if isinstance(category, QualityEventCategory)
+                else QualityEventCategory(category)
+            )
+            normalized_severity = (
+                severity
+                if isinstance(severity, QualityEventSeverity)
+                else QualityEventSeverity(severity)
+            )
+        except (TypeError, ValueError) as exc:
+            raise TabularPersistenceError("category/severity no son válidos") from exc
+        normalized_run_id = _required_text(scrape_run_id, "scrape_run_id")
+        normalized_supermarket = _required_text(supermarket_id, "supermarket_id")
+        normalized_location = _required_text(location_id, "location_id")
+        normalized_code = _required_text(event_code, "event_code")
+        normalized_offer_id = _optional_text(offer_id)
         canonical = {
-            "scrape_run_id": _required_text(scrape_run_id, "scrape_run_id"),
-            "supermarket_id": _required_text(supermarket_id, "supermarket_id"),
-            "location_id": _required_text(location_id, "location_id"),
-            "category": category.value if hasattr(category, "value") else str(category),
-            "severity": severity.value if hasattr(severity, "value") else str(severity),
-            "event_code": _required_text(event_code, "event_code"),
+            "scrape_run_id": normalized_run_id,
+            "supermarket_id": normalized_supermarket,
+            "location_id": normalized_location,
+            "category": normalized_category.value,
+            "severity": normalized_severity.value,
+            "event_code": normalized_code,
             "observed_at_utc": _utc_text(observed_at_utc),
-            "offer_id": _optional_text(offer_id),
+            "offer_id": normalized_offer_id,
             "sequence": sequence,
         }
         digest = hashlib.sha256(
-            json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(
+                canonical,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
         ).hexdigest()
-        return cls(quality_event_id=f"qe_{digest[:32]}", **{key: value for key, value in canonical.items() if key != "sequence"})
+        return cls(
+            quality_event_id=f"qe_{digest[:32]}",
+            scrape_run_id=normalized_run_id,
+            supermarket_id=normalized_supermarket,
+            location_id=normalized_location,
+            category=normalized_category,
+            severity=normalized_severity,
+            event_code=normalized_code,
+            observed_at_utc=observed_at_utc,
+            offer_id=normalized_offer_id,
+        )
 
 
 def scrape_run_row(
