@@ -180,70 +180,94 @@ class SafeHttpClient:
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.retry_delay_seconds = retry_delay_seconds
-        self._transport = transport
-        self._sleeper = sleeper
-        self._last_request_monotonic: float | None = None
+        self._transport = transport or self._deny_external_transport
+        self.sleeper = sleeper
         self._sealed = True
 
-    def _validate_url(self, url: str) -> None:
+    @property
+    def transport(self) -> Transport:
+        return self._transport
+
+    def validate_url(self, url: str) -> None:
         parsed = urlsplit(url)
         if parsed.scheme != "https":
-            raise RobotsPolicyError("Solo se permite HTTPS")
-        host = (parsed.hostname or "").casefold()
-        if host not in self.allowed_hosts:
-            raise RobotsPolicyError(f"Host no permitido: {host}")
-        path = parsed.path.casefold()
+            raise RobotsPolicyError("Solo se permiten URLs HTTPS")
+        if parsed.hostname is None or parsed.hostname.casefold() not in self.allowed_hosts:
+            raise RobotsPolicyError(f"Host no permitido: {parsed.hostname or '<vacío>'}")
+        path = parsed.path.casefold() or "/"
         if any(path.startswith(prefix) for prefix in self.forbidden_path_prefixes):
-            raise RobotsPolicyError(f"Ruta no permitida: {parsed.path}")
+            raise RobotsPolicyError(f"Ruta excluida por política: {parsed.path}")
 
-    def _default_transport(
-        self,
-        url: str,
-        headers: Mapping[str, str],
-        timeout: float,
-    ) -> HttpResponse:
-        del url, headers, timeout
-        raise ExternalNetworkDeniedError(
-            "El transporte externo está denegado por defecto; use una ruta live explícitamente autorizada"
-        )
-
-    def _pace(self) -> None:
-        if self._last_request_monotonic is None:
-            return
-        elapsed = time.monotonic() - self._last_request_monotonic
-        wait = self.retry_delay_seconds - elapsed
-        if wait > 0:
-            self._sleeper(wait)
-
-    def get(self, url: str, headers: Mapping[str, str] | None = None) -> HttpResponse:
-        self._validate_url(url)
-        request_headers = dict(headers or {})
-        transport = self._transport or self._default_transport
-        last_error: Exception | None = None
+    def get(self, url: str) -> HttpResponse:
+        self.validate_url(url)
+        headers = {
+            "Accept": "application/json,text/plain;q=0.9,*/*;q=0.1",
+            "User-Agent": self.user_agent,
+        }
+        last_response: HttpResponse | None = None
 
         for attempt in range(self.max_retries + 1):
-            if attempt > 0:
-                self._sleeper(self.retry_delay_seconds)
-            self._pace()
+            if attempt:
+                self.sleeper(self.retry_delay_seconds)
             try:
-                response = transport(url, request_headers, self.timeout_seconds)
-                self._last_request_monotonic = time.monotonic()
-            except (URLError, TimeoutError) as exc:
-                last_error = exc
+                response = self._transport(url, headers, self.timeout_seconds)
+            except (TimeoutError, URLError) as exc:
+                if attempt >= self.max_retries:
+                    raise ScraperError(f"No fue posible consultar {url}: {exc}") from exc
                 continue
 
-            if response.status_code == 429:
-                last_error = RateLimitedError(response.status_code, url)
+            self.validate_url(response.url)
+            last_response = response
+            status = response.status_code
+
+            if status == 403:
+                raise BlockedResponseError(status, response.url)
+            if status == 429:
+                if attempt >= self.max_retries:
+                    raise RateLimitedError(status, response.url)
+                retry_after = _retry_after_seconds(response.headers)
+                self.sleeper(min(retry_after, 30.0))
                 continue
-            if response.status_code in {401, 403}:
-                raise BlockedResponseError(response.status_code, url)
-            if not 200 <= response.status_code < 300:
-                raise HttpStatusError(response.status_code, url)
+            if 300 <= status <= 399:
+                raise HttpStatusError(status, response.url)
+            if 500 <= status <= 599:
+                if attempt >= self.max_retries:
+                    raise HttpStatusError(status, response.url)
+                continue
+            if status >= 400:
+                raise HttpStatusError(status, response.url)
+
             lowered = response.text.casefold()
             if any(marker in lowered for marker in self._BLOCK_MARKERS):
-                raise BlockedResponseError(response.status_code, url)
+                raise BlockedResponseError(status, response.url)
             return response
 
-        if last_error:
-            raise last_error
-        raise ScraperError("No fue posible completar la solicitud")
+        assert last_response is not None
+        raise HttpStatusError(last_response.status_code, last_response.url)
+
+    def get_json(self, url: str) -> Mapping[str, Any]:
+        return self.get(url).json()
+
+    @staticmethod
+    def _deny_external_transport(
+        url: str,
+        headers: Mapping[str, str],
+        timeout_seconds: float,
+    ) -> HttpResponse:
+        del url, headers, timeout_seconds
+        raise ExternalNetworkDeniedError(
+            "GLOBAL LIVE BLOCKED: use un fake explícito para pruebas offline"
+        )
+
+
+def _retry_after_seconds(headers: Mapping[str, str]) -> float:
+    raw_value = next(
+        (value for key, value in headers.items() if key.casefold() == "retry-after"),
+        None,
+    )
+    if raw_value is None:
+        return 1.0
+    try:
+        return max(float(raw_value), 0.0)
+    except ValueError:
+        return 1.0
