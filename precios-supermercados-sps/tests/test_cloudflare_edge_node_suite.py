@@ -35,36 +35,25 @@ def _node() -> str:
     return executable
 
 
+def _npm() -> str:
+    executable = shutil.which("npm")
+    assert executable is not None, "npm es obligatorio para validar la suite edge canónica"
+    return executable
+
+
 def test_cloudflare_node_suite() -> None:
-    test_files = [
-        "core.test.mjs",
-        "canonical-time.test.mjs",
-        "ledger.test.mjs",
-        "authorization-ledger.test.mjs",
-        "durable-store.test.mjs",
-        "gateway-runtime.test.mjs",
-        "worker-adapter.test.mjs",
-        "worker-fencing.test.mjs",
-        "gateway-supervisor.test.mjs",
-        "front-door-jwks-gate.test.mjs",
-        "structural-trace-context.test.mjs",
-        "structural-gateway-runtime.test.mjs",
-        "structural-worker-adapter.test.mjs",
-        "probe.test.mjs",
-    ]
+    # package.json is the single source of truth for the complete Node suite.
+    # Do not duplicate its test-file list here: drift would silently exclude tests from CI.
+    _node()
     result = subprocess.run(
-        [
-            _node(),
-            "--test",
-            *(str(EDGE_ROOT / "test" / name) for name in test_files),
-        ],
+        [_npm(), "--prefix", str(EDGE_ROOT), "test"],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
         timeout=90,
     )
     assert result.returncode == 0, (
-        "La suite Node del gateway Cloudflare falló.\n"
+        "La suite Node canónica del gateway Cloudflare falló.\n"
         f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
 
