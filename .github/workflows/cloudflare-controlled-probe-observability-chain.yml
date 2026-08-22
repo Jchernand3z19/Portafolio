@@ -23,8 +23,7 @@ jobs:
           github.event.workflow_run.conclusion == 'success' &&
           github.event.workflow_run.head_repository.full_name == github.repository &&
           github.event.workflow_run.head_branch == 'diag/precios-sps-observability-request-001' &&
-          github.event.workflow_run.actor.login == 'Jchernand3z19' &&
-          github.event.workflow_run.pull_requests[0].number == 107 }}
+          github.event.workflow_run.actor.login == 'Jchernand3z19' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: cloudflare-probe

@@ -50,7 +50,7 @@ def test_chain_runs_only_after_successful_marker_pr_ci():
     assert "github.event.workflow_run.head_repository.full_name == github.repository" in condition
     assert "github.event.workflow_run.head_branch == 'diag/precios-sps-observability-request-001'" in condition
     assert "github.event.workflow_run.actor.login == 'Jchernand3z19'" in condition
-    assert "github.event.workflow_run.pull_requests[0].number == 107" in condition
+    assert "github.event.workflow_run.pull_requests" not in condition
     assert job["environment"] == "cloudflare-probe"
     assert "id-token" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in raw
