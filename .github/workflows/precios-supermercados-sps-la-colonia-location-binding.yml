@@ -1,0 +1,70 @@
+name: La Colonia - Radiografía manual de ubicación
+
+on:
+  workflow_dispatch:
+    inputs:
+      authorization_id:
+        description: ID de autorización live previamente aprobado y versionado
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: la-colonia-location-binding-radiography
+  cancel-in-progress: false
+
+jobs:
+  radiography:
+    # Fail-closed: una autorización futura requiere un PR separado que active
+    # simultáneamente este job y los gates versionados del capturador.
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+      AUTHORIZATION_ID: ${{ inputs.authorization_id }}
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Configurar Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias cerradas
+        shell: bash
+        run: python -m pip install -r precios-supermercados-sps/requirements.txt
+      - name: Ejecutar radiografía cerrada
+        id: radiography
+        shell: bash
+        run: |
+          set +e
+          python precios-supermercados-sps/scripts/diagnosticar_binding_ubicacion_la_colonia.py \
+            --authorization-id "$AUTHORIZATION_ID" \
+            --output-path precios-supermercados-sps/diagnostic-artifacts/location-binding-radiography.json
+          exit_code=$?
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Publicar artefacto sanitizado
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: la-colonia-location-binding-${{ github.run_id }}
+          path: precios-supermercados-sps/diagnostic-artifacts/location-binding-radiography.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Reflejar conclusión técnica
+        if: always()
+        shell: bash
+        run: |
+          exit_code="${{ steps.radiography.outputs.exit_code }}"
+          case "$exit_code" in
+            "0") exit 0 ;;
+            "2") exit 2 ;;
+            "3") exit 3 ;;
+            *) exit 5 ;;
+          esac
