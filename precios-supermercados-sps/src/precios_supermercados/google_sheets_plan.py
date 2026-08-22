@@ -1,8 +1,8 @@
 """Plan offline para materializar las tablas comunes en Google Sheets.
 
-El resultado es un único payload para ``spreadsheets.batchUpdate``. Google
-Sheets documenta que las subsolicitudes de ese endpoint se aplican juntas de
-forma atómica. Este módulo no autentica, no hace red y no conoce credenciales.
+El resultado representa un único payload para ``spreadsheets.batchUpdate``.
+Google Sheets documenta que las subsolicitudes de ese endpoint se aplican juntas
+de forma atómica. Este módulo no autentica, no hace red y no conoce credenciales.
 """
 
 from __future__ import annotations
@@ -65,10 +65,28 @@ class SpreadsheetMetadata:
 
 @dataclass(frozen=True, slots=True)
 class AtomicWorkbookPlan:
-    payload: Mapping[str, Any]
+    """Payload cerrado; ``payload`` devuelve una copia JSON lista para transporte."""
+
+    payload_json: str
     sheet_ids: Mapping[str, int]
     row_counts: Mapping[str, int]
     payload_bytes: int
+
+    def __post_init__(self) -> None:
+        try:
+            parsed = json.loads(self.payload_json)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise GoogleSheetsPlanError("payload_json inválido") from exc
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("requests"), list):
+            raise GoogleSheetsPlanError("payload_json no es batchUpdate")
+        if self.payload_bytes != len(self.payload_json.encode("utf-8")):
+            raise GoogleSheetsPlanError("payload_bytes no coincide con payload_json")
+        object.__setattr__(self, "sheet_ids", MappingProxyType(dict(self.sheet_ids)))
+        object.__setattr__(self, "row_counts", MappingProxyType(dict(self.row_counts)))
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        return json.loads(self.payload_json)
 
 
 def parse_spreadsheet_metadata(payload: Mapping[str, Any]) -> SpreadsheetMetadata:
@@ -267,7 +285,7 @@ def build_atomic_workbook_plan(
         except TabularStoreError as exc:
             raise GoogleSheetsPlanError(str(exc)) from exc
         matrix = _matrix_rows(spec, rows)
-        required_rows = max(len(matrix), 1)
+        required_rows = len(matrix)
         required_columns = len(spec.columns)
         row_counts[table_name] = len(rows)
 
@@ -294,25 +312,21 @@ def build_atomic_workbook_plan(
         sheet_ids[table_name] = sheet_id
         requests.append(_update_cells_request(sheet_id, required_columns, matrix))
         requests.append(_header_format_request(sheet_id, required_columns))
-        if len(rows) > 0:
-            requests.append(
-                _filter_request(sheet_id, required_rows, required_columns)
-            )
+        if rows:
+            requests.append(_filter_request(sheet_id, required_rows, required_columns))
 
-    payload: Mapping[str, Any] = MappingProxyType(
-        {
-            "requests": tuple(requests),
-            "includeSpreadsheetInResponse": False,
-        }
-    )
-    encoded = json.dumps(
-        {"requests": requests, "includeSpreadsheetInResponse": False},
+    payload_dict = {
+        "requests": requests,
+        "includeSpreadsheetInResponse": False,
+    }
+    payload_json = json.dumps(
+        payload_dict,
         ensure_ascii=False,
         separators=(",", ":"),
-    ).encode("utf-8")
+    )
     return AtomicWorkbookPlan(
-        payload=payload,
-        sheet_ids=MappingProxyType(sheet_ids),
-        row_counts=MappingProxyType(row_counts),
-        payload_bytes=len(encoded),
+        payload_json=payload_json,
+        sheet_ids=sheet_ids,
+        row_counts=row_counts,
+        payload_bytes=len(payload_json.encode("utf-8")),
     )
