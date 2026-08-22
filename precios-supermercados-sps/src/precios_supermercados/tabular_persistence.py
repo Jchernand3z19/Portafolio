@@ -7,6 +7,12 @@ identidad de supermercado y ubicación.
 La capa es fail-closed respecto a ubicación: una oferta no puede convertirse en
 fila persistible si su ubicación no está habilitada en ``LocationCatalog`` o si
 una fuente multiubicación no demuestra una asignación confirmada.
+
+Current e histórico conservan además la evidencia estructurada mínima necesaria
+para reconstruir un ``ValidatedOffer`` después de reiniciar un runner. No se
+persiste ``raw_values`` porque no participa en identidad/hash/transición y puede
+contener payload fuente voluminoso; los campos que sí participan en el
+fingerprint comercial quedan explícitos y auditables en columnas cerradas.
 """
 
 from __future__ import annotations
@@ -81,6 +87,9 @@ CFG_LOCATIONS = TableSpec(
     primary_key=("location_id",),
 )
 
+# Estas columnas son deliberadamente explícitas. El Spreadsheet es también el
+# snapshot durable que debe permitir continuar el histórico en una ejecución
+# posterior, no sólo una vista para BI.
 FACT_OFFERS_CURRENT = TableSpec(
     name="fact_offers_current",
     columns=(
@@ -91,6 +100,9 @@ FACT_OFFERS_CURRENT = TableSpec(
         "city_id",
         "city_name",
         "location_granularity",
+        "location_status",
+        "location_evidence",
+        "location_confidence",
         "source_product_id",
         "product_id",
         "source_key_type",
@@ -101,6 +113,8 @@ FACT_OFFERS_CURRENT = TableSpec(
         "source_brand",
         "normalized_brand",
         "source_presentation",
+        "source_category",
+        "barcode",
         "category",
         "subcategory",
         "variant",
@@ -117,7 +131,13 @@ FACT_OFFERS_CURRENT = TableSpec(
         "unit_price_basis",
         "state_hash",
         "review_status",
+        "quality_events_json",
+        "offer_scrape_run_id",
+        "extractor_version",
+        "schema_version",
+        "source_url",
         "observed_at_utc",
+        "validated_at_utc",
         "first_observed_at_utc",
         "last_observed_at_utc",
         "last_scrape_run_id",
@@ -138,6 +158,9 @@ FACT_OFFER_HISTORY = TableSpec(
         "city_id",
         "city_name",
         "location_granularity",
+        "location_status",
+        "location_evidence",
+        "location_confidence",
         "source_product_id",
         "product_id",
         "source_key_type",
@@ -148,6 +171,8 @@ FACT_OFFER_HISTORY = TableSpec(
         "source_brand",
         "normalized_brand",
         "source_presentation",
+        "source_category",
+        "barcode",
         "category",
         "subcategory",
         "variant",
@@ -166,6 +191,12 @@ FACT_OFFER_HISTORY = TableSpec(
         "change_type",
         "changed_fields_json",
         "review_status",
+        "quality_events_json",
+        "offer_scrape_run_id",
+        "extractor_version",
+        "schema_version",
+        "source_url",
+        "validated_at_utc",
         "valid_from_utc",
         "valid_to_utc",
         "opened_by_scrape_run_id",
@@ -251,6 +282,10 @@ def _utc_text(value: datetime | None) -> str | None:
     if value.utcoffset().total_seconds() != 0:
         raise TabularPersistenceError("datetime debe estar en UTC")
     return value.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _json_string_list(values: tuple[str, ...]) -> str:
+    return json.dumps(list(values), ensure_ascii=False, separators=(",", ":"))
 
 
 def _closed_row(spec: TableSpec, values: Mapping[str, Any]) -> dict[str, Any]:
@@ -365,6 +400,9 @@ def _offer_base_row(
         "city_id": location.city_id,
         "city_name": location.city_name,
         "location_granularity": location.granularity.value,
+        "location_status": offer.location_status.value,
+        "location_evidence": offer.location_evidence,
+        "location_confidence": _decimal_text(offer.location_confidence),
         "source_product_id": offer.source_product_id,
         "product_id": offer.product_id,
         "source_key_type": offer.source_key_type.value,
@@ -375,6 +413,8 @@ def _offer_base_row(
         "source_brand": offer.source_brand,
         "normalized_brand": offer.normalized_brand,
         "source_presentation": offer.source_presentation,
+        "source_category": offer.source_category,
+        "barcode": offer.barcode,
         "category": offer.category,
         "subcategory": offer.subcategory,
         "variant": offer.variant,
@@ -391,6 +431,12 @@ def _offer_base_row(
         "unit_price_basis": offer.unit_price_basis,
         "state_hash": validated.state_hash,
         "review_status": validated.review_status.value,
+        "quality_events_json": _json_string_list(validated.quality_events),
+        "offer_scrape_run_id": offer.scrape_run_id,
+        "extractor_version": offer.extractor_version,
+        "schema_version": offer.schema_version,
+        "source_url": offer.source_url,
+        "validated_at_utc": _utc_text(validated.validated_at_utc),
         "product_url": offer.product_url,
         "image_url": offer.image_url,
     }
