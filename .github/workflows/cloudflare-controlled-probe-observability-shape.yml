@@ -1,11 +1,11 @@
 name: Cloudflare controlled probe - Observability shape diagnostic
 
 on:
-  push:
-    branches:
-      - main
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [main]
     paths:
-      - .github/workflows/cloudflare-controlled-probe-observability-shape.yml
+      - precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json
 
 permissions:
   contents: read
@@ -13,12 +13,16 @@ permissions:
   issues: write
 
 concurrency:
-  group: cloudflare-controlled-probe-observability-shape
+  group: cloudflare-controlled-probe-observability-shape-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   inspect-observability-shape:
-    if: ${{ github.repository == 'Jchernand3z19/Portafolio' }}
+    if: >-
+      ${{ github.repository == 'Jchernand3z19/Portafolio' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.user.login == 'Jchernand3z19' &&
+          github.event.pull_request.base.ref == 'main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: cloudflare-probe
@@ -28,6 +32,7 @@ jobs:
       SOURCE_COMMIT_SHA: "cc15edef22709911beb1d1b027ae4c9992da1944"
       PROBE_PUBLIC_KEY_SPKI_B64URL: ${{ vars.CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      TARGET_PR_NUMBER: ${{ github.event.pull_request.number }}
 
     steps:
       - name: Prepare sanitized fallback comment
@@ -54,10 +59,10 @@ jobs:
           )
           PY
 
-      - name: Checkout diagnostic revision
+      - name: Checkout trusted base revision only
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
 
       - name: Locate verifier project
@@ -386,14 +391,18 @@ jobs:
               })
           PY
 
-      - name: Publish sanitized diagnostic to technical PR
+      - name: Publish sanitized diagnostic to triggering PR
         if: ${{ always() }}
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
+          if ! [[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]; then
+            echo "Invalid PR number" >&2
+            exit 1
+          fi
           gh api \
             --method POST \
-            "repos/${GITHUB_REPOSITORY}/issues/103/comments" \
+            "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR_NUMBER}/comments" \
             --input "$RUNNER_TEMP/probe-shape-comment.json"

@@ -10,6 +10,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "cloudflare-controlled-probe-observability-shape.yml"
+MARKER = "precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json"
 
 PINNED_ACTIONS = {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
@@ -25,7 +26,7 @@ def _load() -> tuple[str, dict[str, object]]:
     return raw, value
 
 
-def test_shape_diagnostic_is_push_main_self_scoped_and_comment_only_write():
+def test_shape_diagnostic_uses_controlled_pull_request_target_only():
     raw, workflow = _load()
     assert workflow["permissions"] == {
         "contents": "read",
@@ -33,13 +34,17 @@ def test_shape_diagnostic_is_push_main_self_scoped_and_comment_only_write():
         "issues": "write",
     }
     triggers = workflow["on"]
-    assert isinstance(triggers, dict) and set(triggers) == {"push"}
-    push = triggers["push"]
-    assert push["branches"] == ["main"]
-    assert push["paths"] == [".github/workflows/cloudflare-controlled-probe-observability-shape.yml"]
-    jobs = workflow["jobs"]
-    assert isinstance(jobs, dict) and set(jobs) == {"inspect-observability-shape"}
-    job = jobs["inspect-observability-shape"]
+    assert isinstance(triggers, dict) and set(triggers) == {"pull_request_target"}
+    trigger = triggers["pull_request_target"]
+    assert trigger["types"] == ["opened", "synchronize", "reopened"]
+    assert trigger["branches"] == ["main"]
+    assert trigger["paths"] == [MARKER]
+
+    job = workflow["jobs"]["inspect-observability-shape"]
+    condition = job["if"]
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
+    assert "github.event.pull_request.user.login == 'Jchernand3z19'" in condition
+    assert "github.event.pull_request.base.ref == 'main'" in condition
     assert job["environment"] == "cloudflare-probe"
     assert "id-token" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in raw
@@ -87,9 +92,27 @@ def test_shape_diagnostic_reads_raw_shapes_without_reusing_strict_normalizers():
     assert "json.dumps(artifact" not in raw
 
 
-def test_shape_diagnostic_always_prepares_and_publishes_only_sanitized_comment():
+def test_pull_request_target_never_checks_out_or_reads_untrusted_head():
     raw, workflow = _load()
     steps = workflow["jobs"]["inspect-observability-shape"]["steps"]
+    checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["name"] == "Checkout trusted base revision only"
+    assert checkout["with"] == {
+        "ref": "${{ github.event.pull_request.base.sha }}",
+        "persist-credentials": "false",
+    }
+    assert "github.event.pull_request.head.sha" not in raw
+    assert "github.head_ref" not in raw
+    assert "git checkout" not in raw
+    assert "git fetch" not in raw
+    assert MARKER in raw
+
+
+def test_shape_diagnostic_always_publishes_only_sanitized_comment_to_triggering_pr():
+    raw, workflow = _load()
+    job = workflow["jobs"]["inspect-observability-shape"]
+    assert job["env"]["TARGET_PR_NUMBER"] == "${{ github.event.pull_request.number }}"
+    steps = job["steps"]
     assert steps[0]["name"] == "Prepare sanitized fallback comment"
     assert "started_without_summary" in steps[0]["run"]
     assert 'Path(os.environ["RUNNER_TEMP"], "probe-shape-comment.json")' in steps[0]["run"]
@@ -101,11 +124,12 @@ def test_shape_diagnostic_always_prepares_and_publishes_only_sanitized_comment()
     assert "str(exc)" not in inspect["run"]
     assert "traceback" not in inspect["run"]
 
-    publish = next(step for step in steps if step["name"] == "Publish sanitized diagnostic to technical PR")
+    publish = next(step for step in steps if step["name"] == "Publish sanitized diagnostic to triggering PR")
     assert publish["if"] == "${{ always() }}"
     assert publish["env"] == {"GH_TOKEN": "${{ github.token }}"}
     script = publish["run"]
-    assert 'repos/${GITHUB_REPOSITORY}/issues/103/comments' in script
+    assert 'issues/${TARGET_PR_NUMBER}/comments' in script
+    assert '[[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]' in script
     assert '--input "$RUNNER_TEMP/probe-shape-comment.json"' in script
     assert "--method POST" in script
     assert "curl " not in script
@@ -113,7 +137,7 @@ def test_shape_diagnostic_always_prepares_and_publishes_only_sanitized_comment()
     assert "PROBE_OBSERVABILITY_TOKEN" not in script
 
 
-def test_shape_diagnostic_actions_are_pinned_and_checkout_is_immutable():
+def test_shape_diagnostic_actions_are_pinned():
     _, workflow = _load()
     steps = workflow["jobs"]["inspect-observability-shape"]["steps"]
     uses_steps = [step for step in steps if "uses" in step]
@@ -121,9 +145,3 @@ def test_shape_diagnostic_actions_are_pinned_and_checkout_is_immutable():
         action, separator, revision = step["uses"].partition("@")
         assert separator and re.fullmatch(r"[0-9a-f]{40}", revision)
         assert PINNED_ACTIONS[action] == revision
-
-    checkout = next(step for step in uses_steps if step["uses"].startswith("actions/checkout@"))
-    assert checkout["with"] == {
-        "ref": "${{ github.sha }}",
-        "persist-credentials": "false",
-    }
