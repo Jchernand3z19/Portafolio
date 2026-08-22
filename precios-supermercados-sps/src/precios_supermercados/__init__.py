@@ -18,6 +18,18 @@ from .identifiers import (
     generate_state_hash,
     select_source_key,
 )
+from .locations import (
+    DEFAULT_LOCATION_CATALOG,
+    LA_COLONIA_SPS,
+    LA_COLONIA_TGU,
+    LocationCatalog,
+    LocationConfig,
+    LocationConfigError,
+    LocationGranularity,
+    LocationSelectionMode,
+    SupermarketConfig,
+    build_location_catalog,
+)
 from .models import NormalizedOffer, RawProduct, ValidatedOffer
 
 __all__ = [
@@ -29,6 +41,16 @@ __all__ = [
     "ReviewStatus",
     "RunStatus",
     "SourceKeyType",
+    "LocationConfigError",
+    "LocationGranularity",
+    "LocationSelectionMode",
+    "SupermarketConfig",
+    "LocationConfig",
+    "LocationCatalog",
+    "DEFAULT_LOCATION_CATALOG",
+    "LA_COLONIA_SPS",
+    "LA_COLONIA_TGU",
+    "build_location_catalog",
     "RawProduct",
     "NormalizedOffer",
     "ValidatedOffer",
