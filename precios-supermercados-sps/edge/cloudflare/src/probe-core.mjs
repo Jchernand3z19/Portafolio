@@ -46,26 +46,29 @@ function receiptSigningBytes(payload) {
 
 export function validateControlledProbeOriginUrl(rawUrl) {
   const value = exactText(rawUrl, "probe_origin_url_invalid", 4096);
-  let url;
+  let baseUrl;
   try {
-    url = new URL(value);
+    baseUrl = new URL(value);
   } catch {
     fail("probe_origin_url_invalid");
   }
-  if (url.protocol !== "https:") fail("probe_origin_scheme_invalid");
-  if (url.port !== "") fail("probe_origin_port_forbidden");
-  if (url.username || url.password) fail("probe_origin_credentials_forbidden");
-  if (url.search !== "") fail("probe_origin_query_forbidden");
-  if (url.hash !== "") fail("probe_origin_fragment_forbidden");
-  if (url.pathname !== CONTROLLED_PROBE_ORIGIN_PATH) fail("probe_origin_path_invalid");
-  if (!WORKERS_DEV_HOST_RE.test(url.hostname)) fail("probe_origin_host_not_workers_dev");
-  if (url.hostname === "www.lacolonia.com" || url.hostname.endsWith(".lacolonia.com")) {
+  if (baseUrl.protocol !== "https:") fail("probe_origin_scheme_invalid");
+  if (baseUrl.port !== "") fail("probe_origin_port_forbidden");
+  if (baseUrl.username || baseUrl.password) fail("probe_origin_credentials_forbidden");
+  if (baseUrl.search !== "") fail("probe_origin_query_forbidden");
+  if (baseUrl.hash !== "") fail("probe_origin_fragment_forbidden");
+  if (baseUrl.pathname !== "/" && baseUrl.pathname !== CONTROLLED_PROBE_ORIGIN_PATH) {
+    fail("probe_origin_path_invalid");
+  }
+  if (!WORKERS_DEV_HOST_RE.test(baseUrl.hostname)) fail("probe_origin_host_not_workers_dev");
+  if (baseUrl.hostname === "www.lacolonia.com" || baseUrl.hostname.endsWith(".lacolonia.com")) {
     fail("probe_origin_lacolonia_forbidden");
   }
+  const requestUrl = new URL(CONTROLLED_PROBE_ORIGIN_PATH, baseUrl.origin);
   return Object.freeze({
-    url: url.toString(),
-    targetHost: url.hostname,
-    targetPath: url.pathname,
+    url: requestUrl.toString(),
+    targetHost: baseUrl.hostname,
+    targetPath: CONTROLLED_PROBE_ORIGIN_PATH,
   });
 }
 
