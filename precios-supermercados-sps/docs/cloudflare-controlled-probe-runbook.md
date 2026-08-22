@@ -31,8 +31,8 @@ Un PASS demuestra únicamente las invariantes físicas de la sonda. No significa
 
 Antes de desplegar:
 
-- `main` contiene PR #84, #88, #89 y la actualización documental #90;
-- la suite observada es **1231/1231 pruebas aprobadas** + `compileall`;
+- `main` contiene PR #84, #88, #89, #90 y #91;
+- la suite observada en PR #91 es **1234/1234 pruebas aprobadas** + `compileall`;
 - `edge/cloudflare/wrangler.probe-origin.json` define el origen controlado;
 - `edge/cloudflare/wrangler.probe.json` define el gateway/DO de sonda;
 - ambos Workers tienen tracing con `head_sampling_rate = 1`;
@@ -40,7 +40,7 @@ Antes de desplegar:
 - el gateway productivo de La Colonia y su allowlist no se modifican para esta prueba;
 - `ACTIVE_AUTHORIZATION_IDS` de La Colonia puede y debe seguir vacío.
 
-No es requisito crear una autorización live de La Colonia para ejecutar esta sonda.
+No es requisito crear una autorización live de La Colonia para ejecutar esta sonda. El barrido posterior a PR #91 no dejó una tarea de implementación offline conocida que pueda sustituir esta prueba física externa.
 
 ## 3. Toolchain fijado
 

@@ -9,8 +9,8 @@ Proyecto para recolectar, normalizar, validar y conservar cambios relevantes de 
 Estado verificado al **2026-08-21 (America/Tegucigalpa)**:
 
 - `main` está protegida; GATE-17 permanece `PASS_PRODUCTIVE_EVIDENCE`.
-- La revisión técnica más reciente de la sonda integrada es PR #89.
-- CI observada en PR #89: **1231/1231 pruebas aprobadas** + `compileall`.
+- La revisión offline más reciente integrada es PR #91.
+- CI observada en PR #91: **1234/1234 pruebas aprobadas** + `compileall`.
 - No existen autorizaciones live activas.
 - `SPS-context-and-root-facets-001` está consumida; `002` no está autorizada.
 - SPS technical context continúa `UNCONFIRMED`.
@@ -22,6 +22,8 @@ Estado verificado al **2026-08-21 (America/Tegucigalpa)**:
 - `trusted_collector_provenance_unavailable` permanece en la aceptación canónica hasta evidencia productiva real.
 - `commercial_state.py` y `commercial_pricing.py` implementan current/history y reducción real offline; no existe backend productivo conectado.
 - La sonda Cloudflare no-La-Colonia está integrada offline con origen controlado, OIDC, Durable Object, receipt Ed25519, verificación criptográfica independiente y reconciliación contra Workers Observability. **No ha sido desplegada ni ejecutada físicamente.**
+- Wrangler está fijado a `4.125.0`; el runbook evita CLI mutable y el directorio edge ignora estado local/secrets temporales.
+- En el barrido posterior a PR #91 no quedó una tarea de implementación offline conocida que pueda cerrar honestamente la frontera productiva sin acceso externo a Cloudflare.
 
 La fuente canónica del estado es [`docs/arquitectura.md`](docs/arquitectura.md). El procedimiento de la primera prueba externa está en [`docs/cloudflare-controlled-probe-runbook.md`](docs/cloudflare-controlled-probe-runbook.md). La evidencia de GATE-17 está en [`docs/gate-17-verification.md`](docs/gate-17-verification.md).
 
@@ -148,10 +150,10 @@ pytest precios-supermercados-sps/tests
 
 La CI también ejecuta la suite Node de `edge/cloudflare` y auditoría fail-closed de workflows.
 
-Último resultado observado para PR #89:
+Último resultado observado para PR #91:
 
 ```text
-1231 passed
+1234 passed
 compileall PASS
 ```
 

@@ -6,13 +6,13 @@ Este documento es la **fuente canónica única** del estado técnico actual del 
 
 Estado verificado al **2026-08-21 (America/Tegucigalpa)**.
 
-La última frontera técnica integrada en este corte es **PR #89 — reconciliación Workers Observability de la sonda controlada**. No se fija aquí el SHA mutable de `main`; se consulta en GitHub al iniciar cualquier trabajo.
+La última frontera offline integrada en este corte es **PR #91 — toolchain Wrangler fijada y protección de secrets/estado local**. No se fija aquí el SHA mutable de `main`; se consulta en GitHub al iniciar cualquier trabajo.
 
-CI observada para la revisión integrada por PR #89:
+CI observada para PR #91:
 
 ```text
 compileall = PASS
-pytest = 1231/1231 PASS
+pytest = 1234/1234 PASS
 ```
 
 Estado operativo:
@@ -26,8 +26,10 @@ Estado operativo:
 - los entrypoints capaces de tráfico live hacia La Colonia permanecen globalmente cerrados;
 - Cloudflare productivo no está desplegado;
 - la sonda Cloudflare no-La-Colonia está completa **offline**, pero no desplegada ni ejecutada;
+- Wrangler de esta fase está fijado a `4.125.0` y los archivos locales de secrets/estado edge están ignorados;
 - no existe autoridad productiva del catálogo;
 - no existe backend comercial productivo conectado;
+- el barrido posterior a PR #91 no encontró una tarea de implementación offline conocida que pueda sustituir la evidencia física externa pendiente;
 - **requests live a La Colonia durante estas fases: 0**.
 
 ## Estados usados
@@ -58,7 +60,7 @@ Estado operativo:
 | Transporte autenticado de páginas | `DONE_OFFLINE` | Gateway → crypto/body → coverage con binding exacto. |
 | Finalización de provenance de catálogo | `DONE_OFFLINE` | Observability por página + manifest de run exacto. |
 | Readiness técnica de catálogo | `DONE_OFFLINE` | Puede demostrar completitud técnica sin aceptar catálogo. |
-| Sonda Cloudflare no-La-Colonia | `DONE_OFFLINE / READY_FOR_EXTERNAL_DEPLOYMENT` | Origen/gateway/DO/OIDC/firma/verifier/Observability integrados; no desplegada ni ejecutada. |
+| Sonda Cloudflare no-La-Colonia | `DONE_OFFLINE / READY_FOR_EXTERNAL_DEPLOYMENT` | Origen/gateway/DO/OIDC/firma/verifier/Observability/toolchain integrados; no desplegada ni ejecutada. |
 | Despliegue y prueba física de sonda | `BLOCKED_EXTERNAL` | Requiere cuenta/configuración Cloudflare y credenciales de sonda. |
 | Autoridad productiva del collector | `BLOCKED_EXTERNAL` | No se concede con fixtures, firmas o spans simulados. |
 | SPS technical context | `BLOCKED_LIVE` | `UNCONFIRMED`; requiere observación live mínima autorizada. |
@@ -181,7 +183,7 @@ hasta evidencia productiva real.
 
 La primera prueba física de Cloudflare se hace contra infraestructura propia, no contra La Colonia.
 
-Cadena integrada por PR #84, #88 y #89:
+Cadena integrada por PR #84, #88 y #89, endurecida para despliegue por #90 y #91:
 
 ```text
 workflow manual cloudflare-probe
@@ -213,12 +215,16 @@ Propiedades:
 - firma/body/request/evidence ID se verifican fuera del Worker;
 - Workers Observability se consulta por transporte fijo a `api.cloudflare.com/client/v4` sin redirects ni retries;
 - se exige exactamente un custom span y un child fetch reconciliados por run/commit/release/URL/status/size/timestamps;
+- Wrangler está fijado a `4.125.0` y el runbook sólo usa esa entrada versionada;
+- el primer bootstrap de secrets evita `secret put` secuencial y usa carga conjunta con el deploy;
+- `.dev.vars`, `.wrangler/`, `node_modules/` y archivos temporales de secrets quedan ignorados en el directorio edge;
 - un resultado válido mantiene `catalog_accepted=false` y `production_authority=false`.
 
 Estado:
 
 ```text
 SONDA_CODE = DONE_OFFLINE
+SONDA_TOOLCHAIN = DONE_OFFLINE
 SONDA_DEPLOY = NOT_DONE
 SONDA_PHYSICAL_RUN = NOT_DONE
 ```
@@ -326,6 +332,7 @@ La siguiente integración productiva de persistencia debe consumir una decisión
 - plan, transporte y finalización autenticados del catálogo;
 - readiness técnica separada de autoridad productiva;
 - sonda controlada completa offline, incluida verificación Ed25519 externa y Workers Observability;
+- toolchain Wrangler fijada y protección de secrets/estado local;
 - GATE-17 productivo.
 
 ### READY_FOR_EXTERNAL_DEPLOYMENT / BLOCKED_EXTERNAL
@@ -337,6 +344,8 @@ La siguiente integración productiva de persistencia debe consumir una decisión
 - configurar Environment GitHub `cloudflare-probe`;
 - ejecutar la sonda y obtener evidencia física de OIDC/DO/version metadata/firma/Observability;
 - mantener La Colonia en **0 requests** durante esta etapa.
+
+No queda una tarea offline conocida que pueda reemplazar legítimamente estas operaciones externas.
 
 ### Después de un PASS de sonda
 
@@ -360,6 +369,6 @@ La siguiente integración productiva de persistencia debe consumir una decisión
 
 No se usa un bloqueo live como excusa para omitir trabajo offline disponible y tampoco se representa una simulación como producción.
 
-El siguiente hito correcto es **desplegar y ejecutar la sonda Cloudflare contra el origen controlado no-La-Colonia** siguiendo `docs/cloudflare-controlled-probe-runbook.md`.
+El trabajo offline previo conocido está cerrado. El siguiente hito correcto es **conectar/configurar Cloudflare y desplegar/ejecutar la sonda contra el origen controlado no-La-Colonia** siguiendo `docs/cloudflare-controlled-probe-runbook.md`.
 
 Sólo después de obtener ese PASS se prepara el collector productivo real. El acceso live a La Colonia continúa requiriendo autorización humana nueva y separada.
