@@ -30,6 +30,30 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
     steps:
+      - name: Prepare sanitized fallback comment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+              "diagnostic_status": "started_without_summary",
+              "contains_no_event_values": True,
+              "production_authority": False,
+              "catalog_accepted": False,
+          }
+          rendered = json.dumps(payload, sort_keys=True, indent=2)
+          Path(os.environ["RUNNER_TEMP"], "probe-shape-comment.json").write_text(
+              json.dumps({
+                  "body": "## Sanitized Workers Observability shape diagnostic\n\n```json\n" + rendered + "\n```"
+              }),
+              encoding="utf-8",
+          )
+          PY
+
       - name: Checkout diagnostic revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -72,7 +96,7 @@ jobs:
           repository: ${{ github.repository }}
           run-id: 32551882793
 
-      - name: Inspect sanitized telemetry shape only
+      - name: Inspect raw telemetry shape without trusting event schema
         env:
           PROBE_OBSERVABILITY_TOKEN: ${{ secrets.CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN }}
         shell: bash
@@ -82,72 +106,25 @@ jobs:
           import json
           import os
           from collections import Counter
-          from collections.abc import Mapping
+          from collections.abc import Mapping, Sequence
           from datetime import datetime, timedelta, timezone
           from pathlib import Path
 
-          from precios_supermercados.cloudflare_controlled_probe_events_query import (
-              build_trace_events_query,
-              normalize_events_response,
-          )
+          from precios_supermercados.cloudflare_controlled_probe_events_query import build_trace_events_query
           from precios_supermercados.cloudflare_controlled_probe_observability import (
               CONTROLLED_PROBE_SPAN_NAME,
+              ControlledProbeObservabilityError,
           )
           from precios_supermercados.cloudflare_controlled_probe_trace_query import (
               OBSERVABILITY_QUERY_PATH_TEMPLATE,
               build_trace_invocations_query,
               build_trace_summary_query,
-              normalize_invocations_response,
               parse_trace_summary_response,
           )
-          from precios_supermercados.cloudflare_controlled_probe_verifier import (
-              verify_controlled_probe_artifact,
-          )
-          from precios_supermercados.cloudflare_observability_http_transport import (
-              CloudflareObservabilityHttpTransport,
-          )
+          from precios_supermercados.cloudflare_controlled_probe_verifier import verify_controlled_probe_artifact
+          from precios_supermercados.cloudflare_observability_http_transport import CloudflareObservabilityHttpTransport
 
-          artifact = json.loads(Path(".probe-evidence/cloudflare-probe-result.json").read_text(encoding="utf-8"))
-          verify_controlled_probe_artifact(
-              artifact,
-              public_key_spki_b64url=os.environ["PROBE_PUBLIC_KEY_SPKI_B64URL"],
-              expected_commit_sha=os.environ["SOURCE_COMMIT_SHA"],
-              expected_run_id=os.environ["SOURCE_RUN_ID"],
-              expected_run_attempt=int(os.environ["SOURCE_RUN_ATTEMPT"]),
-          )
-
-          receipt = artifact["receiptPayload"]
-
-          def parse_utc(value):
-              if not isinstance(value, str) or not value.endswith("Z"):
-                  raise SystemExit("receipt timestamp invalid")
-              return datetime.fromisoformat(value[:-1] + "+00:00").astimezone(timezone.utc)
-
-          start = parse_utc(receipt["physical_started_at_utc"]) - timedelta(seconds=30)
-          end = parse_utc(receipt["response_completed_at_utc"]) + timedelta(seconds=30)
-          account = os.environ["CLOUDFLARE_ACCOUNT_ID"]
-          if len(account) != 32 or any(ch not in "0123456789abcdef" for ch in account):
-              raise SystemExit("account id invalid")
-          path = OBSERVABILITY_QUERY_PATH_TEMPLATE.format(account_id=account)
-          transport = CloudflareObservabilityHttpTransport()
-          token = os.environ["PROBE_OBSERVABILITY_TOKEN"]
-
-          discovery = transport.post_json(
-              path,
-              bearer_token=token,
-              payload=build_trace_summary_query(from_utc=start, to_utc=end),
-          )
-          trace_ids = parse_trace_summary_response(discovery)
-
-          FIXED_MATCH_PATHS = (
-              ("$metadata", "spanName"),
-              ("spanName",),
-              ("source", "spanName"),
-              ("source", "name"),
-              ("source", "span.name"),
-              ("source", "attributes", "span.name"),
-              ("source", "attributes", "spanName"),
-          )
+          COMMENT_PATH = Path(os.environ["RUNNER_TEMP"], "probe-shape-comment.json")
           STANDARD_KEYS = (
               "service.name",
               "faas.invocation_id",
@@ -159,9 +136,44 @@ jobs:
               "http.response.status_code",
               "http.response.body.size",
           )
+          FIXED_MATCH_PATHS = (
+              ("$metadata", "spanName"),
+              ("spanName",),
+              ("source", "spanName"),
+              ("source", "name"),
+              ("source", "span.name"),
+              ("source", "attributes", "span.name"),
+              ("source", "attributes", "spanName"),
+          )
+
+          def safe_type(value):
+              if value is None:
+                  return "null"
+              if isinstance(value, Mapping):
+                  return "mapping"
+              if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+                  return "sequence"
+              if isinstance(value, str):
+                  return "string"
+              if isinstance(value, bool):
+                  return "boolean"
+              if isinstance(value, (int, float)):
+                  return "number"
+              return type(value).__name__[:64]
+
+          def safe_keys(values):
+              return sorted(
+                  key for key in {str(value) for value in values}
+                  if 0 < len(key) <= 128 and "\n" not in key and "\r" not in key
+              )[:100]
 
           def mapping(value):
               return value if isinstance(value, Mapping) else {}
+
+          def sequence(value):
+              if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+                  return value
+              return ()
 
           def value_at(event, parts):
               current = event
@@ -171,13 +183,7 @@ jobs:
                   current = current[part]
               return current
 
-          def safe_keys(values):
-              return sorted(
-                  key for key in {str(value) for value in values}
-                  if 0 < len(key) <= 128 and "\n" not in key and "\r" not in key
-              )[:100]
-
-          def summarize(events):
+          def summarize_events(events):
               top_keys = set()
               metadata_keys = set()
               workers_keys = set()
@@ -189,8 +195,13 @@ jobs:
               source_types = Counter()
               metadata_presence = Counter()
               precios_key_locations = set()
+              mapping_count = 0
 
-              for event in events:
+              for raw_event in events[:500]:
+                  if not isinstance(raw_event, Mapping):
+                      continue
+                  mapping_count += 1
+                  event = raw_event
                   top_keys.update(event.keys())
                   metadata = mapping(event.get("$metadata"))
                   workers = mapping(event.get("$workers"))
@@ -209,7 +220,7 @@ jobs:
                   elif source is None:
                       source_types["missing"] += 1
                   else:
-                      source_types[type(source).__name__] += 1
+                      source_types[safe_type(source)] += 1
 
                   for key in ("traceId", "spanId", "parentSpanId", "spanName", "service", "startTime", "endTime"):
                       if key in metadata:
@@ -234,7 +245,8 @@ jobs:
                               precios_key_locations.add(f"{label}:{key}")
 
               return {
-                  "event_count": len(events),
+                  "raw_event_count": min(len(events), 500),
+                  "mapping_event_count": mapping_count,
                   "top_keys": safe_keys(top_keys),
                   "metadata_keys": safe_keys(metadata_keys),
                   "workers_keys": safe_keys(workers_keys),
@@ -248,45 +260,134 @@ jobs:
                   "precios_attribute_key_locations": sorted(precios_key_locations)[:100],
               }
 
-          summaries = []
-          for trace_id in trace_ids:
-              events_response = transport.post_json(
-                  path,
-                  bearer_token=token,
-                  payload=build_trace_events_query(from_utc=start, to_utc=end, trace_id=trace_id),
-              )
-              invocation_response = transport.post_json(
-                  path,
-                  bearer_token=token,
-                  payload=build_trace_invocations_query(from_utc=start, to_utc=end, trace_id=trace_id),
-              )
-              summaries.append({
-                  "events": summarize(normalize_events_response(events_response)),
-                  "invocations": summarize(normalize_invocations_response(invocation_response)),
-              })
+          def raw_events_shape(response):
+              envelope = mapping(response)
+              result = mapping(envelope.get("result"))
+              container = result.get("events")
+              events = ()
+              container_keys = []
+              if isinstance(container, Mapping):
+                  container_keys = safe_keys(container.keys())
+                  events = sequence(container.get("events"))
+              elif isinstance(container, Sequence) and not isinstance(container, (str, bytes, bytearray)):
+                  events = container
+              return {
+                  "result_keys": safe_keys(result.keys()),
+                  "events_container_type": safe_type(container),
+                  "events_container_keys": container_keys,
+                  "events": summarize_events(events),
+              }
 
-          safe = {
-              "trace_candidate_count": len(trace_ids),
-              "candidate_shapes": summaries,
-              "contains_no_event_values": True,
-              "production_authority": False,
-              "catalog_accepted": False,
-          }
-          rendered = json.dumps(safe, sort_keys=True, indent=2)
-          print(rendered)
-          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(
-              "## Sanitized Workers Observability shape diagnostic\n\n```json\n" + rendered + "\n```\n",
-              encoding="utf-8",
-          )
-          Path(".probe-shape-comment.json").write_text(
-              json.dumps({
-                  "body": "## Sanitized Workers Observability shape diagnostic\n\n```json\n" + rendered + "\n```"
-              }),
-              encoding="utf-8",
-          )
+          def raw_invocations_shape(response):
+              envelope = mapping(response)
+              result = mapping(envelope.get("result"))
+              invocations = result.get("invocations")
+              events = []
+              group_count = 0
+              group_value_types = Counter()
+              if isinstance(invocations, Mapping):
+                  group_count = min(len(invocations), 200)
+                  for raw_group in list(invocations.values())[:200]:
+                      group_value_types[safe_type(raw_group)] += 1
+                      for event in sequence(raw_group)[:500]:
+                          if len(events) >= 500:
+                              break
+                          events.append(event)
+              return {
+                  "result_keys": safe_keys(result.keys()),
+                  "invocations_type": safe_type(invocations),
+                  "invocation_group_count": group_count,
+                  "invocation_group_value_types": dict(sorted(group_value_types.items())),
+                  "events": summarize_events(events),
+              }
+
+          def render(payload):
+              safe = {
+                  **payload,
+                  "contains_no_event_values": True,
+                  "production_authority": False,
+                  "catalog_accepted": False,
+              }
+              text = json.dumps(safe, sort_keys=True, indent=2)
+              COMMENT_PATH.write_text(
+                  json.dumps({
+                      "body": "## Sanitized Workers Observability shape diagnostic\n\n```json\n" + text + "\n```"
+                  }),
+                  encoding="utf-8",
+              )
+              Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(
+                  "## Sanitized Workers Observability shape diagnostic\n\n```json\n" + text + "\n```\n",
+                  encoding="utf-8",
+              )
+              print(text)
+
+          try:
+              artifact = json.loads(Path(".probe-evidence/cloudflare-probe-result.json").read_text(encoding="utf-8"))
+              verify_controlled_probe_artifact(
+                  artifact,
+                  public_key_spki_b64url=os.environ["PROBE_PUBLIC_KEY_SPKI_B64URL"],
+                  expected_commit_sha=os.environ["SOURCE_COMMIT_SHA"],
+                  expected_run_id=os.environ["SOURCE_RUN_ID"],
+                  expected_run_attempt=int(os.environ["SOURCE_RUN_ATTEMPT"]),
+              )
+              receipt = artifact["receiptPayload"]
+
+              def parse_utc(value):
+                  if not isinstance(value, str) or not value.endswith("Z"):
+                      raise ValueError("invalid_timestamp")
+                  return datetime.fromisoformat(value[:-1] + "+00:00").astimezone(timezone.utc)
+
+              start = parse_utc(receipt["physical_started_at_utc"]) - timedelta(seconds=30)
+              end = parse_utc(receipt["response_completed_at_utc"]) + timedelta(seconds=30)
+              account = os.environ["CLOUDFLARE_ACCOUNT_ID"]
+              if len(account) != 32 or any(ch not in "0123456789abcdef" for ch in account):
+                  raise ValueError("invalid_account")
+              path = OBSERVABILITY_QUERY_PATH_TEMPLATE.format(account_id=account)
+              transport = CloudflareObservabilityHttpTransport()
+              token = os.environ["PROBE_OBSERVABILITY_TOKEN"]
+
+              discovery = transport.post_json(
+                  path,
+                  bearer_token=token,
+                  payload=build_trace_summary_query(from_utc=start, to_utc=end),
+              )
+              trace_ids = parse_trace_summary_response(discovery)
+              candidates = []
+              for trace_id in trace_ids[:20]:
+                  events_response = transport.post_json(
+                      path,
+                      bearer_token=token,
+                      payload=build_trace_events_query(from_utc=start, to_utc=end, trace_id=trace_id),
+                  )
+                  invocations_response = transport.post_json(
+                      path,
+                      bearer_token=token,
+                      payload=build_trace_invocations_query(from_utc=start, to_utc=end, trace_id=trace_id),
+                  )
+                  candidates.append({
+                      "events_view": raw_events_shape(events_response),
+                      "invocations_view": raw_invocations_shape(invocations_response),
+                  })
+
+              render({
+                  "diagnostic_status": "shape_collected",
+                  "trace_candidate_count": len(trace_ids),
+                  "candidate_shapes": candidates,
+              })
+          except ControlledProbeObservabilityError as exc:
+              render({
+                  "diagnostic_status": "controlled_observability_error",
+                  "error_code": exc.code,
+              })
+          except Exception as exc:
+              render({
+                  "diagnostic_status": "unexpected_diagnostic_error",
+                  "error_type": type(exc).__name__[:64],
+              })
           PY
 
       - name: Publish sanitized diagnostic to technical PR
+        if: ${{ always() }}
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -295,4 +396,4 @@ jobs:
           gh api \
             --method POST \
             "repos/${GITHUB_REPOSITORY}/issues/103/comments" \
-            --input .probe-shape-comment.json
+            --input "$RUNNER_TEMP/probe-shape-comment.json"
