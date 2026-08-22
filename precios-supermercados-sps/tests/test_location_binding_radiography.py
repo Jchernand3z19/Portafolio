@@ -78,7 +78,7 @@ def test_store_binding_wins_when_strong_context_changes_after_store() -> None:
     ) is False
 
 
-def test_city_remains_candidate_when_store_selection_does_not_change_strong_context() -> None:
+def test_city_remains_candidate_when_store_selection_does_not_change_context() -> None:
     before = stage("before", cookie={"salesChannel": "1"})
     after_city = stage("after_city", cookie={"salesChannel": "2"})
     after_store = stage("after_store", cookie={"salesChannel": "2"})
@@ -95,6 +95,39 @@ def test_city_remains_candidate_when_store_selection_does_not_change_strong_cont
     assert report.granularity_candidate is BindingGranularity.CITY
     assert report.confidence is BindingConfidence.STRONG
     assert report.decisive_stage == "after_city"
+
+
+def test_weak_session_change_after_store_prevents_city_confirmation() -> None:
+    before = stage(
+        "before",
+        localStorage={"regionId": "region-before"},
+        cookie={"vtex_session": "session-before"},
+    )
+    after_city = stage(
+        "after_city",
+        localStorage={"regionId": "region-sps"},
+        cookie={"vtex_session": "session-city"},
+    )
+    after_store = stage(
+        "after_store",
+        localStorage={"regionId": "region-sps"},
+        cookie={"vtex_session": "session-store"},
+    )
+
+    report = analyze_location_binding(
+        city_name="San Pedro Sula",
+        before=before,
+        after_city=after_city,
+        store_selection_observed=True,
+        after_store=after_store,
+        store_name="Plaza Pedregal",
+    )
+
+    assert report.granularity_candidate is BindingGranularity.UNKNOWN
+    assert report.confidence is BindingConfidence.WEAK
+    assert report.technical_binding_observed is False
+    assert report.source_location_key_candidate is None
+    assert report.decisive_stage == "after_store"
 
 
 def test_generic_vtex_session_change_is_weak_and_does_not_confirm_granularity() -> None:
@@ -137,6 +170,19 @@ def test_request_header_can_be_decisive_binding_mechanism() -> None:
     assert report.source_location_key_candidate.startswith(
         "request_header:binding:sha256:"
     )
+
+
+def test_context_keys_are_case_insensitive_between_stages() -> None:
+    report = analyze_location_binding(
+        city_name="San Pedro Sula",
+        before=stage("before", localStorage={"RegionID": "a"}),
+        after_city=stage("after_city", localStorage={"regionId": "b"}),
+        store_selection_observed=False,
+    )
+
+    assert report.granularity_candidate is BindingGranularity.CITY
+    assert len(report.signals) == 1
+    assert report.signals[0].key == "regionid"
 
 
 def test_report_envelope_contains_only_fingerprints_not_raw_context_values() -> None:
@@ -226,3 +272,18 @@ def test_store_evidence_is_rejected_when_store_selector_was_not_observed() -> No
 def test_context_stage_rejects_invalid_channel_shape() -> None:
     with pytest.raises(LocationBindingRadiographyError, match="channel_values_invalid"):
         ContextStage(name="before", channels={"cookie": ["not", "mapping"]})
+
+
+def test_context_stage_rejects_non_json_context_values() -> None:
+    report_before = ContextStage(name="before", channels={"cookie": {"regionId": object()}})
+    report_after = ContextStage(name="after", channels={"cookie": {"regionId": "b"}})
+    with pytest.raises(
+        LocationBindingRadiographyError,
+        match="context_value_not_serializable",
+    ):
+        analyze_location_binding(
+            city_name="San Pedro Sula",
+            before=report_before,
+            after_city=report_after,
+            store_selection_observed=False,
+        )
