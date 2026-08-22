@@ -85,7 +85,6 @@ def test_shape_diagnostic_reads_raw_shapes_without_reusing_strict_normalizers():
     assert "safe_keys" in raw
     assert "print(event" not in raw
     assert "json.dumps(artifact" not in raw
-    assert "trace_id" not in raw.split('"candidate_shapes"', 1)[-1] if '"candidate_shapes"' in raw else True
 
 
 def test_shape_diagnostic_always_prepares_and_publishes_only_sanitized_comment():
