@@ -57,16 +57,13 @@ test("front door rechaza rutas y métodos fuera de allowlist", () => {
   );
 });
 
-test("JWKS gate coalesce requests concurrentes en un único fetch físico", async () => {
+test("JWKS gate cachea sólo datos y reconstruye Response independientes", async () => {
   let now = 2_000_000_000_000;
   let fetchCalls = 0;
-  let release;
-  const blocked = new Promise((resolve) => { release = resolve; });
   const gate = createJwksFetchGate({
     clock: () => new Date(now),
     fetchImpl: async () => {
       fetchCalls += 1;
-      await blocked;
       return new Response('{"keys":[]}', {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -74,13 +71,17 @@ test("JWKS gate coalesce requests concurrentes en un único fetch físico", asyn
     },
   });
 
-  const first = gate("https://token.actions.githubusercontent.com/.well-known/jwks", {});
-  const second = gate("https://token.actions.githubusercontent.com/.well-known/jwks", {});
-  release();
-  const [a, b] = await Promise.all([first, second]);
+  const first = await gate("https://token.actions.githubusercontent.com/.well-known/jwks", {});
+  const second = await gate("https://token.actions.githubusercontent.com/.well-known/jwks", {});
+  assert.notEqual(first, second);
   assert.equal(fetchCalls, 1);
-  assert.equal(await a.text(), '{"keys":[]}');
-  assert.equal(await b.text(), '{"keys":[]}');
+  assert.equal(await first.text(), '{"keys":[]}');
+  assert.equal(await second.text(), '{"keys":[]}');
+
+  now += 60_000;
+  const refreshed = await gate("https://token.actions.githubusercontent.com/.well-known/jwks", {});
+  assert.equal(await refreshed.text(), '{"keys":[]}');
+  assert.equal(fetchCalls, 2);
 });
 
 test("JWKS gate impide refresh físico repetido por kid desconocido dentro de ventana", async () => {
@@ -111,6 +112,20 @@ test("JWKS gate impide refresh físico repetido por kid desconocido dentro de ve
   const refreshed = await gate("https://token.actions.githubusercontent.com/.well-known/jwks", {});
   assert.match(await refreshed.text(), /k-2/u);
   assert.equal(fetchCalls, 2);
+});
+
+test("JWKS gate aplica límite antes de conservar bytes en cache", async () => {
+  const gate = createJwksFetchGate({
+    maxBodyBytes: 8,
+    fetchImpl: async () => new Response("0123456789", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  });
+  await assert.rejects(
+    gate("https://token.actions.githubusercontent.com/.well-known/jwks", {}),
+    (error) => expectPolicyError(error, "jwks_gate_body_above_limit"),
+  );
 });
 
 test("JWKS gate no cachea respuestas HTTP fallidas", async () => {
