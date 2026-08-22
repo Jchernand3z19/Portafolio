@@ -3,6 +3,7 @@ import {
   CONTROLLED_PROBE_MAX_REQUEST_BODY_BYTES,
   CONTROLLED_PROBE_ROUTE,
 } from "./probe-policy.mjs";
+import { CONTROLLED_PROBE_GENERIC_EXECUTION_ERROR } from "./probe-rpc-error.mjs";
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -31,6 +32,7 @@ function errorStatus(code) {
   }
   if (code === "probe_replay_in_flight" || code === "probe_replay_failed") return 409;
   if (code.startsWith("jwks_")) return 503;
+  if (code === CONTROLLED_PROBE_GENERIC_EXECUTION_ERROR) return 500;
   return 400;
 }
 
