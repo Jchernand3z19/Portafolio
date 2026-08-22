@@ -25,7 +25,8 @@ Regla comercial protegida:
 
 - `reported_regular_price` es sólo dato declarado por la tienda;
 - el ahorro real compara el `current_price` actual contra el `current_price` del periodo histórico aceptado inmediatamente anterior;
-- sin baseline confiable no se inventa ahorro.
+- sin baseline confiable no se inventa ahorro;
+- Power BI consume esta semántica desde la proyección común; no debe redefinirla en DAX.
 
 ## Autoridad y tráfico live
 
@@ -108,21 +109,41 @@ Fronteras ya existentes que deben reutilizarse:
 - tablas comunes y serializers;
 - `InMemoryTabularStore` / `TabularBatch` como referencia atómica;
 - rehidratación durable current/history;
+- restauración del motor entre runners con reserva de run IDs terminales;
+- guard de persistencia que bloquea decisiones caller-controlled mutantes;
+- binding durable `crev1_` para reconocer igualdad/replay sin conceder autoridad;
 - plan `spreadsheets.batchUpdate`;
 - transporte Sheets cerrado;
 - adapter read-modify-write;
 - bootstrap manual;
+- loader read-only Google Sheets → snapshot → rehidratación → estado restaurado;
 - batch comercial previo al adapter.
 
 Reglas críticas:
 
 - no crear una pestaña por supermercado si la tabla común ya resuelve la dimensión;
 - cada run final debe registrarse aunque no haya cambios;
-- current/history sólo mutan con decisión comercial aceptada;
+- current/history sólo mutan con decisión comercial aceptada y evidencia autoritativa real;
+- un hash/fingerprint prueba igualdad de replay, **no autoridad**;
 - replay idéntico no duplica; divergencia falla;
 - runs rechazados/fallidos no alteran current/history;
 - ausencia en un payload no implica baja;
+- restaurar estado no autoriza una ejecución nueva;
+- el loader de Sheets es read-only y no debe adquirir capacidades de escritura;
 - no conectar persistencia productiva a un `catalog_accepted` caller-controlled.
+
+## Power BI
+
+`power_bi_projection.py` es la frontera semántica read-only para el futuro dataset.
+
+- reutiliza la lógica comercial de ahorro real existente;
+- separa `reported_regular_price` del baseline histórico aceptado;
+- expone `price_direction`, disponibilidad, promoción, ubicación y `review_status`;
+- preserva tipos numéricos/temporales hasta la frontera de consumo;
+- no persiste, no scrapea y no concede autoridad;
+- el dataset/refresh productivo sólo puede consumir datos aceptados y durables.
+
+No implementes una segunda definición de ahorro real en DAX, scripts o workflows.
 
 ## GitHub Actions
 
@@ -177,17 +198,3 @@ No declares un conteo de tests si no fue observado en un run real. El conteo vig
 - **Reviewer:** revisión adversarial offline.
 - **Tests:** validación offline.
 - **Live:** sólo durante una autorización humana explícita y limitada.
-
-## Cierre de trabajo
-
-Registra con precisión:
-
-- qué cambió;
-- qué tests pasaron y en qué run/PR cuando sea relevante;
-- si hubo tráfico live o no;
-- autorizaciones activas/consumidas;
-- PRs abiertos/mergeados;
-- estado `DONE`, `DONE_OFFLINE`, `DONE_PRODUCTIVE`, `PARTIAL_PRODUCTIVE` o bloqueado;
-- siguiente dependencia real.
-
-Nunca describas una frontera offline como productiva sólo porque CI está verde.
