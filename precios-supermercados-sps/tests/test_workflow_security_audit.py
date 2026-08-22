@@ -44,16 +44,12 @@ PINNED_ACTIONS = {
 }
 
 PROBE_WORKFLOW = "precios-supermercados-sps-cloudflare-probe.yml"
-DIAGNOSTIC_WORKFLOW = "cloudflare-controlled-probe-observability-shape.yml"
 TEST_WORKFLOW = "precios-supermercados-sps-tests.yml"
 COMMAND_WORKFLOW = "precios-supermercados-sps-la-colonia-command.yml"
 RECOVERY_WORKFLOW = "precios-supermercados-sps-la-colonia-dispatch-recovery.yml"
 LA_DIAGNOSTIC_WORKFLOW = "precios-supermercados-sps-la-colonia-diagnostic.yml"
 FACET_WORKFLOW = "precios-supermercados-sps-la-colonia-facet-discovery.yml"
 LIVE_WORKFLOW = "precios-supermercados-sps-la-colonia-live.yml"
-DIAGNOSTIC_MARKER_PATH = (
-    "precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json"
-)
 PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
 PROBE_OBSERVABILITY_SECRET = "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN"
 PROBE_PUBLIC_KEY_VAR = "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL"
@@ -61,7 +57,6 @@ CLOUDFLARE_ACCOUNT_VAR = "CLOUDFLARE_ACCOUNT_ID"
 
 EXPECTED_PERMISSIONS = {
     PROBE_WORKFLOW: {"contents": "read"},
-    DIAGNOSTIC_WORKFLOW: {"contents": "read"},
     COMMAND_WORKFLOW: {"contents": "read", "pull-requests": "read"},
     RECOVERY_WORKFLOW: {"actions": "read", "contents": "read"},
     LA_DIAGNOSTIC_WORKFLOW: {"contents": "read"},
@@ -74,25 +69,10 @@ ALLOWED_JOB_PERMISSIONS = {
     PROBE_WORKFLOW: {
         "controlled-probe": {"contents": "read", "id-token": "write"},
     },
-    DIAGNOSTIC_WORKFLOW: {
-        "verify-main-marker": {"contents": "read"},
-        "publish-main-trigger-heartbeat": {
-            "contents": "read",
-            "issues": "write",
-            "statuses": "write",
-        },
-        "inspect-observability-shape": {
-            "contents": "read",
-            "actions": "read",
-            "issues": "write",
-            "statuses": "write",
-        },
-    },
 }
 
 EXPECTED_TRIGGERS = {
     PROBE_WORKFLOW: {"workflow_dispatch"},
-    DIAGNOSTIC_WORKFLOW: {"push"},
     COMMAND_WORKFLOW: {"pull_request_target"},
     LA_DIAGNOSTIC_WORKFLOW: {"workflow_dispatch"},
     RECOVERY_WORKFLOW: {"workflow_run"},
@@ -111,11 +91,9 @@ BLOCKED_ENTRYPOINTS = {
 
 ALLOWED_SECRET_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_GATEWAY_SECRET, PROBE_OBSERVABILITY_SECRET},
-    DIAGNOSTIC_WORKFLOW: {PROBE_OBSERVABILITY_SECRET},
 }
 ALLOWED_VAR_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
-    DIAGNOSTIC_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
 }
 
 
@@ -226,7 +204,9 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
             continue
 
         checkout_steps = [
-            step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
+            step
+            for step in steps(workflow)
+            if str(step.get("uses", "")).startswith("actions/checkout@")
         ]
         expected_ref = (
             "${{ github.workflow_sha }}"
@@ -322,63 +302,6 @@ def test_trigger_sets_are_closed_without_issue_comment_authority():
         assert "issue_comment" not in triggers
 
 
-def test_observability_diagnostic_is_one_shot_trusted_main_push_only():
-    path = WORKFLOW_DIR / DIAGNOSTIC_WORKFLOW
-    workflow = load_workflow(path)
-    raw = path.read_text(encoding="utf-8")
-    trigger = workflow["on"]["push"]
-    assert trigger["branches"] == ["main"]
-    assert trigger["paths"] == [DIAGNOSTIC_MARKER_PATH]
-    assert set(jobs(workflow)) == {
-        "verify-main-marker",
-        "publish-main-trigger-heartbeat",
-        "inspect-observability-shape",
-    }
-
-    verify = jobs(workflow)["verify-main-marker"]
-    heartbeat = jobs(workflow)["publish-main-trigger-heartbeat"]
-    diagnostic = jobs(workflow)["inspect-observability-shape"]
-    assert "environment" not in verify
-    assert "secrets." not in str(verify)
-    assert '"requestSequence": 6' in str(verify)
-    assert '"authority": False' in str(verify)
-    assert "marker_verified=true" in str(verify)
-    assert heartbeat["needs"] == "verify-main-marker"
-    assert heartbeat["if"] == "${{ always() }}"
-    assert heartbeat["permissions"] == {
-        "contents": "read",
-        "issues": "write",
-        "statuses": "write",
-    }
-    assert "environment" not in heartbeat
-    assert "secrets." not in str(heartbeat)
-    assert 'statuses/${GITHUB_SHA}' in str(heartbeat)
-    assert "precios-sps/observability-shape-trigger" in str(heartbeat)
-    assert diagnostic["needs"] == "verify-main-marker"
-    assert diagnostic["if"] == "${{ needs.verify-main-marker.outputs.marker_verified == 'true' }}"
-    assert diagnostic["permissions"] == {
-        "contents": "read",
-        "actions": "read",
-        "issues": "write",
-        "statuses": "write",
-    }
-    assert diagnostic["environment"] == "cloudflare-probe"
-    assert diagnostic["env"]["TARGET_PR_NUMBER"] == "117"
-    assert "precios-sps/observability-shape-diagnostic" in str(diagnostic)
-    assert "publicar_fingerprint_observability_sonda.py" in raw
-    assert "run-id: 32551882793" in raw
-    assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" in raw
-    assert "CLOUDFLARE_PROBE_GATEWAY_URL" not in raw
-    assert ".workers.dev" not in raw
-    assert "/v1/probe" not in raw
-    assert "scripts/probar_la_colonia.py" not in raw
-    assert "scripts/diagnosticar_ventanas_la_colonia.py" not in raw
-    assert "scripts/descubrir_facets_la_colonia.py" not in raw
-    assert "pull_request_target" not in raw
-    assert "workflow_run" not in raw
-    assert "${{ runner.temp }}" not in raw
-
-
 def test_pull_request_target_never_checks_out_untrusted_pr_code():
     for path, workflow in workflows():
         triggers = workflow["on"]
@@ -391,7 +314,9 @@ def test_pull_request_target_never_checks_out_untrusted_pr_code():
         assert "github.head_ref" not in raw
         assert "github.event.pull_request.head" not in raw
         checkout = [
-            step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
+            step
+            for step in steps(workflow)
+            if str(step.get("uses", "")).startswith("actions/checkout@")
         ]
         assert all(step["with"]["ref"] == "${{ github.workflow_sha }}" for step in checkout)
 
