@@ -28,7 +28,32 @@ jobs:
     timeout-minutes: 2
     env:
       TARGET_PR_NUMBER: ${{ github.event.pull_request.number }}
+      TRIGGER_COMMENT_PATH: ${{ runner.temp }}/observability-trigger-heartbeat.json
     steps:
+      - name: Prepare sanitized trigger heartbeat
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+              "diagnostic_status": "trigger_observed",
+              "contains_no_event_values": True,
+              "production_authority": False,
+              "catalog_accepted": False,
+          }
+          rendered = json.dumps(payload, sort_keys=True, indent=2)
+          Path(os.environ["TRIGGER_COMMENT_PATH"]).write_text(
+              json.dumps({
+                  "body": "## Sanitized Workers Observability diagnostic\n\n```json\n" + rendered + "\n```"
+              }),
+              encoding="utf-8",
+          )
+          PY
+
       - name: Publish sanitized trigger heartbeat
         env:
           GH_TOKEN: ${{ github.token }}
@@ -42,16 +67,7 @@ jobs:
           gh api \
             --method POST \
             "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR_NUMBER}/comments" \
-            -f body='## Sanitized Workers Observability diagnostic
-
-```json
-{
-  "diagnostic_status": "trigger_observed",
-  "contains_no_event_values": true,
-  "production_authority": false,
-  "catalog_accepted": false
-}
-```'
+            --input "$TRIGGER_COMMENT_PATH"
 
   inspect-observability-shape:
     if: >-
