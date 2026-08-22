@@ -104,7 +104,7 @@ def _location_label(locations: set[str]) -> str:
     return "mixed"
 
 
-def _source_label(source_types: Mapping[str, object]) -> str:
+def _source_label(source_types: Mapping[str, object]) -> str | None:
     present = {
         key
         for key in ("mapping", "string", "missing")
@@ -114,7 +114,14 @@ def _source_label(source_types: Mapping[str, object]) -> str:
         return next(iter(present))
     if len(present) > 1:
         return "mixed"
-    return "other"
+    has_other_positive = any(
+        key not in {"mapping", "string", "missing"}
+        and _safe_nonnegative_int(value, maximum=500) > 0
+        for key, value in source_types.items()
+    )
+    if has_other_positive:
+        return "other"
+    return None
 
 
 def build_statuses(payload: Mapping[str, object]) -> tuple[CommitStatus, ...]:
@@ -153,7 +160,9 @@ def build_statuses(payload: Mapping[str, object]) -> tuple[CommitStatus, ...]:
                     events.get("mapping_event_count"), maximum=500
                 ) > 0
                 source_types = _mapping(events.get("source_types"))
-                source_labels.add(_source_label(source_types))
+                source_label = _source_label(source_types)
+                if source_label is not None:
+                    source_labels.add(source_label)
 
                 matches = _mapping(events.get("expected_custom_span_match_counts"))
                 custom_span = custom_span or any(
@@ -166,7 +175,13 @@ def build_statuses(payload: Mapping[str, object]) -> tuple[CommitStatus, ...]:
                 http_locations.update(_presence(standard, "http.response.status_code"))
                 url_locations.update(_presence(standard, "url.full"))
 
-        source_label = next(iter(source_labels)) if len(source_labels) == 1 else "mixed"
+        source_label = (
+            next(iter(source_labels))
+            if len(source_labels) == 1
+            else "mixed"
+            if len(source_labels) > 1
+            else "other"
+        )
         contexts.extend(
             [
                 f"{CONTEXT_PREFIX}/mapping-events/{'yes' if mapping_events else 'no'}",
