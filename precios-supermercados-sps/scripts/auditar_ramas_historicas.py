@@ -4,15 +4,15 @@
 La clasificación automática es deliberadamente conservadora:
 
 * MERGED_OR_SUBSUMED: el tip es ancestro de main, el tree coincide o todos los
-  commits no-merge tienen patch equivalente en main según `git cherry`.
+  commits no-merge tienen patch equivalente en main según ``git cherry``.
 * OPEN_CURRENT: todavía conserva cambios únicos y existe un PR abierto para el
   head exacto.
 * UNIQUE_UNMERGED: conserva cambios únicos y no existe PR abierto. Estos son los
-  únicos candidatos que requieren inspección humana para decidir si el trabajo
+  únicos candidatos que requieren inspección manual para decidir si el trabajo
   sigue siendo útil o si corresponde reclasificarlo como CLOSED_SUPERSEDED.
 
 El script no borra, fusiona ni modifica ramas. Usa sólo git local y, cuando se
-proporciona GITHUB_TOKEN, la API pública de GitHub para el estado de PRs.
+proporciona GITHUB_TOKEN, la API de GitHub para consultar PRs del head exacto.
 """
 
 from __future__ import annotations
@@ -50,6 +50,8 @@ class BranchAudit:
     open_prs: tuple[int, ...]
     closed_unmerged_prs: tuple[int, ...]
     merged_prs: tuple[int, ...]
+    unique_commit_subjects: tuple[str, ...]
+    changed_files: tuple[str, ...]
     reason: str
 
 
@@ -86,6 +88,28 @@ def _unique_patches(main_ref: str, branch_ref: str) -> list[str]:
     result = _git("cherry", main_ref, branch_ref)
     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     return [line[2:] for line in lines if line.startswith("+ ")]
+
+
+def _subjects(shas: list[str]) -> tuple[str, ...]:
+    result: list[str] = []
+    for sha in shas:
+        subject = _git("show", "-s", "--format=%s", sha).stdout.strip()
+        result.append(subject or "(sin subject)")
+    return tuple(result)
+
+
+def _changed_files(shas: list[str]) -> tuple[str, ...]:
+    files: set[str] = set()
+    for sha in shas:
+        raw = _git(
+            "show",
+            "--format=",
+            "--name-only",
+            "--no-renames",
+            sha,
+        ).stdout.splitlines()
+        files.update(path.strip() for path in raw if path.strip())
+    return tuple(sorted(files))
 
 
 def _repository() -> tuple[str, str]:
@@ -134,43 +158,57 @@ def _pull_requests_for_branch(branch: str) -> list[dict[str, Any]]:
     return [item for item in payload if isinstance(item, dict)]
 
 
+def _row(
+    *,
+    branch: str,
+    category: str,
+    tip_sha: str,
+    reason: str,
+    unique_shas: list[str] | None = None,
+    open_prs: tuple[int, ...] = (),
+    closed_unmerged_prs: tuple[int, ...] = (),
+    merged_prs: tuple[int, ...] = (),
+) -> BranchAudit:
+    shas = unique_shas or []
+    return BranchAudit(
+        branch=branch,
+        category=category,
+        tip_sha=tip_sha,
+        unique_patch_count=len(shas),
+        open_prs=open_prs,
+        closed_unmerged_prs=closed_unmerged_prs,
+        merged_prs=merged_prs,
+        unique_commit_subjects=_subjects(shas),
+        changed_files=_changed_files(shas),
+        reason=reason,
+    )
+
+
 def _classify(main_ref: str, remote_prefix: str, branch: str) -> BranchAudit:
     ref = f"{remote_prefix}/{branch}"
     tip_sha = _ref_sha(ref)
 
     if _is_ancestor(ref, main_ref):
-        return BranchAudit(
+        return _row(
             branch=branch,
             category="MERGED_OR_SUBSUMED",
             tip_sha=tip_sha,
-            unique_patch_count=0,
-            open_prs=(),
-            closed_unmerged_prs=(),
-            merged_prs=(),
             reason="branch tip is an ancestor of main",
         )
     if _same_tree(ref, main_ref):
-        return BranchAudit(
+        return _row(
             branch=branch,
             category="MERGED_OR_SUBSUMED",
             tip_sha=tip_sha,
-            unique_patch_count=0,
-            open_prs=(),
-            closed_unmerged_prs=(),
-            merged_prs=(),
             reason="branch tree equals main tree",
         )
 
     unique_patches = _unique_patches(main_ref, ref)
     if not unique_patches:
-        return BranchAudit(
+        return _row(
             branch=branch,
             category="MERGED_OR_SUBSUMED",
             tip_sha=tip_sha,
-            unique_patch_count=0,
-            open_prs=(),
-            closed_unmerged_prs=(),
-            merged_prs=(),
             reason="all branch patches are patch-equivalent to main",
         )
 
@@ -194,11 +232,11 @@ def _classify(main_ref: str, remote_prefix: str, branch: str) -> BranchAudit:
         if open_prs
         else "unique patches remain; requires manual intent/content inspection"
     )
-    return BranchAudit(
+    return _row(
         branch=branch,
         category=category,
         tip_sha=tip_sha,
-        unique_patch_count=len(unique_patches),
+        unique_shas=unique_patches,
         open_prs=open_prs,
         closed_unmerged_prs=closed_unmerged_prs,
         merged_prs=merged_prs,
@@ -217,6 +255,14 @@ def _branches(remote_prefix: str, pattern: str) -> list[str]:
         for branch in raw
         if branch.strip() and branch.strip() != "HEAD" and pattern in branch
     )
+
+
+def _short(values: tuple[str, ...], limit: int = 12) -> str:
+    visible = values[:limit]
+    rendered = "; ".join(visible)
+    if len(values) > limit:
+        rendered += f"; … (+{len(values) - limit})"
+    return rendered or "—"
 
 
 def _markdown(rows: list[BranchAudit]) -> str:
@@ -243,9 +289,21 @@ def _markdown(rows: list[BranchAudit]) -> str:
             lines.append(
                 f"| `{row.branch}` | {row.category} | {row.unique_patch_count} | {open_prs} | {closed_prs} |"
             )
+        lines.extend(["", "## Evidencia de candidatos", ""])
+        for row in candidates:
+            lines.extend(
+                [
+                    f"### `{row.branch}`",
+                    f"- category: `{row.category}`",
+                    f"- tip: `{row.tip_sha}`",
+                    f"- subjects: {_short(row.unique_commit_subjects)}",
+                    f"- files: {_short(row.changed_files, limit=24)}",
+                    f"- reason: {row.reason}",
+                    "",
+                ]
+            )
     lines.extend(
         [
-            "",
             "> `UNIQUE_UNMERGED` es deliberadamente conservador: se inspecciona manualmente antes de decidir si es trabajo útil perdido o `CLOSED_SUPERSEDED`.",
             "",
         ]
@@ -267,10 +325,7 @@ def main() -> int:
     if not branches:
         raise AuditError(f"no remote branches matched {args.pattern!r}")
 
-    rows = [
-        _classify(args.main_ref, args.remote_prefix, branch)
-        for branch in branches
-    ]
+    rows = [_classify(args.main_ref, args.remote_prefix, branch) for branch in branches]
     args.json_output.write_text(
         json.dumps([asdict(row) for row in rows], indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
