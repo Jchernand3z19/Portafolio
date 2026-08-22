@@ -6,22 +6,29 @@ Este documento es la **fuente canónica única** del estado técnico actual del 
 
 Estado verificado al **2026-08-21 (America/Tegucigalpa)**.
 
-La revisión integrada más reciente usada para este corte es **PR #83 — separación de readiness técnica y autoridad productiva**. No se fija aquí el SHA mutable de `main`, porque el propio merge de documentación lo cambiaría.
+La última frontera técnica integrada en este corte es **PR #89 — reconciliación Workers Observability de la sonda controlada**. No se fija aquí el SHA mutable de `main`; se consulta en GitHub al iniciar cualquier trabajo.
 
-La suite integrada en `main` hasta PR #83 contiene **1209/1209 pruebas aprobadas**, además de `compileall`. El **PR #84** prepara una sonda Cloudflare contra origen controlado no-La-Colonia y obtuvo **1212/1212** en CI, pero mientras siga sin integrar no forma parte del estado ejecutable de `main`.
+CI observada para la revisión integrada por PR #89:
 
-Durante este corte:
+```text
+compileall = PASS
+pytest = 1231/1231 PASS
+```
 
-- `main` continúa protegida y GATE-17 permanece `PASS_PRODUCTIVE_EVIDENCE`;
-- no existe autorización live activa;
-- `SPS-context-and-root-facets-001` está consumida;
-- no existe autorización `002`;
-- SPS technical context continúa `UNCONFIRMED`;
-- todos los entrypoints capaces de tráfico live hacia La Colonia siguen globalmente cerrados;
-- Cloudflare no está desplegado;
+Estado operativo:
+
+- `main` continúa protegida; GATE-17 = `PASS_PRODUCTIVE_EVIDENCE`;
+- no existe autorización live activa para La Colonia;
+- `SPS-context-and-root-facets-001` está consumida y no puede reutilizarse;
+- `SPS-context-and-root-facets-002` no está autorizada;
+- `ACTIVE_AUTHORIZATION_IDS = []`;
+- SPS technical context = `UNCONFIRMED`;
+- los entrypoints capaces de tráfico live hacia La Colonia permanecen globalmente cerrados;
+- Cloudflare productivo no está desplegado;
+- la sonda Cloudflare no-La-Colonia está completa **offline**, pero no desplegada ni ejecutada;
 - no existe autoridad productiva del catálogo;
 - no existe backend comercial productivo conectado;
-- **requests live a La Colonia realizados durante estas fases: 0**.
+- **requests live a La Colonia durante estas fases: 0**.
 
 ## Estados usados
 
@@ -29,46 +36,46 @@ Durante este corte:
 |---|---|
 | `DONE` | Contrato o lógica estable integrada. |
 | `DONE_OFFLINE` | Implementado y probado sin afirmar despliegue ni autoridad productiva. |
-| `DONE_PRODUCTIVE` | Verificado contra enforcement productivo real. |
-| `PARTIAL` | Existe una parte útil, pero la frontera completa no está cerrada. |
-| `READY_TO_INTEGRATE` | Implementación terminada y validada, aún fuera de `main`. |
+| `DONE_PRODUCTIVE` | Verificado contra enforcement/producto real. |
+| `READY_FOR_EXTERNAL_DEPLOYMENT` | El trabajo versionado previo está cerrado; falta infraestructura externa. |
 | `BLOCKED_EXTERNAL` | Requiere cuenta, despliegue, credencial o infraestructura externa. |
 | `BLOCKED_LIVE` | Requiere observación real autorizada de la fuente. |
 | `BLOCKED_HUMAN_DECISION` | Requiere autorización humana explícita. |
 | `BLOCKED_DEPENDENCIES` | No debe activarse hasta cerrar dependencias previas. |
 
-## Estado operativo resumido
+## Estado resumido
 
 | Área | Estado | Consecuencia |
 |---|---|---|
-| `RawProduct` / `NormalizedOffer` / `ValidatedOffer` | DONE | Contratos protegidos y preservados. |
-| Identificadores / `state_hash` | DONE | Deterministas y revalidados en fronteras comerciales. |
-| Extractor VTEX La Colonia | DONE_OFFLINE | Fixtures y contratos; la red externa permanece denegada por defecto. |
-| Facets / particiones / cobertura / reconciliación | DONE_OFFLINE | Completitud adversarial implementada, sin autoridad productiva. |
-| Cloudflare Worker + Durable Object | DONE_OFFLINE | OIDC, pacing, presupuesto, replay, Ed25519, fencing y version metadata implementados; no desplegados. |
-| Observability Cloudflare | DONE_OFFLINE | Evidencia de spans y reconciliación estructural/catálogo implementada y probada offline. |
-| Structural discovery autenticado | DONE_OFFLINE | Puede cerrar una `VerifiedStructuralDiscovery` bajo evidencia offline verificada. |
-| Plan canónico autenticado de catálogo | DONE_OFFLINE | Page size, órdenes, IDs y recorrido derivados internamente; no elegibles por caller. |
-| Transporte autenticado de páginas | DONE_OFFLINE | Gateway -> firma -> body -> cobertura con binding exacto a discovery/plan. |
-| Finalización de provenance del catálogo | DONE_OFFLINE | Reconciliación observability por página + manifest de run completo. |
-| Readiness técnica del catálogo | DONE_OFFLINE | Distingue completitud técnica de autoridad productiva; nunca produce `catalog_accepted=true`. |
-| Sonda Cloudflare no-La-Colonia | READY_TO_INTEGRATE | PR #84 verde 1212/1212; no desplegada y aún fuera de `main`. |
-| Despliegue Cloudflare real | BLOCKED_EXTERNAL | Requiere cuenta/configuración externa y prueba física controlada. |
-| Autoridad productiva del collector | BLOCKED_EXTERNAL | No se concede con firmas/logs simulados u offline. |
-| SPS technical context | BLOCKED_LIVE | `UNCONFIRMED`; requiere observación live autorizada. |
-| Autorización La Colonia | BLOCKED_HUMAN_DECISION | Ninguna activa. |
-| GATE-17 / protección de `main` | DONE_PRODUCTIVE | Enforcement verificado productivamente. |
-| Current/history | DONE_OFFLINE | Máquina atómica/idempotente y evidencia defensiva. |
-| Pricing histórico | DONE_OFFLINE | Ahorro real contra precio aceptado anterior, fail-closed. |
-| Backend comercial productivo | BLOCKED_DEPENDENCIES | Espera autoridad productiva y decisión de almacenamiento. |
-| Scraping diario | BLOCKED_DEPENDENCIES | Espera live estable + autoridad + persistencia. |
-| Power BI | BLOCKED_DEPENDENCIES | Espera datos comerciales autoritativos persistidos. |
-| Segundo supermercado | BLOCKED_DEPENDENCIES | Espera cerrar la plataforma común antes de replicar. |
+| `RawProduct` / `NormalizedOffer` / `ValidatedOffer` | `DONE` | Contratos protegidos y preservados. |
+| Identificadores / `state_hash` | `DONE` | Deterministas y revalidados en fronteras comerciales. |
+| Extractor VTEX La Colonia | `DONE_OFFLINE` | Fixtures y contratos; red externa denegada por defecto. |
+| Facets / particiones / coverage / reconciliación | `DONE_OFFLINE` | Completitud adversarial implementada, sin autoridad productiva. |
+| Cloudflare Worker productivo + `AuthorizationGateway` | `DONE_OFFLINE` | OIDC, budget, pacing, replay, Ed25519, fencing y version metadata; no desplegados. |
+| Observability productiva | `DONE_OFFLINE` | Parsers/verifiers/reconciliación estructural y catálogo probados offline. |
+| Structural discovery autenticado | `DONE_OFFLINE` | `VerifiedStructuralDiscovery` bajo evidencia verificada offline. |
+| Plan canónico autenticado de catálogo | `DONE_OFFLINE` | Page size, órdenes, IDs y recorrido derivados internamente. |
+| Transporte autenticado de páginas | `DONE_OFFLINE` | Gateway → crypto/body → coverage con binding exacto. |
+| Finalización de provenance de catálogo | `DONE_OFFLINE` | Observability por página + manifest de run exacto. |
+| Readiness técnica de catálogo | `DONE_OFFLINE` | Puede demostrar completitud técnica sin aceptar catálogo. |
+| Sonda Cloudflare no-La-Colonia | `DONE_OFFLINE / READY_FOR_EXTERNAL_DEPLOYMENT` | Origen/gateway/DO/OIDC/firma/verifier/Observability integrados; no desplegada ni ejecutada. |
+| Despliegue y prueba física de sonda | `BLOCKED_EXTERNAL` | Requiere cuenta/configuración Cloudflare y credenciales de sonda. |
+| Autoridad productiva del collector | `BLOCKED_EXTERNAL` | No se concede con fixtures, firmas o spans simulados. |
+| SPS technical context | `BLOCKED_LIVE` | `UNCONFIRMED`; requiere observación live mínima autorizada. |
+| Autorización La Colonia | `BLOCKED_HUMAN_DECISION` | Ninguna activa. |
+| GATE-17 / protección de `main` | `DONE_PRODUCTIVE` | Enforcement real demostrado. |
+| Current/history | `DONE_OFFLINE` | Máquina atómica/idempotente y evidencia defensiva. |
+| Pricing histórico | `DONE_OFFLINE` | Ahorro real contra precio aceptado anterior, fail-closed. |
+| Backend comercial productivo | `BLOCKED_DEPENDENCIES` | Espera autoridad productiva y luego decisión de almacenamiento. |
+| Scraping diario | `BLOCKED_DEPENDENCIES` | Espera live estable + autoridad + persistencia. |
+| Power BI | `BLOCKED_DEPENDENCIES` | Espera datos comerciales autoritativos persistidos. |
+| Segundo supermercado | `BLOCKED_DEPENDENCIES` | Espera cerrar la plataforma común. |
 
 ## Orden de avance
 
 ```text
 CORRECTNESS
+-> PHYSICAL PLATFORM PROOF
 -> AUTHORITATIVE ACCEPTANCE
 -> PERSISTENCE
 -> AUTOMATION
@@ -88,7 +95,7 @@ Regla histórica vigente:
 
 - `reported_regular_price` es un dato informado por el supermercado;
 - no demuestra ahorro real;
-- la reducción real se compara contra el `current_price` del periodo histórico **aceptado inmediatamente anterior**;
+- la reducción real compara el `current_price` actual contra el `current_price` del periodo histórico **aceptado inmediatamente anterior**;
 - `reported_regular_price` e `is_promotion` no participan en la fórmula de ahorro real;
 - si falta precio actual o baseline, no se inventa reducción;
 - igualdad o subida producen reducción cero;
@@ -96,23 +103,24 @@ Regla histórica vigente:
 
 ## Frontera comercial
 
-`commercial_state.py` implementa la máquina de transición backend-neutral y offline. Sus invariantes incluyen:
+`commercial_state.py` implementa la máquina de transición backend-neutral y offline. Entre sus invariantes:
 
-- mutación únicamente para una decisión comercial aceptada;
-- replay terminal idempotente y `running` transitorio;
-- IDs deterministas revalidados antes de aplicar;
+- sólo una decisión comercial aceptada puede mutar current/history;
+- replay terminal idempotente; `running` es transitorio;
+- IDs deterministas y `state_hash` se revalidan;
 - continuidad de identidad, ubicación, producto fuente y moneda;
-- `state_hash` recalculado;
 - cronología cerrada;
-- ausencia de una oferta en un payload posterior **no** implica `not_listed`, `out_of_stock` ni baja;
+- ausencia en un payload no implica `not_listed`, `out_of_stock` ni baja;
 - snapshots defensivos de evidencia;
-- cambios atómicos: un fallo no deja estado parcial;
-- un mismo hash confirma el periodo abierto sin duplicar histórico;
+- cambios atómicos;
+- un mismo hash confirma el periodo abierto sin duplicarlo;
 - un cambio real cierra un periodo y abre exactamente uno.
 
-El parámetro histórico `catalog_accepted` sigue siendo una **decisión upstream**, no una autoridad que el caller pueda inventar. La integración productiva debe obtener esa decisión de una frontera de evidencia productiva no controlable por el caller.
+El parámetro histórico `catalog_accepted` de esa frontera es una **decisión upstream**, no una capacidad que el caller pueda inventar. La integración productiva debe derivarla de una autoridad tipada y verificable.
 
-`commercial_pricing.py` revalida identidad, hashes, cronología, contigüidad y relación current/history antes de producir una reducción. Una inconsistencia falla cerrado.
+`commercial_pricing.py` revalida identidad, hashes, cronología, contigüidad y relación current/history antes de calcular reducción.
+
+No se implementa un backend productivo sólo para aparentar progreso mientras la autoridad sigue ausente.
 
 ## La Colonia — identidad y completitud
 
@@ -125,80 +133,127 @@ SKU:      itemId
 
 Deduplicar nunca demuestra completitud. El recorrido exige estructura, membership, totales, ventanas, ausencia de gaps/truncamiento/repeticiones, reconciliación independiente, unión producto/SKU y consistencia de owner.
 
-Las observaciones conservan `LocationStatus.UNKNOWN` mientras SPS no sea técnicamente demostrado.
+Las observaciones conservan `LocationStatus.UNKNOWN` mientras SPS no sea demostrado técnicamente.
 
-## Cadena Cloudflare integrada offline
+## Cadena Cloudflare productiva preparada offline
 
-La arquitectura productiva seleccionada ya no es el diseño histórico de Google Cloud Run/Secure Web Proxy/KMS. La ruta activa de ingeniería es **Cloudflare Workers + Durable Objects + GitHub OIDC + Ed25519 + Workers Observability**.
-
-Cadena lógica actual:
+La ruta de ingeniería seleccionada es **Cloudflare Workers + Durable Objects + GitHub OIDC + Ed25519 + Workers Observability**. El diseño histórico Google Cloud Run/Secure Web Proxy/KMS está supersedido.
 
 ```text
 GitHub Actions autorizado
     -> GitHub OIDC fijado a repo/ref/workflow/environment/run
-    -> Cloudflare Worker
-    -> Durable Object de autorización/presupuesto/replay
-    -> request exacto permitido
+    -> Cloudflare Worker productivo
+    -> AuthorizationGateway
+    -> request exacto allowlisted
     -> respuesta cruda + SHA-256
     -> receipt Ed25519 ligado a release/commit/run/request
     -> verificación criptográfica Python
-    -> reconciliación con Workers Observability
+    -> Workers Observability
     -> manifest estructural o de catálogo
     -> readiness técnica
 ```
 
-### Fronteras ya implementadas
+Implementado offline:
 
-- política OIDC fijada en código: repo, repository ID, `main`, workflow, environment, event, audience, commit, run y attempt;
-- GitHub JWKS con origen fijo, body acotado y caché corta;
-- URL/host/path/método/query GraphQL de La Colonia cerrados en el Worker productivo;
-- `page_size <= 50`, órdenes allowlisted y parámetros estructurales canónicos;
+- política OIDC cerrada a repo, repository ID, `main`, workflow, environment, event, audience, commit, run y attempt;
+- GitHub JWKS con origen fijo;
+- host/path/método/query GraphQL de La Colonia cerrados en el Worker productivo;
+- `page_size <= 50`, órdenes allowlisted y parámetros canónicos;
 - Durable Object SQLite para presupuesto, reserva, pacing, single-flight, replay y fencing;
-- `max_retries = 0` en la ruta canónica;
-- receipts Ed25519 y hash de respuesta cruda;
-- release del Worker ligada a `CF_VERSION_METADATA`;
-- collectors Python que no aceptan URL, page size, orden ni IDs de traversal arbitrarios del caller;
-- verificación exacta de identidad entre página criptográfica y observación de Workers Observability;
-- manifest de run que exige el conjunto exacto esperado de páginas y unicidad de evidencias físicas;
-- finalizador de structural discovery autenticado;
-- readiness de catálogo que puede afirmar **completitud técnica** pero conserva `catalog_accepted=false` y `production_authority=false`.
+- ruta canónica con `max_retries = 0`;
+- receipts Ed25519 y hash de bytes crudos;
+- release ligada a `CF_VERSION_METADATA`;
+- collectors Python sin URL/page size/order/traversal IDs arbitrarios del caller;
+- identidad exacta entre página criptográfica y observación de Workers Observability;
+- manifest de run con conjunto exacto de páginas y unicidad de evidencias;
+- structural discovery autenticado;
+- readiness técnica que puede afirmar completitud sin producir autoridad.
 
-### Lo que la implementación offline no demuestra
-
-No demuestra que exista un Worker realmente desplegado, un Durable Object remoto, claves privadas alojadas en Cloudflare, un token OIDC real consumido por ese Worker, spans reales de Workers Observability ni un request físico autorizado. Por eso la firma y los manifests offline **no son autoridad productiva**.
-
-El evaluador canónico mantiene deliberadamente el reason:
+Lo anterior **no** demuestra Worker/DO/llaves/spans reales. El reason canónico permanece:
 
 ```text
 trusted_collector_provenance_unavailable
 ```
 
-Hasta una prueba productiva real, ese reason no debe eliminarse ni sustituirse por un booleano controlado por caller.
+hasta evidencia productiva real.
 
 ## Sonda controlada no-La-Colonia
 
-Para validar Cloudflare antes de cualquier contacto con La Colonia, el PR #84 prepara una sonda aislada con dos Workers separados:
+La primera prueba física de Cloudflare se hace contra infraestructura propia, no contra La Colonia.
+
+Cadena integrada por PR #84, #88 y #89:
 
 ```text
-GitHub workflow manual de sonda
-    -> OIDC audience/environment exclusivos de sonda
-    -> Worker gateway de sonda + Durable Object propio
-    -> origen controlado workers.dev
-    -> challenge exacto
-    -> receipt Ed25519 con schema/dominio criptográfico de sonda
+workflow manual cloudflare-probe
+    -> OIDC de sonda
+    -> Worker precios-sps-controlled-probe
+    -> ProbeLedger
+    -> custom span obligatorio / tracing 100 %
+    -> Worker precios-sps-controlled-origin (*.workers.dev)
+    -> challenge/body exactos
+    -> receipt Ed25519 probe-1
+    -> artifact sanitizado
+    -> job verificador separado sin OIDC
+    -> public key confiable de Environment
+    -> Workers Observability API
+    -> custom span único + child fetch único
+    -> PlatformReconciledControlledProbe
 ```
 
-Propiedades de diseño:
+Propiedades:
 
-- no modifica el allowlist del Worker productivo de La Colonia;
-- el caller no puede inyectar el origen;
-- el origen de sonda debe ser HTTPS `*.workers.dev` y path exacto;
-- La Colonia es rechazada antes de cualquier fetch;
-- claves, OIDC audience, environment, signing key ID, schema y dominio de firma son distintos a producción;
-- un receipt de sonda no verifica bajo el dominio de receipt productivo;
-- no concede `catalog_accepted` ni `production_authority`.
+- no modifica ni amplía el allowlist productivo de La Colonia;
+- caller no puede inyectar origin URL;
+- origen sólo HTTPS `*.workers.dev` y path exacto;
+- La Colonia se rechaza antes de cualquier fetch;
+- Worker/DO, audience/environment, llaves, signing key ID, schema y dominio de firma son distintos de producción;
+- `span.isTraced` debe ser true antes del fetch;
+- el job OIDC no hace checkout;
+- el job verificador no posee `id-token: write`;
+- firma/body/request/evidence ID se verifican fuera del Worker;
+- Workers Observability se consulta por transporte fijo a `api.cloudflare.com/client/v4` sin redirects ni retries;
+- se exige exactamente un custom span y un child fetch reconciliados por run/commit/release/URL/status/size/timestamps;
+- un resultado válido mantiene `catalog_accepted=false` y `production_authority=false`.
 
-Mientras PR #84 no esté integrado, esta sonda es `READY_TO_INTEGRATE`, no `DONE_OFFLINE` de `main`. Incluso integrada seguirá siendo `NO DESPLEGADA` hasta completar la frontera externa de Cloudflare.
+Estado:
+
+```text
+SONDA_CODE = DONE_OFFLINE
+SONDA_DEPLOY = NOT_DONE
+SONDA_PHYSICAL_RUN = NOT_DONE
+```
+
+El procedimiento externo está en `docs/cloudflare-controlled-probe-runbook.md`.
+
+## Secrets/variables de la sonda
+
+Cloudflare gateway:
+
+```text
+PROBE_ORIGIN_URL
+PROBE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL
+PROBE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
+```
+
+La private key sólo puede existir en Cloudflare.
+
+GitHub Environment `cloudflare-probe`:
+
+Secrets:
+
+```text
+CLOUDFLARE_PROBE_GATEWAY_URL
+CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN
+```
+
+Variables:
+
+```text
+CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL
+CLOUDFLARE_ACCOUNT_ID
+```
+
+El token de Observability debe limitarse a la cuenta requerida y no poseer `Workers Scripts Write`. La documentación actual de Cloudflare exige un permiso denominado `Workers Observability Write` para el endpoint de consulta; esa denominación no lo convierte en credencial de deploy.
 
 ## SPS y autorización live
 
@@ -210,30 +265,29 @@ READY_FOR_LIVE = NO
 SPS_TECHNICAL_CONTEXT = UNCONFIRMED
 ```
 
-Sin autorización humana explícita nueva están prohibidos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl y cualquier otro tráfico hacia La Colonia.
+Sin autorización humana explícita nueva están prohibidos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl y cualquier tráfico hacia La Colonia.
 
-Comentarios, PR comments, issue comments, archivos de comando, markers, logs y artefactos son observabilidad; **no crean autoridad**.
+Un PASS de la sonda Cloudflare **no** crea una autorización live.
 
 ## Workflows y CI
 
-Los workflows de La Colonia capaces de live permanecen globalmente bloqueados con `if: ${{ false }}`. `test_workflow_security_audit.py` clasifica todos los workflows SPS y falla si aparece uno nuevo sin política explícita.
+Los workflows de La Colonia capaces de live permanecen globalmente bloqueados con `if: ${{ false }}`. `test_workflow_security_audit.py` clasifica todo workflow SPS y falla si aparece uno nuevo sin política explícita.
 
-Controles actuales:
+El workflow de sonda es la excepción controlada porque no puede contactar La Colonia:
 
-- Actions externas por SHA completo allowlisted;
-- permisos mínimos explícitos;
-- checkout inmutable y `persist-credentials: false` cuando corresponde;
-- `pull_request_target` no ejecuta código no confiable;
-- `issue_comment` no concede autoridad;
-- scripts capaces de tráfico La Colonia sólo pueden aparecer en entrypoints bloqueados;
-- CI cubre PRs y pushes a `main` que afecten proyecto/workflows;
-- el ruleset productivo exige PR, `tests` y resolución de conversaciones.
+- sólo `workflow_dispatch`;
+- job OIDC sin checkout;
+- job verificador sin OIDC;
+- secrets y variables allowlisted explícitamente;
+- URL de gateway restringida a `workers.dev`;
+- no existen inputs de origin/destino;
+- no invoca scripts live de La Colonia.
 
-GATE-17 permanece `DONE_PRODUCTIVE`; la evidencia específica está en `docs/gate-17-verification.md`.
+CI cubre PRs y pushes a `main` que afectan el proyecto/workflows. GATE-17 permanece `DONE_PRODUCTIVE`; evidencia en `docs/gate-17-verification.md`.
 
 ## Persistencia
 
-El modelo lógico sigue definiendo, entre otras entidades:
+El modelo lógico contempla:
 
 - `cfg_supermarkets`;
 - `cfg_locations`;
@@ -244,16 +298,17 @@ El modelo lógico sigue definiendo, entre otras entidades:
 - `fact_offer_history`;
 - `fact_quality_events`.
 
-La lógica current/history y pricing ya existe offline. **No hay backend productivo seleccionado ni conectado.** Google Sheets y BigQuery siguen siendo opciones de arquitectura histórica/evolutiva, no una declaración de infraestructura activa.
+Current/history y pricing existen offline. **No hay backend productivo seleccionado ni conectado.** Google Sheets y BigQuery son opciones históricas/evolutivas, no infraestructura activa.
 
-No se debe implementar un adaptador productivo que reciba un `catalog_accepted` caller-controlled. La siguiente integración de persistencia debe consumir una decisión de autoridad tipada y verificada cuando esa frontera exista.
+La siguiente integración productiva de persistencia debe consumir una decisión de autoridad tipada y verificada; no un booleano caller-controlled.
 
 ## Gates principales
 
 | Gate | Estado | Evidencia faltante |
 |---|---|---|
 | GATE-17 — gobernanza/protección de `main` | `PASS_PRODUCTIVE_EVIDENCE` | Ninguna para este gate. |
-| GATE-06 — enforcement físico/collector | `OPEN_PRODUCTIVE` | Despliegue y prueba física real. |
+| Prueba Cloudflare no-La-Colonia | `READY_FOR_EXTERNAL_DEPLOYMENT` | Deploy + ejecución física + firma/Observability reales. |
+| GATE-06 — enforcement físico/collector productivo | `OPEN_PRODUCTIVE` | Despliegue y evidencia física productiva. |
 | GATE-18 — aceptación exacta de catálogo | `OPEN_PRODUCTIVE` | Autoridad productiva + validación live exacta autorizada. |
 | SPS technical context | `UNCONFIRMED` | Observación live mínima autorizada. |
 
@@ -270,22 +325,27 @@ No se debe implementar un adaptador productivo que reciba un `catalog_accepted` 
 - structural discovery autenticado;
 - plan, transporte y finalización autenticados del catálogo;
 - readiness técnica separada de autoridad productiva;
+- sonda controlada completa offline, incluida verificación Ed25519 externa y Workers Observability;
 - GATE-17 productivo.
 
-### READY_TO_INTEGRATE
+### READY_FOR_EXTERNAL_DEPLOYMENT / BLOCKED_EXTERNAL
 
-- PR #84: sonda Cloudflare contra origen controlado no-La-Colonia; CI 1212/1212. No contar como integrado hasta merge.
+- conectar/configurar una cuenta Cloudflare;
+- desplegar `precios-sps-controlled-origin`;
+- generar/cargar llaves Ed25519 exclusivas de sonda, con private key sólo en Cloudflare;
+- desplegar `precios-sps-controlled-probe` y `ProbeLedger`;
+- configurar Environment GitHub `cloudflare-probe`;
+- ejecutar la sonda y obtener evidencia física de OIDC/DO/version metadata/firma/Observability;
+- mantener La Colonia en **0 requests** durante esta etapa.
 
-### BLOCKED_EXTERNAL
+### Después de un PASS de sonda
 
-- desplegar origen controlado y gateway de sonda en una cuenta Cloudflare;
-- crear/cargar las llaves de sonda únicamente en Cloudflare;
-- validar OIDC, Durable Object, Version Metadata, Ed25519 y Workers Observability físicamente;
-- después preparar/desplegar la frontera productiva real de collector sin conceder autoridad por configuración.
+- preparar/desplegar la frontera productiva real sin invocarla todavía contra La Colonia;
+- demostrar todo lo posible de autenticación/fencing/configuración productiva sin requests a la fuente.
 
 ### BLOCKED_HUMAN_DECISION / BLOCKED_LIVE
 
-- una autorización humana nueva para cualquier request a La Colonia;
+- nueva autorización humana explícita para cualquier request a La Colonia;
 - diagnóstico mínimo de SPS;
 - validación live exacta de catálogo bajo presupuesto cerrado.
 
@@ -298,4 +358,8 @@ No se debe implementar un adaptador productivo que reciba un `catalog_accepted` 
 
 ## Criterio para el siguiente paso
 
-No se usa un bloqueo live como excusa para omitir trabajo offline disponible, y tampoco se representa una simulación como producción. El siguiente hito externo correcto es **probar Cloudflare físicamente contra un origen controlado que no sea La Colonia**. Sólo después se evalúa la frontera productiva real; el acceso live a La Colonia continúa requiriendo autorización humana separada.
+No se usa un bloqueo live como excusa para omitir trabajo offline disponible y tampoco se representa una simulación como producción.
+
+El siguiente hito correcto es **desplegar y ejecutar la sonda Cloudflare contra el origen controlado no-La-Colonia** siguiendo `docs/cloudflare-controlled-probe-runbook.md`.
+
+Sólo después de obtener ese PASS se prepara el collector productivo real. El acceso live a La Colonia continúa requiriendo autorización humana nueva y separada.
