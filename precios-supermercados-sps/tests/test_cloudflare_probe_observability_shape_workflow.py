@@ -115,6 +115,8 @@ def test_main_push_heartbeat_is_visible_by_status_and_comment_without_cloudflare
     assert prepare["name"] == "Prepare sanitized main-push heartbeat"
     script = prepare["run"]
     assert 'HEARTBEAT_PATH="$RUNNER_TEMP/observability-main-push-heartbeat.json"' in script
+    assert "export HEARTBEAT_PATH" in script
+    assert "printf 'HEARTBEAT_PATH=%s\\n' \"$HEARTBEAT_PATH\" >> \"$GITHUB_ENV\"" in script
     assert '"diagnostic_status": "main_push_trigger_observed"' in script
     assert '"marker_verified"' in script
     assert '"contains_no_event_values": True' in script
@@ -140,6 +142,16 @@ def test_main_push_heartbeat_is_visible_by_status_and_comment_without_cloudflare
     assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in str(job)
     assert "actions/checkout@" not in str(job)
     assert "actions/download-artifact@" not in str(job)
+
+
+def test_heartbeat_path_is_persisted_before_cross_step_use():
+    _, workflow = _load()
+    steps = workflow["jobs"]["publish-main-trigger-heartbeat"]["steps"]
+    prepare_script = steps[0]["run"]
+    publish_script = steps[2]["run"]
+    assert "GITHUB_ENV" in prepare_script
+    assert "HEARTBEAT_PATH" in prepare_script
+    assert '--input "$HEARTBEAT_PATH"' in publish_script
 
 
 def test_diagnostic_requires_verified_marker_and_executes_only_main_code():
