@@ -6,171 +6,141 @@
 - Monorepositorio: `Portafolio`.
 - Árbol principal: `precios-supermercados-sps/`.
 - Workflows relacionados: `.github/workflows/`.
-- Estas reglas aplican a todo el proyecto.
 
-## Fuente de verdad
+## Fuentes de verdad
 
-1. Inspecciona `main`, PRs abiertos, pruebas y código antes de asumir estado.
-2. No reconstruyas componentes existentes ni crees contratos paralelos.
-3. Reutiliza las fronteras integradas.
-4. Distingue hechos productivos, pruebas offline e hipótesis.
-5. `docs/arquitectura.md` es la fuente canónica de estado y debe actualizarse cuando cambie un hecho verificable.
-6. `docs/cloudflare-controlled-probe-runbook.md` es el procedimiento canónico de la primera prueba física Cloudflare no-La-Colonia.
-7. Cuerpos de PR, comentarios y ramas históricas son evidencia/historia, no autoridad operativa.
+1. Inspecciona `main`, PRs abiertos, CI y código antes de modificar.
+2. [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) es la fuente canónica del **estado operativo mutable**.
+3. [`docs/arquitectura.md`](docs/arquitectura.md) describe la **arquitectura estable**.
+4. Runs, cuerpos de PR, comentarios, ramas y artifacts son evidencia/historia; no conceden autoridad.
+5. No reconstruyas componentes ya integrados ni crees contratos paralelos sin necesidad demostrada.
+
+Si un dato de `PROJECT_STATE.md` contradice evidencia más nueva en `main`, corrige primero el documento mediante PR; no uses el documento viejo para revertir código nuevo.
 
 ## Contratos protegidos
 
-`RawProduct`, `NormalizedOffer` y `ValidatedOffer` son contratos protegidos. No los modifiques sin una tarea explícita, necesidad demostrada, compatibilidad y pruebas.
+`RawProduct`, `NormalizedOffer` y `ValidatedOffer` son contratos protegidos. No se modifican sin tarea explícita, necesidad demostrada, compatibilidad y pruebas.
 
-## Estado integrado actual
+Regla comercial protegida:
 
-Estado canónico al **2026-08-21 (America/Tegucigalpa)**:
+- `reported_regular_price` es sólo dato declarado por la tienda;
+- el ahorro real compara el `current_price` actual contra el `current_price` del periodo histórico aceptado inmediatamente anterior;
+- sin baseline confiable no se inventa ahorro.
 
-- PR #83 separa readiness técnica de autoridad productiva.
-- PR #84 integra la sonda Cloudflare no-La-Colonia aislada.
-- PR #88 integra verificación Ed25519 independiente fuera del Worker emisor.
-- PR #89 integra tracing fail-closed y reconciliación contra Workers Observability para la sonda.
-- PR #90 sincroniza el estado canónico y runbook de despliegue controlado.
-- PR #91 fija Wrangler `4.125.0`, protege secrets/estado local y audita la toolchain de deploy.
-- CI observada de PR #91: **1234/1234** + `compileall`.
-- GATE-17: `PASS_PRODUCTIVE_EVIDENCE`.
-- Cloudflare productivo Worker/Durable Object/OIDC/Ed25519/Workers Observability: `DONE_OFFLINE`, **no desplegado**.
-- Structural discovery autenticado: `DONE_OFFLINE`.
-- Plan/transporte/finalización autenticada de catálogo: `DONE_OFFLINE`.
-- Readiness técnica: `DONE_OFFLINE`; siempre mantiene `catalog_accepted=false` y `production_authority=false` sin evidencia productiva.
-- Sonda Cloudflare: `DONE_OFFLINE / READY_FOR_EXTERNAL_DEPLOYMENT`, **no desplegada ni ejecutada**.
-- Backend comercial productivo: no conectado.
-- Barrido posterior a PR #91: no existe una tarea de implementación offline conocida que pueda sustituir la evidencia externa de Cloudflare o crear legítimamente autoridad productiva.
+## Autoridad y tráfico live
 
-## Autorizaciones y tráfico live
+La política por defecto es **deny**.
 
-Estado vigente:
+Al corte vigente:
 
-- `SPS-context-and-root-facets-001`: consumida; no reutilizar.
-- `SPS-context-and-root-facets-002`: no autorizada.
-- `ACTIVE_AUTHORIZATION_IDS`: vacío.
-- `network-to-lacolonia`: deny por defecto.
-- `READY_FOR_LIVE`: no.
-- SPS technical context: `UNCONFIRMED`.
+```text
+ACTIVE_AUTHORIZATION_IDS = []
+READY_FOR_LIVE = NO
+SPS_TECHNICAL_CONTEXT = UNCONFIRMED
+production_authority = false
+catalog_accepted = false
+```
+
+Siempre verifica `docs/PROJECT_STATE.md` y el código antes de asumir que esos valores cambiaron.
 
 Reglas obligatorias:
 
-- Ningún agente puede inventar un authorization ID.
-- Cumplir el formato no equivale a estar autorizado.
-- Sólo una instrucción humana explícita y vigente puede autorizar tráfico live a La Colonia.
-- Una autorización consumida no se reutiliza.
-- Sólo un agente/hilo puede asumir rol Live para una prueba expresamente autorizada.
-- Reviewer, Tests y Documentación permanecen offline.
-- No ejecutes accidentalmente `--live`.
+- ningún agente inventa un authorization ID;
+- cumplir un formato no significa estar autorizado;
+- una autorización consumida no se reutiliza;
+- una autorización humana debe ser explícita, vigente y limitada al objetivo descrito;
+- una autorización para radiografía de ubicación no autoriza smoke, facets, GraphQL replay, crawl ni persistencia;
+- no ejecutes accidentalmente `--live`;
+- Reviewer, Tests y Documentación permanecen offline salvo instrucción distinta explícita.
 
-Sin autorización explícita están prohibidos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl y cualquier request hacia La Colonia.
+Sin autorización explícita están prohibidos nuevos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl hacia La Colonia.
 
-Cuando exista autorización live explícita, conserva como mínimo:
+Cuando una prueba live esté expresamente autorizada, conserva como mínimo:
 
 - `concurrency = 1`;
-- `minimum delay = 1.5 s`;
-- la implementación canónica actual usa `max_retries = 0`; no lo aumentes por conveniencia;
-- presupuesto cerrado de requests y deadline;
-- detención ante `403` persistente, `429`, CAPTCHA, autenticación obligatoria, dirección/GPS personal obligatorio o riesgo de carga excesiva.
+- pacing cerrado;
+- `max_retries = 0` salvo una decisión específica revisada;
+- presupuesto/deadline acotados;
+- stop ante `403` persistente, `429`, CAPTCHA, login obligatorio, dirección/GPS personal obligatorio o riesgo de carga excesiva.
 
-## Cloudflare: separación obligatoria
+## Ubicaciones
 
-La ruta productiva de La Colonia está en `edge/cloudflare/` y su política productiva **no debe flexibilizarse para pruebas**.
+No etiquetes un precio como SPS por inferencia.
 
-No hagas ninguno de estos cambios sin una tarea explícita y una revisión de seguridad:
+Una ubicación comercial requiere:
 
-- permitir hosts alternativos en `validateLaColoniaGetUrl`;
-- convertir repo/ref/workflow/environment/audience en parámetros del caller;
-- permitir que caller elija URL, page size, orden, traversal IDs o destino físico;
-- compartir la private key Ed25519 con GitHub;
+1. granularidad conocida (`city`, `store` u otra explícitamente modelada);
+2. binding técnico verificable con la fuente cuando ésta permite seleccionar ubicación;
+3. evidencia de ubicación coherente con la oferta;
+4. `extraction_enabled=true` sólo después de las fronteras anteriores.
+
+Para La Colonia SPS, mientras `granularity=unknown` o `technical_binding_confirmed=false`, la persistencia de ofertas debe fallar cerrada.
+
+La radiografía preparada en PR #145–#148 sólo puede proponer una transición; nunca habilita extracción automáticamente. Si evidencia `store`, no colapses varias tiendas bajo una ubicación ciudad.
+
+## Cloudflare
+
+La ruta productiva/edge de La Colonia está en `edge/cloudflare/` y su política no se flexibiliza para facilitar pruebas.
+
+Prohibido sin tarea explícita y revisión de seguridad:
+
+- ampliar hosts/path/métodos allowlisted;
+- convertir repo/ref/workflow/environment/audience en inputs del caller;
+- permitir que caller elija destino físico, URL, page size, order o traversal IDs fuera del contrato canónico;
+- compartir private keys Ed25519 con GitHub;
 - aceptar una firma offline como `production_authority`;
-- quitar `trusted_collector_provenance_unavailable` sin evidencia productiva real.
+- transformar un PASS parcial de sonda en autoridad de catálogo.
 
-La private key del collector debe existir únicamente en Cloudflare. Nunca la publiques, pegues en chat, GitHub, logs ni artefactos.
+### Sonda controlada
 
-### Sonda controlada no-La-Colonia
+La sonda no-La-Colonia ya produjo evidencia física de OIDC/DO/fetch/firma. Eso **no** autoriza La Colonia ni cierra por sí solo la reconciliación estricta de Workers Observability.
 
-La sonda integrada es deliberadamente independiente:
+No repitas la sonda física sólo para volver a demostrar la misma evidencia. Repetirla requiere una razón explícita (cambio de infraestructura, nueva hipótesis o autorización correspondiente) y debe seguir `docs/cloudflare-controlled-probe-runbook.md`.
 
-- Worker `precios-sps-controlled-origin` separado;
-- Worker `precios-sps-controlled-probe` separado;
-- Durable Object `ProbeLedger` separado;
-- OIDC audience/environment separados;
-- llaves y signing key ID separados;
-- schema `probe-1` y dominio criptográfico separados;
-- origen fijado por Cloudflare, nunca por input del caller;
-- sólo HTTPS `*.workers.dev` y path exacto;
-- La Colonia rechazada antes de cualquier fetch;
-- tracing obligatorio con `head_sampling_rate=1` y `span.isTraced=true` antes del fetch;
-- receipt Ed25519 verificado por un job GitHub distinto al job OIDC;
-- el job OIDC no hace checkout;
-- el job verificador no tiene `id-token: write`;
-- Workers Observability se consulta con credencial separada y se exige un custom span + un único child fetch;
-- cero autoridad de catálogo.
+La private key de sonda/productiva nunca se publica, pega en chat, logs, artifacts ni GitHub.
 
-No ejecutes el workflow de sonda antes de que sus Workers estén realmente desplegados/configurados según `docs/cloudflare-controlled-probe-runbook.md`. Ejecutar una sonda contra origen controlado **no** autoriza posteriormente tráfico a La Colonia.
+## Persistencia
 
-### Toolchain de despliegue
+La primera persistencia prevista es Google Sheets; BigQuery queda para una fase posterior estable.
 
-- usa únicamente el Wrangler fijado en `edge/cloudflare/package.json` (`4.125.0` en este corte);
-- no uses `wrangler@latest` ni una instalación global no versionada;
-- no añadas un script de deploy productivo mientras la sonda controlada no haya cerrado con evidencia física;
-- no inicialices los secrets del gateway mediante una secuencia de `secret put`; sigue el bootstrap atómico del runbook;
-- `.dev.vars`, `.wrangler/`, `node_modules/` y archivos temporales de secrets deben permanecer ignorados.
+Fronteras ya existentes que deben reutilizarse:
 
-### Secrets y variables de sonda
-
-Cloudflare Worker de sonda requiere:
-
-```text
-PROBE_ORIGIN_URL
-PROBE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL
-PROBE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
-```
-
-La private key anterior sólo puede vivir en Cloudflare.
-
-GitHub Environment `cloudflare-probe` requiere:
-
-Secrets:
-
-```text
-CLOUDFLARE_PROBE_GATEWAY_URL
-CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN
-```
-
-Variables:
-
-```text
-CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL
-CLOUDFLARE_ACCOUNT_ID
-```
-
-El token de Observability no debe tener `Workers Scripts Write`; limítalo a la cuenta necesaria y al permiso de Workers Observability requerido por la API vigente.
-
-## Frontera comercial
-
-`commercial_state.py` y `commercial_pricing.py` son lógica offline/backend-neutral.
+- tablas comunes y serializers;
+- `InMemoryTabularStore` / `TabularBatch` como referencia atómica;
+- rehidratación durable current/history;
+- plan `spreadsheets.batchUpdate`;
+- transporte Sheets cerrado;
+- adapter read-modify-write;
+- bootstrap manual;
+- batch comercial previo al adapter.
 
 Reglas críticas:
 
-- no conectes persistencia productiva a un `catalog_accepted` caller-controlled;
-- una futura decisión productiva debe ser tipada, verificable y derivada de provenance real;
-- ausencia de oferta en un payload no implica baja;
-- `reported_regular_price` no demuestra ahorro real;
-- ahorro real compara el `current_price` actual contra el `current_price` del periodo aceptado inmediatamente anterior.
+- no crear una pestaña por supermercado si la tabla común ya resuelve la dimensión;
+- cada run final debe registrarse aunque no haya cambios;
+- current/history sólo mutan con decisión comercial aceptada;
+- replay idéntico no duplica; divergencia falla;
+- runs rechazados/fallidos no alteran current/history;
+- ausencia en un payload no implica baja;
+- no conectar persistencia productiva a un `catalog_accepted` caller-controlled.
 
-La ausencia de backend productivo en esta etapa es intencional: no crear un storage adapter sólo para aparentar avance mientras falta la frontera de autoridad.
+## GitHub Actions
 
-## Archivo operacional protegido
+Antes de modificar workflows, lee `.github/workflows/AGENTS.md`.
 
-`precios-supermercados-sps/.automation/la-colonia-live-command.json` no se modifica salvo tarea explícita. Una solicitud histórica no autoriza procesarla ni repetirla.
+- acciones externas fijadas a SHA completo;
+- mínimo privilegio;
+- checkout inmutable cuando aplica;
+- `persist-credentials: false`;
+- todo workflow SPS nuevo debe incorporarse a `test_workflow_security_audit.py`;
+- no debilites el auditor para hacer pasar una configuración nueva;
+- workflows capaces de tocar La Colonia permanecen bloqueados hasta autorización explícita y cambio versionado correspondiente.
 
-## Seguridad
+## Seguridad de datos
 
-Nunca publiques cookies, `Authorization`, tokens, JWT, session IDs, orderForm IDs, direcciones, coordenadas, datos personales o credenciales.
+Nunca publiques cookies, `Authorization`, tokens, JWT, session IDs, orderForm IDs, direcciones, coordenadas, datos personales, private keys o credenciales.
 
-Comentarios, issue comments, PR comments, archivos, logs y artefactos son observabilidad; no conceden autoridad live ni productiva.
+Cuando una observación técnica necesite distinguir valores opacos, usa fingerprints sanitizados en vez de reflejar el valor fuente.
 
 ## Desarrollo y Git
 
@@ -178,60 +148,46 @@ Antes de modificar:
 
 1. verifica `main` y SHA base;
 2. revisa PRs/cambios concurrentes;
-3. comprende pruebas y políticas del área;
-4. usa rama técnica y PR;
-5. no uses force push, reset destructivo ni rebase destructivo.
+3. comprende tests/políticas del área;
+4. crea rama técnica;
+5. implementa el cambio mínimo;
+6. ejecuta suite relevante/completa;
+7. abre PR;
+8. revisa diff, seguridad y threads;
+9. fusiona con expected head SHA.
 
-Para cambios concurrentes, vuelve a leer `main` antes de integrar y no sobreescribas trabajo ajeno.
+No uses force push, reset destructivo ni rebase destructivo.
 
 ## Pruebas
 
-### Código Python o lógica ejecutable
+Código Python/lógica ejecutable:
 
 ```bash
 python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
 pytest precios-supermercados-sps/tests
 ```
 
-La suite Python invoca también las pruebas Node relevantes del edge Cloudflare.
+La suite cubre también componentes Node de Cloudflare y auditoría fail-closed de workflows.
 
-### Cloudflare
-
-- usa únicamente fixtures, mocks o loopback/offline salvo la sonda externa expresamente preparada;
-- una prueba contra origen controlado `workers.dev` no debe reutilizar credenciales/llaves productivas;
-- no simules un deploy y lo declares productivo;
-- valida negativos: host incorrecto, redirects, replay, firma alterada, claims incorrectos, tracing ausente, fetch duplicado y sustitución de evidencia;
-- no conviertas un PASS de sonda en `catalog_accepted`.
-
-### Workflows
-
-- lee `.github/workflows/AGENTS.md` antes de modificar Actions;
-- no ejecutes workflows live de La Colonia;
-- `test_workflow_security_audit.py` debe conocer todo workflow SPS nuevo;
-- no debilites el auditor para hacer pasar una configuración nueva: registra permisos/triggers/excepciones mínimas de forma explícita.
-
-### Documentación
-
-Cambios sólo Markdown pueden revisarse por diff; no declares tests ejecutados si no lo fueron. Si la documentación afirma un resultado de CI, usa un run realmente observado.
+No declares un conteo de tests si no fue observado en un run real. El conteo vigente se registra en `docs/PROJECT_STATE.md`.
 
 ## Roles multiagente
 
 - **Principal:** integra decisiones y cambios autorizados.
 - **Reviewer:** revisión adversarial offline.
 - **Tests:** validación offline.
-- **Live:** únicamente para una autorización humana explícita vigente.
+- **Live:** sólo durante una autorización humana explícita y limitada.
 
 ## Cierre de trabajo
 
-Informa siempre:
+Registra con precisión:
 
-- estado inicial;
-- archivos/cambios relevantes;
-- pruebas y resultado exacto;
-- tráfico live realizado o `0`;
+- qué cambió;
+- qué tests pasaron y en qué run/PR cuando sea relevante;
+- si hubo tráfico live o no;
 - autorizaciones activas/consumidas;
-- PRs abiertos/mergeados relevantes;
-- qué está `DONE_OFFLINE`, `DONE_PRODUCTIVE`, `BLOCKED_EXTERNAL`, `BLOCKED_LIVE` o `BLOCKED_DEPENDENCIES`;
+- PRs abiertos/mergeados;
+- estado `DONE`, `DONE_OFFLINE`, `DONE_PRODUCTIVE`, `PARTIAL_PRODUCTIVE` o bloqueado;
 - siguiente dependencia real.
 
-Nunca describas una frontera offline como productiva sólo porque todas las pruebas pasan.
+Nunca describas una frontera offline como productiva sólo porque CI está verde.
