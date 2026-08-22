@@ -51,13 +51,31 @@ def _plan() -> AuthenticatedCatalogProvenancePlan:
             request_digest="1" * 64,
         ),
         ExpectedProvenancePage(
+            traversal_role="primary",
+            traversal_id=f"{RUN}:primary",
+            partition_id="root",
+            order_by="OrderByNameASC",
+            from_index=50,
+            to_index=99,
+            request_digest="2" * 64,
+        ),
+        ExpectedProvenancePage(
             traversal_role="reconciliation",
             traversal_id=f"{RUN}:reconciliation",
             partition_id="root",
             order_by="OrderByNameDESC",
             from_index=0,
             to_index=49,
-            request_digest="2" * 64,
+            request_digest="3" * 64,
+        ),
+        ExpectedProvenancePage(
+            traversal_role="reconciliation",
+            traversal_id=f"{RUN}:reconciliation",
+            partition_id="root",
+            order_by="OrderByNameDESC",
+            from_index=50,
+            to_index=99,
+            request_digest="4" * 64,
         ),
     )
     derived = DerivedCatalogProvenancePlan(
@@ -122,10 +140,20 @@ def _collection(plan: AuthenticatedCatalogProvenancePlan) -> VerifiedCatalogColl
     return value
 
 
-def _reconciled(marker: object) -> PlatformReconciledEdgePage:
+def _reconciled(
+    marker: object,
+    *,
+    physical_evidence_id: str | None = None,
+    fetch_span_id: str | None = None,
+) -> PlatformReconciledEdgePage:
+    marker_name = getattr(marker, "marker", f"page-{id(marker)}")
+    trace_evidence = SimpleNamespace(
+        physical_evidence_id=physical_evidence_id or f"physical-{marker_name}",
+        fetch_span_id=fetch_span_id or f"fetch-{marker_name}",
+    )
     value = object.__new__(PlatformReconciledEdgePage)
     object.__setattr__(value, "page", marker)
-    object.__setattr__(value, "trace_evidence", object())
+    object.__setattr__(value, "trace_evidence", trace_evidence)
     object.__setattr__(value, "platform_evidence_reconciled", True)
     object.__setattr__(value, "production_authority", False)
     return value
@@ -292,6 +320,80 @@ def test_fallo_observability_en_primera_pagina_corta_sin_consultar_las_siguiente
         finalizer.finalize(collector)
     assert captured.value.code == "catalog_page_0_observability_matching_trace_missing"
     assert calls == 1
+    assert finalizer.finalized is False
+
+
+def test_physical_evidence_reutilizado_corta_antes_de_paginas_posteriores(monkeypatch) -> None:
+    collector = _collector()
+    _patch_collection(monkeypatch, collector)
+    verifier = _verifier()
+    calls: list[object] = []
+
+    def fake_reconcile(self, page, *, bearer_token):
+        calls.append(page)
+        ordinal = len(calls) - 1
+        return _reconciled(
+            page,
+            physical_evidence_id="physical-reused" if ordinal < 2 else f"physical-{ordinal}",
+            fetch_span_id=f"fetch-{ordinal}",
+        )
+
+    monkeypatch.setattr(CloudflareObservabilityVerifierClient, "reconcile_page", fake_reconcile)
+    monkeypatch.setattr(
+        module,
+        "build_authenticated_edge_provenance_run_manifest",
+        lambda **_: pytest.fail("el manifest no debe construirse después de detectar reuse"),
+    )
+    finalizer = module.VerifiedCatalogProvenanceFinalizer(
+        verifier,
+        bearer_token_provider=lambda: "observability-token",
+    )
+
+    with pytest.raises(module.VerifiedCatalogFinalizationError) as captured:
+        finalizer.finalize(collector)
+    assert captured.value.code == "physical_evidence_reused"
+    assert calls == [
+        collector.observations[0].page,
+        collector.observations[1].page,
+    ]
+    assert len(calls) < collector.authenticated_plan.request_count
+    assert finalizer.finalized is False
+
+
+def test_fetch_span_reutilizado_corta_antes_de_paginas_posteriores(monkeypatch) -> None:
+    collector = _collector()
+    _patch_collection(monkeypatch, collector)
+    verifier = _verifier()
+    calls: list[object] = []
+
+    def fake_reconcile(self, page, *, bearer_token):
+        calls.append(page)
+        ordinal = len(calls) - 1
+        return _reconciled(
+            page,
+            physical_evidence_id=f"physical-{ordinal}",
+            fetch_span_id="fetch-reused" if ordinal < 2 else f"fetch-{ordinal}",
+        )
+
+    monkeypatch.setattr(CloudflareObservabilityVerifierClient, "reconcile_page", fake_reconcile)
+    monkeypatch.setattr(
+        module,
+        "build_authenticated_edge_provenance_run_manifest",
+        lambda **_: pytest.fail("el manifest no debe construirse después de detectar reuse"),
+    )
+    finalizer = module.VerifiedCatalogProvenanceFinalizer(
+        verifier,
+        bearer_token_provider=lambda: "observability-token",
+    )
+
+    with pytest.raises(module.VerifiedCatalogFinalizationError) as captured:
+        finalizer.finalize(collector)
+    assert captured.value.code == "physical_fetch_span_reused"
+    assert calls == [
+        collector.observations[0].page,
+        collector.observations[1].page,
+    ]
+    assert len(calls) < collector.authenticated_plan.request_count
     assert finalizer.finalized is False
 
 
