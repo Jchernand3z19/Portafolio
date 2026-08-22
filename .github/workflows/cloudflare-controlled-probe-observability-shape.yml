@@ -49,7 +49,7 @@ jobs:
               "schema": "cloudflare-controlled-probe-observability-diagnostic-request-1",
               "sourceRunId": "32551882793",
               "purpose": "sanitized-shape-observation-only",
-              "requestSequence": 5,
+              "requestSequence": 6,
               "authority": False,
           }
           if payload != expected:
@@ -192,9 +192,13 @@ jobs:
               raise SystemExit("Expected exactly one controlled-probe diagnostic project")
           script = matches[0]
           project = script.parents[1]
+          status_script = project / "scripts" / "publicar_fingerprint_observability_sonda.py"
+          if not status_script.is_file():
+              raise SystemExit("Expected sanitized Observability fingerprint publisher")
           with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env:
               env.write(f"PROJECT_DIR={project}\n")
               env.write(f"DIAGNOSTIC_SCRIPT={script}\n")
+              env.write(f"STATUS_SCRIPT={status_script}\n")
               env.write(f"PYTHONPATH={project / 'src'}\n")
           PY
 
@@ -246,6 +250,15 @@ jobs:
             -f state="$state" \
             -f context="precios-sps/observability-shape-diagnostic" \
             -f description="$description"
+
+      - name: Publish sanitized shape fingerprint statuses
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python "$STATUS_SCRIPT"
 
       - name: Publish sanitized diagnostic to marker PR
         if: ${{ always() }}
