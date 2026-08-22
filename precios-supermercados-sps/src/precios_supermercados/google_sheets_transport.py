@@ -5,7 +5,8 @@ caller sólo aporta el ``spreadsheet_id`` y el JSON de una service account. Las
 credenciales se transforman inmediatamente en una sesión autorizada y no se
 conserva el JSON secreto en la instancia.
 
-No hay retries de aplicación ni redirects. El transporte no conoce La Colonia.
+No hay retries de aplicación ni redirects. El transporte no conoce fuentes
+comerciales ni sus endpoints.
 """
 
 from __future__ import annotations
@@ -77,11 +78,8 @@ def validate_spreadsheet_id(value: str) -> str:
 def parse_service_account_info(raw_json: str) -> dict[str, Any]:
     """Valida la forma mínima de una service account sin exponer sus secretos."""
 
-    raw_json = _required_text(
-        raw_json,
-        "service_account_json",
-        max_length=_MAX_SERVICE_ACCOUNT_JSON_BYTES,
-    )
+    if not isinstance(raw_json, str) or not raw_json.strip():
+        raise GoogleSheetsTransportError("service_account_json_invalid")
     if len(raw_json.encode("utf-8")) > _MAX_SERVICE_ACCOUNT_JSON_BYTES:
         raise GoogleSheetsTransportError("service_account_json_too_large")
     try:
