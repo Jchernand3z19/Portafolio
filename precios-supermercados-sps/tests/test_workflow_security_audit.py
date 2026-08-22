@@ -76,7 +76,11 @@ ALLOWED_JOB_PERMISSIONS = {
     },
     DIAGNOSTIC_WORKFLOW: {
         "verify-main-marker": {"contents": "read"},
-        "publish-main-trigger-heartbeat": {"contents": "read", "issues": "write"},
+        "publish-main-trigger-heartbeat": {
+            "contents": "read",
+            "issues": "write",
+            "statuses": "write",
+        },
         "inspect-observability-shape": {
             "contents": "read",
             "actions": "read",
@@ -335,13 +339,20 @@ def test_observability_diagnostic_is_one_shot_trusted_main_push_only():
     diagnostic = jobs(workflow)["inspect-observability-shape"]
     assert "environment" not in verify
     assert "secrets." not in str(verify)
-    assert '"requestSequence": 3' in str(verify)
+    assert '"requestSequence": 4' in str(verify)
     assert '"authority": False' in str(verify)
     assert "marker_verified=true" in str(verify)
     assert heartbeat["needs"] == "verify-main-marker"
     assert heartbeat["if"] == "${{ always() }}"
+    assert heartbeat["permissions"] == {
+        "contents": "read",
+        "issues": "write",
+        "statuses": "write",
+    }
     assert "environment" not in heartbeat
     assert "secrets." not in str(heartbeat)
+    assert 'statuses/${GITHUB_SHA}' in str(heartbeat)
+    assert "precios-sps/observability-shape-trigger" in str(heartbeat)
     assert diagnostic["needs"] == "verify-main-marker"
     assert diagnostic["if"] == "${{ needs.verify-main-marker.outputs.marker_verified == 'true' }}"
     assert diagnostic["environment"] == "cloudflare-probe"
