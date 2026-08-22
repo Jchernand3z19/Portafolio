@@ -12,25 +12,78 @@ permissions:
   issues: write
 
 concurrency:
-  group: cloudflare-controlled-probe-observability-chain-107
+  group: cloudflare-controlled-probe-observability-chain-117
   cancel-in-progress: false
 
 jobs:
+  publish-chain-heartbeat:
+    if: >-
+      ${{ github.repository == 'Jchernand3z19/Portafolio' &&
+          github.event.workflow_run.event == 'pull_request' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          github.event.workflow_run.head_branch == 'diag/precios-sps-observability-request-007' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      TARGET_PR_NUMBER: "117"
+      SOURCE_CI_SUCCESS: ${{ github.event.workflow_run.conclusion == 'success' }}
+      CHAIN_HEARTBEAT_PATH: ${{ runner.temp }}/probe-shape-chain-heartbeat.json
+
+    steps:
+      - name: Prepare sanitized chain heartbeat
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+              "diagnostic_status": "chain_trigger_observed",
+              "source_ci_success": os.environ["SOURCE_CI_SUCCESS"].lower() == "true",
+              "contains_no_event_values": True,
+              "production_authority": False,
+              "catalog_accepted": False,
+          }
+          rendered = json.dumps(payload, sort_keys=True, indent=2)
+          Path(os.environ["CHAIN_HEARTBEAT_PATH"]).write_text(
+              json.dumps({
+                  "body": "## Sanitized Workers Observability chain heartbeat\n\n```json\n" + rendered + "\n```"
+              }),
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Publish sanitized chain heartbeat
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]; then
+            echo "Invalid PR number" >&2
+            exit 1
+          fi
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR_NUMBER}/comments" \
+            --input "$CHAIN_HEARTBEAT_PATH"
+
   inspect-existing-evidence:
     if: >-
       ${{ github.repository == 'Jchernand3z19/Portafolio' &&
           github.event.workflow_run.event == 'pull_request' &&
           github.event.workflow_run.conclusion == 'success' &&
           github.event.workflow_run.head_repository.full_name == github.repository &&
-          github.event.workflow_run.head_branch == 'diag/precios-sps-observability-request-001' &&
-          github.event.workflow_run.actor.login == 'Jchernand3z19' }}
+          github.event.workflow_run.head_branch == 'diag/precios-sps-observability-request-007' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: cloudflare-probe
     env:
       PROBE_PUBLIC_KEY_SPKI_B64URL: ${{ vars.CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      TARGET_PR_NUMBER: "107"
+      TARGET_PR_NUMBER: "117"
       PROBE_DIAGNOSTIC_COMMENT_PATH: ${{ runner.temp }}/probe-shape-chain-comment.json
 
     steps:
