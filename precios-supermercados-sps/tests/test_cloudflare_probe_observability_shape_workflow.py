@@ -69,23 +69,36 @@ def test_trigger_heartbeat_is_sanitized_and_has_no_environment_or_repository_cod
     job = workflow["jobs"]["publish-trigger-heartbeat"]
     assert "environment" not in job
     assert job["timeout-minutes"] == "2"
-    assert job["env"] == {"TARGET_PR_NUMBER": "${{ github.event.pull_request.number }}"}
-    assert len(job["steps"]) == 1
-    step = job["steps"][0]
-    assert step["name"] == "Publish sanitized trigger heartbeat"
-    assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
-    script = step["run"]
-    assert '[[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]' in script
-    assert 'issues/${TARGET_PR_NUMBER}/comments' in script
-    assert '"diagnostic_status": "trigger_observed"' in script
-    assert '"contains_no_event_values": true' in script
-    assert '"production_authority": false' in script
-    assert '"catalog_accepted": false' in script
+    assert job["env"] == {
+        "TARGET_PR_NUMBER": "${{ github.event.pull_request.number }}",
+        "TRIGGER_COMMENT_PATH": "${{ runner.temp }}/observability-trigger-heartbeat.json",
+    }
+    assert len(job["steps"]) == 2
+
+    prepare = job["steps"][0]
+    assert prepare["name"] == "Prepare sanitized trigger heartbeat"
+    assert "env" not in prepare
+    prepare_script = prepare["run"]
+    assert '"diagnostic_status": "trigger_observed"' in prepare_script
+    assert '"contains_no_event_values": True' in prepare_script
+    assert '"production_authority": False' in prepare_script
+    assert '"catalog_accepted": False' in prepare_script
+    assert 'Path(os.environ["TRIGGER_COMMENT_PATH"])' in prepare_script
+    assert "PROBE_OBSERVABILITY_TOKEN" not in prepare_script
+
+    publish = job["steps"][1]
+    assert publish["name"] == "Publish sanitized trigger heartbeat"
+    assert publish["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    publish_script = publish["run"]
+    assert '[[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]' in publish_script
+    assert 'issues/${TARGET_PR_NUMBER}/comments' in publish_script
+    assert '--input "$TRIGGER_COMMENT_PATH"' in publish_script
+    assert "curl " not in publish_script
+
     assert "actions/checkout@" not in str(job)
     assert "PROBE_OBSERVABILITY_TOKEN" not in str(job)
     assert ".probe-evidence" not in str(job)
     assert "run-id: 32551882793" not in str(job)
-    assert "curl " not in script
     assert "la-colonia" not in str(job).lower()
     assert "lacolonia" not in str(job).lower()
     assert raw.count("github.event.pull_request.head") == 2
