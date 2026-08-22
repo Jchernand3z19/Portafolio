@@ -346,14 +346,22 @@ def test_pull_request_target_never_checks_out_untrusted_pr_code():
             assert trigger["branches"] == ["main"]
             assert trigger["paths"] == [DIAGNOSTIC_MARKER_PATH]
             assert not all_jobs_blocked(workflow)
-            assert len(jobs(workflow)) == 1
-            diagnostic_job = next(iter(jobs(workflow).values()))
-            condition = str(diagnostic_job.get("if", ""))
-            assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
-            assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
-            assert "github.event.pull_request.user.login == 'Jchernand3z19'" in condition
-            assert "github.event.pull_request.base.ref == 'main'" in condition
-            assert raw.count("github.event.pull_request.head") == 1
+            diagnostic_jobs = jobs(workflow)
+            assert set(diagnostic_jobs) == {"publish-trigger-heartbeat", "inspect-observability-shape"}
+            heartbeat_job = diagnostic_jobs["publish-trigger-heartbeat"]
+            diagnostic_job = diagnostic_jobs["inspect-observability-shape"]
+            for controlled_job in (heartbeat_job, diagnostic_job):
+                condition = str(controlled_job.get("if", ""))
+                assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
+                assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
+                assert "github.event.pull_request.user.login == 'Jchernand3z19'" in condition
+                assert "github.event.pull_request.base.ref == 'main'" in condition
+                assert "github.event.pull_request.changed_files == 1" in condition
+            assert "environment" not in heartbeat_job
+            assert diagnostic_job.get("environment") == "cloudflare-probe"
+            assert "actions/checkout@" not in str(heartbeat_job)
+            assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in str(heartbeat_job)
+            assert raw.count("github.event.pull_request.head") == 2
             assert "github.event.pull_request.head.sha" not in raw
             assert "github.event.pull_request.head.ref" not in raw
             assert checkout
