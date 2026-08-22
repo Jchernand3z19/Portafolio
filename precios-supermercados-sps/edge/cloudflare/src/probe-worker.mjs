@@ -11,6 +11,7 @@ import {
   CONTROLLED_PROBE_SPAN_NAME,
   CONTROLLED_PROBE_WORKER_POLICY,
 } from "./probe-policy.mjs";
+import { annotateControlledProbeSpan } from "./probe-trace-context.mjs";
 import { runControlledOriginProbe } from "./probe-runtime.mjs";
 
 function fail(code) {
@@ -78,10 +79,11 @@ export class ProbeLedger extends DurableObject {
 
     try {
       const result = await tracing.enterSpan(CONTROLLED_PROBE_SPAN_NAME, async (span) => {
-        span.setAttribute("precios_sps.probe_id", probeId);
-        span.setAttribute("precios_sps.github_run_id", input.claims.run_id);
-        span.setAttribute("precios_sps.github_run_attempt", Number(input.claims.run_attempt));
-        span.setAttribute("precios_sps.target_kind", "controlled_workers_dev_origin");
+        annotateControlledProbeSpan(span, {
+          probeId,
+          approvedCommitSha: input.approvedCommitSha,
+          claims: input.claims,
+        });
         return runControlledOriginProbe(
           {
             probeId,
