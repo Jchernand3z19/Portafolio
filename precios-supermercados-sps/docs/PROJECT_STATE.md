@@ -9,7 +9,8 @@ Estado verificado al **2026-08-22 (America/Tegucigalpa)**.
 ```text
 base técnica del corte = da342bf9439e260a8bc213c8c83e805412c5741d (merge de PR #154)
 último PR técnico integrado antes de este corte documental = #154
-última suite técnica completa observada = 1462/1462 PASS (PR #154)
+último PR documental integrado = #155
+última suite técnica completa observada = 1462/1462 PASS
 compileall = PASS
 GATE-17 = PASS_PRODUCTIVE_EVIDENCE
 ACTIVE_AUTHORIZATION_IDS = []
@@ -54,10 +55,12 @@ El HEAD mutable de `main` no se usa como autoridad por sí mismo; este corte fij
 | Guard de autoridad antes de persistencia | `DONE_OFFLINE` | PR #150 impide que código operativo convierta una `CommercialRunDecision` caller-controlled en mutación de current/history. |
 | Binding durable de replay | `DONE_OFFLINE` | PR #151 liga evidencia, decisión, ofertas, metadata y quality events con fingerprint `crev1_`; demuestra igualdad/replay, nunca autoridad. |
 | Rehidratación + restauración entre runners | `DONE_OFFLINE` | PR #152 restaura el motor desde current/history/runs y reserva todos los IDs terminales históricos. |
-| Google Sheets plan/transporte/adapter/bootstrap | `DONE_OFFLINE` | Plan atómico, transporte autenticado, read-modify-write y bootstrap manual implementados. No se ha observado aún una escritura productiva. |
+| Google Sheets plan/transporte/adapter/bootstrap | `DONE_OFFLINE` | Plan atómico, transporte autenticado, read-modify-write y bootstrap manual implementados. |
 | Google Sheets read-side → estado comercial | `DONE_OFFLINE` | PR #153 carga snapshot validado, recalcula métricas, rehidrata current/history y restaura el motor sin writes ni autoridad. |
 | Batch comercial → Google Sheets | `DONE_OFFLINE` | Existe frontera comercial a `TabularBatch`, pero la entrada productiva mutante sigue cerrada hasta autoridad real. |
-| Google Sheets productivo | `BLOCKED_EXTERNAL / BLOCKED_DEPENDENCIES` | Requiere configuración/credenciales productivas observadas y sólo podrá recibir datos comerciales autoritativos cuando ubicación/autoridad estén cerradas. |
+| Workbook físico Google Sheets | `PARTIAL_PRODUCTIVE` | Se creó y releyó el workbook canónico `Precios Supermercados SPS - Storage` mediante la conexión Google autorizada; seis tabs gestionadas, timezone `America/Tegucigalpa`, configuración La Colonia SPS/TGU exacta y cero filas en todas las tablas `fact_*`. |
+| GitHub Actions → Google Sheets por service account | `BLOCKED_EXTERNAL` | El workflow seguro existe, pero no se ha demostrado el environment/variable/secret ni una ejecución `check` desde GitHub Actions. |
+| Persistencia productiva de ofertas | `BLOCKED_DEPENDENCIES` | El workbook existe, pero no puede recibir ofertas comerciales hasta cerrar ubicación y autoridad del catálogo. |
 | Proyección semántica Power BI | `DONE_OFFLINE` | PR #154 centraliza precio actual, baseline aceptado, ahorro real, dirección de precio, precio regular reportado, promoción, disponibilidad, ubicación y review status. |
 | Dataset/refresh Power BI productivo | `BLOCKED_DEPENDENCIES` | Espera persistencia durable/autoritativa; Power BI no decide autoridad ni recalcula la semántica comercial. |
 | Scraping diario | `BLOCKED_DEPENDENCIES` | Espera binding correcto, live estable, autoridad de catálogo y persistencia productiva. |
@@ -114,6 +117,17 @@ fact_scrape_runs
 fact_quality_events
 ```
 
+El workbook físico canónico ya existe en la cuenta Google conectada. Su estructura fue materializada y revalidada después de la escritura:
+
+- `cfg_supermarkets`: encabezado exacto + La Colonia activa;
+- `cfg_locations`: SPS en alcance y TGU fuera de alcance;
+- SPS conserva `granularity=unknown`, `source_location_key` vacío, `extraction_enabled=false` y `technical_binding_confirmed=false`;
+- `fact_offers_current`, `fact_offer_history`, `fact_scrape_runs` y `fact_quality_events`: encabezado exacto y **cero filas de datos**;
+- timezone del Spreadsheet: `America/Tegucigalpa`;
+- la pestaña ajena por defecto se preserva porque el adapter está diseñado para ignorar tabs no gestionadas.
+
+Esta materialización demuestra la existencia y escritura física del workbook mediante la conexión Google del usuario. **No demuestra todavía** que GitHub Actions pueda autenticarse con la service account prevista ni que exista persistencia comercial autoritativa.
+
 Reglas vigentes:
 
 - un mismo esquema para todos los supermercados;
@@ -128,7 +142,7 @@ Reglas vigentes:
 - el read-side de Sheets sólo lee/valida/rehidrata/restaura;
 - una decisión caller-controlled nunca sustituye evidencia autoritativa.
 
-Configuración externa prevista:
+Configuración externa prevista para GitHub Actions:
 
 ```text
 Environment: precios-sps-storage
@@ -136,7 +150,7 @@ Variable: PRECIOS_SPS_GOOGLE_SPREADSHEET_ID
 Secret: PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON
 ```
 
-La capacidad externa sigue sin declararse productiva hasta observar que esa configuración existe y que una operación de storage válida funciona. Esto puede verificarse sin contactar La Colonia.
+No registrar el JSON de service account en el repositorio, Drive, documentación, logs ni chat. La service account debe recibir acceso de edición al workbook y el workflow debe validarse primero con `mode=check`, que es read-only.
 
 ## Regla comercial del precio y Power BI
 
@@ -158,13 +172,15 @@ Si no existe baseline, no se inventa ahorro. Una subida produce reducción cero.
 
 ## Próximos pasos
 
-Trabajo que todavía puede hacerse sin tráfico a La Colonia:
+Trabajo de storage pendiente que **no requiere tráfico a La Colonia** pero sí configuración externa:
 
-1. verificar en modo read-only si el environment `precios-sps-storage` ya contiene la variable/secret esperados;
-2. si la configuración existe, revisar que el bootstrap de Google Sheets pueda ejecutarse sin tocar La Colonia antes de cualquier write externo;
-3. mantener la proyección BI como contrato derivado, sin conectarla a datos no autoritativos.
+1. crear/seleccionar una Google service account exclusiva para este storage;
+2. compartir el workbook canónico con su `client_email` como editor;
+3. configurar en el environment GitHub `precios-sps-storage` la variable del Spreadsheet y el secret JSON de la service account;
+4. ejecutar primero el workflow manual en `mode=check` y exigir `wrote=false`;
+5. sólo después, si el check es limpio, ejecutar `apply-config` para comprobar la ruta GitHub Actions → Google Sheets sin introducir ofertas.
 
-La **próxima dependencia humana live** continúa siendo una nueva autorización explícita para una única radiografía limitada de ubicación de La Colonia.
+La **próxima dependencia humana live** continúa siendo una nueva autorización explícita para una única radiografía limitada de ubicación de La Colonia. La configuración de storage anterior es una dependencia externa distinta y no autoriza tráfico live.
 
 Después de resolver ubicación y autoridad, el orden productivo es:
 
@@ -172,7 +188,7 @@ Después de resolver ubicación y autoridad, el orden productivo es:
 binding de ubicación
 -> validación live exacta/autorizada del catálogo
 -> decisión autoritativa del catálogo
--> Google Sheets productivo
+-> persistencia comercial en Google Sheets
 -> ejecución diaria
 -> dataset/refresh Power BI
 -> La Colonia end-to-end
@@ -181,6 +197,6 @@ binding de ubicación
 
 ## Tráfico live reciente
 
-PR #135–#154 y este corte documental se realizaron **sin nuevos requests a La Colonia**.
+PR #135–#155, la materialización del workbook y este corte documental se realizaron **sin nuevos requests a La Colonia**.
 
 No usar esta frase para inferir que el proyecto nunca realizó pruebas live históricas; sólo describe este bloque de trabajo.
