@@ -2,7 +2,9 @@ name: Cloudflare controlled probe - Observability shape diagnostic
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - diag/precios-sps-observability-direct
     paths:
       - precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json
 
@@ -10,16 +12,19 @@ permissions:
   contents: read
   actions: read
   issues: write
+  statuses: write
 
 concurrency:
-  group: cloudflare-controlled-probe-observability-shape-main
+  group: cloudflare-controlled-probe-observability-shape-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   inspect-observability-shape:
     if: >-
       ${{ github.repository == 'Jchernand3z19/Portafolio' &&
-          github.ref == 'refs/heads/main' }}
+          (github.ref == 'refs/heads/main' ||
+           (github.ref == 'refs/heads/diag/precios-sps-observability-direct' &&
+            github.actor == 'Jchernand3z19')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: cloudflare-probe
@@ -28,6 +33,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       TARGET_PR_NUMBER: "107"
       PROBE_DIAGNOSTIC_COMMENT_PATH: ${{ runner.temp }}/probe-shape-comment.json
+      DIAGNOSTIC_STATUS_CONTEXT: "precios-sps/observability-diagnostic"
 
     steps:
       - name: Prepare sanitized fallback comment
@@ -54,10 +60,24 @@ jobs:
           )
           PY
 
-      - name: Checkout trusted main revision only
+      - name: Publish diagnostic run heartbeat
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=pending \
+            -f context="$DIAGNOSTIC_STATUS_CONTEXT" \
+            -f description="Sanitized Observability diagnostic running" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+      - name: Checkout trusted diagnostic revision only
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.ref == 'refs/heads/main' && github.sha || github.event.before }}
           persist-credentials: false
 
       - name: Validate diagnostic marker
@@ -146,3 +166,24 @@ jobs:
             --method POST \
             "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR_NUMBER}/comments" \
             --input "$PROBE_DIAGNOSTIC_COMMENT_PATH"
+
+      - name: Publish final diagnostic heartbeat
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$JOB_STATUS" in
+            success) state=success ;;
+            failure) state=failure ;;
+            *) state=error ;;
+          esac
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="$state" \
+            -f context="$DIAGNOSTIC_STATUS_CONTEXT" \
+            -f description="Sanitized Observability diagnostic ${JOB_STATUS}" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
