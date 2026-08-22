@@ -10,7 +10,9 @@ conceptos que no deben confundirse:
 
 La separación permite registrar desde hoy todas las ciudades conocidas sin
 etiquetar precios con una ciudad que todavía no está ligada técnicamente a la
-sesión/request de la fuente.
+sesión/request de la fuente. La granularidad comercial también es explícita: una
+fuente no puede habilitar extracción mientras no sepamos si el contexto efectivo
+varía por ciudad, tienda u otro nivel.
 """
 
 from __future__ import annotations
@@ -152,6 +154,10 @@ class LocationConfig:
             raise LocationConfigError(
                 "una ubicación fuera de alcance no puede habilitar extracción"
             )
+        if self.extraction_enabled and self.granularity is LocationGranularity.UNKNOWN:
+            raise LocationConfigError(
+                "una ubicación con granularidad desconocida no puede habilitar extracción"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +188,13 @@ class LocationCatalog:
             if location.extraction_enabled and not supermarket.is_active:
                 raise LocationConfigError(
                     "un supermercado inactivo no puede tener extracción habilitada"
+                )
+            if (
+                location.extraction_enabled
+                and location.granularity is LocationGranularity.UNKNOWN
+            ):
+                raise LocationConfigError(
+                    "una ubicación requiere granularidad comercial confirmada antes de habilitar extracción"
                 )
             if (
                 location.extraction_enabled
@@ -247,6 +260,8 @@ class LocationCatalog:
             return "location_unavailable"
         if not location.in_scope:
             return "location_out_of_scope"
+        if location.granularity is LocationGranularity.UNKNOWN:
+            return "location_granularity_unconfirmed"
         if (
             supermarket.location_selection_mode
             is LocationSelectionMode.SOURCE_SELECTION_REQUIRED
@@ -273,13 +288,15 @@ LA_COLONIA_SUPERMARKET = SupermarketConfig(
 
 # Ciudades visibles en el selector del sitio observado el 2026-08-22. Esto
 # registra disponibilidad declarada por la UI; no demuestra todavía cómo queda
-# ligado el contexto de ciudad a las requests del catálogo.
+# ligado el contexto a las requests ni si precio/inventario varían sólo por ciudad
+# o también por tienda dentro de la ciudad. La radiografía live resolverá ambos
+# puntos antes de habilitar extracción.
 LA_COLONIA_SPS = LocationConfig(
     location_id="la_colonia_sps",
     supermarket_id="la_colonia",
     city_id="sps",
     city_name="San Pedro Sula",
-    granularity=LocationGranularity.CITY,
+    granularity=LocationGranularity.UNKNOWN,
     is_available=True,
     in_scope=True,
     extraction_enabled=False,
@@ -292,7 +309,7 @@ LA_COLONIA_TGU = LocationConfig(
     supermarket_id="la_colonia",
     city_id="tgu",
     city_name="Tegucigalpa",
-    granularity=LocationGranularity.CITY,
+    granularity=LocationGranularity.UNKNOWN,
     is_available=True,
     in_scope=False,
     extraction_enabled=False,
