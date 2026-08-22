@@ -45,7 +45,9 @@ PINNED_ACTIONS = {
 
 PROBE_WORKFLOW = "precios-supermercados-sps-cloudflare-probe.yml"
 PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
+PROBE_OBSERVABILITY_SECRET = "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN"
 PROBE_PUBLIC_KEY_VAR = "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL"
+CLOUDFLARE_ACCOUNT_VAR = "CLOUDFLARE_ACCOUNT_ID"
 
 EXPECTED_PERMISSIONS = {
     PROBE_WORKFLOW: {"contents": "read"},
@@ -95,10 +97,10 @@ BLOCKED_ENTRYPOINTS = {
 }
 
 ALLOWED_SECRET_REFERENCES = {
-    PROBE_WORKFLOW: {PROBE_GATEWAY_SECRET},
+    PROBE_WORKFLOW: {PROBE_GATEWAY_SECRET, PROBE_OBSERVABILITY_SECRET},
 }
 ALLOWED_VAR_REFERENCES = {
-    PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR},
+    PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
 }
 
 
@@ -270,12 +272,16 @@ def test_controlled_probe_is_manual_isolated_and_verified_outside_oidc_job():
     privileged_raw = "\n".join(str(step) for step in job_steps(privileged))
     verifier_raw = "\n".join(str(step) for step in job_steps(verifier))
     raw = path.read_text(encoding="utf-8")
-    assert secret_references(path) == {PROBE_GATEWAY_SECRET}
-    assert variable_references(path) == {PROBE_PUBLIC_KEY_VAR}
+    assert secret_references(path) == {PROBE_GATEWAY_SECRET, PROBE_OBSERVABILITY_SECRET}
+    assert variable_references(path) == {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR}
     assert "actions/checkout@" not in privileged_raw
+    assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in privileged_raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in verifier_raw
     assert "ACTIONS_ID_TOKEN_REQUEST_URL" not in verifier_raw
     assert "cloudflare_controlled_probe_verifier" in verifier_raw
+    assert "cloudflare_controlled_probe_observability" in verifier_raw
+    assert "CloudflareObservabilityHttpTransport" in verifier_raw
+    assert "PROBE_OBSERVABILITY_TOKEN" in verifier_raw
     assert "actions/download-artifact@" in verifier_raw
     assert "${{ inputs." not in raw
     assert "github.event.inputs" not in raw
