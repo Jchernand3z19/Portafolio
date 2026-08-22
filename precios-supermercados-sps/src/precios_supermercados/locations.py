@@ -1,0 +1,324 @@
+"""Catálogo común y offline de supermercados, ciudades y ubicaciones.
+
+Este módulo no descubre ubicaciones en red ni concede autoridad live. Separa tres
+conceptos que no deben confundirse:
+
+- una ubicación que el supermercado declara disponible;
+- una ubicación que está dentro del alcance actual del proyecto;
+- una ubicación cuyo binding técnico ya está demostrado y puede habilitarse para
+  extracción.
+
+La separación permite registrar desde hoy todas las ciudades conocidas sin
+etiquetar precios con una ciudad que todavía no está ligada técnicamente a la
+sesión/request de la fuente.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import StrEnum
+from types import MappingProxyType
+from typing import Iterable, Mapping
+
+
+class LocationConfigError(ValueError):
+    """La configuración de supermercado/ubicación viola una invariante."""
+
+
+class LocationGranularity(StrEnum):
+    """Nivel al que una fuente puede variar precio o inventario."""
+
+    CITY = "city"
+    STORE = "store"
+    ONLINE = "online"
+    UNKNOWN = "unknown"
+
+
+class LocationSelectionMode(StrEnum):
+    """Cómo se determina la ubicación efectiva de una fuente."""
+
+    FIXED_SINGLE_CITY = "fixed_single_city"
+    SOURCE_SELECTION_REQUIRED = "source_selection_required"
+    UNKNOWN = "unknown"
+
+
+def _required_text(value: str, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise LocationConfigError(f"{field_name} no puede estar vacío")
+    return value.strip()
+
+
+def _optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+@dataclass(frozen=True, slots=True)
+class SupermarketConfig:
+    """Identidad estable y política de ubicación de un supermercado."""
+
+    supermarket_id: str
+    supermarket_name: str
+    location_selection_mode: LocationSelectionMode | str
+    country_code: str = "HN"
+    is_active: bool = True
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "supermarket_id",
+            _required_text(self.supermarket_id, "supermarket_id"),
+        )
+        object.__setattr__(
+            self,
+            "supermarket_name",
+            _required_text(self.supermarket_name, "supermarket_name"),
+        )
+        country = _required_text(self.country_code, "country_code").upper()
+        if len(country) != 2 or not country.isalpha():
+            raise LocationConfigError("country_code debe ser ISO alpha-2")
+        object.__setattr__(self, "country_code", country)
+        try:
+            mode = (
+                self.location_selection_mode
+                if isinstance(self.location_selection_mode, LocationSelectionMode)
+                else LocationSelectionMode(self.location_selection_mode)
+            )
+        except (TypeError, ValueError) as exc:
+            raise LocationConfigError("location_selection_mode no es válido") from exc
+        object.__setattr__(self, "location_selection_mode", mode)
+        if not isinstance(self.is_active, bool):
+            raise LocationConfigError("is_active debe ser booleano")
+
+
+@dataclass(frozen=True, slots=True)
+class LocationConfig:
+    """Ubicación común reutilizable por current/history y futuros backends."""
+
+    location_id: str
+    supermarket_id: str
+    city_id: str
+    city_name: str
+    granularity: LocationGranularity | str
+    is_available: bool
+    in_scope: bool
+    extraction_enabled: bool
+    technical_binding_confirmed: bool = False
+    source_location_key: str | None = None
+    evidence: str | None = None
+
+    def __post_init__(self) -> None:
+        for field_name in ("location_id", "supermarket_id", "city_id", "city_name"):
+            object.__setattr__(
+                self,
+                field_name,
+                _required_text(getattr(self, field_name), field_name),
+            )
+        try:
+            granularity = (
+                self.granularity
+                if isinstance(self.granularity, LocationGranularity)
+                else LocationGranularity(self.granularity)
+            )
+        except (TypeError, ValueError) as exc:
+            raise LocationConfigError("granularity no es válida") from exc
+        object.__setattr__(self, "granularity", granularity)
+        for field_name in (
+            "is_available",
+            "in_scope",
+            "extraction_enabled",
+            "technical_binding_confirmed",
+        ):
+            if not isinstance(getattr(self, field_name), bool):
+                raise LocationConfigError(f"{field_name} debe ser booleano")
+        object.__setattr__(
+            self,
+            "source_location_key",
+            _optional_text(self.source_location_key),
+        )
+        object.__setattr__(self, "evidence", _optional_text(self.evidence))
+
+        if self.technical_binding_confirmed and self.source_location_key is None:
+            raise LocationConfigError(
+                "technical_binding_confirmed requiere source_location_key"
+            )
+        if self.extraction_enabled and not self.is_available:
+            raise LocationConfigError(
+                "una ubicación no disponible no puede habilitar extracción"
+            )
+        if self.extraction_enabled and not self.in_scope:
+            raise LocationConfigError(
+                "una ubicación fuera de alcance no puede habilitar extracción"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class LocationCatalog:
+    """Registro validado y común para todos los supermercados."""
+
+    supermarkets: Mapping[str, SupermarketConfig]
+    locations: tuple[LocationConfig, ...]
+
+    def __post_init__(self) -> None:
+        supermarket_values = dict(self.supermarkets)
+        if not supermarket_values:
+            raise LocationConfigError("el catálogo requiere supermercados")
+        if any(key != value.supermarket_id for key, value in supermarket_values.items()):
+            raise LocationConfigError("la llave de supermercado no coincide con supermarket_id")
+
+        by_location: dict[str, LocationConfig] = {}
+        for location in self.locations:
+            if location.location_id in by_location:
+                raise LocationConfigError(
+                    f"location_id duplicado: {location.location_id}"
+                )
+            supermarket = supermarket_values.get(location.supermarket_id)
+            if supermarket is None:
+                raise LocationConfigError(
+                    f"supermercado inexistente para {location.location_id}"
+                )
+            if location.extraction_enabled and not supermarket.is_active:
+                raise LocationConfigError(
+                    "un supermercado inactivo no puede tener extracción habilitada"
+                )
+            if (
+                location.extraction_enabled
+                and supermarket.location_selection_mode
+                is LocationSelectionMode.SOURCE_SELECTION_REQUIRED
+                and not location.technical_binding_confirmed
+            ):
+                raise LocationConfigError(
+                    "una fuente multiubicación requiere binding técnico confirmado "
+                    "antes de habilitar extracción"
+                )
+            by_location[location.location_id] = location
+
+        object.__setattr__(
+            self,
+            "supermarkets",
+            MappingProxyType(supermarket_values),
+        )
+        object.__setattr__(self, "locations", tuple(self.locations))
+
+    def supermarket(self, supermarket_id: str) -> SupermarketConfig:
+        try:
+            return self.supermarkets[supermarket_id]
+        except KeyError as exc:
+            raise LocationConfigError(
+                f"supermarket_id desconocido: {supermarket_id}"
+            ) from exc
+
+    def location(self, location_id: str) -> LocationConfig:
+        for location in self.locations:
+            if location.location_id == location_id:
+                return location
+        raise LocationConfigError(f"location_id desconocido: {location_id}")
+
+    def locations_for_supermarket(self, supermarket_id: str) -> tuple[LocationConfig, ...]:
+        self.supermarket(supermarket_id)
+        return tuple(
+            location
+            for location in self.locations
+            if location.supermarket_id == supermarket_id
+        )
+
+    def in_scope_locations(self, supermarket_id: str) -> tuple[LocationConfig, ...]:
+        return tuple(
+            location
+            for location in self.locations_for_supermarket(supermarket_id)
+            if location.in_scope
+        )
+
+    def enabled_locations(self, supermarket_id: str) -> tuple[LocationConfig, ...]:
+        return tuple(
+            location
+            for location in self.locations_for_supermarket(supermarket_id)
+            if location.extraction_enabled
+        )
+
+    def extraction_block_reason(self, location_id: str) -> str | None:
+        location = self.location(location_id)
+        supermarket = self.supermarket(location.supermarket_id)
+        if not supermarket.is_active:
+            return "supermarket_inactive"
+        if not location.is_available:
+            return "location_unavailable"
+        if not location.in_scope:
+            return "location_out_of_scope"
+        if (
+            supermarket.location_selection_mode
+            is LocationSelectionMode.SOURCE_SELECTION_REQUIRED
+            and not location.technical_binding_confirmed
+        ):
+            return "technical_location_binding_unconfirmed"
+        if not location.extraction_enabled:
+            return "extraction_disabled"
+        return None
+
+    def require_extraction_ready(self, location_id: str) -> LocationConfig:
+        location = self.location(location_id)
+        reason = self.extraction_block_reason(location_id)
+        if reason is not None:
+            raise LocationConfigError(reason)
+        return location
+
+
+LA_COLONIA_SUPERMARKET = SupermarketConfig(
+    supermarket_id="la_colonia",
+    supermarket_name="La Colonia",
+    location_selection_mode=LocationSelectionMode.SOURCE_SELECTION_REQUIRED,
+)
+
+# Ciudades visibles en el selector del sitio observado el 2026-08-22. Esto
+# registra disponibilidad declarada por la UI; no demuestra todavía cómo queda
+# ligado el contexto de ciudad a las requests del catálogo.
+LA_COLONIA_SPS = LocationConfig(
+    location_id="la_colonia_sps",
+    supermarket_id="la_colonia",
+    city_id="sps",
+    city_name="San Pedro Sula",
+    granularity=LocationGranularity.CITY,
+    is_available=True,
+    in_scope=True,
+    extraction_enabled=False,
+    technical_binding_confirmed=False,
+    source_location_key=None,
+    evidence="website_city_selector",
+)
+LA_COLONIA_TGU = LocationConfig(
+    location_id="la_colonia_tgu",
+    supermarket_id="la_colonia",
+    city_id="tgu",
+    city_name="Tegucigalpa",
+    granularity=LocationGranularity.CITY,
+    is_available=True,
+    in_scope=False,
+    extraction_enabled=False,
+    technical_binding_confirmed=False,
+    source_location_key=None,
+    evidence="website_city_selector",
+)
+
+DEFAULT_LOCATION_CATALOG = LocationCatalog(
+    supermarkets={LA_COLONIA_SUPERMARKET.supermarket_id: LA_COLONIA_SUPERMARKET},
+    locations=(LA_COLONIA_SPS, LA_COLONIA_TGU),
+)
+
+
+def build_location_catalog(
+    supermarkets: Iterable[SupermarketConfig],
+    locations: Iterable[LocationConfig],
+) -> LocationCatalog:
+    """Construye un catálogo validado sin depender de almacenamiento externo."""
+
+    supermarket_values = tuple(supermarkets)
+    registry: dict[str, SupermarketConfig] = {}
+    for supermarket in supermarket_values:
+        if supermarket.supermarket_id in registry:
+            raise LocationConfigError(
+                f"supermarket_id duplicado: {supermarket.supermarket_id}"
+            )
+        registry[supermarket.supermarket_id] = supermarket
+    return LocationCatalog(registry, tuple(locations))
