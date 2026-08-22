@@ -30,7 +30,9 @@ Estado canónico al **2026-08-21 (America/Tegucigalpa)**:
 - PR #84 integra la sonda Cloudflare no-La-Colonia aislada.
 - PR #88 integra verificación Ed25519 independiente fuera del Worker emisor.
 - PR #89 integra tracing fail-closed y reconciliación contra Workers Observability para la sonda.
-- CI observada de PR #89: **1231/1231** + `compileall`.
+- PR #90 sincroniza el estado canónico y runbook de despliegue controlado.
+- PR #91 fija Wrangler `4.125.0`, protege secrets/estado local y audita la toolchain de deploy.
+- CI observada de PR #91: **1234/1234** + `compileall`.
 - GATE-17: `PASS_PRODUCTIVE_EVIDENCE`.
 - Cloudflare productivo Worker/Durable Object/OIDC/Ed25519/Workers Observability: `DONE_OFFLINE`, **no desplegado**.
 - Structural discovery autenticado: `DONE_OFFLINE`.
@@ -38,6 +40,7 @@ Estado canónico al **2026-08-21 (America/Tegucigalpa)**:
 - Readiness técnica: `DONE_OFFLINE`; siempre mantiene `catalog_accepted=false` y `production_authority=false` sin evidencia productiva.
 - Sonda Cloudflare: `DONE_OFFLINE / READY_FOR_EXTERNAL_DEPLOYMENT`, **no desplegada ni ejecutada**.
 - Backend comercial productivo: no conectado.
+- Barrido posterior a PR #91: no existe una tarea de implementación offline conocida que pueda sustituir la evidencia externa de Cloudflare o crear legítimamente autoridad productiva.
 
 ## Autorizaciones y tráfico live
 
@@ -106,6 +109,14 @@ La sonda integrada es deliberadamente independiente:
 - cero autoridad de catálogo.
 
 No ejecutes el workflow de sonda antes de que sus Workers estén realmente desplegados/configurados según `docs/cloudflare-controlled-probe-runbook.md`. Ejecutar una sonda contra origen controlado **no** autoriza posteriormente tráfico a La Colonia.
+
+### Toolchain de despliegue
+
+- usa únicamente el Wrangler fijado en `edge/cloudflare/package.json` (`4.125.0` en este corte);
+- no uses `wrangler@latest` ni una instalación global no versionada;
+- no añadas un script de deploy productivo mientras la sonda controlada no haya cerrado con evidencia física;
+- no inicialices los secrets del gateway mediante una secuencia de `secret put`; sigue el bootstrap atómico del runbook;
+- `.dev.vars`, `.wrangler/`, `node_modules/` y archivos temporales de secrets deben permanecer ignorados.
 
 ### Secrets y variables de sonda
 
