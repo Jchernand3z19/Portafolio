@@ -7,9 +7,9 @@ Este documento es la **fuente canónica del estado operativo mutable** del proye
 Estado verificado al **2026-08-22 (America/Tegucigalpa)**.
 
 ```text
-main = b4588d7425601963cc64cc6eec779fdbe9492b05
-último PR integrado = #148
-última suite completa observada = 1418/1418 PASS
+base técnica del corte = b4588d7425601963cc64cc6eec779fdbe9492b05 (merge de PR #148)
+último PR técnico integrado antes de este corte documental = #148
+última suite técnica completa observada = 1418/1418 PASS (PR #148)
 GATE-17 = PASS_PRODUCTIVE_EVIDENCE
 ACTIVE_AUTHORIZATION_IDS = []
 READY_FOR_LIVE = NO
@@ -18,7 +18,7 @@ production_authority = false
 catalog_accepted = false
 ```
 
-No hay PR técnicos abiertos al cerrar este corte.
+El HEAD mutable de `main` se consulta en GitHub y no se fija aquí como “actual”, porque el propio merge de documentación lo volvería obsoleto. No había PR técnicos abiertos al iniciar este corte documental.
 
 ## Semántica de estado
 
@@ -53,7 +53,7 @@ No hay PR técnicos abiertos al cerrar este corte.
 | Rehidratación durable entre runners | `DONE_OFFLINE` | Current/history reconstruibles y revalidados desde snapshot tabular. |
 | Google Sheets plan/transporte/adapter/bootstrap | `DONE_OFFLINE` | Plan atómico, transporte autenticado cerrado, read-modify-write y workflow manual implementados. No se observó una escritura real con credenciales productivas. |
 | Batch comercial → Google Sheets | `DONE_OFFLINE` | Frontera comercial produce `TabularBatch` durable antes del adapter. |
-| Google Sheets productivo | `BLOCKED_EXTERNAL / BLOCKED_DEPENDENCIES` | Requiere Environment/variable/service account y sólo debe recibir datos comerciales cuando la ubicación/autoridad correspondiente esté cerrada. |
+| Google Sheets productivo | `BLOCKED_EXTERNAL / BLOCKED_DEPENDENCIES` | Requiere configuración externa productiva observada y sólo debe recibir datos comerciales cuando la ubicación/autoridad correspondiente esté cerrada. |
 | Scraping diario | `BLOCKED_DEPENDENCIES` | Espera live estable, binding correcto, autoridad de catálogo y persistencia productiva. |
 | Power BI | `BLOCKED_DEPENDENCIES` | Espera dataset comercial durable/autoritativo. |
 | Segundo supermercado | `BLOCKED_DEPENDENCIES` | Se inicia después de cerrar La Colonia end-to-end sobre la plataforma común. |
