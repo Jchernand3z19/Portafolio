@@ -25,24 +25,42 @@ GitHub workflow manual
 -> reconciliación de plataforma
 ```
 
-Un PASS de esta prueba significa únicamente que la infraestructura de sonda cumple sus invariantes físicas. No significa que el collector de La Colonia esté productivamente autorizado.
+Un PASS demuestra únicamente las invariantes físicas de la sonda. No significa que el collector de La Colonia esté productivamente autorizado.
 
 ## 2. Precondiciones versionadas
 
 Antes de desplegar:
 
-- `main` debe contener PR #84, #88 y #89;
-- la suite observada tras PR #89 es **1231/1231 pruebas aprobadas** + `compileall`;
+- `main` contiene PR #84, #88, #89 y la actualización documental #90;
+- la suite observada es **1231/1231 pruebas aprobadas** + `compileall`;
 - `edge/cloudflare/wrangler.probe-origin.json` define el origen controlado;
 - `edge/cloudflare/wrangler.probe.json` define el gateway/DO de sonda;
-- ambos Workers tienen tracing habilitado con `head_sampling_rate = 1`;
+- ambos Workers tienen tracing con `head_sampling_rate = 1`;
 - el gateway de sonda usa un `ProbeLedger` separado del `AuthorizationGateway` productivo;
 - el gateway productivo de La Colonia y su allowlist no se modifican para esta prueba;
 - `ACTIVE_AUTHORIZATION_IDS` de La Colonia puede y debe seguir vacío.
 
 No es requisito crear una autorización live de La Colonia para ejecutar esta sonda.
 
-## 3. Recursos externos necesarios
+## 3. Toolchain fijado
+
+El CLI de despliegue se invoca **únicamente** mediante el script versionado de `edge/cloudflare/package.json`:
+
+```text
+wrangler = npx --yes wrangler@4.125.0
+```
+
+Verificación local:
+
+```bash
+npm run wrangler -- --version
+```
+
+El resultado esperado es `4.125.0`. No usar `npx wrangler`, `npx wrangler@latest` ni una instalación global no versionada para esta prueba.
+
+Si se decide cambiar la versión, hacerlo primero en un PR separado, revalidar configuración/CI y actualizar el test de toolchain. No actualizar Wrangler durante el mismo ejercicio físico.
+
+## 4. Recursos externos necesarios
 
 En una sola cuenta Cloudflare:
 
@@ -51,7 +69,7 @@ En una sola cuenta Cloudflare:
 3. Durable Object SQLite `ProbeLedger`, creado por la configuración del gateway;
 4. par Ed25519 **exclusivo de sonda**;
 5. Workers Observability habilitado por la configuración versionada;
-6. API Token limitado a la cuenta requerida y con el permiso que Cloudflare exige actualmente para consultar Workers Observability.
+6. API Token limitado a la cuenta requerida y con el permiso que Cloudflare exige para consultar Workers Observability.
 
 En GitHub:
 
@@ -61,11 +79,9 @@ En GitHub:
 
 No se reutilizan claves, audience, environment ni secrets de `la-colonia-live`.
 
-## 4. Material criptográfico
+## 5. Material criptográfico
 
 El par Ed25519 de sonda debe ser nuevo e independiente del collector productivo.
-
-Representaciones esperadas por el Worker:
 
 ```text
 PROBE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL = PKCS#8 DER, base64url sin padding
@@ -80,9 +96,9 @@ Reglas obligatorias:
 - el key ID de sonda permanece `cloudflare-probe-ed25519-v1`;
 - no reutilizar una clave productiva futura.
 
-Si la clave se genera mediante una herramienta local, cualquier archivo temporal que contenga la private key debe tener permisos restrictivos y eliminarse inmediatamente después de cargarla. Preferir una operación de secret directa de Cloudflare cuando esté disponible.
+Si una herramienta local genera la clave, cualquier archivo temporal debe vivir fuera del repositorio, usar permisos restrictivos y eliminarse inmediatamente después de cargarlo. `edge/cloudflare/.gitignore` bloquea además `.dev.vars`, `.wrangler/` y patrones de secrets locales como defensa adicional.
 
-## 5. Orden de despliegue
+## 6. Orden de despliegue
 
 Trabajar desde:
 
@@ -90,29 +106,25 @@ Trabajar desde:
 precios-supermercados-sps/edge/cloudflare/
 ```
 
-### 5.1 Origen controlado
+### 6.1 Origen controlado
 
 El origen no necesita secrets.
 
-Con Wrangler, el comando conceptual es:
-
 ```bash
-npx wrangler deploy --config wrangler.probe-origin.json
+npm run deploy:probe-origin
 ```
 
-Registrar la URL final exacta, que debe tener forma:
+Este script usa el Wrangler fijado. Registrar la URL final exacta:
 
 ```text
 https://precios-sps-controlled-origin.<subdominio>.workers.dev
 ```
 
-No usar Custom Domain ni otro host en esta fase.
+No usar Custom Domain ni otro host en esta fase. Antes de continuar, comprobar que el hostname termina exactamente en `.workers.dev`.
 
-Antes de continuar, comprobar que el hostname termina exactamente en `.workers.dev`.
+### 6.2 Gateway de sonda
 
-### 5.2 Gateway de sonda
-
-`wrangler.probe.json` declara como obligatorios:
+`wrangler.probe.json` declara:
 
 ```text
 PROBE_ORIGIN_URL
@@ -122,26 +134,23 @@ PROBE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
 
 Valores:
 
-- `PROBE_ORIGIN_URL`: URL del Worker controlado del paso anterior;
-- private key: material PKCS#8 de sonda;
-- public key: SPKI correspondiente a esa misma private key.
+- `PROBE_ORIGIN_URL`: URL del Worker controlado anterior;
+- private key: PKCS#8 de sonda;
+- public key: SPKI correspondiente al mismo par.
 
-Cloudflare debe almacenar estos valores como secrets. La configuración versionada usa `secrets.required`, por lo que el deploy debe fallar si falta alguno.
+`secrets.required` hace que el deploy falle si falta alguno. Para el **primer deploy**, cargar los tres de forma atómica junto con el código:
 
-Para el **primer deploy**, preferir una carga atómica junto con el código mediante `wrangler deploy --secrets-file <archivo-temporal>` o un mecanismo equivalente que presente los tres secrets en una sola operación. El archivo debe estar fuera del repositorio, tener permisos restrictivos y eliminarse inmediatamente después; nunca se hace commit.
-
-No usar una secuencia de `wrangler secret put` para inicializar por primera vez el Worker: la documentación actual de Wrangler indica que cada `secret put` crea una nueva versión y la despliega inmediatamente, lo que introduciría estados parciales innecesarios durante el bootstrap. Después del primer despliegue, cualquier rotación de secrets debe tratarse como un cambio controlado separado.
-
-El gateway a desplegar está definido por:
-
-```text
-wrangler.probe.json
-name = precios-sps-controlled-probe
+```bash
+npm run wrangler -- deploy --config wrangler.probe.json --secrets-file /ruta/fuera-del-repo/probe-secrets.json
 ```
 
-Registrar su URL final exacta `https://...workers.dev`.
+El archivo temporal debe estar fuera del repositorio, tener permisos restrictivos y eliminarse inmediatamente después.
 
-## 6. Configuración de GitHub Environment
+No inicializar el Worker mediante una secuencia de `wrangler secret put`: la documentación actual indica que cada `secret put` crea una nueva versión y la despliega inmediatamente, introduciendo estados parciales innecesarios durante el bootstrap.
+
+Registrar la URL final exacta `https://...workers.dev` del gateway.
+
+## 7. Configuración de GitHub Environment
 
 Environment:
 
@@ -158,7 +167,7 @@ CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN
 
 `CLOUDFLARE_PROBE_GATEWAY_URL` contiene sólo el origen HTTPS del gateway, sin path, query, fragment, puerto ni credenciales.
 
-`CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN` debe limitarse a la única cuenta Cloudflare requerida y no debe tener permisos para modificar Workers. La API oficial de Workers Observability exige actualmente el permiso denominado `Workers Observability Write` para el endpoint de consulta; el nombre del permiso no debe reinterpretarse como permiso para desplegar scripts.
+`CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN` debe limitarse a la única cuenta requerida y no debe tener permisos para modificar Workers. La API oficial de Workers Observability exige actualmente el permiso denominado `Workers Observability Write` para el endpoint de consulta; el nombre del permiso no debe reinterpretarse como permiso para desplegar scripts.
 
 ### Variables
 
@@ -167,11 +176,9 @@ CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL
 CLOUDFLARE_ACCOUNT_ID
 ```
 
-`CLOUDFLARE_ACCOUNT_ID` debe ser el ID hexadecimal de 32 caracteres de la cuenta.
+`CLOUDFLARE_ACCOUNT_ID` debe ser el ID hexadecimal de 32 caracteres de la cuenta. La public key debe corresponder exactamente al par cargado en Cloudflare.
 
-La public key debe corresponder exactamente al par cargado en Cloudflare.
-
-## 7. Separación de permisos del workflow
+## 8. Separación de permisos del workflow
 
 Workflow:
 
@@ -180,8 +187,6 @@ Workflow:
 ```
 
 Es únicamente `workflow_dispatch`.
-
-Tiene dos jobs con funciones distintas:
 
 ### `controlled-probe`
 
@@ -203,9 +208,9 @@ Tiene dos jobs con funciones distintas:
 - exige custom span único y child `fetch` único;
 - reconcilia URL, método, HTTP status, tamaño, version metadata, run/attempt y timestamps.
 
-El auditor `test_workflow_security_audit.py` falla si esta separación cambia sin actualización explícita de política.
+`test_workflow_security_audit.py` falla si esta separación cambia sin actualización explícita de política.
 
-## 8. Ejecución física permitida
+## 9. Ejecución física permitida
 
 Sólo después de configurar todos los recursos anteriores, ejecutar manualmente:
 
@@ -215,7 +220,7 @@ Precios SPS - Sonda Cloudflare controlada
 
 sobre `main`.
 
-No seleccionar una rama de PR. La política OIDC del Worker exige:
+No seleccionar una rama de PR. La política OIDC exige:
 
 ```text
 repository = Jchernand3z19/Portafolio
@@ -229,7 +234,7 @@ aud = urn:precios-sps:cloudflare:probe:v1
 
 El `probeId` se deriva exactamente como `github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}`; no existe input humano para URL, challenge, origin o authority.
 
-## 9. Criterio PASS
+## 10. Criterio PASS
 
 La ejecución sólo es PASS si **todos** estos puntos se observan:
 
@@ -257,13 +262,11 @@ catalog_accepted = false
 La Colonia requests = 0
 ```
 
-Un solo mismatch convierte la sonda en FAIL; no se degrada a una evidencia parcial aceptable.
+Un solo mismatch convierte la sonda en FAIL; no se degrada a evidencia parcial aceptable.
 
-## 10. Criterios de parada y no-retry
+## 11. Criterios de parada y no-retry
 
-La ruta física de sonda no tiene retry oculto.
-
-Detener y revisar si ocurre:
+La ruta física de sonda no tiene retry oculto. Detener y revisar ante:
 
 - OIDC rechazado;
 - tracing no muestreado;
@@ -278,9 +281,9 @@ Detener y revisar si ocurre:
 - token de Observability insuficiente;
 - error de límites de Cloudflare.
 
-Un error de Observability **no autoriza repetir automáticamente el fetch físico**. Una nueva ejecución del workflow usa un nuevo run ID y debe analizarse como una nueva sonda.
+Un error de Observability **no autoriza repetir automáticamente el fetch físico**. Una nueva ejecución usa un nuevo run ID y se analiza como una nueva sonda.
 
-## 11. Evidencia que se conserva
+## 12. Evidencia que se conserva
 
 Conservar de forma sanitizada:
 
@@ -296,16 +299,11 @@ Conservar de forma sanitizada:
 - physical evidence ID;
 - status PASS/FAIL y motivo.
 
-No conservar:
-
-- private key;
-- OIDC token;
-- Observability API token;
-- `Authorization` headers.
+No conservar private key, OIDC token, Observability API token ni `Authorization` headers.
 
 El artifact `precios-sps-cloudflare-controlled-probe` puede conservar el resultado sanitizado del gateway durante su retención configurada; no convierte la evidencia en autoridad de catálogo.
 
-## 12. Qué desbloquea un PASS
+## 13. Qué desbloquea un PASS
 
 Un PASS productivo de esta sonda permite afirmar únicamente:
 
@@ -326,7 +324,7 @@ production_authority = false
 
 Después del PASS puede prepararse y validar el despliegue del Worker productivo **sin invocarlo contra La Colonia**. Cualquier request real a La Colonia sigue necesitando una autorización humana nueva y explícita.
 
-## 13. Fuentes de plataforma verificadas
+## 14. Fuentes de plataforma verificadas
 
 Al preparar este runbook se verificó en documentación oficial de Cloudflare que:
 
@@ -335,6 +333,7 @@ Al preparar este runbook se verificó en documentación oficial de Cloudflare qu
 - `wrangler deploy --secrets-file` permite cargar secrets junto con el código;
 - `wrangler secret put` crea una nueva versión y la despliega inmediatamente;
 - el endpoint de Workers Observability es `POST /accounts/{account_id}/workers/observability/telemetry/query`;
-- el endpoint de Observability acepta API Tokens y la documentación actual enumera `Workers Observability Write` entre los permisos aceptados.
+- el endpoint acepta API Tokens y enumera `Workers Observability Write` entre los permisos aceptados;
+- la versión de Wrangler fijada para esta fase es `4.125.0`.
 
-Los límites, precios y permisos de plataforma pueden cambiar. Revalidarlos inmediatamente antes del primer despliegue real.
+Los límites, precios y permisos pueden cambiar. Revalidarlos inmediatamente antes del primer despliegue real sin cambiar la versión fijada dentro de la misma ejecución.
