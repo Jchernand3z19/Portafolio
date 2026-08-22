@@ -128,9 +128,11 @@ Valores:
 
 Cloudflare debe almacenar estos valores como secrets. La configuración versionada usa `secrets.required`, por lo que el deploy debe fallar si falta alguno.
 
-Cloudflare permite cargar secrets mediante su dashboard, Wrangler o un mecanismo equivalente. Si se utiliza `wrangler deploy --secrets-file`, el archivo debe ser temporal, estar fuera del repositorio y eliminarse inmediatamente; nunca se hace commit.
+Para el **primer deploy**, preferir una carga atómica junto con el código mediante `wrangler deploy --secrets-file <archivo-temporal>` o un mecanismo equivalente que presente los tres secrets en una sola operación. El archivo debe estar fuera del repositorio, tener permisos restrictivos y eliminarse inmediatamente después; nunca se hace commit.
 
-Después desplegar el gateway definido por:
+No usar una secuencia de `wrangler secret put` para inicializar por primera vez el Worker: la documentación actual de Wrangler indica que cada `secret put` crea una nueva versión y la despliega inmediatamente, lo que introduciría estados parciales innecesarios durante el bootstrap. Después del primer despliegue, cualquier rotación de secrets debe tratarse como un cambio controlado separado.
+
+El gateway a desplegar está definido por:
 
 ```text
 wrangler.probe.json
@@ -225,7 +227,7 @@ event_name = workflow_dispatch
 aud = urn:precios-sps:cloudflare:probe:v1
 ```
 
-El `probeId` se deriva de `GITHUB_RUN_ID:GITHUB_RUN_ATTEMPT`; no existe input humano para URL, challenge, origin o authority.
+El `probeId` se deriva exactamente como `github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}`; no existe input humano para URL, challenge, origin o authority.
 
 ## 9. Criterio PASS
 
@@ -330,7 +332,8 @@ Al preparar este runbook se verificó en documentación oficial de Cloudflare qu
 
 - Wrangler admite `exports` declarativos para Durable Objects y `storage: "sqlite"`;
 - `secrets.required` se valida durante `wrangler deploy`/`versions upload`;
-- `wrangler secret put` y `--secrets-file` son mecanismos soportados para secrets desplegados;
+- `wrangler deploy --secrets-file` permite cargar secrets junto con el código;
+- `wrangler secret put` crea una nueva versión y la despliega inmediatamente;
 - el endpoint de Workers Observability es `POST /accounts/{account_id}/workers/observability/telemetry/query`;
 - el endpoint de Observability acepta API Tokens y la documentación actual enumera `Workers Observability Write` entre los permisos aceptados.
 
