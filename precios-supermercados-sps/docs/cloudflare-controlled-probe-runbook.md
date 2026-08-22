@@ -81,11 +81,23 @@ El origen permitido permanece limitado a HTTPS `*.workers.dev` y al path canóni
 
 Un rerun de sonda **no crea ni consume una autorización live de La Colonia**.
 
-## 4. Toolchain
+## 4. Toolchain fijada
 
-Usar únicamente la versión de Wrangler fijada en `edge/cloudflare/package.json` y validada por CI. No sustituirla por `wrangler@latest` ni una instalación global durante un ejercicio físico.
+La invocación canónica sigue siendo exactamente:
 
-Si la versión fijada cambia, hacerlo en un PR separado con pruebas antes de cualquier rerun.
+```text
+wrangler = npx --yes wrangler@4.125.0
+```
+
+La versión se verifica únicamente a través del script versionado de `edge/cloudflare/package.json`:
+
+```bash
+npm run wrangler -- --version
+```
+
+El resultado esperado es `4.125.0`.
+
+No usar `npx wrangler`, `npx wrangler@latest` ni una instalación global durante un ejercicio físico. Si la versión fijada cambia, hacerlo primero en un PR separado, revalidar CI/runbook y sólo después considerar un rerun.
 
 ## 5. Recursos de Cloudflare
 
@@ -144,11 +156,7 @@ El token de Observability no debe conceder permisos de deploy de Workers. Verifi
 
 ## 8. Despliegue/redeploy
 
-Sólo si la razón del rerun requiere desplegar o actualizar recursos:
-
-```text
-precios-supermercados-sps/edge/cloudflare/
-```
+Sólo si la razón del rerun requiere desplegar o actualizar recursos, trabajar desde `precios-supermercados-sps/edge/cloudflare/`.
 
 Origen controlado:
 
@@ -156,12 +164,20 @@ Origen controlado:
 npm run deploy:probe-origin
 ```
 
-Gateway/DO:
+Gateway/DO, sólo cuando deba desplegarse de nuevo y usando un archivo temporal fuera del repositorio:
 
-- usar la configuración `wrangler.probe.json` versionada;
-- cargar secrets según el mecanismo cerrado definido por la toolchain vigente;
+```bash
+npm run wrangler -- deploy --config wrangler.probe.json --secrets-file /ruta/fuera-del-repo/probe-secrets.json
+```
+
+Reglas:
+
+- usar `wrangler.probe.json` versionado;
+- cargar secrets mediante la toolchain fijada;
+- eliminar el archivo temporal inmediatamente después;
 - no añadir Custom Domain ni destino externo;
-- no ampliar el origen más allá de `*.workers.dev`.
+- no ampliar el origen más allá de `*.workers.dev`;
+- no usar `wrangler.json` productivo para la sonda.
 
 Si los recursos existentes ya corresponden exactamente al SHA/configuración que se desea probar, no hacer un redeploy innecesario.
 
