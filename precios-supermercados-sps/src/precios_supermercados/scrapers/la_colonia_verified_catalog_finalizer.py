@@ -183,6 +183,8 @@ class VerifiedCatalogProvenanceFinalizer:
             ) from exc
 
         reconciled: list[PlatformReconciledEdgePage] = []
+        physical_evidence_ids: set[str] = set()
+        fetch_span_ids: set[str] = set()
         for ordinal, observation in enumerate(observations):
             try:
                 page = self._verifier_client.reconcile_page(
@@ -204,6 +206,15 @@ class VerifiedCatalogProvenanceFinalizer:
                 _fail("catalog_observability_result_unreconciled")
             if page.production_authority is not False:
                 _fail("catalog_observability_authority_forbidden")
+
+            physical_evidence_id = page.physical_evidence_id
+            if physical_evidence_id in physical_evidence_ids:
+                _fail("physical_evidence_reused")
+            fetch_span_id = page.trace_evidence.fetch_span_id
+            if fetch_span_id in fetch_span_ids:
+                _fail("physical_fetch_span_reused")
+            physical_evidence_ids.add(physical_evidence_id)
+            fetch_span_ids.add(fetch_span_id)
             reconciled.append(page)
 
         try:
