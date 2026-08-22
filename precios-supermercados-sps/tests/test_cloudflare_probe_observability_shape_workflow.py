@@ -14,6 +14,7 @@ MARKER = "precios-supermercados-sps/ops/cloudflare-probe-observability-diagnosti
 SCRIPT_NAME = "diagnosticar_observability_sonda_cloudflare.py"
 TARGET_PR = "117"
 STATUS_CONTEXT = "precios-sps/observability-shape-trigger"
+DIAGNOSTIC_STATUS_CONTEXT = "precios-sps/observability-shape-diagnostic"
 
 PINNED_ACTIONS = {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
@@ -83,7 +84,7 @@ def test_main_marker_is_verified_before_environment_or_observability_access():
     assert '"schema": "cloudflare-controlled-probe-observability-diagnostic-request-1"' in script
     assert '"sourceRunId": "32551882793"' in script
     assert '"purpose": "sanitized-shape-observation-only"' in script
-    assert '"requestSequence": 4' in script
+    assert '"requestSequence": 5' in script
     assert '"authority": False' in script
     assert "payload != expected" in script
     assert "controlled_observability_marker_mismatch" in script
@@ -163,6 +164,7 @@ def test_diagnostic_requires_verified_marker_and_executes_only_main_code():
         "contents": "read",
         "actions": "read",
         "issues": "write",
+        "statuses": "write",
     }
     assert job["environment"] == "cloudflare-probe"
     assert job["env"] == {
@@ -178,12 +180,33 @@ def test_diagnostic_requires_verified_marker_and_executes_only_main_code():
         "ref": "${{ github.sha }}",
         "persist-credentials": "false",
     }
+    inspect = next(step for step in steps if step["name"] == "Inspect existing telemetry shape")
+    assert inspect["id"] == "inspect"
     assert "github.event.pull_request" not in raw
     assert "github.head_ref" not in raw
     assert "git checkout" not in raw
     assert "git fetch" not in raw
     assert f"*/scripts/{SCRIPT_NAME}" in raw
     assert 'python "$DIAGNOSTIC_SCRIPT"' in raw
+
+
+def test_diagnostic_outcome_has_independent_sanitized_commit_status():
+    _, workflow = _load()
+    job = workflow["jobs"]["inspect-observability-shape"]
+    status = next(step for step in job["steps"] if step["name"] == "Publish immutable diagnostic outcome status")
+    assert status["if"] == "${{ always() }}"
+    assert status["env"] == {
+        "GH_TOKEN": "${{ github.token }}",
+        "INSPECT_OUTCOME": "${{ steps.inspect.outcome }}",
+    }
+    script = status["run"]
+    assert 'statuses/${GITHUB_SHA}' in script
+    assert f'-f context="{DIAGNOSTIC_STATUS_CONTEXT}"' in script
+    assert 'if [ "$INSPECT_OUTCOME" = "success" ]' in script
+    assert "state=success" in script
+    assert "state=failure" in script
+    assert "PROBE_OBSERVABILITY_TOKEN" not in script
+    assert "event" not in script.lower()
 
 
 def test_shape_diagnostic_has_no_gateway_oidc_or_physical_probe_capability():

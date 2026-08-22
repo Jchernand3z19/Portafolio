@@ -85,6 +85,7 @@ ALLOWED_JOB_PERMISSIONS = {
             "contents": "read",
             "actions": "read",
             "issues": "write",
+            "statuses": "write",
         },
     },
 }
@@ -339,7 +340,7 @@ def test_observability_diagnostic_is_one_shot_trusted_main_push_only():
     diagnostic = jobs(workflow)["inspect-observability-shape"]
     assert "environment" not in verify
     assert "secrets." not in str(verify)
-    assert '"requestSequence": 4' in str(verify)
+    assert '"requestSequence": 5' in str(verify)
     assert '"authority": False' in str(verify)
     assert "marker_verified=true" in str(verify)
     assert heartbeat["needs"] == "verify-main-marker"
@@ -355,8 +356,15 @@ def test_observability_diagnostic_is_one_shot_trusted_main_push_only():
     assert "precios-sps/observability-shape-trigger" in str(heartbeat)
     assert diagnostic["needs"] == "verify-main-marker"
     assert diagnostic["if"] == "${{ needs.verify-main-marker.outputs.marker_verified == 'true' }}"
+    assert diagnostic["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+        "issues": "write",
+        "statuses": "write",
+    }
     assert diagnostic["environment"] == "cloudflare-probe"
     assert diagnostic["env"]["TARGET_PR_NUMBER"] == "117"
+    assert "precios-sps/observability-shape-diagnostic" in str(diagnostic)
     assert "run-id: 32551882793" in raw
     assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" in raw
     assert "CLOUDFLARE_PROBE_GATEWAY_URL" not in raw
