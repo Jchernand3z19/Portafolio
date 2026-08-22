@@ -27,6 +27,14 @@ def _load() -> tuple[str, dict[str, object]]:
     return raw, value
 
 
+def _assert_controlled_condition(condition: str) -> None:
+    assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
+    assert "github.event.pull_request.user.login == 'Jchernand3z19'" in condition
+    assert "github.event.pull_request.base.ref == 'main'" in condition
+    assert "github.event.pull_request.changed_files == 1" in condition
+
+
 def test_shape_diagnostic_uses_controlled_pull_request_target_only():
     raw, workflow = _load()
     assert workflow["permissions"] == {
@@ -41,14 +49,12 @@ def test_shape_diagnostic_uses_controlled_pull_request_target_only():
     assert trigger["branches"] == ["main"]
     assert trigger["paths"] == [MARKER]
 
-    job = workflow["jobs"]["inspect-observability-shape"]
-    condition = job["if"]
-    assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
-    assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
-    assert "github.event.pull_request.user.login == 'Jchernand3z19'" in condition
-    assert "github.event.pull_request.base.ref == 'main'" in condition
-    assert "github.event.pull_request.changed_files == 1" in condition
-    assert job["environment"] == "cloudflare-probe"
+    jobs = workflow["jobs"]
+    assert set(jobs) == {"publish-trigger-heartbeat", "inspect-observability-shape"}
+    _assert_controlled_condition(jobs["publish-trigger-heartbeat"]["if"])
+    _assert_controlled_condition(jobs["inspect-observability-shape"]["if"])
+    assert "environment" not in jobs["publish-trigger-heartbeat"]
+    assert jobs["inspect-observability-shape"]["environment"] == "cloudflare-probe"
     assert "id-token" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_URL" not in raw
@@ -56,6 +62,33 @@ def test_shape_diagnostic_uses_controlled_pull_request_target_only():
     assert "contents: write" not in raw
     assert "workflow_run" not in raw
     assert "workflow_dispatch" not in raw
+
+
+def test_trigger_heartbeat_is_sanitized_and_has_no_environment_or_repository_code():
+    raw, workflow = _load()
+    job = workflow["jobs"]["publish-trigger-heartbeat"]
+    assert "environment" not in job
+    assert job["timeout-minutes"] == "2"
+    assert job["env"] == {"TARGET_PR_NUMBER": "${{ github.event.pull_request.number }}"}
+    assert len(job["steps"]) == 1
+    step = job["steps"][0]
+    assert step["name"] == "Publish sanitized trigger heartbeat"
+    assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    script = step["run"]
+    assert '[[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]' in script
+    assert 'issues/${TARGET_PR_NUMBER}/comments' in script
+    assert '"diagnostic_status": "trigger_observed"' in script
+    assert '"contains_no_event_values": true' in script
+    assert '"production_authority": false' in script
+    assert '"catalog_accepted": false' in script
+    assert "actions/checkout@" not in str(job)
+    assert "PROBE_OBSERVABILITY_TOKEN" not in str(job)
+    assert ".probe-evidence" not in str(job)
+    assert "run-id: 32551882793" not in str(job)
+    assert "curl " not in script
+    assert "la-colonia" not in str(job).lower()
+    assert "lacolonia" not in str(job).lower()
+    assert raw.count("github.event.pull_request.head") == 2
 
 
 def test_pull_request_target_executes_only_trusted_base_revision_and_modern_script():
@@ -67,7 +100,6 @@ def test_pull_request_target_executes_only_trusted_base_revision_and_modern_scri
         "ref": "${{ github.event.pull_request.base.sha }}",
         "persist-credentials": "false",
     }
-    assert raw.count("github.event.pull_request.head") == 1
     assert "github.event.pull_request.head.sha" not in raw
     assert "github.event.pull_request.head.ref" not in raw
     assert "github.head_ref" not in raw
