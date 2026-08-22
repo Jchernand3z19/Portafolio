@@ -20,7 +20,9 @@ from precios_supermercados.cloudflare_controlled_probe_events_query import (
     build_trace_events_query,
 )
 from precios_supermercados.cloudflare_controlled_probe_observability import (
+    CONTROLLED_PROBE_SERVICE,
     CONTROLLED_PROBE_SPAN_NAME,
+    OBSERVABILITY_DATASET,
     ControlledProbeObservabilityError,
 )
 from precios_supermercados.cloudflare_controlled_probe_trace_query import (
@@ -42,6 +44,8 @@ SOURCE_RUN_ATTEMPT = 1
 SOURCE_COMMIT_SHA = "cc15edef22709911beb1d1b027ae4c9992da1944"
 MAX_EVENTS = 500
 MAX_TRACE_CANDIDATES = 20
+DIRECT_QUERY_ID_SERVICE = "precios-sps-controlled-probe-direct-span-service-v1"
+DIRECT_QUERY_ID_ANY = "precios-sps-controlled-probe-direct-span-any-v1"
 
 STANDARD_KEYS = (
     "service.name",
@@ -53,6 +57,21 @@ STANDARD_KEYS = (
     "http.request.method",
     "http.response.status_code",
     "http.response.body.size",
+)
+
+METADATA_KEYS = (
+    "traceId",
+    "spanId",
+    "parentSpanId",
+    "spanName",
+    "service",
+    "startTime",
+    "endTime",
+    "statusCode",
+    "url",
+    "origin",
+    "type",
+    "requestId",
 )
 
 FIXED_MATCH_PATHS = (
@@ -111,6 +130,44 @@ def _value_at(event: Mapping[str, object], parts: tuple[str, ...]) -> object:
     return current
 
 
+def _filter(key: str, value: str) -> dict[str, object]:
+    return {
+        "kind": "filter",
+        "key": key,
+        "operation": "eq",
+        "type": "string",
+        "value": value,
+    }
+
+
+def _direct_custom_span_query(
+    *,
+    from_utc: datetime,
+    to_utc: datetime,
+    service_scoped: bool,
+) -> dict[str, object]:
+    filters = [_filter("$metadata.spanName", CONTROLLED_PROBE_SPAN_NAME)]
+    query_id = DIRECT_QUERY_ID_ANY
+    if service_scoped:
+        filters.insert(0, _filter("$metadata.service", CONTROLLED_PROBE_SERVICE))
+        query_id = DIRECT_QUERY_ID_SERVICE
+    return {
+        "queryId": query_id,
+        "timeframe": {
+            "from": int(from_utc.timestamp() * 1000),
+            "to": int(to_utc.timestamp() * 1000),
+        },
+        "view": "events",
+        "limit": MAX_EVENTS,
+        "parameters": {
+            "datasets": [OBSERVABILITY_DATASET],
+            "filterCombination": "and",
+            "filters": filters,
+            "limit": MAX_EVENTS,
+        },
+    }
+
+
 def _summarize_events(raw_events: Sequence[object]) -> dict[str, object]:
     top_keys: set[object] = set()
     metadata_keys: set[object] = set()
@@ -151,15 +208,7 @@ def _summarize_events(raw_events: Sequence[object]) -> dict[str, object]:
         else:
             source_types[_safe_type(source)] += 1
 
-        for key in (
-            "traceId",
-            "spanId",
-            "parentSpanId",
-            "spanName",
-            "service",
-            "startTime",
-            "endTime",
-        ):
+        for key in METADATA_KEYS:
             if key in metadata:
                 metadata_presence[key] += 1
 
@@ -198,16 +247,23 @@ def _summarize_events(raw_events: Sequence[object]) -> dict[str, object]:
     }
 
 
+def _raw_events(response: Mapping[str, object]) -> Sequence[object]:
+    result = _mapping(response.get("result"))
+    container = result.get("events")
+    if isinstance(container, Mapping):
+        return _sequence(container.get("events"))
+    if isinstance(container, Sequence) and not isinstance(container, (str, bytes, bytearray)):
+        return container
+    return ()
+
+
 def _raw_events_shape(response: Mapping[str, object]) -> dict[str, object]:
     result = _mapping(response.get("result"))
     container = result.get("events")
-    events: Sequence[object] = ()
+    events = _raw_events(response)
     container_keys: list[str] = []
     if isinstance(container, Mapping):
         container_keys = _safe_keys(container.keys())
-        events = _sequence(container.get("events"))
-    elif isinstance(container, Sequence) and not isinstance(container, (str, bytes, bytearray)):
-        events = container
     return {
         "result_keys": _safe_keys(result.keys()),
         "events_container_type": _safe_type(container),
@@ -237,6 +293,24 @@ def _raw_invocations_shape(response: Mapping[str, object]) -> dict[str, object]:
         "invocation_group_value_types": dict(sorted(group_value_types.items())),
         "events": _summarize_events(events),
     }
+
+
+def _direct_trace_relation(
+    response: Mapping[str, object],
+    candidate_trace_ids: Sequence[str],
+) -> str:
+    candidates = set(candidate_trace_ids)
+    observed: set[str] = set()
+    for raw_event in _raw_events(response)[:MAX_EVENTS]:
+        metadata = _mapping(_mapping(raw_event).get("$metadata"))
+        trace_id = metadata.get("traceId")
+        if isinstance(trace_id, str) and trace_id:
+            observed.add("candidate" if trace_id in candidates else "outside")
+    if not observed:
+        return "none"
+    if len(observed) == 1:
+        return next(iter(observed))
+    return "mixed"
 
 
 def _parse_utc(value: object) -> datetime:
@@ -329,11 +403,35 @@ def main() -> int:
                 }
             )
 
+        direct_service = transport.post_json(
+            path,
+            bearer_token=token,
+            payload=_direct_custom_span_query(
+                from_utc=start,
+                to_utc=end,
+                service_scoped=True,
+            ),
+        )
+        direct_any = transport.post_json(
+            path,
+            bearer_token=token,
+            payload=_direct_custom_span_query(
+                from_utc=start,
+                to_utc=end,
+                service_scoped=False,
+            ),
+        )
+
         _render(
             {
                 "diagnostic_status": "shape_collected",
                 "trace_candidate_count": len(trace_ids),
                 "candidate_shapes": candidates,
+                "direct_custom_span_views": {
+                    "with_service": _raw_events_shape(direct_service),
+                    "without_service": _raw_events_shape(direct_any),
+                    "trace_relation": _direct_trace_relation(direct_any, trace_ids),
+                },
             }
         )
     except ControlledProbeObservabilityError as exc:

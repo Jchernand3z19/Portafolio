@@ -33,6 +33,7 @@ _ALLOWED_LOCATION_PREFIXES = {
     "source.attributes": "attrs",
     "source.resource": "resource",
 }
+_ALLOWED_TRACE_RELATIONS = {"candidate", "outside", "mixed", "none"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +125,24 @@ def _source_label(source_types: Mapping[str, object]) -> str | None:
     return None
 
 
+def _event_summary(view: object) -> Mapping[str, object]:
+    return _mapping(_mapping(view).get("events"))
+
+
+def _has_metadata(events: Mapping[str, object], key: str) -> bool:
+    counts = _mapping(events.get("metadata_presence_counts"))
+    return _safe_nonnegative_int(counts.get(key), maximum=500) > 0
+
+
+def _has_precios(events: Mapping[str, object]) -> bool:
+    return bool(_sequence(events.get("precios_attribute_key_locations")))
+
+
+def _event_count(view: object) -> int:
+    events = _event_summary(view)
+    return _safe_nonnegative_int(events.get("mapping_event_count"), maximum=500)
+
+
 def build_statuses(payload: Mapping[str, object]) -> tuple[CommitStatus, ...]:
     status = payload.get("diagnostic_status")
     if status not in _ALLOWED_STATUS:
@@ -150,12 +169,17 @@ def build_statuses(payload: Mapping[str, object]) -> tuple[CommitStatus, ...]:
         source_labels: set[str] = set()
         http_locations: set[str] = set()
         url_locations: set[str] = set()
+        metadata_status = False
+        metadata_url = False
+        metadata_parent = False
+        metadata_span_name = False
+        metadata_origin = False
+        metadata_type = False
 
         for candidate in _sequence(payload.get("candidate_shapes"))[:20]:
             candidate_map = _mapping(candidate)
             for view_name in ("events_view", "invocations_view"):
-                view = _mapping(candidate_map.get(view_name))
-                events = _mapping(view.get("events"))
+                events = _event_summary(candidate_map.get(view_name))
                 mapping_events = mapping_events or _safe_nonnegative_int(
                     events.get("mapping_event_count"), maximum=500
                 ) > 0
@@ -168,12 +192,16 @@ def build_statuses(payload: Mapping[str, object]) -> tuple[CommitStatus, ...]:
                 custom_span = custom_span or any(
                     _safe_nonnegative_int(value, maximum=500) > 0 for value in matches.values()
                 )
-                precios_attrs = precios_attrs or bool(
-                    _sequence(events.get("precios_attribute_key_locations"))
-                )
+                precios_attrs = precios_attrs or _has_precios(events)
                 standard = _mapping(events.get("standard_attribute_presence_counts"))
                 http_locations.update(_presence(standard, "http.response.status_code"))
                 url_locations.update(_presence(standard, "url.full"))
+                metadata_status = metadata_status or _has_metadata(events, "statusCode")
+                metadata_url = metadata_url or _has_metadata(events, "url")
+                metadata_parent = metadata_parent or _has_metadata(events, "parentSpanId")
+                metadata_span_name = metadata_span_name or _has_metadata(events, "spanName")
+                metadata_origin = metadata_origin or _has_metadata(events, "origin")
+                metadata_type = metadata_type or _has_metadata(events, "type")
 
         source_label = (
             next(iter(source_labels))
@@ -190,6 +218,32 @@ def build_statuses(payload: Mapping[str, object]) -> tuple[CommitStatus, ...]:
                 f"{CONTEXT_PREFIX}/source/{source_label}",
                 f"{CONTEXT_PREFIX}/http-status/{_location_label(http_locations)}",
                 f"{CONTEXT_PREFIX}/url-full/{_location_label(url_locations)}",
+                f"{CONTEXT_PREFIX}/metadata-status/{'yes' if metadata_status else 'no'}",
+                f"{CONTEXT_PREFIX}/metadata-url/{'yes' if metadata_url else 'no'}",
+                f"{CONTEXT_PREFIX}/metadata-parent/{'yes' if metadata_parent else 'no'}",
+                f"{CONTEXT_PREFIX}/metadata-span-name/{'yes' if metadata_span_name else 'no'}",
+                f"{CONTEXT_PREFIX}/metadata-origin/{'yes' if metadata_origin else 'no'}",
+                f"{CONTEXT_PREFIX}/metadata-type/{'yes' if metadata_type else 'no'}",
+            ]
+        )
+
+        direct = _mapping(payload.get("direct_custom_span_views"))
+        direct_service = direct.get("with_service")
+        direct_any = direct.get("without_service")
+        service_count = min(_event_count(direct_service), 99)
+        any_count = min(_event_count(direct_any), 99)
+        direct_service_events = _event_summary(direct_service)
+        direct_any_events = _event_summary(direct_any)
+        relation = direct.get("trace_relation")
+        if relation not in _ALLOWED_TRACE_RELATIONS:
+            relation = "none"
+        contexts.extend(
+            [
+                f"{CONTEXT_PREFIX}/custom-direct-service/{service_count}",
+                f"{CONTEXT_PREFIX}/custom-direct-any/{any_count}",
+                f"{CONTEXT_PREFIX}/custom-direct-trace/{relation}",
+                f"{CONTEXT_PREFIX}/custom-direct-precios/{'yes' if (_has_precios(direct_service_events) or _has_precios(direct_any_events)) else 'no'}",
+                f"{CONTEXT_PREFIX}/custom-direct-parent/{'yes' if (_has_metadata(direct_service_events, 'parentSpanId') or _has_metadata(direct_any_events, 'parentSpanId')) else 'no'}",
             ]
         )
 
