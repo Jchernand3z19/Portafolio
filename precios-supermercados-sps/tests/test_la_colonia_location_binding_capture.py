@@ -91,13 +91,15 @@ def test_live_is_double_blocked_by_default() -> None:
     assert result.extraction_enabled is False
 
 
-def test_even_injected_active_id_cannot_run_live_while_fuse_is_disabled() -> None:
+def test_live_runtime_cannot_override_allow_list_or_fuse() -> None:
     result = capture.run_capture(
         authorization_id=SYNTHETIC_AUTH,
         active_ids={SYNTHETIC_AUTH},
+        live_execution_enabled=True,
     )
-    assert result.stop_reason == "live_execution_disabled"
+    assert result.stop_reason == "live_runtime_overrides_forbidden"
     assert result.browser_started is False
+    assert result.target_navigation_started is False
 
 
 def test_authorization_format_and_consumption_are_fail_closed() -> None:
@@ -225,17 +227,36 @@ def test_weak_store_session_change_does_not_falsely_confirm_city(local_site) -> 
     assert result.binding_report["technical_binding_observed"] is False
 
 
-def test_live_target_must_be_exact_home_even_if_fuses_are_injected() -> None:
+def test_live_target_must_be_exact_home_before_any_browser_start() -> None:
     result = capture.run_capture(
         authorization_id=SYNTHETIC_AUTH,
-        active_ids={SYNTHETIC_AUTH},
-        live_execution_enabled=True,
         network_policy="live",
         target_url="https://example.com/",
     )
     assert result.browser_started is False
     assert result.target_navigation_started is False
     assert result.stop_reason == "live_target_not_exact_la_colonia_home"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://www.lacolonia.com/",
+        "https://www.lacolonia.com/producto",
+        "https://www.lacolonia.com/?x=1",
+        "https://www.lacolonia.com/#fragment",
+        "https://www.lacolonia.com:444/",
+        "https://user@www.lacolonia.com/",
+    ],
+)
+def test_live_target_rejects_home_lookalikes(url: str) -> None:
+    result = capture.run_capture(
+        authorization_id=SYNTHETIC_AUTH,
+        network_policy="live",
+        target_url=url,
+    )
+    assert result.stop_reason == "live_target_not_exact_la_colonia_home"
+    assert result.browser_started is False
 
 
 def test_public_result_rejects_any_attempt_to_grant_authority() -> None:
