@@ -9,9 +9,8 @@ Proyecto para recolectar, normalizar, validar, historizar y comparar precios de 
 
 Corte verificado al **2026-08-22 (America/Tegucigalpa)**:
 
-- `main`: `b4588d7425601963cc64cc6eec779fdbe9492b05` al abrir este corte documental;
-- último PR técnico integrado: **#148**;
-- última suite completa observada: **1418/1418 pruebas aprobadas** + `compileall`;
+- base técnica del corte: `da342bf9439e260a8bc213c8c83e805412c5741d` (merge de **#154**);
+- última suite completa observada: **1462/1462 pruebas aprobadas** + `compileall`;
 - GATE-17: `PASS_PRODUCTIVE_EVIDENCE`;
 - no existe autorización live activa para La Colonia;
 - `READY_FOR_LIVE=NO`;
@@ -21,7 +20,9 @@ Corte verificado al **2026-08-22 (America/Tegucigalpa)**:
 
 La sonda Cloudflare contra infraestructura propia **sí fue ejecutada físicamente**. El run `32551882793` demostró OIDC, Durable Object, fetch al origen controlado y receipt Ed25519; un verifier-only posterior revalidó firma/bytes/identidad. La reconciliación estricta del custom span contra la API pública de Workers Observability permanece sin cerrar porque esa API no expone el detalle requerido. El verificador no se rebajó para fabricar un PASS.
 
-La persistencia Google Sheets está implementada **offline** hasta el adapter read-modify-write, rehidratación durable, bootstrap manual y batch comercial. No se considera productiva todavía porque no se ha observado una escritura real con la configuración externa prevista.
+La persistencia Google Sheets está implementada **offline** hasta el adapter read-modify-write, rehidratación/restauración durable, bootstrap manual y batch comercial. PR #150–#153 añadieron además guard de autoridad, binding durable de replay y un loader read-only Google Sheets → estado comercial restaurado. No se considera productiva todavía porque no se ha observado una escritura real con la configuración externa prevista.
+
+PR #154 añadió una proyección semántica read-only para Power BI que centraliza precio actual, baseline histórico aceptado, ahorro real, dirección del precio, precio regular reportado, promoción, disponibilidad, certeza de ubicación y estado de revisión. Power BI no debe recalcular estas reglas por su cuenta.
 
 La Colonia SPS continúa deliberadamente bloqueada:
 
@@ -32,9 +33,9 @@ source_location_key = null
 extraction_enabled = false
 ```
 
-PR #145–#148 dejaron preparada una radiografía mínima y sanitizada para decidir si el contexto comercial varía por `city` o por `store`. Su workflow sigue con `if: ${{ false }}`, el fuse live está apagado y la allow-list de autorizaciones está vacía.
+PR #145–#148 dejaron preparada una radiografía mínima y sanitizada para decidir si el contexto comercial varía por `city` o por `store`. Su workflow sigue bloqueado, el fuse live está apagado y la allow-list de autorizaciones está vacía.
 
-**El siguiente paso que requiere intervención humana es una nueva autorización explícita para esa única radiografía de ubicación.** Esa autorización no cubriría crawl, smoke, facets, GraphQL replay ni persistencia de precios.
+**Cualquier siguiente acción live sobre La Colonia requiere una nueva autorización humana explícita.** Mientras tanto pueden seguir avanzando verificaciones offline y de infraestructura de storage que no contacten la fuente.
 
 ## Contratos protegidos
 
@@ -71,33 +72,36 @@ fact_scrape_runs
 fact_quality_events
 ```
 
-El diseño ya protege estas reglas:
+El diseño protege estas reglas:
 
 - una sola estructura para todos los supermercados;
-- current/history rehidratables entre runners;
+- current/history rehidratables y restaurables entre runners;
 - nuevo periodo sólo ante un cambio comercial relevante;
 - todo run final queda registrado aunque no haya cambios;
+- replay durable idéntico se reconoce por evidencia ligada; divergencia falla;
 - runs rechazados/fallidos no contaminan current/history;
 - materialización del workbook como snapshot completo;
-- escritura atómica planificada mediante `spreadsheets.batchUpdate`.
+- escritura atómica planificada mediante `spreadsheets.batchUpdate`;
+- lectura de Google Sheets separada de la frontera de escritura;
+- ninguna decisión caller-controlled puede conceder autoridad productiva.
 
 BigQuery y Cloud Run se reservan para una fase posterior, cuando el proceso esté estable.
 
 ## Power BI
 
-Power BI será el dashboard del proyecto. El dataset deberá permitir, como mínimo:
+Power BI será el dashboard del proyecto. La proyección semántica offline ya expone, entre otros:
 
 - producto, marca y presentación;
-- supermercado y ubicación comercial correcta;
+- supermercado y ubicación + certeza de ubicación;
 - precio actual;
-- precio histórico anterior;
+- precio histórico aceptado anterior;
+- monto/porcentaje de reducción real y dirección del precio;
 - precio regular/referencia declarado por la tienda como dato separado;
 - promoción y disponibilidad;
-- fecha de observación;
-- historial de cambios;
-- detección de ofertas reales por comparación histórica.
+- estado de revisión de la normalización;
+- fecha de observación y runs de referencia.
 
-No se conecta Power BI a datos de La Colonia hasta cerrar binding, aceptación y persistencia productiva.
+El dataset/refresh productivo sigue bloqueado hasta disponer de persistencia comercial autoritativa.
 
 ## Orden de avance
 
@@ -107,10 +111,12 @@ radiografía y binding de ubicación
 -> aceptación autoritativa
 -> Google Sheets productivo
 -> ejecución diaria
--> Power BI
+-> dataset/refresh Power BI
 -> cerrar La Colonia end-to-end
 -> supermercado #2
 ```
+
+Sin tocar La Colonia todavía puede verificarse la configuración externa prevista de Google Sheets y la seguridad del bootstrap.
 
 ## Pruebas
 
@@ -126,7 +132,7 @@ La suite también cubre componentes Node del edge Cloudflare y auditoría fail-c
 Último resultado completo observado antes de esta actualización documental:
 
 ```text
-1418 passed
+1462 passed
 compileall PASS
 ```
 
@@ -134,4 +140,4 @@ compileall PASS
 
 Sin una autorización humana explícita y vigente están prohibidos nuevos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl hacia La Colonia.
 
-No se inventan ni reutilizan authorization IDs. `production_authority` y `catalog_accepted` sólo pueden cambiar por una frontera explícita que aporte evidencia suficiente; una prueba offline o una radiografía de ubicación no los concede.
+No se inventan ni reutilizan authorization IDs. `production_authority` y `catalog_accepted` sólo pueden cambiar por una frontera explícita que aporte evidencia suficiente; una prueba offline, un fingerprint de replay o una radiografía de ubicación no los concede.
