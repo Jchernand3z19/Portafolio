@@ -1,0 +1,12 @@
+# Dependencias y estado local de Wrangler
+node_modules/
+.wrangler/
+
+# Secrets/configuración local de Cloudflare
+.dev.vars
+.dev.vars.*
+*.secrets.json
+*.secrets.env
+
+# Artefactos temporales de despliegue
+.wrangler-secrets-*
