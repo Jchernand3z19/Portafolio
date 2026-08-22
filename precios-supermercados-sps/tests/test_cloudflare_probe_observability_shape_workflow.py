@@ -44,7 +44,7 @@ def test_shape_diagnostic_uses_exact_marker_push_on_main_only():
     condition = job["if"]
     assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
     assert "github.ref == 'refs/heads/main'" in condition
-    assert "github.actor == 'Jchernand3z19'" in condition
+    assert "github.actor" not in condition
     assert job["environment"] == "cloudflare-probe"
     assert "id-token" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in raw
