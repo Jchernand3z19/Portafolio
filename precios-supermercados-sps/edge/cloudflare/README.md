@@ -1,8 +1,15 @@
 # Cloudflare edge provenance
 
-Estado en `main`: **IMPLEMENTADO OFFLINE / NO DESPLEGADO / NO LIVE / SIN AUTORIDAD PRODUCTIVA**.
+Estado en `main`: **IMPLEMENTADO OFFLINE / NO DESPLEGADO / NO LIVE LA-COLONIA / SIN AUTORIDAD PRODUCTIVA**.
 
-Este directorio contiene la frontera edge seleccionada para Cloudflare Workers. Las pruebas no contactan La Colonia, no crean recursos remotos y no conceden `production_authority` ni `catalog_accepted`.
+Este directorio contiene la frontera edge seleccionada para Cloudflare Workers y la sonda aislada previa contra origen controlado. Las pruebas offline no contactan La Colonia, no crean recursos remotos y no conceden `production_authority` ni `catalog_accepted`.
+
+CI observada tras PR #89:
+
+```text
+1231/1231 tests PASS
+compileall PASS
+```
 
 ## Worker productivo preparado
 
@@ -24,7 +31,7 @@ Secret names requeridos, sin valores en Git:
 
 La private key de receipts debe existir únicamente en Cloudflare. **No debe copiarse a GitHub Secrets.**
 
-## Fronteras implementadas offline
+## Fronteras productivas implementadas offline
 
 - JSON y timestamps canónicos;
 - SHA-256 y base64url canónico;
@@ -71,13 +78,12 @@ production_authority = false
 
 mientras falte evidencia productiva real.
 
-## Contrato público productivo preparado
+## Contrato productivo preparado
 
-El Worker productivo acepta rutas autenticadas específicas, entre ellas inicialización/ejecución del gateway y rutas estructurales previstas por la implementación.
-
-La identidad productiva OIDC queda fijada a:
+La identidad OIDC queda fijada a:
 
 - repositorio `Jchernand3z19/Portafolio`;
+- repository ID esperado;
 - ref `refs/heads/main`;
 - workflow live canónico en `main`;
 - environment `la-colonia-live`;
@@ -94,23 +100,141 @@ El caller no puede sustituir:
 - page size/orden/IDs canónicos derivados por la aplicación;
 - pacing por debajo del mínimo.
 
+El allowlist productivo de La Colonia **no se amplía para pruebas**.
+
 ## Sonda controlada no-La-Colonia
 
-PR #84 prepara una sonda físicamente separada para probar Cloudflare antes de contactar La Colonia. A la fecha de este README, obtuvo **1212/1212** en CI pero todavía no forma parte de `main`.
+La sonda está integrada offline mediante PR #84, #88 y #89. Su objetivo es probar Cloudflare físicamente antes de cualquier request a La Colonia.
 
-La sonda propuesta usa:
+### Workers y configuración
+
+`wrangler.probe-origin.json`:
+
+```text
+name = precios-sps-controlled-origin
+entrypoint = src/probe-origin.mjs
+```
+
+`wrangler.probe.json`:
+
+```text
+name = precios-sps-controlled-probe
+entrypoint = src/probe-worker.mjs
+Durable Object = ProbeLedger
+version metadata = CF_VERSION_METADATA
+tracing = enabled / head_sampling_rate 1
+```
+
+Secrets Cloudflare de sonda:
+
+```text
+PROBE_ORIGIN_URL
+PROBE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL
+PROBE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
+```
+
+La private key de sonda también queda exclusivamente en Cloudflare.
+
+### Separación del contrato productivo
+
+La sonda usa:
 
 - Worker de origen controlado `workers.dev`;
-- Worker gateway distinto;
+- gateway distinto;
 - Durable Object `ProbeLedger` distinto;
-- environment/audience OIDC distintos;
+- environment `cloudflare-probe`;
+- audience `urn:precios-sps:cloudflare:probe:v1`;
 - llaves Ed25519 y signing key ID distintos;
-- schema `probe-1` y dominio de firma distintos;
-- origen fijado mediante binding Cloudflare, no input del caller.
+- schema `probe-1`;
+- dominio criptográfico distinto;
+- origen fijado en Cloudflare, nunca por input del caller.
 
-La Colonia es rechazada antes de cualquier fetch y un receipt de sonda no puede validarse como receipt productivo.
+La Colonia se rechaza antes de cualquier fetch. Un receipt de sonda no puede validarse como receipt productivo.
 
-Integrar o ejecutar esa sonda **no** habilita el workflow live de La Colonia.
+### Evidencia de sonda
+
+Cadena:
+
+```text
+GitHub OIDC job sin checkout
+-> ProbeLedger
+-> custom span obligatorio
+-> fetch al Worker controlado
+-> body/challenge exactos
+-> receipt Ed25519
+-> artifact sanitizado
+-> verifier job sin OIDC
+-> public key confiable
+-> Workers Observability
+-> custom span único + child fetch único
+-> reconciliación contra receipt
+```
+
+`probe-trace-context.mjs` exige `span.isTraced === true` antes de permitir el fetch.
+
+`cloudflare_controlled_probe_verifier.py` verifica fuera del Worker:
+
+- firma Ed25519;
+- SHA/tamaño/body;
+- request canónico;
+- evidence ID;
+- repo/ref/workflow/environment/commit/run/attempt;
+- Durable Object name;
+- destino `workers.dev`.
+
+`cloudflare_controlled_probe_observability.py` exige:
+
+- trace único;
+- custom span único;
+- único child `fetch`;
+- service/version Cloudflare consistentes;
+- URL exacta del origen controlado;
+- `GET`, HTTP 200 y body size exacto;
+- timestamps compatibles con el receipt.
+
+`cloudflare_observability_http_transport.py` limita la consulta externa a:
+
+```text
+https://api.cloudflare.com/client/v4/accounts/{account_id}/workers/observability/telemetry/query
+```
+
+sin redirects ni retries y con payload/respuesta acotados.
+
+Ninguna salida de sonda puede establecer `catalog_accepted` o `production_authority`.
+
+## GitHub Environment de sonda
+
+Environment:
+
+```text
+cloudflare-probe
+```
+
+Secrets:
+
+```text
+CLOUDFLARE_PROBE_GATEWAY_URL
+CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN
+```
+
+Variables:
+
+```text
+CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL
+CLOUDFLARE_ACCOUNT_ID
+```
+
+El token de Observability debe estar separado de cualquier credencial de deploy y no tener `Workers Scripts Write`.
+
+## Workflow de sonda
+
+`.github/workflows/precios-supermercados-sps-cloudflare-probe.yml` es sólo `workflow_dispatch`.
+
+- `controlled-probe` tiene `id-token: write` pero **no hace checkout**;
+- `verify-evidence` hace checkout inmutable pero **no tiene OIDC**;
+- el token de Workers Observability sólo llega al paso de reconciliación del segundo job;
+- no existen inputs de origin URL o autoridad;
+- el workflow no invoca ningún script live de La Colonia.
 
 ## Validación offline
 
@@ -124,18 +248,24 @@ La suite Python ejecuta también la suite Node y cruza Python/JavaScript para:
 - structural runtime;
 - observability attributes;
 - configuración Wrangler;
+- sonda aislada y rechazo de La Colonia;
+- firma de sonda verificada fuera del Worker;
+- tracing fail-closed;
+- reconciliation de Workers Observability;
+- transporte fijo de API Cloudflare;
 - invariantes de no-authority.
 
-## Estado productivo pendiente
+## Estado externo pendiente
 
-Todavía no se ha demostrado:
+No se ha demostrado todavía:
 
-- Worker/DO desplegados remotamente;
-- private key real alojada en Cloudflare;
-- OIDC real desde GitHub consumido por el Worker;
+- Workers/DO desplegados remotamente;
+- private key real de sonda alojada en Cloudflare;
+- OIDC real desde GitHub consumido por el Worker de sonda;
 - `CF_VERSION_METADATA` real observado;
-- receipts emitidos por un runtime remoto;
+- receipt de sonda emitido por runtime remoto;
 - spans reales de Workers Observability reconciliados;
+- Worker/DO productivos desplegados;
 - enforcement productivo completo;
 - SPS técnico;
 - autorización live nueva;
@@ -143,4 +273,4 @@ Todavía no se ha demostrado:
 
 Por eso `trusted_collector_provenance_unavailable` continúa cerrando la aceptación canónica.
 
-El siguiente hito externo correcto es una prueba Cloudflare contra **origen controlado no-La-Colonia**. Sólo después se evalúa el despliegue productivo; cualquier request a La Colonia seguirá requiriendo autorización humana explícita aparte.
+El siguiente hito es seguir `docs/cloudflare-controlled-probe-runbook.md`: desplegar y ejecutar exclusivamente la sonda contra el origen controlado. Sólo después se prepara el despliegue productivo; cualquier request a La Colonia seguirá requiriendo autorización humana explícita separada.

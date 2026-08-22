@@ -15,7 +15,8 @@
 3. Reutiliza las fronteras integradas.
 4. Distingue hechos productivos, pruebas offline e hipótesis.
 5. `docs/arquitectura.md` es la fuente canónica de estado y debe actualizarse cuando cambie un hecho verificable.
-6. Cuerpos de PR, comentarios y ramas históricas son evidencia/historia, no autoridad operativa.
+6. `docs/cloudflare-controlled-probe-runbook.md` es el procedimiento canónico de la primera prueba física Cloudflare no-La-Colonia.
+7. Cuerpos de PR, comentarios y ramas históricas son evidencia/historia, no autoridad operativa.
 
 ## Contratos protegidos
 
@@ -25,14 +26,17 @@
 
 Estado canónico al **2026-08-21 (America/Tegucigalpa)**:
 
-- PR #83 está integrado y separa readiness técnica de autoridad productiva.
-- Suite integrada: **1209/1209** + `compileall`.
+- PR #83 separa readiness técnica de autoridad productiva.
+- PR #84 integra la sonda Cloudflare no-La-Colonia aislada.
+- PR #88 integra verificación Ed25519 independiente fuera del Worker emisor.
+- PR #89 integra tracing fail-closed y reconciliación contra Workers Observability para la sonda.
+- CI observada de PR #89: **1231/1231** + `compileall`.
 - GATE-17: `PASS_PRODUCTIVE_EVIDENCE`.
-- Cloudflare Worker/Durable Object/OIDC/Ed25519/Workers Observability: `DONE_OFFLINE`, **no desplegado**.
+- Cloudflare productivo Worker/Durable Object/OIDC/Ed25519/Workers Observability: `DONE_OFFLINE`, **no desplegado**.
 - Structural discovery autenticado: `DONE_OFFLINE`.
 - Plan/transporte/finalización autenticada de catálogo: `DONE_OFFLINE`.
 - Readiness técnica: `DONE_OFFLINE`; siempre mantiene `catalog_accepted=false` y `production_authority=false` sin evidencia productiva.
-- PR #84 prepara una sonda Cloudflare no-La-Colonia; obtuvo 1212/1212 en CI pero no debe contarse como integrado mientras siga fuera de `main`.
+- Sonda Cloudflare: `DONE_OFFLINE / READY_FOR_EXTERNAL_DEPLOYMENT`, **no desplegada ni ejecutada**.
 - Backend comercial productivo: no conectado.
 
 ## Autorizaciones y tráfico live
@@ -83,19 +87,55 @@ La private key del collector debe existir únicamente en Cloudflare. Nunca la pu
 
 ### Sonda controlada no-La-Colonia
 
-La sonda preparada en PR #84 es deliberadamente independiente:
+La sonda integrada es deliberadamente independiente:
 
-- Worker de origen controlado separado;
-- gateway/DO separado;
+- Worker `precios-sps-controlled-origin` separado;
+- Worker `precios-sps-controlled-probe` separado;
+- Durable Object `ProbeLedger` separado;
 - OIDC audience/environment separados;
 - llaves y signing key ID separados;
-- schema y dominio criptográfico separados;
-- origen fijado por binding Cloudflare, nunca por input del caller;
+- schema `probe-1` y dominio criptográfico separados;
+- origen fijado por Cloudflare, nunca por input del caller;
 - sólo HTTPS `*.workers.dev` y path exacto;
 - La Colonia rechazada antes de cualquier fetch;
+- tracing obligatorio con `head_sampling_rate=1` y `span.isTraced=true` antes del fetch;
+- receipt Ed25519 verificado por un job GitHub distinto al job OIDC;
+- el job OIDC no hace checkout;
+- el job verificador no tiene `id-token: write`;
+- Workers Observability se consulta con credencial separada y se exige un custom span + un único child fetch;
 - cero autoridad de catálogo.
 
-No ejecutes el workflow de sonda antes de que sus Workers estén realmente desplegados/configurados. Ejecutar una sonda contra origen controlado **no** autoriza posteriormente tráfico a La Colonia.
+No ejecutes el workflow de sonda antes de que sus Workers estén realmente desplegados/configurados según `docs/cloudflare-controlled-probe-runbook.md`. Ejecutar una sonda contra origen controlado **no** autoriza posteriormente tráfico a La Colonia.
+
+### Secrets y variables de sonda
+
+Cloudflare Worker de sonda requiere:
+
+```text
+PROBE_ORIGIN_URL
+PROBE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL
+PROBE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
+```
+
+La private key anterior sólo puede vivir en Cloudflare.
+
+GitHub Environment `cloudflare-probe` requiere:
+
+Secrets:
+
+```text
+CLOUDFLARE_PROBE_GATEWAY_URL
+CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN
+```
+
+Variables:
+
+```text
+CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL
+CLOUDFLARE_ACCOUNT_ID
+```
+
+El token de Observability no debe tener `Workers Scripts Write`; limítalo a la cuenta necesaria y al permiso de Workers Observability requerido por la API vigente.
 
 ## Frontera comercial
 
@@ -108,6 +148,8 @@ Reglas críticas:
 - ausencia de oferta en un payload no implica baja;
 - `reported_regular_price` no demuestra ahorro real;
 - ahorro real compara el `current_price` actual contra el `current_price` del periodo aceptado inmediatamente anterior.
+
+La ausencia de backend productivo en esta etapa es intencional: no crear un storage adapter sólo para aparentar avance mientras falta la frontera de autoridad.
 
 ## Archivo operacional protegido
 
@@ -144,10 +186,11 @@ La suite Python invoca también las pruebas Node relevantes del edge Cloudflare.
 
 ### Cloudflare
 
-- usa únicamente fixtures, mocks o loopback/offline salvo despliegue externo expresamente preparado;
+- usa únicamente fixtures, mocks o loopback/offline salvo la sonda externa expresamente preparada;
 - una prueba contra origen controlado `workers.dev` no debe reutilizar credenciales/llaves productivas;
 - no simules un deploy y lo declares productivo;
-- valida negativos: host incorrecto, redirects, replay, firma alterada, claims incorrectos y sustitución de evidencia.
+- valida negativos: host incorrecto, redirects, replay, firma alterada, claims incorrectos, tracing ausente, fetch duplicado y sustitución de evidencia;
+- no conviertas un PASS de sonda en `catalog_accepted`.
 
 ### Workflows
 

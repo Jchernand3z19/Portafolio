@@ -1,8 +1,10 @@
 # Trusted collector productivo — arquitectura Cloudflare vigente
 
-Estado: **IMPLEMENTACIÓN OFFLINE AVANZADA / NO DESPLEGADA / SIN AUTORIDAD PRODUCTIVA**.
+Estado: **IMPLEMENTACIÓN OFFLINE AVANZADA / SONDA CONTROLADA COMPLETA OFFLINE / NO DESPLEGADA / SIN AUTORIDAD PRODUCTIVA**.
 
 Este documento describe la ruta vigente para cerrar provenance física del collector. **No autoriza tráfico live a La Colonia.** La fuente canónica de estado general sigue siendo `docs/arquitectura.md`.
+
+El procedimiento reproducible para la primera prueba externa está en `docs/cloudflare-controlled-probe-runbook.md`.
 
 ## Diseño histórico supersedido
 
@@ -149,6 +151,14 @@ Se valida, entre otros:
 
 No se acepta sustituir una página válida por otra página también válida que comparta metadatos parciales.
 
+El transporte HTTP compartido para telemetría está cerrado a:
+
+```text
+https://api.cloudflare.com/client/v4/accounts/{account_id}/workers/observability/telemetry/query
+```
+
+con `POST`, HTTPS, host/path exactos, sin redirects ni retries ocultos. El token de Observability se mantiene separado del job que solicita OIDC.
+
 ## 7. Structural discovery
 
 La cadena estructural vigente puede producir offline una `VerifiedStructuralDiscovery` mediante:
@@ -201,25 +211,31 @@ No se aceptan sustitutos como:
 
 ## 10. Sonda controlada previa a La Colonia
 
-Antes de desplegar/probar el collector productivo contra La Colonia, debe probarse Cloudflare físicamente contra un origen controlado que **no sea La Colonia**.
+La sonda aislada no-La-Colonia ya está **integrada en `main` y completa offline**. PR #84 añadió la infraestructura base; PR #88 añadió verificación criptográfica independiente fuera del Worker emisor; PR #89 añadió reconciliación con Workers Observability. El último CI observado para esta cadena pasó **1231/1231 pruebas** más `compileall`.
 
-PR #84 prepara esa sonda y, a la fecha de este documento, está fuera de `main` aunque su CI pasó 1212/1212.
-
-Diseño:
+Diseño integrado:
 
 ```text
 GitHub workflow manual
--> environment cloudflare-probe
--> OIDC audience de sonda
--> Worker de sonda
--> Durable Object ProbeLedger
--> PROBE_ORIGIN_URL fijado en Cloudflare
--> Worker de origen controlado *.workers.dev
--> challenge exacto
--> receipt Ed25519 probe-1
+-> job controlled-probe
+   -> environment cloudflare-probe
+   -> GitHub OIDC, sin checkout del repositorio
+   -> Worker gateway de sonda
+   -> Durable Object ProbeLedger
+   -> PROBE_ORIGIN_URL fijado en Cloudflare
+   -> Worker de origen controlado *.workers.dev
+   -> challenge exacto
+   -> receipt Ed25519 probe-1
+-> artifact sanitizado
+-> job verify-evidence, sin id-token: write
+   -> checkout inmutable
+   -> verificación Ed25519 con public key confiada desde GitHub Environment
+   -> consulta Workers Observability con token separado
+   -> custom span único + child fetch único
+   -> reconciliación release/URL/status/body/timestamps/commit/run
 ```
 
-Separaciones obligatorias:
+Separaciones obligatorias ya probadas offline:
 
 - Worker/DO distintos a producción;
 - llaves distintas;
@@ -229,27 +245,33 @@ Separaciones obligatorias:
 - dominio criptográfico distinto;
 - caller sin input de origin URL;
 - destino sólo HTTPS `*.workers.dev` y path exacto;
-- La Colonia rechazada antes del fetch;
+- La Colonia rechazada antes de cualquier fetch;
+- job OIDC sin checkout;
+- job verificador sin capacidad OIDC;
+- token de Observability separado del job OIDC;
 - un receipt de sonda no verifica como receipt productivo;
+- tracing fail-closed si el custom span no está muestreado;
 - cero `catalog_accepted` y cero `production_authority`.
+
+La sonda integrada **todavía no está desplegada ni se ha ejecutado remotamente**. Su existencia en `main` no cambia GATE-06/GATE-18.
 
 ## 11. Pruebas productivas necesarias
 
 ### Etapa A — sonda no-La-Colonia
 
-Una vez disponible una cuenta Cloudflare:
+El procedimiento exacto vive en `docs/cloudflare-controlled-probe-runbook.md`. La secuencia externa es:
 
-1. desplegar el Worker de origen controlado;
+1. desplegar `precios-sps-controlled-origin` con `wrangler.probe-origin.json`;
 2. generar un par Ed25519 exclusivo de sonda;
-3. almacenar la private key **sólo en Cloudflare**;
+3. guardar `PROBE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL` y `PROBE_RECEIPT_PUBLIC_KEY_SPKI_B64URL` en el Worker de sonda; la private key nunca se copia a GitHub;
 4. fijar `PROBE_ORIGIN_URL` al Worker de origen controlado;
-5. desplegar gateway/DO de sonda;
-6. configurar environment GitHub `cloudflare-probe` con la URL del gateway;
-7. ejecutar manualmente una sola sonda;
-8. verificar OIDC, DO, version metadata, firma, replay y observability;
-9. verificar que La Colonia recibió **0 requests**.
+5. desplegar `precios-sps-controlled-probe` con `wrangler.probe.json` y su `ProbeLedger` propio;
+6. configurar GitHub Environment `cloudflare-probe` con la URL del gateway, la public key, account ID y un token mínimo para Workers Observability;
+7. ejecutar manualmente `.github/workflows/precios-supermercados-sps-cloudflare-probe.yml` una sola vez;
+8. exigir PASS de verificación Ed25519 externa y PASS de reconciliación Workers Observability;
+9. confirmar release/version metadata, OIDC, DO, único fetch físico y **0 requests a La Colonia**.
 
-La sonda exitosa valida infraestructura, no autoridad de catálogo.
+La sonda exitosa valida infraestructura Cloudflare, **no** autoridad de catálogo.
 
 ### Etapa B — collector productivo sin live
 
@@ -291,6 +313,7 @@ Nunca publicar ni persistir sin sanitizar:
 - private keys;
 - JWT/OIDC tokens;
 - `Authorization`;
+- Cloudflare API tokens;
 - cookies/session IDs;
 - orderForm IDs;
 - direcciones/coordenadas personales;
@@ -307,4 +330,4 @@ catalog_accepted = false
 production_authority = false
 ```
 
-La siguiente prueba externa correcta es la sonda controlada no-La-Colonia; no existe motivo técnico para contactar La Colonia antes de completar ese paso.
+El siguiente hito correcto es desplegar y ejecutar la sonda controlada no-La-Colonia descrita en el runbook. No existe motivo técnico para contactar La Colonia antes de completar ese paso, y aun después cualquier tráfico a La Colonia seguirá requiriendo una autorización humana nueva y separada.
