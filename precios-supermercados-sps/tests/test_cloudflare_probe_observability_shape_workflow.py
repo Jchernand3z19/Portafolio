@@ -64,6 +64,32 @@ def test_shape_diagnostic_uses_controlled_pull_request_target_only():
     assert "workflow_dispatch" not in raw
 
 
+def test_runner_temp_is_resolved_only_after_runner_exists():
+    raw, workflow = _load()
+    assert "${{ runner.temp }}" not in raw
+
+    heartbeat = workflow["jobs"]["publish-trigger-heartbeat"]
+    diagnostic = workflow["jobs"]["inspect-observability-shape"]
+    assert heartbeat["env"] == {
+        "TARGET_PR_NUMBER": "${{ github.event.pull_request.number }}",
+    }
+    assert diagnostic["env"] == {
+        "PROBE_PUBLIC_KEY_SPKI_B64URL": "${{ vars.CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL }}",
+        "CLOUDFLARE_ACCOUNT_ID": "${{ vars.CLOUDFLARE_ACCOUNT_ID }}",
+        "TARGET_PR_NUMBER": "${{ github.event.pull_request.number }}",
+    }
+
+    heartbeat_prepare = heartbeat["steps"][0]["run"]
+    assert 'TRIGGER_COMMENT_PATH="$RUNNER_TEMP/observability-trigger-heartbeat.json"' in heartbeat_prepare
+    assert "export TRIGGER_COMMENT_PATH" in heartbeat_prepare
+    assert "GITHUB_ENV" in heartbeat_prepare
+
+    diagnostic_prepare = diagnostic["steps"][0]["run"]
+    assert 'PROBE_DIAGNOSTIC_COMMENT_PATH="$RUNNER_TEMP/probe-shape-comment.json"' in diagnostic_prepare
+    assert "export PROBE_DIAGNOSTIC_COMMENT_PATH" in diagnostic_prepare
+    assert "GITHUB_ENV" in diagnostic_prepare
+
+
 def test_trigger_heartbeat_is_sanitized_and_has_no_environment_or_repository_code():
     raw, workflow = _load()
     job = workflow["jobs"]["publish-trigger-heartbeat"]
@@ -71,7 +97,6 @@ def test_trigger_heartbeat_is_sanitized_and_has_no_environment_or_repository_cod
     assert job["timeout-minutes"] == "2"
     assert job["env"] == {
         "TARGET_PR_NUMBER": "${{ github.event.pull_request.number }}",
-        "TRIGGER_COMMENT_PATH": "${{ runner.temp }}/observability-trigger-heartbeat.json",
     }
     assert len(job["steps"]) == 2
 
@@ -143,16 +168,17 @@ def test_shape_diagnostic_has_no_gateway_or_physical_fetch_capability():
 
 
 def test_shape_diagnostic_always_publishes_only_sanitized_comment_to_triggering_pr():
-    raw, workflow = _load()
+    _, workflow = _load()
     job = workflow["jobs"]["inspect-observability-shape"]
     assert job["env"]["TARGET_PR_NUMBER"] == "${{ github.event.pull_request.number }}"
-    assert job["env"]["PROBE_DIAGNOSTIC_COMMENT_PATH"] == "${{ runner.temp }}/probe-shape-comment.json"
+    assert "PROBE_DIAGNOSTIC_COMMENT_PATH" not in job["env"]
     steps = job["steps"]
     assert steps[0]["name"] == "Prepare sanitized fallback comment"
     assert "started_without_summary" in steps[0]["run"]
     assert '"contains_no_event_values": True' in steps[0]["run"]
     assert '"production_authority": False' in steps[0]["run"]
     assert '"catalog_accepted": False' in steps[0]["run"]
+    assert "GITHUB_ENV" in steps[0]["run"]
 
     inspect = next(step for step in steps if step["name"] == "Inspect existing telemetry shape")
     assert inspect["env"] == {
