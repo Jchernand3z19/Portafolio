@@ -1,304 +1,310 @@
-# Diseño productivo — Trusted collector y frontera física
+# Trusted collector productivo — arquitectura Cloudflare vigente
 
-Estado: **DISEÑO APROBADO PARA IMPLEMENTACIÓN, NO DESPLEGADO**.
+Estado: **IMPLEMENTACIÓN OFFLINE AVANZADA / NO DESPLEGADA / SIN AUTORIDAD PRODUCTIVA**.
 
-Este documento define la arquitectura productiva elegida para cerrar la provenance física del collector de La Colonia y GATE-06/GATE-18. No autoriza tráfico live, no crea infraestructura y no sustituye una prueba productiva posterior.
+Este documento describe la ruta vigente para cerrar provenance física del collector. **No autoriza tráfico live a La Colonia.** La fuente canónica de estado general sigue siendo `docs/arquitectura.md`.
+
+## Diseño histórico supersedido
+
+La propuesta anterior basada en **Cloud Run + VPC + Secure Web Proxy + Cloud Logging + Cloud KMS** queda **SUPERSEDED**. Fue una alternativa de diseño, no infraestructura desplegada, y ya no debe usarse como descripción de la arquitectura actual ni como condición obligatoria para cerrar los gates.
+
+La ruta activa de ingeniería es:
+
+**Cloudflare Workers + Durable Objects + GitHub OIDC + Ed25519 + Workers Observability.**
 
 ## 1. Problema que debe resolver
 
-El evaluador canónico actual añade deliberadamente `trusted_collector_provenance_unavailable` porque las páginas y digests se construyen dentro del mismo proceso que llama al evaluador. Una marca, HMAC local, digest o booleano generado por ese mismo proceso no demuestra que haya ocurrido una solicitud HTTP física independiente.
-
-La solución productiva debe demostrar, de forma fail-closed, que:
-
-1. el request físico salió por una ruta de red controlada;
-2. la política de egress permitió exactamente ese destino;
-3. el request fue ejecutado por el runtime autorizado y no por el caller;
-4. la respuesta usada por el crawler corresponde a ese request físico;
-5. dos recorridos de reconciliación representan solicitudes físicas distintas;
-6. la evidencia no puede ser fabricada por GitHub Actions, por el caller del evaluador ni por un PR no integrado;
-7. la ausencia de logs, firma, correlación o cierre físico impide la aceptación.
-
-## 2. Arquitectura elegida
+La aceptación canónica añade deliberadamente:
 
 ```text
-GitHub Actions / controller
-        |
-        | OIDC / Workload Identity Federation
-        v
-Cloud Run Job: collector autoritativo
-        |
-        | Direct VPC egress = all-traffic
-        v
-Subred dedicada de collector
-        |
-        | ruta next-hop / policy-based route
-        v
-Secure Web Proxy (default deny)
-        |
-        | allowlist mínima La Colonia/VTEX
-        v
-Internet
-
-collector -> Cloud KMS collector-receipt-key -> recibo firmado
-Secure Web Proxy -> Cloud Logging -> transacción independiente
-
-recibos + logs
-        v
-Cloud Run: provenance verifier
-        |
-        | verifica firma + correlación física + unicidad
-        v
-Cloud KMS verifier-attestation-key
-        |
-        v
-attestation final firmada
-        |
-        v
-GATE-18 / catalog_accepted
+trusted_collector_provenance_unavailable
 ```
 
-### Componentes
+porque datos, labels, digests o booleanos producidos por el mismo caller no demuestran por sí solos una solicitud física independiente.
 
-**Controller (GitHub Actions)**
+La frontera productiva debe demostrar de forma fail-closed que:
 
-- sólo orquesta;
-- autentica a Google Cloud mediante OIDC/Workload Identity Federation, sin claves estáticas;
-- puede invocar el collector/verifier autorizados;
-- no posee permiso de firma KMS;
-- no posee capacidad directa para generar provenance aceptable;
-- los jobs live permanecen bloqueados hasta una autorización humana live nueva.
+1. un runtime externo autorizado realizó el request físico;
+2. el caller no eligió arbitrariamente destino, request o identidad de ejecución;
+3. la respuesta consumida corresponde exactamente a ese request;
+4. la identidad GitHub autorizada está ligada a repo/ref/workflow/environment/commit/run;
+5. receipt, respuesta cruda y observability reconcilian uno a uno;
+6. replay o sustitución de evidencia no puede crear otra solicitud válida;
+7. primary/reconciliation representan evidencias físicas independientes;
+8. ausencia o inconsistencia de evidencia mantiene la aceptación cerrada.
 
-**Collector autoritativo (Cloud Run Job)**
-
-- ejecuta una imagen inmutable construida desde código integrado/protegido;
-- usa una service account exclusiva;
-- usa Direct VPC egress con `all-traffic` hacia una subred dedicada;
-- no dispone de una salida directa a Internet fuera de la ruta controlada;
-- la subred del collector se dirige al Secure Web Proxy en modo next-hop;
-- calcula el SHA-256 de request canónico y bytes crudos de respuesta;
-- emite un recibo firmado con una clave asimétrica de Cloud KMS;
-- no puede leer/alterar los logs independientes usados por el verifier.
-
-**Secure Web Proxy (SWP)**
-
-- política default-deny;
-- permite únicamente hosts/rutas/métodos explícitamente requeridos por la ejecución autorizada;
-- registra cada transacción mediada en Cloud Logging;
-- el despliegue productivo debe demostrar que el collector no puede alcanzar Internet si se elimina/deshabilita la ruta al proxy;
-- no se crea Cloud NAT independiente para el collector que permita un bypass de SWP.
-
-Se elige **next-hop routing** sobre un proxy meramente explícito para que la aplicación no pueda decidir voluntariamente omitir el proxy. La aceptación del despliegue debe probar que la ruta aplica realmente a los IPs de Direct VPC egress del collector.
-
-**Cloud Logging**
-
-Los transaction logs de SWP son evidencia independiente del proceso collector. El verifier debe correlacionar como mínimo host, path, método, tiempos, status, tamaño de respuesta, acción de policy, IP/origen y, cuando esté disponible en la entrada correspondiente, la service account cliente.
-
-**Cloud KMS — collector receipt**
-
-- clave con purpose `ASYMMETRIC_SIGN`;
-- la private key no sale de KMS;
-- sólo la service account del collector recibe `cloudkms.cryptoKeyVersions.useToSign` sobre esa clave;
-- controller, verifier y GitHub no reciben ese permiso;
-- el verifier usa la public key/version esperada para validar recibos.
-
-**Provenance verifier**
-
-- service account separada;
-- puede leer exclusivamente los logs necesarios de SWP;
-- no puede ejecutar requests hacia La Colonia;
-- no puede firmar como collector;
-- reconcilia cada recibo firmado contra una transacción física de SWP;
-- verifica que una transacción no se reutilice para dos requests lógicos;
-- exige traversals independientes para primary/reconciliation;
-- produce una attestation final firmada con **otra** clave KMS (`verifier-attestation-key`);
-- sólo esa attestation verificada puede retirar `trusted_collector_provenance_unavailable` en el evaluador productivo.
-
-## 3. Recibo físico mínimo
-
-El recibo firmado del collector debe usar serialización canónica versionada y contener al menos:
+## 2. Arquitectura vigente
 
 ```text
-schema_version
-run_id
-request_id
-reservation_id
-authorization_id
-approved_commit_sha
-immutable_image_digest
-request_digest
-traversal_id
-traversal_role            # primary | reconciliation
-order_by
-partition_id
-from_index
-to_index
-http_method
-target_scheme
-target_host
-target_path
-canonical_request_sha256
-raw_response_sha256
-response_status
-response_body_bytes
-physical_started_at_utc
-response_completed_at_utc
-collector_service_account
-collector_revision_or_job_execution
-kms_key_version
-nonce
+GitHub Actions en main protegido
+        |
+        | GitHub OIDC
+        v
+Cloudflare Worker productivo
+        |
+        | auth + request validation
+        v
+Durable Object AuthorizationGateway
+        |
+        | budget / pacing / single-flight / replay / fencing
+        v
+request físico exacto permitido
+        |
+        v
+respuesta cruda
+        |
+        +-> SHA-256
+        +-> receipt Ed25519
+        +-> Workers Observability span
+        |
+        v
+verificadores Python
+        |
+        +-> firma/public key
+        +-> body exacto
+        +-> request/receipt/run binding
+        +-> observability reconciliation
+        v
+manifest estructural / catálogo
+        |
+        v
+readiness técnica
 ```
 
-No se incluyen cookies, tokens, JWT, direcciones personales, orderForm IDs ni credenciales en recibos o logs de aplicación.
+La última salida **no** es autoridad productiva mientras Worker/DO/llaves/spans no hayan sido observados en un despliegue real autorizado.
 
-## 4. Attestation final del verifier
+## 3. Worker productivo
 
-La attestation final debe ligar:
+La implementación vive en `edge/cloudflare/`.
+
+Política cerrada actual:
+
+- repo: `Jchernand3z19/Portafolio`;
+- repository ID fijo;
+- ref: `refs/heads/main`;
+- workflow productivo fijado en código;
+- environment: `la-colonia-live`;
+- event: `workflow_dispatch`;
+- audience propia del collector;
+- destino GraphQL de La Colonia fijado por código;
+- método, path, parámetros y variables relevantes validados;
+- órdenes permitidas cerradas;
+- página máxima 50;
+- pacing mínimo 1.5 s;
+- ruta canónica con `max_retries = 0`.
+
+El caller no puede sustituir repo/ref/workflow/environment/audience, host/path, hash GraphQL, collector release, signing key ID, orden arbitrario ni IDs canónicos de traversal.
+
+## 4. Durable Object
+
+`AuthorizationGateway` implementa la frontera durable de ejecución:
+
+- presupuesto de requests;
+- expiración/deadline;
+- reservas one-shot;
+- single-flight;
+- pacing;
+- replay idempotente;
+- fencing por autorización y por `run_id:run_attempt` real del OIDC;
+- persistencia SQLite;
+- recuperación de bytes/evidencia ya completados sin repetir fetch físico.
+
+Una respuesta `WAIT`, `DENY`, estado fallido o evidencia inconsistente no habilita retry oculto.
+
+## 5. Receipt Ed25519
+
+El Worker productivo emite receipts v2 con dominio criptográfico versionado. El receipt liga como mínimo:
+
+- autorización/run/request/reservation;
+- commit aprobado;
+- traversal/role/order/partition/ventana;
+- request digest y request canónico;
+- target scheme/host/path;
+- SHA-256 de respuesta cruda, status y tamaño;
+- tiempos físicos;
+- repo/ref/workflow/environment/run/attempt OIDC;
+- subject/jti;
+- collector provider/principal/execution/release/code SHA;
+- algoritmo/key ID;
+- nonce.
+
+La private key no debe abandonar Cloudflare. GitHub no debe recibirla. Python utiliza únicamente la public key confiada.
+
+Una firma criptográfica válida demuestra integridad/autenticidad respecto de la clave, **no** `production_authority` por sí sola.
+
+## 6. Workers Observability
+
+La capa Python reconcilia los receipts contra evidencia de Workers Observability.
+
+Se valida, entre otros:
+
+- span exacto esperado;
+- request/receipt/evidence IDs;
+- release y commit;
+- run y autorización;
+- target y status;
+- tiempos físicos;
+- unicidad de evidencia;
+- identidad exacta de la página criptográfica que fue observada.
+
+No se acepta sustituir una página válida por otra página también válida que comparta metadatos parciales.
+
+## 7. Structural discovery
+
+La cadena estructural vigente puede producir offline una `VerifiedStructuralDiscovery` mediante:
 
 ```text
-schema_version
-run_id
-authorization_id
-approved_commit_sha
-immutable_image_digest
-collector_receipt_digests[]
-swp_log_insert_ids[]
-primary_traversal_id
-reconciliation_traversal_id
-primary_order_by
-reconciliation_order_by
-verified_request_count
-verification_started_at_utc
-verification_completed_at_utc
-verdict                       # VERIFIED | REJECTED
-reasons[]
-verifier_kms_key_version
+structural request plan
+-> edge structural gateway
+-> signed structural receipt
+-> body validation
+-> structural observability
+-> structural manifest/finalizer
 ```
 
-`VERIFIED` sólo es válido cuando todos los recibos esperados tienen firma válida y una correlación uno-a-uno con logs físicos de SWP.
+Esta salida fija la estructura que luego usa el catálogo. No concede autoridad productiva mientras la evidencia física sea sólo simulada/offline.
 
-## 5. Reglas fail-closed
+## 8. Catálogo autenticado
 
-Cualquiera de los siguientes casos produce `REJECTED` y mantiene `trusted_collector_provenance_unavailable`:
+Después de structural discovery:
 
-- firma KMS ausente/inválida o key version no permitida;
-- attestation final sin firma válida;
-- log SWP ausente, duplicado o ambiguo;
-- log con policy action distinta de ALLOW;
-- host/path/method/status/size incompatibles con el recibo;
-- timestamp fuera de la ventana cerrada de la reserva;
-- service account/origen inesperado;
-- request físico sin recibo o recibo sin request físico;
-- un mismo log físico reclamado por más de un request;
-- primary y reconciliation comparten request/log/nonce;
-- imagen ejecutada distinta del digest autorizado;
-- commit distinto del aprobado;
-- authorization ID inexistente, consumido o no coincidente;
-- pérdida de acceso a Cloud Logging durante la verificación;
-- cualquier ruta alternativa de Internet para el collector;
-- evidencia caller-controlled usada como sustituto de KMS/SWP.
+1. `canonical_authenticated_provenance_plan.py` deriva page size, límites, órdenes e IDs canónicos.
+2. `VerifiedCatalogEdgeCollector` reconstruye internamente las URLs exactas y obtiene páginas sólo mediante gateway + crypto.
+3. Cada página se convierte en `RawPageEvidence` sólo después de verificar firma/body/contexto.
+4. `VerifiedCatalogProvenanceFinalizer` reconcilia cada página con Workers Observability y construye el manifest completo de run.
+5. La identidad entre observación y página criptográfica se exige por objeto exacto, evitando sustituciones.
+6. El manifest exige el conjunto exacto de páginas y unicidad de request/reservation/nonce/receipt/evidence/span.
 
-## 6. Separación IAM mínima
+## 9. Readiness técnica versus autoridad
 
-| Identidad | Puede | No puede |
-|---|---|---|
-| GitHub controller | invocar jobs autorizados mediante WIF | firmar receipts/attestations, escribir logs SWP, egress directo autoritativo |
-| Collector SA | ejecutar collector, usar collector KMS sign | leer logs de verificación, firmar attestation final, administrar red/KMS |
-| Verifier SA | leer logs SWP necesarios, verificar receipts, usar verifier KMS sign | enviar requests a La Colonia, usar collector KMS sign, administrar red |
-| Deploy/Admin | desplegar infraestructura mediante flujo controlado | actuar como runtime normal |
+`la_colonia_catalog_acceptance_readiness.py` existe para evitar una falsa equivalencia entre “todo lo demostrable offline está completo” y “catálogo productivamente aceptado”.
 
-No se almacenan service-account keys JSON en GitHub. La integración GitHub→GCP debe usar OIDC/Workload Identity Federation.
-
-## 7. Controles de red requeridos
-
-1. Cloud Run collector con Direct VPC egress `all-traffic`.
-2. Subred dedicada para el collector.
-3. Secure Web Proxy en modo `NEXT_HOP_ROUTING_MODE` en la misma región.
-4. Route/PBR que capture el egress del rango dedicado y lo entregue a SWP.
-5. Política SWP default-deny.
-6. Allowlist mínima y versionada para el destino autorizado.
-7. Sin Cloud NAT/egress alternativo utilizable por el collector.
-8. Prueba negativa obligatoria: destino no allowlisted debe fallar.
-9. Prueba de bypass obligatoria: sin SWP/ruta válida el collector no debe tener Internet.
-10. Transaction logging de SWP habilitado y accesible sólo al verifier/auditoría.
-
-## 8. Pruebas productivas necesarias antes de cerrar GATE-06/GATE-18
-
-No basta con desplegar recursos. Deben observarse explícitamente:
-
-- un request permitido aparece en SWP logs y produce receipt firmado;
-- un destino no permitido queda DENY y no produce evidencia aceptable;
-- intento de request fuera de SWP no alcanza Internet;
-- receipt modificado falla verificación;
-- receipt duplicado/replay falla;
-- log eliminado/no disponible hace fallar el verdict;
-- receipt sin log falla;
-- log sin receipt falla la completitud de la reserva;
-- primary y reconciliation usan transacciones físicas distintas;
-- controller no puede llamar `asymmetricSign` con ninguna de las dos claves;
-- collector no puede firmar con la clave del verifier;
-- verifier no puede firmar con la clave del collector;
-- una imagen/commit no autorizado falla antes del egress;
-- la autorización one-shot queda consumida y no puede repetirse.
-
-Sólo después de estas pruebas puede cambiarse:
+Puede retornar:
 
 ```text
-GATE-06 -> PASS_PRODUCTIVE_EVIDENCE
-GATE-18 -> elegible para exact final validation
+technical_catalog_complete = true
+ready_for_productive_authority_evidence = true
+catalog_accepted = false
+production_authority = false
 ```
 
-## 9. Integración futura con el código actual
+El reason `trusted_collector_provenance_unavailable` se mantiene. No se elimina hasta una prueba productiva real y una frontera explícita de autoridad.
 
-No se cambia ahora `RawProduct`, `NormalizedOffer` ni `ValidatedOffer`.
+No se aceptan sustitutos como:
 
-La integración productiva debe añadir una frontera nueva fuera de esos contratos:
+- `trusted=True`;
+- `provenance_ok=True`;
+- `catalog_accepted=True` enviado por caller;
+- un marker/archivo/comentario;
+- HMAC o firma generada por el mismo proceso caller;
+- receipt offline sin reconciliación física real.
+
+## 10. Sonda controlada previa a La Colonia
+
+Antes de desplegar/probar el collector productivo contra La Colonia, debe probarse Cloudflare físicamente contra un origen controlado que **no sea La Colonia**.
+
+PR #84 prepara esa sonda y, a la fecha de este documento, está fuera de `main` aunque su CI pasó 1212/1212.
+
+Diseño:
 
 ```text
-SignedPhysicalReceipt
-VerifiedPhysicalRequest
-SignedProvenanceAttestation
+GitHub workflow manual
+-> environment cloudflare-probe
+-> OIDC audience de sonda
+-> Worker de sonda
+-> Durable Object ProbeLedger
+-> PROBE_ORIGIN_URL fijado en Cloudflare
+-> Worker de origen controlado *.workers.dev
+-> challenge exacto
+-> receipt Ed25519 probe-1
 ```
 
-`evaluate_canonical_catalog_coverage()` continuará fail-closed por defecto. Sólo una variante productiva que reciba y verifique una `SignedProvenanceAttestation` auténtica podrá omitir `trusted_collector_provenance_unavailable`.
+Separaciones obligatorias:
 
-No se aceptará una API como `trusted=True`, `provenance_ok=True`, un issuer local, un HMAC con secreto del mismo proceso ni un archivo/marker del repositorio.
+- Worker/DO distintos a producción;
+- llaves distintas;
+- signing key ID distinto;
+- OIDC audience/environment distintos;
+- schema distinto;
+- dominio criptográfico distinto;
+- caller sin input de origin URL;
+- destino sólo HTTPS `*.workers.dev` y path exacto;
+- La Colonia rechazada antes del fetch;
+- un receipt de sonda no verifica como receipt productivo;
+- cero `catalog_accepted` y cero `production_authority`.
 
-## 10. Secuencia de implementación
+## 11. Pruebas productivas necesarias
 
-### Fase A — Preparación humana mínima
+### Etapa A — sonda no-La-Colonia
 
-- proyecto Google Cloud con billing habilitado;
-- región elegida;
-- permisos para crear IAM, Cloud Run, VPC, Secure Web Proxy, Cloud Logging, Cloud KMS y Workload Identity Federation.
+Una vez disponible una cuenta Cloudflare:
 
-### Fase B — Infraestructura sin tráfico a La Colonia
+1. desplegar el Worker de origen controlado;
+2. generar un par Ed25519 exclusivo de sonda;
+3. almacenar la private key **sólo en Cloudflare**;
+4. fijar `PROBE_ORIGIN_URL` al Worker de origen controlado;
+5. desplegar gateway/DO de sonda;
+6. configurar environment GitHub `cloudflare-probe` con la URL del gateway;
+7. ejecutar manualmente una sola sonda;
+8. verificar OIDC, DO, version metadata, firma, replay y observability;
+9. verificar que La Colonia recibió **0 requests**.
 
-- APIs/identidades/WIF;
-- VPC/subred;
-- SWP default-deny;
-- KMS keys;
-- collector/verifier desplegados con endpoint de prueba local/no-La-Colonia;
-- pruebas negativas y de IAM.
+La sonda exitosa valida infraestructura, no autoridad de catálogo.
 
-### Fase C — Validación física controlada
+### Etapa B — collector productivo sin live
 
-Requiere **nueva autorización humana live explícita**. Sólo entonces se habilita una prueba mínima contra La Colonia con presupuesto cerrado.
+Antes de cualquier request a La Colonia deben demostrarse, donde sea posible sin contactar la fuente:
 
-### Fase D — GATE-18
+- despliegue inmutable de Worker/DO productivos;
+- private key productiva alojada únicamente en Cloudflare;
+- public key y code/release bindings correctos;
+- OIDC productivo rechazando workflow/environment incorrectos;
+- replay/fencing/presupuesto fail-closed;
+- Observability accesible y reconciliable;
+- destino alternativo no permitido rechazado antes de fetch.
 
-Con provenance productiva demostrada se ejecuta la validación exacta de catálogo. Recién después puede conectarse persistencia comercial productiva.
+### Etapa C — live mínimo SPS
 
-## 11. Coste y operación
+Requiere **nueva autorización humana explícita**. Sólo entonces se ejecuta una observación mínima bajo presupuesto cerrado para resolver SPS.
 
-Secure Web Proxy tiene coste por instancia/hora y por GB procesado. Por eso no se despliega ni se deja activo por iniciativa del código: billing/proyecto son una frontera humana explícita. Cloud Run, Cloud Logging, KMS y networking también pueden generar cargos según uso/configuración.
+### Etapa D — validación exacta de catálogo
 
-## 12. Referencias oficiales verificadas
+Con SPS y autoridad productiva demostrados, se ejecuta la validación exacta de catálogo. Sólo una decisión autoritativa derivada de esa cadena puede permitir persistencia comercial.
 
-- Cloud Run Direct VPC egress: https://docs.cloud.google.com/run/docs/configuring/vpc-direct-vpc
-- Secure Web Proxy overview: https://docs.cloud.google.com/secure-web-proxy/docs/overview
-- Secure Web Proxy next hop: https://docs.cloud.google.com/secure-web-proxy/docs/deploy-next-hop
-- Secure Web Proxy transaction logs: https://docs.cloud.google.com/secure-web-proxy/docs/view-proxy-transaction-logs
-- Cloud KMS asymmetric signatures: https://docs.cloud.google.com/kms/docs/create-validate-signatures
-- Cloud KMS asymmetricSign API: https://docs.cloud.google.com/kms/docs/reference/rest/v1/projects.locations.keyRings.cryptoKeys.cryptoKeyVersions/asymmetricSign
+## 12. Gates
 
-Referencias consultadas el 2026-08-20/21. La implementación futura debe volver a verificar documentación, disponibilidad regional, límites y precios antes de crear recursos.
+La mera existencia del código no cambia gates productivos.
+
+```text
+GATE-17 = PASS_PRODUCTIVE_EVIDENCE
+GATE-06 = OPEN_PRODUCTIVE
+GATE-18 = OPEN_PRODUCTIVE
+SPS = UNCONFIRMED
+```
+
+GATE-06 requiere evidencia física productiva. GATE-18 requiere además validación exacta autorizada del catálogo.
+
+## 13. Secretos y datos prohibidos
+
+Nunca publicar ni persistir sin sanitizar:
+
+- private keys;
+- JWT/OIDC tokens;
+- `Authorization`;
+- cookies/session IDs;
+- orderForm IDs;
+- direcciones/coordenadas personales;
+- credenciales de Cloudflare/GitHub.
+
+Los artefactos pueden contener receipts y evidencia sanitizada, nunca secretos.
+
+## 14. Criterio de cierre
+
+El trusted collector se considera productivo únicamente cuando exista evidencia observable de que la infraestructura real cumple las mismas invariantes que hoy pasan offline. Hasta entonces:
+
+```text
+catalog_accepted = false
+production_authority = false
+```
+
+La siguiente prueba externa correcta es la sonda controlada no-La-Colonia; no existe motivo técnico para contactar La Colonia antes de completar ese paso.
