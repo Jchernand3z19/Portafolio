@@ -44,6 +44,8 @@ POWER_BI_OFFER_COLUMNS = (
     "offer_id",
     "supermarket_id",
     "location_id",
+    "location_status",
+    "location_confidence",
     "source_product_id",
     "product_id",
     "source_key_type",
@@ -73,6 +75,7 @@ POWER_BI_OFFER_COLUMNS = (
     "reported_regular_price",
     "source_reports_promotion",
     "availability",
+    "review_status",
     "unit_price",
     "unit_price_basis",
     "current_observed_at_utc",
@@ -89,6 +92,8 @@ class PowerBIOfferRecord:
     offer_id: str
     supermarket_id: str
     location_id: str
+    location_status: str
+    location_confidence: Decimal | None
     source_product_id: str
     product_id: str
     source_key_type: str
@@ -118,6 +123,7 @@ class PowerBIOfferRecord:
     reported_regular_price: Decimal | None
     source_reports_promotion: bool
     availability: str
+    review_status: str
     unit_price: Decimal | None
     unit_price_basis: str | None
     current_observed_at_utc: datetime
@@ -134,6 +140,8 @@ class PowerBIOfferRecord:
             "offer_id": self.offer_id,
             "supermarket_id": self.supermarket_id,
             "location_id": self.location_id,
+            "location_status": self.location_status,
+            "location_confidence": self.location_confidence,
             "source_product_id": self.source_product_id,
             "product_id": self.product_id,
             "source_key_type": self.source_key_type,
@@ -163,6 +171,7 @@ class PowerBIOfferRecord:
             "reported_regular_price": self.reported_regular_price,
             "source_reports_promotion": self.source_reports_promotion,
             "availability": self.availability,
+            "review_status": self.review_status,
             "unit_price": self.unit_price,
             "unit_price_basis": self.unit_price_basis,
             "current_observed_at_utc": self.current_observed_at_utc,
@@ -213,7 +222,8 @@ def build_power_bi_offer_records(
         if pricing is None:  # pragma: no cover - current existe por construcción
             raise PowerBIProjectionError("power_bi_current_missing")
 
-        offer = current.validated_offer.offer
+        validated = current.validated_offer
+        offer = validated.offer
         if offer.offer_id != offer_id or pricing.offer_id != offer_id:
             raise PowerBIProjectionError("power_bi_offer_identity_mismatch")
 
@@ -222,6 +232,8 @@ def build_power_bi_offer_records(
                 offer_id=offer.offer_id,
                 supermarket_id=offer.supermarket_id,
                 location_id=offer.location_id,
+                location_status=offer.location_status.value,
+                location_confidence=offer.location_confidence,
                 source_product_id=offer.source_product_id,
                 product_id=offer.product_id,
                 source_key_type=offer.source_key_type.value,
@@ -254,6 +266,7 @@ def build_power_bi_offer_records(
                 reported_regular_price=offer.reported_regular_price,
                 source_reports_promotion=offer.is_promotion,
                 availability=offer.availability.value,
+                review_status=validated.review_status.value,
                 unit_price=offer.unit_price,
                 unit_price_basis=offer.unit_price_basis,
                 current_observed_at_utc=pricing.current_observed_at_utc,
