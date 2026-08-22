@@ -7,9 +7,10 @@ Este documento es la **fuente canónica del estado operativo mutable** del proye
 Estado verificado al **2026-08-22 (America/Tegucigalpa)**.
 
 ```text
-base técnica del corte = b4588d7425601963cc64cc6eec779fdbe9492b05 (merge de PR #148)
-último PR técnico integrado antes de este corte documental = #148
-última suite técnica completa observada = 1418/1418 PASS (PR #148)
+base técnica del corte = da342bf9439e260a8bc213c8c83e805412c5741d (merge de PR #154)
+último PR técnico integrado antes de este corte documental = #154
+última suite técnica completa observada = 1462/1462 PASS (PR #154)
+compileall = PASS
 GATE-17 = PASS_PRODUCTIVE_EVIDENCE
 ACTIVE_AUTHORIZATION_IDS = []
 READY_FOR_LIVE = NO
@@ -18,7 +19,7 @@ production_authority = false
 catalog_accepted = false
 ```
 
-El HEAD mutable de `main` se consulta en GitHub y no se fija aquí como “actual”, porque el propio merge de documentación lo volvería obsoleto. No había PR técnicos abiertos al iniciar este corte documental.
+El HEAD mutable de `main` no se usa como autoridad por sí mismo; este corte fija únicamente la base técnica que fue validada antes de la actualización documental.
 
 ## Semántica de estado
 
@@ -30,7 +31,7 @@ El HEAD mutable de `main` se consulta en GitHub y no se fija aquí como “actua
 | `PARTIAL_PRODUCTIVE` | Una parte de la cadena se demostró físicamente, pero falta otra condición para aceptar la frontera completa. |
 | `BLOCKED_LIVE` | Requiere observación real de la fuente. |
 | `BLOCKED_HUMAN_DECISION` | Requiere autorización humana explícita. |
-| `BLOCKED_EXTERNAL` | Requiere configuración/credencial/servicio externo no disponible desde el código. |
+| `BLOCKED_EXTERNAL` | Requiere configuración/credencial/servicio externo no demostrado. |
 | `BLOCKED_DEPENDENCIES` | Depende de cerrar una frontera anterior. |
 
 ## Resumen por área
@@ -40,49 +41,44 @@ El HEAD mutable de `main` se consulta en GitHub y no se fija aquí como “actua
 | Contratos `RawProduct` / `NormalizedOffer` / `ValidatedOffer` | `DONE` | Protegidos por pruebas e invariantes. |
 | Extractor La Colonia, GraphQL, ventanas, facets, particiones, coverage y reconciliación de catálogo | `DONE_OFFLINE` | Implementados con fixtures y validación adversarial; no equivalen a catálogo productivo aceptado. |
 | GATE-17 / protección de `main` | `DONE_PRODUCTIVE` | `PASS_PRODUCTIVE_EVIDENCE`. |
-| Sonda Cloudflare: OIDC → Durable Object → origen controlado → receipt Ed25519 | `DONE_PRODUCTIVE` para esas capacidades | Run físico `32551882793` completó la sonda; evidencia firmada revalidada posteriormente. |
-| Verificación criptográfica independiente de la sonda | `DONE_PRODUCTIVE` | El verifier-only revalidó firma, bytes e identidad del intento físico. |
-| Reconciliación estricta contra Workers Observability | `PARTIAL_PRODUCTIVE / BLOCKED_EXTERNAL` | Se descubrió trace candidato real, pero la API pública consultada no expone el custom span/fetch hijo con la forma requerida para cerrar el reconciliador estricto. PR #134 retiró el diagnóstico temporal sin rebajar el verificador. |
-| Autoridad productiva del collector/catálogo | `BLOCKED_DEPENDENCIES` | No se deriva de la sonda ni de fixtures; sigue `production_authority=false` / `catalog_accepted=false`. |
+| Sonda Cloudflare: OIDC → Durable Object → origen controlado → receipt Ed25519 | `DONE_PRODUCTIVE` para esas capacidades | Run físico `32551882793`; evidencia firmada revalidada posteriormente. |
+| Verificación criptográfica independiente de la sonda | `DONE_PRODUCTIVE` | Verifier-only `32552932554` revalidó firma, bytes e identidad. |
+| Reconciliación estricta contra Workers Observability | `PARTIAL_PRODUCTIVE / BLOCKED_EXTERNAL` | Existe trace candidato real, pero la API pública consultada no expone el custom span/fetch hijo requerido; el verificador estricto se conserva. |
+| Autoridad productiva del collector/catálogo | `BLOCKED_DEPENDENCIES` | No se deriva de sonda, fixtures, hashes ni caller input; sigue `production_authority=false` / `catalog_accepted=false`. |
 | Modelo común de supermercados/ubicaciones | `DONE_OFFLINE` | La Colonia registra SPS y Tegucigalpa; sólo SPS está dentro del alcance inicial. |
 | Granularidad comercial de La Colonia SPS | `BLOCKED_LIVE` | Se mantiene `unknown`; no se asume que precio/inventario varían sólo por ciudad. |
 | Binding técnico SPS | `BLOCKED_LIVE` | `technical_binding_confirmed=false`, sin `source_location_key` productiva. |
-| Radiografía de ubicación `city|store` | `DONE_OFFLINE` | Analizador, capturador Playwright, workflow manual y evaluador de transición integrados en PR #145–#148. Workflow live permanece bloqueado. |
+| Radiografía de ubicación `city|store` | `DONE_OFFLINE` | Analizador, capturador Playwright, workflow manual y evaluador de transición integrados; workflow live permanece bloqueado. |
 | Current/history + ahorro real | `DONE_OFFLINE` | Máquina comercial atómica/idempotente; ahorro contra precio histórico aceptado anterior. |
 | Persistencia tabular común | `DONE_OFFLINE` | Config, current, history, runs y quality events comparten tablas para todos los supermercados. |
-| Rehidratación durable entre runners | `DONE_OFFLINE` | Current/history reconstruibles y revalidados desde snapshot tabular. |
-| Google Sheets plan/transporte/adapter/bootstrap | `DONE_OFFLINE` | Plan atómico, transporte autenticado cerrado, read-modify-write y workflow manual implementados. No se observó una escritura real con credenciales productivas. |
-| Batch comercial → Google Sheets | `DONE_OFFLINE` | Frontera comercial produce `TabularBatch` durable antes del adapter. |
-| Google Sheets productivo | `BLOCKED_EXTERNAL / BLOCKED_DEPENDENCIES` | Requiere configuración externa productiva observada y sólo debe recibir datos comerciales cuando la ubicación/autoridad correspondiente esté cerrada. |
-| Scraping diario | `BLOCKED_DEPENDENCIES` | Espera live estable, binding correcto, autoridad de catálogo y persistencia productiva. |
-| Power BI | `BLOCKED_DEPENDENCIES` | Espera dataset comercial durable/autoritativo. |
+| Guard de autoridad antes de persistencia | `DONE_OFFLINE` | PR #150 impide que código operativo convierta una `CommercialRunDecision` caller-controlled en mutación de current/history. |
+| Binding durable de replay | `DONE_OFFLINE` | PR #151 liga evidencia, decisión, ofertas, metadata y quality events con fingerprint `crev1_`; demuestra igualdad/replay, nunca autoridad. |
+| Rehidratación + restauración entre runners | `DONE_OFFLINE` | PR #152 restaura el motor desde current/history/runs y reserva todos los IDs terminales históricos. |
+| Google Sheets plan/transporte/adapter/bootstrap | `DONE_OFFLINE` | Plan atómico, transporte autenticado, read-modify-write y bootstrap manual implementados. No se ha observado aún una escritura productiva. |
+| Google Sheets read-side → estado comercial | `DONE_OFFLINE` | PR #153 carga snapshot validado, recalcula métricas, rehidrata current/history y restaura el motor sin writes ni autoridad. |
+| Batch comercial → Google Sheets | `DONE_OFFLINE` | Existe frontera comercial a `TabularBatch`, pero la entrada productiva mutante sigue cerrada hasta autoridad real. |
+| Google Sheets productivo | `BLOCKED_EXTERNAL / BLOCKED_DEPENDENCIES` | Requiere configuración/credenciales productivas observadas y sólo podrá recibir datos comerciales autoritativos cuando ubicación/autoridad estén cerradas. |
+| Proyección semántica Power BI | `DONE_OFFLINE` | PR #154 centraliza precio actual, baseline aceptado, ahorro real, dirección de precio, precio regular reportado, promoción, disponibilidad, ubicación y review status. |
+| Dataset/refresh Power BI productivo | `BLOCKED_DEPENDENCIES` | Espera persistencia durable/autoritativa; Power BI no decide autoridad ni recalcula la semántica comercial. |
+| Scraping diario | `BLOCKED_DEPENDENCIES` | Espera binding correcto, live estable, autoridad de catálogo y persistencia productiva. |
 | Segundo supermercado | `BLOCKED_DEPENDENCIES` | Se inicia después de cerrar La Colonia end-to-end sobre la plataforma común. |
 
 ## Evidencia Cloudflare física
 
 La afirmación histórica “sonda no desplegada/no ejecutada” ya no es válida.
 
-Evidencia principal:
-
 ```text
 physical probe source run = 32551882793
 verifier-only run         = 32552932554
 ```
 
-El ejercicio físico demostró de forma separada:
+La sonda demostró físicamente OIDC de GitHub, Worker/Durable Object, fetch al origen controlado `workers.dev`, challenge/body esperado, receipt Ed25519 y verificación independiente de firma/bytes/identidad.
 
-1. emisión y validación OIDC de GitHub contra Cloudflare;
-2. ejecución del Worker gateway de sonda y `ProbeLedger`;
-3. fetch físico al origen controlado `workers.dev`;
-4. challenge/body esperado;
-5. receipt Ed25519 y hash de respuesta;
-6. verificación independiente de firma/bytes/identidad desde GitHub sin OIDC.
+La reconciliación estricta del custom span + child fetch mediante la API pública de Workers Observability **no** se declara cerrada. Los diagnósticos históricos mostraron que la superficie pública disponible no entrega el detalle que exige el reconciliador. No se fabrica un PASS ni se rebaja el verificador.
 
-La parte que **no** se declara cerrada es la reconciliación estricta del custom span + child fetch mediante la API pública de Workers Observability. Los diagnósticos de PR #99–#134 confirmaron que la forma pública disponible no entrega el detalle que el reconciliador exige. El proyecto conserva el verificador estricto en vez de fabricar un PASS.
+No se necesita repetir la sonda física salvo cambio de infraestructura o una hipótesis explícita nueva.
 
-No se necesita repetir la sonda física para volver a demostrar OIDC/fetch/firma salvo que cambie esa infraestructura o exista una razón explícita distinta.
-
-## La Colonia — ubicación
+## La Colonia — ubicación y live
 
 Estado de `la_colonia_sps`:
 
@@ -95,55 +91,19 @@ source_location_key = null
 extraction_enabled = false
 ```
 
-La UI conocida expone al menos San Pedro Sula y Tegucigalpa, pero eso **no demuestra** si el contexto comercial efectivo varía por ciudad o por tienda.
+La UI conocida expone al menos San Pedro Sula y Tegucigalpa, pero eso no demuestra si el contexto comercial efectivo varía por ciudad o tienda.
 
-La radiografía preparada en PR #145–#148 está diseñada para resolver exclusivamente esa duda:
+La radiografía preparada compara `before -> after_city -> after_store` y busca mecanismos fuertes como `regionId`, `salesChannel`, `binding`, `store` o `storeId`. Valores opacos se convierten en fingerprints sanitizados. `vtex_session` / `vtex_segment` no bastan por sí solos para confirmar granularidad.
 
-```text
-home
--> selector público de ubicación
--> enumerar ciudades visibles
--> seleccionar San Pedro Sula
--> si aparecen tiendas, enumerarlas y elegir una opción determinista
--> comparar mecanismos de contexto before / after_city / after_store
--> emitir sólo fingerprints sanitizados
-```
+El workflow de radiografía sigue deliberadamente bloqueado y la allow-list live está vacía. **No debe iniciarse ninguna petición nueva a La Colonia sin una nueva autorización humana explícita y limitada.**
 
-Mecanismos fuertes considerados incluyen `regionId`, `salesChannel`, `binding`, `store` y `storeId`. `vtex_session` / `vtex_segment` son evidencia débil y no bastan por sí solas para confirmar granularidad.
-
-El workflow `La Colonia - Radiografía manual de ubicación` está deliberadamente cerrado con `if: ${{ false }}` y el capturador mantiene `LIVE_EXECUTION_ENABLED=False` + allow-list vacía. **No debe habilitarse hasta recibir una nueva autorización humana explícita.**
-
-## Qué ocurre después de una radiografía autorizada
-
-El artifact sanitizado no se aplica directamente; `location_binding_transition.py` lo evalúa fail-closed.
-
-### Si demuestra `city + strong`
-
-Puede proponerse:
-
-```text
-granularity = city
-technical_binding_confirmed = true
-source_location_key = fingerprint de evidencia
-evidence = SHA-256 del artifact
-extraction_enabled = false
-```
-
-Incluso en este caso la radiografía **no habilita automáticamente scraping comercial**.
-
-### Si demuestra `store + strong`
-
-No se promueve `la_colonia_sps` como una única ubicación comercial. Deben modelarse/bindearse las tiendas SPS individualmente antes de persistir precios como comparables.
-
-### Si queda `unknown`
-
-No se cambia configuración de ubicación y se diseña el diagnóstico mínimo siguiente; no se adivina.
+Una autorización para radiografía no cubriría smoke, facets, GraphQL replay, crawl completo ni persistencia de precios.
 
 ## Persistencia
 
-La decisión inicial sigue siendo **Google Sheets como almacenamiento temporal estructurado**, con evolución posterior a BigQuery cuando el proceso sea estable.
+Google Sheets sigue siendo el almacenamiento temporal estructurado de la primera fase; BigQuery se incorpora cuando el proceso esté estable.
 
-Ya están implementadas offline las tablas comunes:
+Tablas comunes:
 
 ```text
 cfg_supermarkets
@@ -154,19 +114,21 @@ fact_scrape_runs
 fact_quality_events
 ```
 
-Principios vigentes:
+Reglas vigentes:
 
 - un mismo esquema para todos los supermercados;
-- current/history rehidratables entre runners;
+- current/history rehidratables y restaurables entre runners;
 - nuevo periodo histórico sólo ante cambio relevante;
 - cada run final se registra aunque no cambie ningún precio;
 - runs rechazados/fallidos no alteran current/history;
-- Google Sheets se materializa como snapshot completo y no como parche parcial;
-- escrituras planificadas mediante un único `spreadsheets.batchUpdate`;
-- texto fuente no se convierte accidentalmente en fórmula;
-- no se usa Google Drive como backend de aplicación.
+- un retry durable sólo se reconoce cuando evidencia + decisión + payload coinciden;
+- restaurar un snapshot no concede nueva autoridad;
+- ausencia de una oferta en un payload no implica baja ni `out_of_stock`;
+- Google Sheets se materializa como snapshot completo mediante un único `spreadsheets.batchUpdate` planificado;
+- el read-side de Sheets sólo lee/valida/rehidrata/restaura;
+- una decisión caller-controlled nunca sustituye evidencia autoritativa.
 
-Configuración externa prevista para el workflow de storage:
+Configuración externa prevista:
 
 ```text
 Environment: precios-sps-storage
@@ -174,29 +136,37 @@ Variable: PRECIOS_SPS_GOOGLE_SPREADSHEET_ID
 Secret: PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON
 ```
 
-No se considera productivo hasta observar una configuración/escritura real válida.
+La capacidad externa sigue sin declararse productiva hasta observar que esa configuración existe y que una operación de storage válida funciona. Esto puede verificarse sin contactar La Colonia.
 
-## Regla comercial del precio
+## Regla comercial del precio y Power BI
 
-`reported_regular_price` es sólo el precio de referencia declarado por el supermercado; no demuestra una oferta real.
-
-La reducción real se calcula contra el `current_price` del periodo histórico aceptado inmediatamente anterior. Por tanto:
+Separar siempre:
 
 ```text
-precio actual < último precio histórico aceptado  -> reducción real
-precio actual = último precio histórico aceptado  -> sin reducción
-precio actual > último precio histórico aceptado  -> subida
+current_price              = precio observado que paga el cliente
+reported_regular_price     = referencia declarada por la tienda
+previous_accepted_price    = current_price del periodo aceptado inmediatamente anterior
 ```
 
-Si no existe baseline confiable, no se inventa ahorro.
+La reducción real usa únicamente histórico propio aceptado:
 
-## Próxima dependencia real
+```text
+reduction = max(previous_accepted_price - current_price, 0)
+```
 
-El siguiente paso que ya no puede completarse honestamente sólo con trabajo offline es una **nueva autorización humana explícita para una única radiografía live limitada de ubicación de La Colonia**.
+Si no existe baseline, no se inventa ahorro. Una subida produce reducción cero. PR #154 expone esta semántica como proyección read-only para BI junto con `price_direction`, ubicación, `review_status`, promoción y disponibilidad; Power BI no debe redefinirla en DAX.
 
-Esa autorización no debe interpretarse como permiso para smoke, facets, GraphQL replay, crawl completo ni persistencia de precios.
+## Próximos pasos
 
-Después de resolver `city|store` y el binding técnico, el orden sigue siendo:
+Trabajo que todavía puede hacerse sin tráfico a La Colonia:
+
+1. verificar en modo read-only si el environment `precios-sps-storage` ya contiene la variable/secret esperados;
+2. si la configuración existe, revisar que el bootstrap de Google Sheets pueda ejecutarse sin tocar La Colonia antes de cualquier write externo;
+3. mantener la proyección BI como contrato derivado, sin conectarla a datos no autoritativos.
+
+La **próxima dependencia humana live** continúa siendo una nueva autorización explícita para una única radiografía limitada de ubicación de La Colonia.
+
+Después de resolver ubicación y autoridad, el orden productivo es:
 
 ```text
 binding de ubicación
@@ -204,13 +174,13 @@ binding de ubicación
 -> decisión autoritativa del catálogo
 -> Google Sheets productivo
 -> ejecución diaria
--> dataset Power BI
+-> dataset/refresh Power BI
 -> La Colonia end-to-end
 -> supermercado #2
 ```
 
 ## Tráfico live reciente
 
-PR #135–#148 y esta actualización documental se realizaron **sin nuevos requests a La Colonia**.
+PR #135–#154 y este corte documental se realizaron **sin nuevos requests a La Colonia**.
 
 No usar esta frase para inferir que el proyecto nunca realizó pruebas live históricas; sólo describe este bloque de trabajo.
