@@ -75,6 +75,33 @@ def test_chain_targets_fresh_marker_and_separates_heartbeat_from_environment():
     assert "ACTIONS_ID_TOKEN_REQUEST_URL" not in raw
 
 
+def test_runner_temp_is_resolved_only_after_chain_runner_exists():
+    raw, workflow = _load()
+    assert "${{ runner.temp }}" not in raw
+
+    heartbeat = workflow["jobs"]["publish-chain-heartbeat"]
+    diagnostic = workflow["jobs"]["inspect-existing-evidence"]
+    assert heartbeat["env"] == {
+        "TARGET_PR_NUMBER": TARGET_PR,
+        "SOURCE_CI_SUCCESS": "${{ github.event.workflow_run.conclusion == 'success' }}",
+    }
+    assert diagnostic["env"] == {
+        "PROBE_PUBLIC_KEY_SPKI_B64URL": "${{ vars.CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL }}",
+        "CLOUDFLARE_ACCOUNT_ID": "${{ vars.CLOUDFLARE_ACCOUNT_ID }}",
+        "TARGET_PR_NUMBER": TARGET_PR,
+    }
+
+    heartbeat_prepare = heartbeat["steps"][0]["run"]
+    assert 'CHAIN_HEARTBEAT_PATH="$RUNNER_TEMP/probe-shape-chain-heartbeat.json"' in heartbeat_prepare
+    assert "export CHAIN_HEARTBEAT_PATH" in heartbeat_prepare
+    assert "GITHUB_ENV" in heartbeat_prepare
+
+    diagnostic_prepare = diagnostic["steps"][0]["run"]
+    assert 'PROBE_DIAGNOSTIC_COMMENT_PATH="$RUNNER_TEMP/probe-shape-chain-comment.json"' in diagnostic_prepare
+    assert "export PROBE_DIAGNOSTIC_COMMENT_PATH" in diagnostic_prepare
+    assert "GITHUB_ENV" in diagnostic_prepare
+
+
 def test_chain_heartbeat_is_sanitized_and_has_no_environment_secret_or_checkout():
     _, workflow = _load()
     job = workflow["jobs"]["publish-chain-heartbeat"]
@@ -83,7 +110,6 @@ def test_chain_heartbeat_is_sanitized_and_has_no_environment_secret_or_checkout(
     assert job["env"] == {
         "TARGET_PR_NUMBER": TARGET_PR,
         "SOURCE_CI_SUCCESS": "${{ github.event.workflow_run.conclusion == 'success' }}",
-        "CHAIN_HEARTBEAT_PATH": "${{ runner.temp }}/probe-shape-chain-heartbeat.json",
     }
     assert len(job["steps"]) == 2
 
@@ -154,13 +180,14 @@ def test_chain_always_publishes_only_sanitized_output_to_fresh_marker_pr():
     _, workflow = _load()
     job = workflow["jobs"]["inspect-existing-evidence"]
     assert job["env"]["TARGET_PR_NUMBER"] == TARGET_PR
-    assert job["env"]["PROBE_DIAGNOSTIC_COMMENT_PATH"] == "${{ runner.temp }}/probe-shape-chain-comment.json"
+    assert "PROBE_DIAGNOSTIC_COMMENT_PATH" not in job["env"]
     steps = job["steps"]
     assert steps[0]["name"] == "Prepare sanitized fallback comment"
     assert "started_without_summary" in steps[0]["run"]
     assert '"contains_no_event_values": True' in steps[0]["run"]
     assert '"production_authority": False' in steps[0]["run"]
     assert '"catalog_accepted": False' in steps[0]["run"]
+    assert "GITHUB_ENV" in steps[0]["run"]
 
     publish = next(step for step in steps if step["name"] == "Publish sanitized diagnostic to marker PR")
     assert publish["if"] == "${{ always() }}"
