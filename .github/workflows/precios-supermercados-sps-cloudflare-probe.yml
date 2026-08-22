@@ -134,6 +134,7 @@ jobs:
     environment: cloudflare-probe
     env:
       PROBE_PUBLIC_KEY_SPKI_B64URL: ${{ vars.CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
     steps:
       - name: Descargar revisión inmutable
@@ -204,4 +205,60 @@ jobs:
               "- La Colonia: **0 requests**\n",
               encoding="utf-8",
           )
+          PY
+
+      - name: Reconciliar fetch físico con Workers Observability
+        env:
+          PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+          PROBE_OBSERVABILITY_TOKEN: ${{ secrets.CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from precios_supermercados.cloudflare_controlled_probe_observability import (
+              ControlledProbeObservabilityVerifierClient,
+          )
+          from precios_supermercados.cloudflare_observability_http_transport import (
+              CloudflareObservabilityHttpTransport,
+          )
+
+          public_key = os.environ.get("PROBE_PUBLIC_KEY_SPKI_B64URL", "")
+          account_id = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+          token = os.environ.get("PROBE_OBSERVABILITY_TOKEN", "")
+          if not public_key or not account_id or not token:
+              raise SystemExit("Configuración de Observability de sonda incompleta")
+
+          artifact = json.loads(
+              Path(".probe-evidence/cloudflare-probe-result.json").read_text(encoding="utf-8")
+          )
+          verifier = ControlledProbeObservabilityVerifierClient(
+              account_id,
+              CloudflareObservabilityHttpTransport(),
+          )
+          reconciled = verifier.reconcile_artifact(
+              artifact,
+              public_key_spki_b64url=public_key,
+              expected_commit_sha=os.environ["GITHUB_SHA"],
+              expected_run_id=os.environ["GITHUB_RUN_ID"],
+              expected_run_attempt=int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              bearer_token=token,
+          )
+          if reconciled.production_authority is not False or reconciled.catalog_accepted is not False:
+              raise SystemExit("Observability de sonda no puede conceder autoridad productiva")
+
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
+              summary.write(
+                  "\n### Workers Observability\n\n"
+                  "- Reconciliación de plataforma: **PASS**\n"
+                  f"- Trace ID: `{reconciled.trace_evidence.trace_id}`\n"
+                  f"- Fetch span: `{reconciled.trace_evidence.fetch_span_id}`\n"
+                  f"- Physical evidence ID: `{reconciled.physical_evidence_id}`\n"
+                  "- `production_authority`: **false**\n"
+                  "- `catalog_accepted`: **false**\n"
+                  "- La Colonia: **0 requests**\n"
+              )
           PY
