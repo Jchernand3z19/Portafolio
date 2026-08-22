@@ -23,6 +23,9 @@ PINNED_ACTIONS = {
     "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
 }
 
+TARGET_BRANCH = "diag/precios-sps-observability-request-007"
+TARGET_PR = "117"
+
 
 def _load() -> tuple[str, dict[str, object]]:
     raw = WORKFLOW.read_text(encoding="utf-8")
@@ -31,7 +34,16 @@ def _load() -> tuple[str, dict[str, object]]:
     return raw, value
 
 
-def test_chain_runs_only_after_successful_marker_pr_ci():
+def _assert_common_chain_gate(condition: str) -> None:
+    assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
+    assert "github.event.workflow_run.event == 'pull_request'" in condition
+    assert "github.event.workflow_run.head_repository.full_name == github.repository" in condition
+    assert f"github.event.workflow_run.head_branch == '{TARGET_BRANCH}'" in condition
+    assert "github.event.workflow_run.actor.login" not in condition
+    assert "github.event.workflow_run.pull_requests" not in condition
+
+
+def test_chain_targets_fresh_marker_and_separates_heartbeat_from_environment():
     raw, workflow = _load()
     assert workflow["permissions"] == {
         "contents": "read",
@@ -42,19 +54,64 @@ def test_chain_runs_only_after_successful_marker_pr_ci():
     trigger = workflow["on"]["workflow_run"]
     assert trigger["workflows"] == ["Precios Supermercados SPS - Pruebas base"]
     assert trigger["types"] == ["completed"]
+    assert workflow["concurrency"]["group"] == "cloudflare-controlled-probe-observability-chain-117"
 
-    job = workflow["jobs"]["inspect-existing-evidence"]
-    condition = job["if"]
-    assert "github.event.workflow_run.event == 'pull_request'" in condition
-    assert "github.event.workflow_run.conclusion == 'success'" in condition
-    assert "github.event.workflow_run.head_repository.full_name == github.repository" in condition
-    assert "github.event.workflow_run.head_branch == 'diag/precios-sps-observability-request-001'" in condition
-    assert "github.event.workflow_run.actor.login == 'Jchernand3z19'" in condition
-    assert "github.event.workflow_run.pull_requests" not in condition
-    assert job["environment"] == "cloudflare-probe"
+    jobs = workflow["jobs"]
+    assert set(jobs) == {"publish-chain-heartbeat", "inspect-existing-evidence"}
+    heartbeat = jobs["publish-chain-heartbeat"]
+    diagnostic = jobs["inspect-existing-evidence"]
+
+    _assert_common_chain_gate(heartbeat["if"])
+    _assert_common_chain_gate(diagnostic["if"])
+    assert "github.event.workflow_run.conclusion == 'success'" not in heartbeat["if"]
+    assert "github.event.workflow_run.conclusion == 'success'" in diagnostic["if"]
+    assert "environment" not in heartbeat
+    assert diagnostic["environment"] == "cloudflare-probe"
+    assert heartbeat["env"]["TARGET_PR_NUMBER"] == TARGET_PR
+    assert diagnostic["env"]["TARGET_PR_NUMBER"] == TARGET_PR
+
     assert "id-token" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_URL" not in raw
+
+
+def test_chain_heartbeat_is_sanitized_and_has_no_environment_secret_or_checkout():
+    _, workflow = _load()
+    job = workflow["jobs"]["publish-chain-heartbeat"]
+    assert "environment" not in job
+    assert job["timeout-minutes"] == "2"
+    assert job["env"] == {
+        "TARGET_PR_NUMBER": TARGET_PR,
+        "SOURCE_CI_SUCCESS": "${{ github.event.workflow_run.conclusion == 'success' }}",
+        "CHAIN_HEARTBEAT_PATH": "${{ runner.temp }}/probe-shape-chain-heartbeat.json",
+    }
+    assert len(job["steps"]) == 2
+
+    prepare = job["steps"][0]
+    assert prepare["name"] == "Prepare sanitized chain heartbeat"
+    assert "env" not in prepare
+    prepare_script = prepare["run"]
+    assert '"diagnostic_status": "chain_trigger_observed"' in prepare_script
+    assert '"source_ci_success"' in prepare_script
+    assert '"contains_no_event_values": True' in prepare_script
+    assert '"production_authority": False' in prepare_script
+    assert '"catalog_accepted": False' in prepare_script
+    assert "PROBE_OBSERVABILITY_TOKEN" not in prepare_script
+
+    publish = job["steps"][1]
+    assert publish["name"] == "Publish sanitized chain heartbeat"
+    assert publish["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    publish_script = publish["run"]
+    assert 'issues/${TARGET_PR_NUMBER}/comments' in publish_script
+    assert '--input "$CHAIN_HEARTBEAT_PATH"' in publish_script
+    assert '[[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]' in publish_script
+    assert "PROBE_OBSERVABILITY_TOKEN" not in publish_script
+    assert ".probe-evidence" not in publish_script
+
+    assert "actions/checkout@" not in str(job)
+    assert "actions/download-artifact@" not in str(job)
+    assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in str(job)
+    assert ".probe-evidence" not in str(job)
 
 
 def test_chain_executes_only_trusted_default_branch_code():
@@ -93,14 +150,18 @@ def test_chain_has_no_gateway_oidc_or_physical_probe_capability():
     assert "CLOUDFLARE_ACCOUNT_ID" in raw
 
 
-def test_chain_always_publishes_only_sanitized_output_to_fixed_marker_pr():
-    raw, workflow = _load()
+def test_chain_always_publishes_only_sanitized_output_to_fresh_marker_pr():
+    _, workflow = _load()
     job = workflow["jobs"]["inspect-existing-evidence"]
-    assert job["env"]["TARGET_PR_NUMBER"] == "107"
+    assert job["env"]["TARGET_PR_NUMBER"] == TARGET_PR
     assert job["env"]["PROBE_DIAGNOSTIC_COMMENT_PATH"] == "${{ runner.temp }}/probe-shape-chain-comment.json"
     steps = job["steps"]
     assert steps[0]["name"] == "Prepare sanitized fallback comment"
     assert "started_without_summary" in steps[0]["run"]
+    assert '"contains_no_event_values": True' in steps[0]["run"]
+    assert '"production_authority": False' in steps[0]["run"]
+    assert '"catalog_accepted": False' in steps[0]["run"]
+
     publish = next(step for step in steps if step["name"] == "Publish sanitized diagnostic to marker PR")
     assert publish["if"] == "${{ always() }}"
     assert publish["env"] == {"GH_TOKEN": "${{ github.token }}"}
@@ -113,6 +174,9 @@ def test_chain_always_publishes_only_sanitized_output_to_fixed_marker_pr():
 
 def test_chain_actions_are_pinned():
     _, workflow = _load()
+    heartbeat = workflow["jobs"]["publish-chain-heartbeat"]
+    assert all("uses" not in step for step in heartbeat["steps"])
+
     steps = workflow["jobs"]["inspect-existing-evidence"]["steps"]
     for step in (step for step in steps if "uses" in step):
         action, separator, revision = step["uses"].partition("@")
