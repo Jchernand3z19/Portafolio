@@ -105,7 +105,7 @@ export function createControlledProbeOidcAuthenticator({
     try {
       response = await fetchImpl(GITHUB_OIDC_JWKS_URL, {
         method: "GET",
-        redirect: "error",
+        redirect: "manual",
         headers: Object.freeze({ accept: "application/json" }),
       });
     } catch (error) {
