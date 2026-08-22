@@ -101,8 +101,9 @@ def test_existing_probe_verifier_binds_signed_source_identity_and_only_polls_tel
     assert 'expected_run_id=os.environ["SOURCE_RUN_ID"]' in raw
     assert 'expected_run_attempt=int(os.environ["SOURCE_RUN_ATTEMPT"])' in raw
     assert "verify_controlled_probe_artifact" in raw
-    assert "ControlledProbeTraceQueryVerifierClient" in raw
-    assert "cloudflare_controlled_probe_trace_query" in raw
+    assert "ControlledProbeEventsVerifierClient" in raw
+    assert "cloudflare_controlled_probe_events_query" in raw
+    assert "ControlledProbeTraceQueryVerifierClient" not in raw
     assert "ControlledProbeObservabilityVerifierClient" not in raw
     assert "CloudflareObservabilityHttpTransport" in raw
     assert 'exc.code != "probe_discovery_trace_missing"' in raw
