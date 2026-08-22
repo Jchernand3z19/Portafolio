@@ -1,0 +1,12 @@
+{
+  "name": "precios-sps-controlled-origin",
+  "main": "src/probe-origin.mjs",
+  "compatibility_date": "2026-08-21",
+  "preview_urls": false,
+  "observability": {
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
+  }
+}
