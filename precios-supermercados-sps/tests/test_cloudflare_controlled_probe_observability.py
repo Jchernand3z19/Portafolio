@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -54,16 +53,20 @@ def _b64url(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
 
 
+def _raw_body() -> bytes:
+    return json.dumps(
+        {"ok": True, "purpose": CONTROLLED_PROBE_PURPOSE, "challenge": CHALLENGE},
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
 def _artifact() -> tuple[dict[str, object], str]:
     private_key = Ed25519PrivateKey.generate()
     public_key = private_key.public_key().public_bytes(
         encoding=serialization.Encoding.DER,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
-    raw_body = json.dumps(
-        {"ok": True, "purpose": CONTROLLED_PROBE_PURPOSE, "challenge": CHALLENGE},
-        separators=(",", ":"),
-    ).encode("utf-8")
+    raw_body = _raw_body()
     request = {
         "challenge": CHALLENGE,
         "method": "GET",
@@ -89,12 +92,16 @@ def _artifact() -> tuple[dict[str, object], str]:
         "github_workflow_ref": CONTROLLED_PROBE_WORKFLOW_REF,
         "oidc_jti": "probe-jti-001",
         "oidc_subject": CONTROLLED_PROBE_SUBJECT,
-        "physical_started_at_utc": datetime.fromtimestamp(START_MS / 1000, tz=timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "physical_started_at_utc": datetime.fromtimestamp(
+            START_MS / 1000, tz=timezone.utc
+        ).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "probe_id": PROBE_ID,
         "purpose": CONTROLLED_PROBE_PURPOSE,
         "raw_response_sha256": hashlib.sha256(raw_body).hexdigest(),
         "response_body_bytes": len(raw_body),
-        "response_completed_at_utc": datetime.fromtimestamp((START_MS + 700) / 1000, tz=timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "response_completed_at_utc": datetime.fromtimestamp(
+            (START_MS + 700) / 1000, tz=timezone.utc
+        ).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "response_status": 200,
         "schema_version": CONTROLLED_PROBE_SCHEMA_VERSION,
         "signing_algorithm": "Ed25519",
@@ -104,54 +111,64 @@ def _artifact() -> tuple[dict[str, object], str]:
         "target_scheme": "https",
     }
     receipt_bytes = canonical_json_bytes(receipt)
-    signature = _b64url(private_key.sign(CONTROLLED_PROBE_SIGNATURE_DOMAIN + receipt_bytes))
+    signature = _b64url(
+        private_key.sign(CONTROLLED_PROBE_SIGNATURE_DOMAIN + receipt_bytes)
+    )
     evidence_id = hashlib.sha256(
-        CONTROLLED_PROBE_SIGNATURE_DOMAIN + receipt_bytes + b"\0" + signature.encode("ascii")
+        CONTROLLED_PROBE_SIGNATURE_DOMAIN
+        + receipt_bytes
+        + b"\0"
+        + signature.encode("ascii")
     ).hexdigest()
-    return ({
-        "ok": True,
-        "decision": "PROBE_COMPLETED",
-        "replayed": False,
-        "purpose": CONTROLLED_PROBE_PURPOSE,
-        "rawBodyB64Url": _b64url(raw_body),
-        "receiptPayload": receipt,
-        "signatureB64Url": signature,
-        "signingKeyId": CONTROLLED_PROBE_SIGNING_KEY_ID,
-        "evidenceId": evidence_id,
-    }, _b64url(public_key))
+    return (
+        {
+            "ok": True,
+            "decision": "PROBE_COMPLETED",
+            "replayed": False,
+            "purpose": CONTROLLED_PROBE_PURPOSE,
+            "rawBodyB64Url": _b64url(raw_body),
+            "receiptPayload": receipt,
+            "signatureB64Url": signature,
+            "signingKeyId": CONTROLLED_PROBE_SIGNING_KEY_ID,
+            "evidenceId": evidence_id,
+        },
+        _b64url(public_key),
+    )
 
 
-def _standard_source() -> dict[str, object]:
+def _standard_source(*, version: str = VERSION_ID) -> dict[str, object]:
     return {
         "cloud.provider": "cloudflare",
         "cloud.platform": "cloudflare.workers",
         "faas.invocation_id": INVOCATION_ID,
         "service.name": CONTROLLED_PROBE_SERVICE,
-        "cloudflare.script_version.id": VERSION_ID,
+        "cloudflare.script_version.id": version,
     }
 
 
-def _workers() -> dict[str, object]:
+def _workers(*, version: str = VERSION_ID) -> dict[str, object]:
     return {
         "eventType": "rpc",
         "requestId": "probe-worker-request-001",
         "scriptName": CONTROLLED_PROBE_SERVICE,
-        "scriptVersion": {"id": VERSION_ID},
+        "scriptVersion": {"id": version},
         "truncated": False,
     }
 
 
-def _custom_event() -> dict[str, object]:
-    source = _standard_source()
-    source.update({
-        "precios.probe_contract_version": "1",
-        "precios.probe_purpose": CONTROLLED_PROBE_PURPOSE,
-        "precios.probe_id": PROBE_ID,
-        "precios.approved_commit_sha": SHA,
-        "precios.github_run_id": RUN_ID,
-        "precios.github_run_attempt": str(RUN_ATTEMPT),
-        "precios.target_kind": "controlled_workers_dev_origin",
-    })
+def _custom_event(*, version: str = VERSION_ID) -> dict[str, object]:
+    source = _standard_source(version=version)
+    source.update(
+        {
+            "precios.probe_contract_version": "1",
+            "precios.probe_purpose": CONTROLLED_PROBE_PURPOSE,
+            "precios.probe_id": PROBE_ID,
+            "precios.approved_commit_sha": SHA,
+            "precios.github_run_id": RUN_ID,
+            "precios.github_run_attempt": str(RUN_ATTEMPT),
+            "precios.target_kind": "controlled_workers_dev_origin",
+        }
+    )
     return {
         "$metadata": {
             "id": "event-probe-custom",
@@ -165,23 +182,26 @@ def _custom_event() -> dict[str, object]:
         "dataset": "cloudflare-workers",
         "source": source,
         "timestamp": START_MS,
-        "$workers": _workers(),
+        "$workers": _workers(version=version),
     }
 
 
-def _fetch_event(*, url: str = ORIGIN_URL, version: str = VERSION_ID) -> dict[str, object]:
-    source = _standard_source()
-    source["cloudflare.script_version.id"] = version
-    source.update({
-        "url.full": url,
-        "url.scheme": "https",
-        "url.path": CONTROLLED_PROBE_ORIGIN_PATH,
-        "http.request.method": "GET",
-        "http.response.status_code": 200,
-        "http.response.body.size": len(base64.urlsafe_b64decode(_artifact()[0]["rawBodyB64Url"] + "==")),
-    })
-    workers = _workers()
-    workers["scriptVersion"] = {"id": version}
+def _fetch_event(
+    *,
+    url: str = ORIGIN_URL,
+    version: str = VERSION_ID,
+) -> dict[str, object]:
+    source = _standard_source(version=version)
+    source.update(
+        {
+            "url.full": url,
+            "url.scheme": "https",
+            "url.path": CONTROLLED_PROBE_ORIGIN_PATH,
+            "http.request.method": "GET",
+            "http.response.status_code": 200,
+            "http.response.body.size": len(_raw_body()),
+        }
+    )
     return {
         "$metadata": {
             "id": "event-probe-fetch",
@@ -197,7 +217,7 @@ def _fetch_event(*, url: str = ORIGIN_URL, version: str = VERSION_ID) -> dict[st
         "dataset": "cloudflare-workers",
         "source": source,
         "timestamp": START_MS + 50,
-        "$workers": workers,
+        "$workers": _workers(version=version),
     }
 
 
@@ -271,10 +291,26 @@ def test_detail_rechaza_fetch_duplicado() -> None:
     assert exc.value.code == "probe_origin_fetch_span_not_unique"
 
 
-def test_reconciliacion_rechaza_destino_o_release_distinto() -> None:
+def test_detail_rechaza_version_interna_distinta_entre_custom_y_fetch() -> None:
+    with pytest.raises(ControlledProbeObservabilityError) as exc:
+        parse_controlled_probe_trace_detail_response(
+            _response([_custom_event(), _fetch_event(version="cf-probe-other")]),
+            expected_trace_id=TRACE_ID,
+        )
+    assert exc.value.code == "probe_fetch_execution_identity_mismatch"
+
+
+def test_reconciliacion_rechaza_destino_o_release_distinto_del_receipt() -> None:
     artifact, _public_key, verified = _verified()
     wrong_url = parse_controlled_probe_trace_detail_response(
-        _response([_custom_event(), _fetch_event(url="https://other.example.workers.dev/v1/probe-origin")]),
+        _response(
+            [
+                _custom_event(),
+                _fetch_event(
+                    url="https://other.example.workers.dev/v1/probe-origin"
+                ),
+            ]
+        ),
         expected_trace_id=TRACE_ID,
     )
     with pytest.raises(ControlledProbeObservabilityError) as url_exc:
@@ -282,12 +318,17 @@ def test_reconciliacion_rechaza_destino_o_release_distinto() -> None:
     assert url_exc.value.code == "probe_trace_fetch_url_mismatch"
 
     wrong_version = parse_controlled_probe_trace_detail_response(
-        _response([_custom_event(), _fetch_event(version="cf-probe-other")]),
+        _response(
+            [
+                _custom_event(version="cf-probe-other"),
+                _fetch_event(version="cf-probe-other"),
+            ]
+        ),
         expected_trace_id=TRACE_ID,
     )
     with pytest.raises(ControlledProbeObservabilityError) as version_exc:
         reconcile_controlled_probe_trace(verified, artifact, wrong_version)
-    assert version_exc.value.code == "probe_fetch_execution_identity_mismatch"
+    assert version_exc.value.code == "probe_trace_script_version_mismatch"
 
 
 def test_client_reverifica_firma_y_consulta_discovery_mas_detail_sin_autoridad() -> None:
@@ -311,7 +352,11 @@ def test_client_reverifica_firma_y_consulta_discovery_mas_detail_sin_autoridad()
         bearer_token="observability-token-test",
     )
     assert len(calls) == 2
-    assert all(call[0] == "/accounts/" + "a" * 32 + "/workers/observability/telemetry/query" for call in calls)
+    assert all(
+        call[0]
+        == "/accounts/" + "a" * 32 + "/workers/observability/telemetry/query"
+        for call in calls
+    )
     assert result.production_authority is False
     assert result.catalog_accepted is False
 
