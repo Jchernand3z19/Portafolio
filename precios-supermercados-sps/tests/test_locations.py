@@ -16,7 +16,7 @@ from precios_supermercados.locations import (
 )
 
 
-def test_la_colonia_registers_all_currently_known_cities() -> None:
+def test_la_colonia_registers_all_currently_known_cities_without_assuming_granularity() -> None:
     locations = DEFAULT_LOCATION_CATALOG.locations_for_supermarket("la_colonia")
     assert {location.location_id for location in locations} == {
         "la_colonia_sps",
@@ -27,7 +27,7 @@ def test_la_colonia_registers_all_currently_known_cities() -> None:
         "Tegucigalpa",
     }
     assert all(location.is_available for location in locations)
-    assert all(location.granularity is LocationGranularity.CITY for location in locations)
+    assert all(location.granularity is LocationGranularity.UNKNOWN for location in locations)
 
 
 def test_initial_scope_contains_only_san_pedro_sula() -> None:
@@ -36,15 +36,15 @@ def test_initial_scope_contains_only_san_pedro_sula() -> None:
     assert LA_COLONIA_TGU.in_scope is False
 
 
-def test_multi_city_source_is_not_enabled_before_technical_binding() -> None:
+def test_la_colonia_sps_is_not_enabled_before_granularity_and_binding_are_confirmed() -> None:
     assert DEFAULT_LOCATION_CATALOG.enabled_locations("la_colonia") == ()
     assert (
         DEFAULT_LOCATION_CATALOG.extraction_block_reason("la_colonia_sps")
-        == "technical_location_binding_unconfirmed"
+        == "location_granularity_unconfirmed"
     )
     with pytest.raises(
         LocationConfigError,
-        match="technical_location_binding_unconfirmed",
+        match="location_granularity_unconfirmed",
     ):
         DEFAULT_LOCATION_CATALOG.require_extraction_ready("la_colonia_sps")
 
@@ -83,6 +83,20 @@ def test_single_city_supermarket_can_be_enabled_without_source_selector_key() ->
     assert catalog.require_extraction_ready("solo_sps_sps") == location
 
 
+def test_any_enabled_location_requires_confirmed_granularity() -> None:
+    with pytest.raises(LocationConfigError, match="granularidad desconocida"):
+        LocationConfig(
+            location_id="x_sps",
+            supermarket_id="x",
+            city_id="sps",
+            city_name="San Pedro Sula",
+            granularity=LocationGranularity.UNKNOWN,
+            is_available=True,
+            in_scope=True,
+            extraction_enabled=True,
+        )
+
+
 def test_multi_city_supermarket_cannot_be_enabled_without_confirmed_binding() -> None:
     supermarket = SupermarketConfig(
         supermarket_id="multi",
@@ -101,6 +115,30 @@ def test_multi_city_supermarket_cannot_be_enabled_without_confirmed_binding() ->
     )
     with pytest.raises(LocationConfigError, match="binding técnico confirmado"):
         build_location_catalog((supermarket,), (location,))
+
+
+def test_known_granularity_but_unconfirmed_binding_has_specific_block_reason() -> None:
+    supermarket = SupermarketConfig(
+        supermarket_id="multi",
+        supermarket_name="Multi",
+        location_selection_mode=LocationSelectionMode.SOURCE_SELECTION_REQUIRED,
+    )
+    location = LocationConfig(
+        location_id="multi_sps",
+        supermarket_id="multi",
+        city_id="sps",
+        city_name="San Pedro Sula",
+        granularity=LocationGranularity.CITY,
+        is_available=True,
+        in_scope=True,
+        extraction_enabled=False,
+        technical_binding_confirmed=False,
+    )
+    catalog = build_location_catalog((supermarket,), (location,))
+    assert (
+        catalog.extraction_block_reason("multi_sps")
+        == "technical_location_binding_unconfirmed"
+    )
 
 
 def test_multi_city_supermarket_can_enable_exact_confirmed_source_key() -> None:
