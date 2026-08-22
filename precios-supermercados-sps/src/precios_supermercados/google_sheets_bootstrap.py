@@ -43,7 +43,7 @@ class GoogleSheetsBootstrapResult:
     created: int
     updated: int
     replayed: int
-    managed_tabs_read: int
+    nonempty_managed_tables: int
     row_counts: Mapping[str, int]
     payload_bytes: int | None = None
 
@@ -52,7 +52,12 @@ class GoogleSheetsBootstrapResult:
             raise GoogleSheetsBootstrapError("bootstrap_mode_invalid")
         if type(self.wrote) is not bool:
             raise GoogleSheetsBootstrapError("bootstrap_wrote_invalid")
-        for field_name in ("created", "updated", "replayed", "managed_tabs_read"):
+        for field_name in (
+            "created",
+            "updated",
+            "replayed",
+            "nonempty_managed_tables",
+        ):
             value = getattr(self, field_name)
             if type(value) is not int or value < 0:
                 raise GoogleSheetsBootstrapError(f"bootstrap_{field_name}_invalid")
@@ -69,7 +74,7 @@ class GoogleSheetsBootstrapResult:
             "created": self.created,
             "updated": self.updated,
             "replayed": self.replayed,
-            "managed_tabs_read": self.managed_tabs_read,
+            "nonempty_managed_tables": self.nonempty_managed_tables,
             "row_counts": dict(self.row_counts),
             "payload_bytes": self.payload_bytes,
         }
@@ -111,7 +116,9 @@ def run_google_sheets_bootstrap(
             created=0,
             updated=0,
             replayed=0,
-            managed_tabs_read=len(snapshot.requested_ranges),
+            nonempty_managed_tables=sum(
+                1 for count in snapshot.row_counts.values() if count > 0
+            ),
             row_counts=snapshot.row_counts,
             payload_bytes=None,
         )
@@ -124,7 +131,7 @@ def run_google_sheets_bootstrap(
         created=result.created,
         updated=result.updated,
         replayed=result.replayed,
-        managed_tabs_read=sum(
+        nonempty_managed_tables=sum(
             1 for count in result.initial_row_counts.values() if count > 0
         ),
         row_counts=result.final_row_counts,
