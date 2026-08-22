@@ -135,16 +135,16 @@ jobs:
           import time
           from pathlib import Path
 
+          from precios_supermercados.cloudflare_controlled_probe_events_query import (
+              ControlledProbeEventsVerifierClient,
+          )
           from precios_supermercados.cloudflare_controlled_probe_observability import (
               ControlledProbeObservabilityError,
-          )
-          from precios_supermercados.cloudflare_controlled_probe_trace_query import (
-              ControlledProbeTraceQueryVerifierClient,
           )
           from precios_supermercados.cloudflare_observability_http_transport import CloudflareObservabilityHttpTransport
 
           artifact = json.loads(Path(".probe-evidence/cloudflare-probe-result.json").read_text(encoding="utf-8"))
-          verifier = ControlledProbeTraceQueryVerifierClient(
+          verifier = ControlledProbeEventsVerifierClient(
               os.environ["CLOUDFLARE_ACCOUNT_ID"],
               CloudflareObservabilityHttpTransport(),
           )
