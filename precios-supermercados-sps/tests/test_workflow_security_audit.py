@@ -45,6 +45,7 @@ PINNED_ACTIONS = {
 
 PROBE_WORKFLOW = "precios-supermercados-sps-cloudflare-probe.yml"
 DIAGNOSTIC_WORKFLOW = "cloudflare-controlled-probe-observability-shape.yml"
+TEST_WORKFLOW = "precios-supermercados-sps-tests.yml"
 DIAGNOSTIC_MARKER_PATH = (
     "precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json"
 )
@@ -71,7 +72,7 @@ EXPECTED_PERMISSIONS = {
     "precios-supermercados-sps-la-colonia-diagnostic.yml": {"contents": "read"},
     "precios-supermercados-sps-la-colonia-facet-discovery.yml": {"contents": "read"},
     "precios-supermercados-sps-la-colonia-live.yml": {"contents": "read"},
-    "precios-supermercados-sps-tests.yml": {"contents": "read"},
+    TEST_WORKFLOW: {"contents": "read"},
 }
 
 ALLOWED_JOB_PERMISSIONS = {
@@ -80,7 +81,18 @@ ALLOWED_JOB_PERMISSIONS = {
             "contents": "read",
             "id-token": "write",
         }
-    }
+    },
+    TEST_WORKFLOW: {
+        "observability-marker-heartbeat": {
+            "contents": "read",
+            "issues": "write",
+        },
+        "observability-marker-diagnostic": {
+            "contents": "read",
+            "actions": "read",
+            "issues": "write",
+        },
+    },
 }
 
 EXPECTED_TRIGGERS = {
@@ -91,7 +103,7 @@ EXPECTED_TRIGGERS = {
     "precios-supermercados-sps-la-colonia-dispatch-recovery.yml": {"workflow_run"},
     "precios-supermercados-sps-la-colonia-facet-discovery.yml": {"workflow_dispatch"},
     "precios-supermercados-sps-la-colonia-live.yml": {"workflow_dispatch"},
-    "precios-supermercados-sps-tests.yml": {
+    TEST_WORKFLOW: {
         "workflow_dispatch",
         "pull_request",
         "push",
@@ -109,10 +121,12 @@ BLOCKED_ENTRYPOINTS = {
 ALLOWED_SECRET_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_GATEWAY_SECRET, PROBE_OBSERVABILITY_SECRET},
     DIAGNOSTIC_WORKFLOW: {PROBE_OBSERVABILITY_SECRET},
+    TEST_WORKFLOW: {PROBE_OBSERVABILITY_SECRET},
 }
 ALLOWED_VAR_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
     DIAGNOSTIC_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
+    TEST_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
 }
 
 
@@ -223,6 +237,36 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
             }
             continue
 
+        if path.name == TEST_WORKFLOW:
+            ci_jobs = jobs(workflow)
+            tests_checkout = [
+                step
+                for step in job_steps(ci_jobs["tests"])
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            ]
+            heartbeat_checkout = [
+                step
+                for step in job_steps(ci_jobs["observability-marker-heartbeat"])
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            ]
+            diagnostic_checkout = [
+                step
+                for step in job_steps(ci_jobs["observability-marker-diagnostic"])
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            ]
+            assert len(tests_checkout) == 1
+            assert tests_checkout[0]["with"] == {
+                "ref": "${{ github.sha }}",
+                "persist-credentials": "false",
+            }
+            assert heartbeat_checkout == []
+            assert len(diagnostic_checkout) == 1
+            assert diagnostic_checkout[0]["with"] == {
+                "ref": "${{ github.event.pull_request.base.sha }}",
+                "persist-credentials": "false",
+            }
+            continue
+
         checkout_steps = [
             step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
         ]
@@ -327,6 +371,68 @@ def test_trigger_sets_are_closed_without_issue_comment_authority():
         assert "issue_comment" not in triggers
 
 
+def test_ci_observability_marker_route_is_exact_trusted_and_non_live():
+    path = WORKFLOW_DIR / TEST_WORKFLOW
+    workflow = load_workflow(path)
+    ci_jobs = jobs(workflow)
+    assert set(ci_jobs) == {
+        "tests",
+        "observability-marker-heartbeat",
+        "observability-marker-diagnostic",
+    }
+    heartbeat = ci_jobs["observability-marker-heartbeat"]
+    diagnostic = ci_jobs["observability-marker-diagnostic"]
+
+    required_condition_fragments = (
+        "github.event_name == 'pull_request'",
+        "github.repository == 'Jchernand3z19/Portafolio'",
+        "github.event.pull_request.number == 117",
+        "github.event.pull_request.head.repo.full_name == github.repository",
+        "github.event.pull_request.head.ref == 'diag/precios-sps-observability-request-007'",
+        "github.event.pull_request.base.ref == 'main'",
+        "github.event.pull_request.changed_files == 1",
+    )
+    for controlled_job in (heartbeat, diagnostic):
+        condition = str(controlled_job.get("if", ""))
+        for fragment in required_condition_fragments:
+            assert fragment in condition
+
+    assert "environment" not in heartbeat
+    assert diagnostic.get("environment") == "cloudflare-probe"
+    assert diagnostic.get("needs") == "tests"
+    assert heartbeat["env"]["TARGET_PR_NUMBER"] == "117"
+    assert diagnostic["env"]["TARGET_PR_NUMBER"] == "117"
+    assert heartbeat["permissions"] == {"contents": "read", "issues": "write"}
+    assert diagnostic["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+        "issues": "write",
+    }
+
+    heartbeat_raw = str(heartbeat)
+    diagnostic_raw = str(diagnostic)
+    assert "actions/checkout@" not in heartbeat_raw
+    assert "actions/download-artifact@" not in heartbeat_raw
+    assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in heartbeat_raw
+    assert "cloudflare-probe" not in heartbeat_raw
+    assert "diagnostic_status': 'ci_route_observed" not in heartbeat_raw
+    assert "ci_route_observed" in heartbeat_raw
+
+    assert "run-id: 32551882793" in path.read_text(encoding="utf-8")
+    assert "diagnosticar_observability_sonda_cloudflare.py" in diagnostic_raw
+    assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" in diagnostic_raw
+    assert "CLOUDFLARE_PROBE_GATEWAY_URL" not in diagnostic_raw
+    assert ".workers.dev" not in diagnostic_raw
+    assert "/v1/probe" not in diagnostic_raw
+    assert "scripts/probar_la_colonia.py" not in diagnostic_raw
+    assert "scripts/diagnosticar_ventanas_la_colonia.py" not in diagnostic_raw
+    assert "scripts/descubrir_facets_la_colonia.py" not in diagnostic_raw
+    assert "production_authority" in heartbeat_raw
+    assert "catalog_accepted" in heartbeat_raw
+    assert "production_authority" in diagnostic_raw
+    assert "catalog_accepted" in diagnostic_raw
+
+
 def test_pull_request_target_never_checks_out_untrusted_pr_code():
     for path, workflow in workflows():
         triggers = workflow["on"]
@@ -393,7 +499,7 @@ def test_network_capable_scripts_exist_only_inside_blocked_jobs():
 
 
 def test_ci_paths_cover_project_policy_and_every_sps_workflow():
-    workflow = load_workflow(WORKFLOW_DIR / "precios-supermercados-sps-tests.yml")
+    workflow = load_workflow(WORKFLOW_DIR / TEST_WORKFLOW)
     expected_paths = {
         "precios-supermercados-sps/**",
         ".github/workflows/**",
