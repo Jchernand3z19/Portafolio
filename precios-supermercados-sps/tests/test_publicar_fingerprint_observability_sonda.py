@@ -39,6 +39,14 @@ def test_shape_collected_exposes_only_fixed_structural_fingerprint():
                     "events": {
                         "mapping_event_count": 3,
                         "source_types": {"mapping": 3},
+                        "metadata_presence_counts": {
+                            "spanName": 3,
+                            "statusCode": 1,
+                            "url": 1,
+                            "parentSpanId": 2,
+                            "origin": 1,
+                            "type": 3,
+                        },
                         "expected_custom_span_match_counts": {"$metadata.spanName": 1},
                         "standard_attribute_presence_counts": {
                             "source:http.response.status_code": 1,
@@ -51,6 +59,7 @@ def test_shape_collected_exposes_only_fixed_structural_fingerprint():
                     "events": {
                         "mapping_event_count": 0,
                         "source_types": {"missing": 0},
+                        "metadata_presence_counts": {},
                         "expected_custom_span_match_counts": {},
                         "standard_attribute_presence_counts": {},
                         "precios_attribute_key_locations": [],
@@ -58,6 +67,23 @@ def test_shape_collected_exposes_only_fixed_structural_fingerprint():
                 },
             }
         ],
+        "direct_custom_span_views": {
+            "with_service": {
+                "events": {
+                    "mapping_event_count": 1,
+                    "metadata_presence_counts": {"parentSpanId": 1},
+                    "precios_attribute_key_locations": ["source:precios.probe_id"],
+                }
+            },
+            "without_service": {
+                "events": {
+                    "mapping_event_count": 1,
+                    "metadata_presence_counts": {"parentSpanId": 1},
+                    "precios_attribute_key_locations": ["source:precios.probe_id"],
+                }
+            },
+            "trace_relation": "candidate",
+        },
     }
     assert _contexts(payload) == {
         "precios-sps/obs/result/shape_collected",
@@ -68,6 +94,17 @@ def test_shape_collected_exposes_only_fixed_structural_fingerprint():
         "precios-sps/obs/source/mapping",
         "precios-sps/obs/http-status/source",
         "precios-sps/obs/url-full/source",
+        "precios-sps/obs/metadata-status/yes",
+        "precios-sps/obs/metadata-url/yes",
+        "precios-sps/obs/metadata-parent/yes",
+        "precios-sps/obs/metadata-span-name/yes",
+        "precios-sps/obs/metadata-origin/yes",
+        "precios-sps/obs/metadata-type/yes",
+        "precios-sps/obs/custom-direct-service/1",
+        "precios-sps/obs/custom-direct-any/1",
+        "precios-sps/obs/custom-direct-trace/candidate",
+        "precios-sps/obs/custom-direct-precios/yes",
+        "precios-sps/obs/custom-direct-parent/yes",
     }
 
 
@@ -84,6 +121,7 @@ def test_shape_fingerprint_collapses_multiple_locations_and_source_types():
                     "events": {
                         "mapping_event_count": 2,
                         "source_types": {"mapping": 1, "string": 1},
+                        "metadata_presence_counts": {},
                         "expected_custom_span_match_counts": {},
                         "standard_attribute_presence_counts": {
                             "top:http.response.status_code": 1,
@@ -101,6 +139,30 @@ def test_shape_fingerprint_collapses_multiple_locations_and_source_types():
     assert "precios-sps/obs/url-full/none" in contexts
     assert "precios-sps/obs/custom-span/no" in contexts
     assert "precios-sps/obs/precios-attrs/no" in contexts
+    assert "precios-sps/obs/metadata-status/no" in contexts
+    assert "precios-sps/obs/custom-direct-service/0" in contexts
+    assert "precios-sps/obs/custom-direct-trace/none" in contexts
+
+
+def test_direct_custom_span_relation_is_vocabulary_limited():
+    payload = {
+        "diagnostic_status": "shape_collected",
+        "trace_candidate_count": 1,
+        "contains_no_event_values": True,
+        "production_authority": False,
+        "catalog_accepted": False,
+        "candidate_shapes": [],
+        "direct_custom_span_views": {
+            "with_service": {"events": {"mapping_event_count": 500}},
+            "without_service": {"events": {"mapping_event_count": 500}},
+            "trace_relation": "attacker-controlled-value",
+        },
+    }
+    contexts = _contexts(payload)
+    assert "precios-sps/obs/custom-direct-service/99" in contexts
+    assert "precios-sps/obs/custom-direct-any/99" in contexts
+    assert "precios-sps/obs/custom-direct-trace/none" in contexts
+    assert all("attacker-controlled-value" not in context for context in contexts)
 
 
 def test_controlled_error_publishes_only_safe_internal_code():
@@ -164,6 +226,7 @@ def test_status_contexts_are_bounded_and_never_include_raw_candidate_values():
                     "events": {
                         "mapping_event_count": 1,
                         "source_types": {"mapping": 1},
+                        "metadata_presence_counts": {"spanName": 1},
                         "expected_custom_span_match_counts": {"unexpected-path": 1},
                         "standard_attribute_presence_counts": {
                             "attacker:http.response.status_code": 1,
@@ -179,5 +242,6 @@ def test_status_contexts_are_bounded_and_never_include_raw_candidate_values():
     assert "precios-sps/obs/trace-candidates/999" in contexts
     assert "precios-sps/obs/http-status/none" in contexts
     assert "precios-sps/obs/url-full/resource" in contexts
+    assert "precios-sps/obs/metadata-span-name/yes" in contexts
     assert all("event-secret-value" not in context for context in contexts)
     assert all(len(context) <= 100 for context in contexts)
