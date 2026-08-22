@@ -45,12 +45,10 @@ PINNED_ACTIONS = {
 
 PROBE_WORKFLOW = "precios-supermercados-sps-cloudflare-probe.yml"
 PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
+PROBE_PUBLIC_KEY_VAR = "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL"
 
 EXPECTED_PERMISSIONS = {
-    PROBE_WORKFLOW: {
-        "contents": "read",
-        "id-token": "write",
-    },
+    PROBE_WORKFLOW: {"contents": "read"},
     "precios-supermercados-sps-la-colonia-command.yml": {
         "contents": "read",
         "pull-requests": "read",
@@ -63,6 +61,15 @@ EXPECTED_PERMISSIONS = {
     "precios-supermercados-sps-la-colonia-facet-discovery.yml": {"contents": "read"},
     "precios-supermercados-sps-la-colonia-live.yml": {"contents": "read"},
     "precios-supermercados-sps-tests.yml": {"contents": "read"},
+}
+
+ALLOWED_JOB_PERMISSIONS = {
+    PROBE_WORKFLOW: {
+        "controlled-probe": {
+            "contents": "read",
+            "id-token": "write",
+        }
+    }
 }
 
 EXPECTED_TRIGGERS = {
@@ -90,6 +97,9 @@ BLOCKED_ENTRYPOINTS = {
 ALLOWED_SECRET_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_GATEWAY_SECRET},
 }
+ALLOWED_VAR_REFERENCES = {
+    PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR},
+}
 
 
 def load_workflow(path: Path) -> dict[str, Any]:
@@ -113,13 +123,17 @@ def jobs(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
+def job_steps(job: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    current = job.get("steps", [])
+    assert isinstance(current, list)
+    assert all(isinstance(step, dict) for step in current)
+    return tuple(current)
+
+
 def steps(value: dict[str, Any]) -> tuple[dict[str, Any], ...]:
     all_steps: list[dict[str, Any]] = []
     for job in jobs(value).values():
-        current = job.get("steps", [])
-        assert isinstance(current, list)
-        assert all(isinstance(step, dict) for step in current)
-        all_steps.extend(current)
+        all_steps.extend(job_steps(job))
     return tuple(all_steps)
 
 
@@ -142,6 +156,11 @@ def secret_references(path: Path) -> set[str]:
     return set(re.findall(r"\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}", raw))
 
 
+def variable_references(path: Path) -> set[str]:
+    raw = path.read_text(encoding="utf-8")
+    return set(re.findall(r"\$\{\{\s*vars\.([A-Za-z0-9_]+)\s*\}\}", raw))
+
+
 def all_jobs_blocked(value: dict[str, Any]) -> bool:
     return all(job.get("if") == "${{ false }}" for job in jobs(value).values())
 
@@ -154,22 +173,45 @@ def test_all_external_actions_are_pinned_to_verified_full_shas():
             assert PINNED_ACTIONS.get(action) == revision, (path.name, reference)
 
 
-def test_permissions_are_exact_without_job_override_or_unapproved_secrets():
+def test_permissions_are_exact_with_only_explicit_job_overrides_and_references():
     for path, workflow in workflows():
         assert workflow["permissions"] == EXPECTED_PERMISSIONS[path.name]
-        assert all("permissions" not in job for job in jobs(workflow).values())
+        actual_overrides = {
+            name: job["permissions"]
+            for name, job in jobs(workflow).items()
+            if "permissions" in job
+        }
+        assert actual_overrides == ALLOWED_JOB_PERMISSIONS.get(path.name, {})
         assert secret_references(path) == ALLOWED_SECRET_REFERENCES.get(path.name, set())
+        assert variable_references(path) == ALLOWED_VAR_REFERENCES.get(path.name, set())
 
 
 def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
     for path, workflow in workflows():
+        if path.name == PROBE_WORKFLOW:
+            probe_jobs = jobs(workflow)
+            privileged_checkout = [
+                step
+                for step in job_steps(probe_jobs["controlled-probe"])
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            ]
+            assert privileged_checkout == [], "El job con OIDC no debe ejecutar código del repositorio"
+
+            verifier_checkout = [
+                step
+                for step in job_steps(probe_jobs["verify-evidence"])
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            ]
+            assert len(verifier_checkout) == 1
+            assert verifier_checkout[0]["with"] == {
+                "ref": "${{ github.sha }}",
+                "persist-credentials": "false",
+            }
+            continue
+
         checkout_steps = [
             step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
         ]
-        if path.name == PROBE_WORKFLOW:
-            assert checkout_steps == [], "La sonda privilegiada no debe ejecutar código del repositorio"
-            continue
-
         expected_ref = (
             "${{ github.workflow_sha }}"
             if path.name
@@ -205,7 +247,7 @@ def test_privileged_and_live_entrypoints_are_globally_blocked():
     assert "github.request(" not in controller
 
 
-def test_controlled_probe_is_manual_isolated_and_has_no_caller_target_input():
+def test_controlled_probe_is_manual_isolated_and_verified_outside_oidc_job():
     path = WORKFLOW_DIR / PROBE_WORKFLOW
     workflow = load_workflow(path)
     triggers = workflow["on"]
@@ -214,16 +256,27 @@ def test_controlled_probe_is_manual_isolated_and_has_no_caller_target_input():
     assert triggers["workflow_dispatch"] in ("", None)
 
     probe_jobs = jobs(workflow)
-    assert set(probe_jobs) == {"controlled-probe"}
-    job = probe_jobs["controlled-probe"]
-    assert job.get("environment") == "cloudflare-probe"
-    assert job.get("if") != "${{ false }}"
-    assert "permissions" not in job
-    assert workflow["permissions"] == {"contents": "read", "id-token": "write"}
+    assert set(probe_jobs) == {"controlled-probe", "verify-evidence"}
+    privileged = probe_jobs["controlled-probe"]
+    verifier = probe_jobs["verify-evidence"]
+    assert privileged.get("environment") == "cloudflare-probe"
+    assert verifier.get("environment") == "cloudflare-probe"
+    assert privileged.get("if") != "${{ false }}"
+    assert verifier.get("needs") == "controlled-probe"
+    assert privileged["permissions"] == {"contents": "read", "id-token": "write"}
+    assert "permissions" not in verifier
+    assert workflow["permissions"] == {"contents": "read"}
 
+    privileged_raw = "\n".join(str(step) for step in job_steps(privileged))
+    verifier_raw = "\n".join(str(step) for step in job_steps(verifier))
     raw = path.read_text(encoding="utf-8")
     assert secret_references(path) == {PROBE_GATEWAY_SECRET}
-    assert "actions/checkout@" not in raw
+    assert variable_references(path) == {PROBE_PUBLIC_KEY_VAR}
+    assert "actions/checkout@" not in privileged_raw
+    assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in verifier_raw
+    assert "ACTIONS_ID_TOKEN_REQUEST_URL" not in verifier_raw
+    assert "cloudflare_controlled_probe_verifier" in verifier_raw
+    assert "actions/download-artifact@" in verifier_raw
     assert "${{ inputs." not in raw
     assert "github.event.inputs" not in raw
     assert "originUrl" not in raw
@@ -237,13 +290,15 @@ def test_controlled_probe_is_manual_isolated_and_has_no_caller_target_input():
     assert "${PROBE_GATEWAY_URL%/}/v1/probe" in raw
 
 
-def test_only_probe_workflow_can_request_oidc_write_permission():
+def test_only_controlled_probe_job_can_request_oidc_write_permission():
     for path, workflow in workflows():
-        permissions = workflow["permissions"]
-        if path.name == PROBE_WORKFLOW:
-            assert permissions.get("id-token") == "write"
-        else:
-            assert "id-token" not in permissions
+        assert "id-token" not in workflow["permissions"]
+        for name, job in jobs(workflow).items():
+            permissions = job.get("permissions", {})
+            if path.name == PROBE_WORKFLOW and name == "controlled-probe":
+                assert permissions.get("id-token") == "write"
+            else:
+                assert "id-token" not in permissions
 
 
 def test_trigger_sets_are_closed_without_issue_comment_authority():
