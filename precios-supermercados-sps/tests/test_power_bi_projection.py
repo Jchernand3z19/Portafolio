@@ -62,7 +62,11 @@ def validated(
         current_price=Decimal(price) if price is not None else None,
         reported_regular_price=Decimal(regular) if regular is not None else None,
         is_promotion=True,
-        availability=AvailabilityStatus.IN_STOCK,
+        availability=(
+            AvailabilityStatus.IN_STOCK
+            if price is not None
+            else AvailabilityStatus.UNKNOWN
+        ),
         location_status=LocationStatus.CONFIRMED,
         location_evidence="fixture",
         location_confidence=Decimal("1"),
