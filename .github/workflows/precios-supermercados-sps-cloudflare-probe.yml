@@ -47,8 +47,8 @@ jobs:
               raise SystemExit("La URL secreta debe contener sólo el origen del gateway")
           PY
 
-      - name: Solicitar token OIDC de GitHub
-        id: oidc
+      - name: Autenticar y ejecutar una única sonda física
+        id: probe
         shell: bash
         run: |
           set -euo pipefail
@@ -57,15 +57,7 @@ jobs:
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${PROBE_AUDIENCE}")"
           id_token="$(python -c 'import json,sys; value=json.load(sys.stdin).get("value"); assert isinstance(value,str) and value; print(value)' <<<"$token_response")"
           echo "::add-mask::$id_token"
-          echo "token=$id_token" >> "$GITHUB_OUTPUT"
 
-      - name: Ejecutar una única sonda física
-        id: probe
-        shell: bash
-        env:
-          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
-        run: |
-          set -euo pipefail
           payload="$(python - <<'PY'
           import json
           import os
@@ -78,11 +70,13 @@ jobs:
 
           curl --fail-with-body --silent --show-error --retry 0 \
             --connect-timeout 10 --max-time 60 \
-            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H "Authorization: Bearer ${id_token}" \
             -H "Content-Type: application/json" \
             --data "$payload" \
             "${PROBE_GATEWAY_URL%/}/v1/probe" \
             --output cloudflare-probe-result.json
+
+          unset id_token token_response
 
           python - <<'PY'
           import json
