@@ -298,8 +298,6 @@ def test_binding_rejects_invalid_time_order_timezone_and_counts() -> None:
         "offers": (validated_offer(),),
         "supermarket_id": "demo",
         "location_id": "demo_sps",
-        "products_observed": 1,
-        "offers_observed": 1,
         "quality_events": (quality_event(),),
     }
 
@@ -308,6 +306,8 @@ def test_binding_rejects_invalid_time_order_timezone_and_counts() -> None:
             **common,
             started_at_utc=BASE + timedelta(minutes=1),
             finished_at_utc=BASE,
+            products_observed=1,
+            offers_observed=1,
         )
 
     with pytest.raises(CommercialRunEvidenceError, match="started_at_utc_invalid"):
@@ -315,6 +315,8 @@ def test_binding_rejects_invalid_time_order_timezone_and_counts() -> None:
             **common,
             started_at_utc=BASE.replace(tzinfo=None),
             finished_at_utc=BASE + timedelta(minutes=1),
+            products_observed=1,
+            offers_observed=1,
         )
 
     with pytest.raises(CommercialRunEvidenceError, match="products_observed_invalid"):
@@ -323,6 +325,7 @@ def test_binding_rejects_invalid_time_order_timezone_and_counts() -> None:
             started_at_utc=BASE,
             finished_at_utc=BASE + timedelta(minutes=1),
             products_observed=-1,
+            offers_observed=1,
         )
 
 
