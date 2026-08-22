@@ -1,8 +1,22 @@
 # Modelo común de datos y almacenamiento
 
+## Estado de implementación
+
+Este documento define el **modelo lógico común** y las invariantes que debe respetar cualquier backend futuro. **No declara un backend productivo seleccionado ni conectado.**
+
+Estado vigente:
+
+- `commercial_state.py` implementa current/history de forma atómica e idempotente **offline**;
+- `commercial_pricing.py` implementa la derivación de reducción real **offline**;
+- Google Sheets y BigQuery son opciones históricas/evolutivas de almacenamiento, no infraestructura activa;
+- ninguna escritura productiva debe depender de un `catalog_accepted`, `commercial_update_allowed` o booleano equivalente controlable por el caller;
+- una futura persistencia productiva deberá consumir una decisión de autoridad tipada y verificable derivada de provenance productiva real.
+
+Hasta que esa frontera exista, las tablas descritas abajo son un contrato lógico para diseño, pruebas y futura persistencia; no evidencian que los datos ya estén siendo almacenados comercialmente.
+
 ## Nomenclatura oficial
 
-La Fase 0 utiliza una sola nomenclatura en modelos Python, pruebas y tabs futuras. No se admiten alias para el mismo dato.
+La Fase 0 utiliza una sola nomenclatura en modelos Python, pruebas y estructuras futuras. No se admiten alias para el mismo dato.
 
 | Concepto | Nombre oficial |
 |---|---|
@@ -38,7 +52,7 @@ Salida común de los extractores. Permite normalización parcial legítima:
 
 ### `ValidatedOffer`
 
-Oferta validada estructuralmente. Contiene `state_hash`, fecha de validación, `review_status` y eventos de calidad. Una oferta puede ser válida para trazabilidad aunque conserve campos pendientes. La aceptación comercial también depende del estado de la ejecución completa.
+Oferta validada estructuralmente. Contiene `state_hash`, fecha de validación, `review_status` y eventos de calidad. Una oferta puede ser válida para trazabilidad aunque conserve campos pendientes. La aceptación comercial también depende del estado de la ejecución completa y, en producción, de autoridad externa verificable.
 
 ## Vocabularios cerrados
 
@@ -105,9 +119,11 @@ Reglas de `source_key`:
 5. Parámetros potencialmente funcionales, incluido `ref`, se conservan.
 6. `supermarket_id`, `location_id`, `source_product_id` y `source_key` vacíos se rechazan.
 
-## Tabs futuras de Google Sheets
+## Modelo lógico de almacenamiento
 
-Las fechas se almacenarán en ISO 8601 UTC. Los decimales serán valores numéricos. Los campos JSON se serializarán de forma determinista. Google Sheets no aplica restricciones físicas, por lo que la capa de persistencia deberá validarlas.
+Las estructuras siguientes se diseñaron inicialmente con Google Sheets como almacenamiento temporal. Hoy deben leerse como **tablas lógicas backend-neutral**. Si en el futuro se usa Sheets, BigQuery u otra tecnología, el adaptador deberá conservar estas invariantes o documentar explícitamente una migración compatible.
+
+Las fechas se almacenan en ISO 8601 UTC. Los decimales son valores numéricos. Los campos JSON se serializan de forma determinista. Si el backend no aplica restricciones físicas, la capa de persistencia debe validarlas antes de confirmar una transacción.
 
 ### `cfg_supermarkets`
 
@@ -211,7 +227,7 @@ Las fechas se almacenarán en ISO 8601 UTC. Los decimales serán valores numéri
 
 ### `fact_offers_current`
 
-**Propósito:** último estado comercial aceptado de cada oferta. Solo se actualiza desde ejecuciones con `commercial_update_allowed = true`.
+**Propósito:** último estado comercial aceptado de cada oferta. En un backend productivo sólo puede actualizarse después de una decisión comercial autoritativa; un booleano enviado por el caller no es suficiente.
 
 **Llave primaria:** `offer_id`.
 
@@ -256,7 +272,7 @@ Las fechas se almacenarán en ISO 8601 UTC. Los decimales serán valores numéri
 
 ### `fact_offer_history`
 
-**Propósito:** periodos históricos solo cuando cambia `state_hash`.
+**Propósito:** periodos históricos solo cuando cambia `state_hash` de un estado comercial aceptado.
 
 **Llave primaria:** `offer_history_id`.
 
@@ -300,7 +316,7 @@ Las fechas se almacenarán en ISO 8601 UTC. Los decimales serán valores numéri
 
 ### `fact_scrape_runs`
 
-**Propósito:** registrar cada ejecución, medir completitud y decidir si puede actualizar estados comerciales.
+**Propósito:** registrar cada ejecución, medir completitud y conservar la decisión técnica/comercial. En producción, la habilitación comercial requiere además autoridad productiva verificable y no se deriva únicamente de métricas o de un booleano caller-controlled.
 
 **Llave primaria:** `scrape_run_id`.
 
@@ -312,7 +328,7 @@ Las fechas se almacenarán en ISO 8601 UTC. Los decimales serán valores numéri
 | `started_at_utc` | datetime | Sí | UTC. |
 | `finished_at_utc` | datetime | No | UTC. |
 | `run_status` | enum | Sí | `running`, `success`, `warning`, `rejected`, `failed`, `abandoned`. |
-| `commercial_update_allowed` | boolean | Sí | Solo true tras superar validaciones de completitud. |
+| `commercial_update_allowed` | boolean | Sí | Campo lógico derivado de una decisión autoritativa; el caller no puede concederlo por sí solo. |
 | `extractor_version` | string | Sí | Versión ejecutada. |
 | `schema_version` | string | Sí | Versión esperada. |
 | `discovered_page_count` | integer | Sí | Mayor o igual que cero. |
@@ -342,14 +358,15 @@ Las fechas se almacenarán en ISO 8601 UTC. Los decimales serán valores numéri
 | `git_commit_sha` | string | No | Commit ejecutado. |
 | `git_ref` | string | No | Rama o tag ejecutado. |
 
-**Reglas de aceptación:**
+**Reglas de aceptación técnica/comercial:**
 
 - `running`: ejecución activa; no actualiza hechos comerciales.
-- `success`: completa y aceptada; `commercial_update_allowed = true`.
-- `warning`: aceptada con eventos no bloqueantes; puede actualizar si `commercial_update_allowed = true`.
-- `rejected`: terminó técnicamente, pero falló métricas de completitud o validaciones bloqueantes; no actualiza precios, disponibilidad ni periodos.
+- `success`: terminó técnicamente y puede ser candidata a aceptación; en producción aún requiere autoridad verificable.
+- `warning`: terminó con eventos no bloqueantes y puede ser candidata; en producción aún requiere autoridad verificable.
+- `rejected`: falló completitud o validaciones bloqueantes; no actualiza precios, disponibilidad ni periodos.
 - `failed`: error técnico; no actualiza.
 - `abandoned`: ejecución iniciada que no terminó dentro del límite; no actualiza.
+- `commercial_update_allowed = true` sólo puede materializarse después de la decisión autoritativa correspondiente; no se acepta como input suficiente para conceder autoridad.
 
 Una caída de cobertura, páginas faltantes, cambio estructural bloqueante o extracción parcial no se transforma en `not_listed`, `out_of_stock` ni reducción de precios. La ejecución completa se marca `rejected` y el último estado comercial aceptado permanece intacto.
 
@@ -399,13 +416,13 @@ fact_scrape_runs      1 ── * fact_quality_events
 
 ## Regla de periodos históricos
 
-1. Solo una ejecución aceptada puede comparar y persistir estados comerciales.
+1. Solo una ejecución **comercialmente aceptada por una frontera autoritativa** puede comparar y persistir estados comerciales.
 2. Si no existe `offer_id`, se crea `fact_offers_current` y un periodo `initial` abierto.
 3. Si `state_hash` coincide, no se crea historial; se actualizan `last_observed_at_utc` y `last_confirmed_by_scrape_run_id`.
 4. Si cambia, se calcula `changed_fields`, se asigna `change_type`, se cierra el periodo anterior con `valid_to_utc` y `closed_by_scrape_run_id`, y se abre exactamente uno nuevo.
 5. Solo existe un periodo abierto por `offer_id`.
 6. El mismo `scrape_run_id`, `offer_id` y `state_hash` no puede duplicar historial.
-7. Una ejecución rechazada, fallida o abandonada registra eventos y métricas, pero no abre ni cierra periodos.
+7. Una ejecución rechazada, fallida, abandonada o sin autoridad productiva registra diagnóstico/evidencia, pero no abre ni cierra periodos productivos.
 
 ## Campos incluidos en `state_hash`
 
