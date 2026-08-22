@@ -60,6 +60,9 @@ jobs:
       issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    env:
+      TARGET_PR_NUMBER: "117"
+      HEARTBEAT_PATH: ${{ runner.temp }}/observability-ci-heartbeat.json
     steps:
       - name: Confirmar ruta de CI
-        run: echo "ci-route-observed"
+        run: echo "$TARGET_PR_NUMBER $HEARTBEAT_PATH"
