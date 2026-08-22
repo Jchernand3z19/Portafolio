@@ -47,7 +47,7 @@ class StructureChangedError(ScraperError):
 
 
 class ExternalNetworkDeniedError(ScraperError):
-    """El transporte real está cerrado mientras GATE-17 siga bloqueado."""
+    """El transporte real permanece cerrado salvo una ruta explícitamente autorizada."""
 
 
 @dataclass(frozen=True, slots=True)
