@@ -55,6 +55,9 @@ jobs:
           github.event.pull_request.head.ref == 'diag/precios-sps-observability-request-007' &&
           github.event.pull_request.base.ref == 'main' &&
           github.event.pull_request.changed_files == 1 }}
+    permissions:
+      contents: read
+      issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
