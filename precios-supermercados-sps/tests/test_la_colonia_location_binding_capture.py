@@ -17,15 +17,16 @@ def _html(*, store_mode: str = "strong") -> str:
     if store_mode == "none":
         stores = ""
     else:
-        store_effect = (
-            "localStorage.setItem('storeId','opaque-store-pedregal')"
-            if store_mode == "strong"
-            else "document.cookie='vtex_session=opaque-session-store; path=/'"
-        )
+        if store_mode == "strong":
+            plaza_effect = "localStorage.setItem('storeId','opaque-store-pedregal')"
+            mega_effect = "localStorage.setItem('storeId','opaque-store-megamall')"
+        else:
+            plaza_effect = "document.cookie='vtex_session=opaque-session-store-pedregal; path=/'"
+            mega_effect = "document.cookie='vtex_session=opaque-session-store-megamall; path=/'"
         stores = f'''
         <div id="stores" role="listbox" hidden>
-          <button role="option" aria-label="Plaza Pedregal" onclick="{store_effect}">Plaza Pedregal</button>
-          <button role="option" aria-label="Mega Mall" onclick="localStorage.setItem('storeId','opaque-store-megamall')">Mega Mall</button>
+          <button role="option" aria-label="Plaza Pedregal" onclick="{plaza_effect}">Plaza Pedregal</button>
+          <button role="option" aria-label="Mega Mall" onclick="{mega_effect}">Mega Mall</button>
         </div>
         '''
     show_stores = (
@@ -218,6 +219,7 @@ def test_weak_store_session_change_does_not_falsely_confirm_city(local_site) -> 
 
     assert result.stop_reason is None
     assert result.store_selection_observed is True
+    assert result.selected_store == "Mega Mall"
     assert result.binding_report["granularity_candidate"] == "unknown"
     assert result.binding_report["confidence"] == "weak"
     assert result.binding_report["technical_binding_observed"] is False
@@ -232,10 +234,8 @@ def test_live_target_must_be_exact_home_even_if_fuses_are_injected() -> None:
         target_url="https://example.com/",
     )
     assert result.browser_started is False
-    assert result.stop_reason in {
-        "live_target_not_exact_la_colonia_home",
-        "unexpected_capture_error",
-    }
+    assert result.target_navigation_started is False
+    assert result.stop_reason == "live_target_not_exact_la_colonia_home"
 
 
 def test_public_result_rejects_any_attempt_to_grant_authority() -> None:
