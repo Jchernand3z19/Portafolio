@@ -48,6 +48,7 @@ DIAGNOSTIC_WORKFLOW = "cloudflare-controlled-probe-observability-shape.yml"
 DIAGNOSTIC_MARKER_PATH = (
     "precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json"
 )
+DIAGNOSTIC_DIRECT_BRANCH = "diag/precios-sps-observability-direct"
 PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
 PROBE_OBSERVABILITY_SECRET = "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN"
 PROBE_PUBLIC_KEY_VAR = "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL"
@@ -59,6 +60,7 @@ EXPECTED_PERMISSIONS = {
         "contents": "read",
         "actions": "read",
         "issues": "write",
+        "statuses": "write",
     },
     "precios-supermercados-sps-la-colonia-command.yml": {
         "contents": "read",
@@ -231,6 +233,8 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
             "precios-supermercados-sps-la-colonia-dispatch-recovery.yml",
         }:
             expected_ref = "${{ github.workflow_sha }}"
+        elif path.name == DIAGNOSTIC_WORKFLOW:
+            expected_ref = "${{ github.ref == 'refs/heads/main' && github.sha || github.event.before }}"
         else:
             expected_ref = "${{ github.sha }}"
         assert checkout_steps, path.name
@@ -325,7 +329,7 @@ def test_trigger_sets_are_closed_without_issue_comment_authority():
         assert "issue_comment" not in triggers
 
 
-def test_diagnostic_push_is_scoped_to_main_and_fixed_marker():
+def test_diagnostic_push_is_scoped_to_controlled_branches_and_fixed_marker():
     path = WORKFLOW_DIR / DIAGNOSTIC_WORKFLOW
     workflow = load_workflow(path)
     triggers = workflow["on"]
@@ -333,7 +337,7 @@ def test_diagnostic_push_is_scoped_to_main_and_fixed_marker():
     assert set(triggers) == {"push"}
     push = triggers["push"]
     assert isinstance(push, dict)
-    assert push["branches"] == ["main"]
+    assert push["branches"] == ["main", DIAGNOSTIC_DIRECT_BRANCH]
     assert push["paths"] == [DIAGNOSTIC_MARKER_PATH]
     assert not all_jobs_blocked(workflow)
 
@@ -345,6 +349,11 @@ def test_diagnostic_push_is_scoped_to_main_and_fixed_marker():
     assert "github.head_ref" not in raw
     assert "github.workflow_sha" not in raw
     assert "github.event.workflow_run" not in raw
+    assert f"refs/heads/{DIAGNOSTIC_DIRECT_BRANCH}" in raw
+    assert "github.actor == 'Jchernand3z19'" in raw
+    assert "statuses: write" in raw
+    assert "precios-sps/observability-diagnostic" in raw
+    assert 'actions/runs/${GITHUB_RUN_ID}' in raw
 
     checkout = [
         step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
@@ -352,7 +361,7 @@ def test_diagnostic_push_is_scoped_to_main_and_fixed_marker():
     assert checkout
     assert all(
         step["with"] == {
-            "ref": "${{ github.sha }}",
+            "ref": "${{ github.ref == 'refs/heads/main' && github.sha || github.event.before }}",
             "persist-credentials": "false",
         }
         for step in checkout

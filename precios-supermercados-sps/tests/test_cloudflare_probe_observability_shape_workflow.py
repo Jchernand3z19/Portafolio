@@ -1,4 +1,4 @@
-"""Auditoría del diagnóstico sanitizado de Workers Observability sobre main."""
+"""Auditoría del diagnóstico sanitizado de Workers Observability."""
 
 from __future__ import annotations
 
@@ -11,7 +11,9 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "cloudflare-controlled-probe-observability-shape.yml"
 MARKER = "precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json"
+DIRECT_BRANCH = "diag/precios-sps-observability-direct"
 SCRIPT_NAME = "diagnosticar_observability_sonda_cloudflare.py"
+STATUS_CONTEXT = "precios-sps/observability-diagnostic"
 
 PINNED_ACTIONS = {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
@@ -27,24 +29,26 @@ def _load() -> tuple[str, dict[str, object]]:
     return raw, value
 
 
-def test_shape_diagnostic_uses_exact_marker_push_on_main_only():
+def test_shape_diagnostic_uses_exact_marker_push_on_controlled_branches_only():
     raw, workflow = _load()
     assert workflow["permissions"] == {
         "contents": "read",
         "actions": "read",
         "issues": "write",
+        "statuses": "write",
     }
     triggers = workflow["on"]
     assert isinstance(triggers, dict) and set(triggers) == {"push"}
     trigger = triggers["push"]
-    assert trigger["branches"] == ["main"]
+    assert trigger["branches"] == ["main", DIRECT_BRANCH]
     assert trigger["paths"] == [MARKER]
 
     job = workflow["jobs"]["inspect-observability-shape"]
     condition = job["if"]
     assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
     assert "github.ref == 'refs/heads/main'" in condition
-    assert "github.actor" not in condition
+    assert f"github.ref == 'refs/heads/{DIRECT_BRANCH}'" in condition
+    assert "github.actor == 'Jchernand3z19'" in condition
     assert job["environment"] == "cloudflare-probe"
     assert "id-token" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in raw
@@ -72,13 +76,13 @@ def test_shape_diagnostic_validates_marker_before_observability_secret_is_used()
     }
 
 
-def test_shape_diagnostic_executes_only_trusted_main_revision():
+def test_shape_diagnostic_executes_trusted_revision_for_each_route():
     raw, workflow = _load()
     steps = workflow["jobs"]["inspect-observability-shape"]["steps"]
     checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
-    assert checkout["name"] == "Checkout trusted main revision only"
+    assert checkout["name"] == "Checkout trusted diagnostic revision only"
     assert checkout["with"] == {
-        "ref": "${{ github.sha }}",
+        "ref": "${{ github.ref == 'refs/heads/main' && github.sha || github.event.before }}",
         "persist-credentials": "false",
     }
     assert "github.event.pull_request" not in raw
@@ -108,17 +112,25 @@ def test_shape_diagnostic_has_no_gateway_or_physical_fetch_capability():
     assert "CLOUDFLARE_ACCOUNT_ID" in raw
 
 
-def test_shape_diagnostic_always_publishes_only_sanitized_comment_to_fixed_marker_pr():
+def test_shape_diagnostic_has_sanitized_comment_and_commit_status_channels():
     raw, workflow = _load()
     job = workflow["jobs"]["inspect-observability-shape"]
     assert job["env"]["TARGET_PR_NUMBER"] == "107"
     assert job["env"]["PROBE_DIAGNOSTIC_COMMENT_PATH"] == "${{ runner.temp }}/probe-shape-comment.json"
+    assert job["env"]["DIAGNOSTIC_STATUS_CONTEXT"] == STATUS_CONTEXT
     steps = job["steps"]
     assert steps[0]["name"] == "Prepare sanitized fallback comment"
     assert "started_without_summary" in steps[0]["run"]
     assert '"contains_no_event_values": True' in steps[0]["run"]
     assert '"production_authority": False' in steps[0]["run"]
     assert '"catalog_accepted": False' in steps[0]["run"]
+
+    heartbeat = next(step for step in steps if step["name"] == "Publish diagnostic run heartbeat")
+    assert heartbeat["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert 'statuses/${GITHUB_SHA}' in heartbeat["run"]
+    assert "-f state=pending" in heartbeat["run"]
+    assert 'actions/runs/${GITHUB_RUN_ID}' in heartbeat["run"]
+    assert "PROBE_OBSERVABILITY_TOKEN" not in heartbeat["run"]
 
     publish = next(step for step in steps if step["name"] == "Publish sanitized diagnostic to marker PR")
     assert publish["if"] == "${{ always() }}"
@@ -131,6 +143,16 @@ def test_shape_diagnostic_always_publishes_only_sanitized_comment_to_fixed_marke
     assert "curl " not in script
     assert ".probe-evidence" not in script
     assert "PROBE_OBSERVABILITY_TOKEN" not in script
+
+    final = next(step for step in steps if step["name"] == "Publish final diagnostic heartbeat")
+    assert final["if"] == "${{ always() }}"
+    assert final["env"] == {
+        "GH_TOKEN": "${{ github.token }}",
+        "JOB_STATUS": "${{ job.status }}",
+    }
+    assert 'statuses/${GITHUB_SHA}' in final["run"]
+    assert 'actions/runs/${GITHUB_RUN_ID}' in final["run"]
+    assert "PROBE_OBSERVABILITY_TOKEN" not in final["run"]
 
 
 def test_shape_diagnostic_actions_are_pinned():
