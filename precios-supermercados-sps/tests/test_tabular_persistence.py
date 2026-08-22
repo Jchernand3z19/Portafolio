@@ -283,7 +283,7 @@ def test_same_fact_table_accepts_rows_from_different_supermarkets() -> None:
     assert row_b["supermarket_id"] == "b"
 
 
-def test_la_colonia_sps_cannot_be_persisted_before_binding_is_confirmed() -> None:
+def test_la_colonia_sps_cannot_be_persisted_before_granularity_is_confirmed() -> None:
     offer = make_validated(
         run_id="run-lc",
         observed_at=BASE_TIME,
@@ -293,7 +293,7 @@ def test_la_colonia_sps_cannot_be_persisted_before_binding_is_confirmed() -> Non
     ).offer
     with pytest.raises(
         TabularPersistenceError,
-        match="technical_location_binding_unconfirmed",
+        match="location_granularity_unconfirmed",
     ):
         validate_offer_location_for_persistence(offer, DEFAULT_LOCATION_CATALOG)
 
