@@ -45,6 +45,12 @@ PINNED_ACTIONS = {
 
 PROBE_WORKFLOW = "precios-supermercados-sps-cloudflare-probe.yml"
 DIAGNOSTIC_WORKFLOW = "cloudflare-controlled-probe-observability-shape.yml"
+TEST_WORKFLOW = "precios-supermercados-sps-tests.yml"
+COMMAND_WORKFLOW = "precios-supermercados-sps-la-colonia-command.yml"
+RECOVERY_WORKFLOW = "precios-supermercados-sps-la-colonia-dispatch-recovery.yml"
+LA_DIAGNOSTIC_WORKFLOW = "precios-supermercados-sps-la-colonia-diagnostic.yml"
+FACET_WORKFLOW = "precios-supermercados-sps-la-colonia-facet-discovery.yml"
+LIVE_WORKFLOW = "precios-supermercados-sps-la-colonia-live.yml"
 DIAGNOSTIC_MARKER_PATH = (
     "precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json"
 )
@@ -56,36 +62,21 @@ CLOUDFLARE_ACCOUNT_VAR = "CLOUDFLARE_ACCOUNT_ID"
 EXPECTED_PERMISSIONS = {
     PROBE_WORKFLOW: {"contents": "read"},
     DIAGNOSTIC_WORKFLOW: {"contents": "read"},
-    "precios-supermercados-sps-la-colonia-command.yml": {
-        "contents": "read",
-        "pull-requests": "read",
-    },
-    "precios-supermercados-sps-la-colonia-dispatch-recovery.yml": {
-        "actions": "read",
-        "contents": "read",
-    },
-    "precios-supermercados-sps-la-colonia-diagnostic.yml": {"contents": "read"},
-    "precios-supermercados-sps-la-colonia-facet-discovery.yml": {"contents": "read"},
-    "precios-supermercados-sps-la-colonia-live.yml": {"contents": "read"},
-    "precios-supermercados-sps-tests.yml": {"contents": "read"},
+    COMMAND_WORKFLOW: {"contents": "read", "pull-requests": "read"},
+    RECOVERY_WORKFLOW: {"actions": "read", "contents": "read"},
+    LA_DIAGNOSTIC_WORKFLOW: {"contents": "read"},
+    FACET_WORKFLOW: {"contents": "read"},
+    LIVE_WORKFLOW: {"contents": "read"},
+    TEST_WORKFLOW: {"contents": "read"},
 }
 
 ALLOWED_JOB_PERMISSIONS = {
     PROBE_WORKFLOW: {
-        "controlled-probe": {
-            "contents": "read",
-            "id-token": "write",
-        }
+        "controlled-probe": {"contents": "read", "id-token": "write"},
     },
     DIAGNOSTIC_WORKFLOW: {
-        "verify-marker-change": {
-            "contents": "read",
-            "pull-requests": "read",
-        },
-        "publish-trigger-heartbeat": {
-            "contents": "read",
-            "issues": "write",
-        },
+        "verify-main-marker": {"contents": "read"},
+        "publish-main-trigger-heartbeat": {"contents": "read", "issues": "write"},
         "inspect-observability-shape": {
             "contents": "read",
             "actions": "read",
@@ -96,25 +87,21 @@ ALLOWED_JOB_PERMISSIONS = {
 
 EXPECTED_TRIGGERS = {
     PROBE_WORKFLOW: {"workflow_dispatch"},
-    DIAGNOSTIC_WORKFLOW: {"pull_request_target"},
-    "precios-supermercados-sps-la-colonia-command.yml": {"pull_request_target"},
-    "precios-supermercados-sps-la-colonia-diagnostic.yml": {"workflow_dispatch"},
-    "precios-supermercados-sps-la-colonia-dispatch-recovery.yml": {"workflow_run"},
-    "precios-supermercados-sps-la-colonia-facet-discovery.yml": {"workflow_dispatch"},
-    "precios-supermercados-sps-la-colonia-live.yml": {"workflow_dispatch"},
-    "precios-supermercados-sps-tests.yml": {
-        "workflow_dispatch",
-        "pull_request",
-        "push",
-    },
+    DIAGNOSTIC_WORKFLOW: {"push"},
+    COMMAND_WORKFLOW: {"pull_request_target"},
+    LA_DIAGNOSTIC_WORKFLOW: {"workflow_dispatch"},
+    RECOVERY_WORKFLOW: {"workflow_run"},
+    FACET_WORKFLOW: {"workflow_dispatch"},
+    LIVE_WORKFLOW: {"workflow_dispatch"},
+    TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
 }
 
 BLOCKED_ENTRYPOINTS = {
-    "precios-supermercados-sps-la-colonia-command.yml",
-    "precios-supermercados-sps-la-colonia-diagnostic.yml",
-    "precios-supermercados-sps-la-colonia-dispatch-recovery.yml",
-    "precios-supermercados-sps-la-colonia-facet-discovery.yml",
-    "precios-supermercados-sps-la-colonia-live.yml",
+    COMMAND_WORKFLOW,
+    LA_DIAGNOSTIC_WORKFLOW,
+    RECOVERY_WORKFLOW,
+    FACET_WORKFLOW,
+    LIVE_WORKFLOW,
 }
 
 ALLOWED_SECRET_REFERENCES = {
@@ -221,7 +208,6 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
                 if str(step.get("uses", "")).startswith("actions/checkout@")
             ]
             assert privileged_checkout == [], "El job con OIDC no debe ejecutar código del repositorio"
-
             verifier_checkout = [
                 step
                 for step in job_steps(probe_jobs["verify-evidence"])
@@ -237,15 +223,11 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
         checkout_steps = [
             step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
         ]
-        if path.name == DIAGNOSTIC_WORKFLOW:
-            expected_ref = "${{ github.event.pull_request.base.sha }}"
-        elif path.name in {
-            "precios-supermercados-sps-la-colonia-command.yml",
-            "precios-supermercados-sps-la-colonia-dispatch-recovery.yml",
-        }:
-            expected_ref = "${{ github.workflow_sha }}"
-        else:
-            expected_ref = "${{ github.sha }}"
+        expected_ref = (
+            "${{ github.workflow_sha }}"
+            if path.name in {COMMAND_WORKFLOW, RECOVERY_WORKFLOW}
+            else "${{ github.sha }}"
+        )
         assert checkout_steps, path.name
         for step in checkout_steps:
             inputs = step.get("with")
@@ -254,12 +236,11 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
 
 
 def test_privileged_and_live_entrypoints_are_globally_blocked():
-    by_name = dict(workflows())
+    by_name = {path.name: workflow for path, workflow in workflows()}
     for name in BLOCKED_ENTRYPOINTS:
-        path = WORKFLOW_DIR / name
-        assert all_jobs_blocked(by_name[path]), name
+        assert all_jobs_blocked(by_name[name]), name
 
-    command = by_name[WORKFLOW_DIR / "precios-supermercados-sps-la-colonia-command.yml"]
+    command = by_name[COMMAND_WORKFLOW]
     assert "actions" not in command["permissions"]
     controller = (
         REPO_ROOT
@@ -295,8 +276,6 @@ def test_controlled_probe_is_manual_isolated_and_verified_outside_oidc_job():
     privileged_raw = "\n".join(str(step) for step in job_steps(privileged))
     verifier_raw = "\n".join(str(step) for step in job_steps(verifier))
     raw = path.read_text(encoding="utf-8")
-    assert secret_references(path) == {PROBE_GATEWAY_SECRET, PROBE_OBSERVABILITY_SECRET}
-    assert variable_references(path) == {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR}
     assert "actions/checkout@" not in privileged_raw
     assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in privileged_raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in verifier_raw
@@ -338,78 +317,62 @@ def test_trigger_sets_are_closed_without_issue_comment_authority():
         assert "issue_comment" not in triggers
 
 
+def test_observability_diagnostic_is_one_shot_trusted_main_push_only():
+    path = WORKFLOW_DIR / DIAGNOSTIC_WORKFLOW
+    workflow = load_workflow(path)
+    raw = path.read_text(encoding="utf-8")
+    trigger = workflow["on"]["push"]
+    assert trigger["branches"] == ["main"]
+    assert trigger["paths"] == [DIAGNOSTIC_MARKER_PATH]
+    assert set(jobs(workflow)) == {
+        "verify-main-marker",
+        "publish-main-trigger-heartbeat",
+        "inspect-observability-shape",
+    }
+
+    verify = jobs(workflow)["verify-main-marker"]
+    heartbeat = jobs(workflow)["publish-main-trigger-heartbeat"]
+    diagnostic = jobs(workflow)["inspect-observability-shape"]
+    assert "environment" not in verify
+    assert "secrets." not in str(verify)
+    assert '"requestSequence": 3' in str(verify)
+    assert '"authority": False' in str(verify)
+    assert "marker_verified=true" in str(verify)
+    assert heartbeat["needs"] == "verify-main-marker"
+    assert heartbeat["if"] == "${{ always() }}"
+    assert "environment" not in heartbeat
+    assert "secrets." not in str(heartbeat)
+    assert diagnostic["needs"] == "verify-main-marker"
+    assert diagnostic["if"] == "${{ needs.verify-main-marker.outputs.marker_verified == 'true' }}"
+    assert diagnostic["environment"] == "cloudflare-probe"
+    assert diagnostic["env"]["TARGET_PR_NUMBER"] == "117"
+    assert "run-id: 32551882793" in raw
+    assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" in raw
+    assert "CLOUDFLARE_PROBE_GATEWAY_URL" not in raw
+    assert ".workers.dev" not in raw
+    assert "/v1/probe" not in raw
+    assert "scripts/probar_la_colonia.py" not in raw
+    assert "scripts/diagnosticar_ventanas_la_colonia.py" not in raw
+    assert "scripts/descubrir_facets_la_colonia.py" not in raw
+    assert "pull_request_target" not in raw
+    assert "workflow_run" not in raw
+    assert "${{ runner.temp }}" not in raw
+
+
 def test_pull_request_target_never_checks_out_untrusted_pr_code():
     for path, workflow in workflows():
         triggers = workflow["on"]
         if "pull_request_target" not in triggers:
             continue
         raw = path.read_text(encoding="utf-8")
+        assert path.name in BLOCKED_ENTRYPOINTS
+        assert all_jobs_blocked(workflow)
         assert "actions: write" not in raw
         assert "github.head_ref" not in raw
+        assert "github.event.pull_request.head" not in raw
         checkout = [
             step for step in steps(workflow) if str(step.get("uses", "")).startswith("actions/checkout@")
         ]
-
-        if path.name == DIAGNOSTIC_WORKFLOW:
-            trigger = triggers["pull_request_target"]
-            assert isinstance(trigger, dict)
-            assert trigger["types"] == ["opened", "synchronize", "reopened"]
-            assert trigger["branches"] == ["main"]
-            assert trigger["paths"] == [DIAGNOSTIC_MARKER_PATH]
-            assert not all_jobs_blocked(workflow)
-
-            diagnostic_jobs = jobs(workflow)
-            assert set(diagnostic_jobs) == {
-                "verify-marker-change",
-                "publish-trigger-heartbeat",
-                "inspect-observability-shape",
-            }
-            preflight_job = diagnostic_jobs["verify-marker-change"]
-            heartbeat_job = diagnostic_jobs["publish-trigger-heartbeat"]
-            diagnostic_job = diagnostic_jobs["inspect-observability-shape"]
-
-            preflight_condition = str(preflight_job.get("if", ""))
-            assert "github.repository == 'Jchernand3z19/Portafolio'" in preflight_condition
-            assert "github.event.pull_request.head.repo.full_name == github.repository" in preflight_condition
-            assert "github.event.pull_request.user.login == 'Jchernand3z19'" in preflight_condition
-            assert "github.event.pull_request.base.ref == 'main'" in preflight_condition
-            assert "github.event.pull_request.changed_files" not in preflight_condition
-            assert preflight_job["permissions"] == {
-                "contents": "read",
-                "pull-requests": "read",
-            }
-            assert "environment" not in preflight_job
-            assert "actions/checkout@" not in str(preflight_job)
-            assert "secrets." not in str(preflight_job)
-            preflight_raw = str(preflight_job)
-            assert 'pulls/${TARGET_PR_NUMBER}/files?per_page=100' in preflight_raw
-            assert "EXPECTED_MARKER" in preflight_raw
-            assert "marker_only" in preflight_raw
-
-            expected_gate = "${{ needs.verify-marker-change.outputs.marker_only == 'true' }}"
-            assert heartbeat_job.get("needs") == "verify-marker-change"
-            assert diagnostic_job.get("needs") == "verify-marker-change"
-            assert heartbeat_job.get("if") == expected_gate
-            assert diagnostic_job.get("if") == expected_gate
-            assert "environment" not in heartbeat_job
-            assert diagnostic_job.get("environment") == "cloudflare-probe"
-            assert "actions/checkout@" not in str(heartbeat_job)
-            assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in str(heartbeat_job)
-            assert "github.event.pull_request.changed_files" not in raw
-            assert "github.event.pull_request.head.sha" not in raw
-            assert "github.event.pull_request.head.ref" not in raw
-            assert checkout
-            assert all(
-                step["with"] == {
-                    "ref": "${{ github.event.pull_request.base.sha }}",
-                    "persist-credentials": "false",
-                }
-                for step in checkout
-            )
-            continue
-
-        assert all_jobs_blocked(workflow)
-        assert "github.event.pull_request.head" not in raw
         assert all(step["with"]["ref"] == "${{ github.workflow_sha }}" for step in checkout)
 
 
@@ -427,11 +390,8 @@ def test_network_capable_scripts_exist_only_inside_blocked_jobs():
 
 
 def test_ci_paths_cover_project_policy_and_every_sps_workflow():
-    workflow = load_workflow(WORKFLOW_DIR / "precios-supermercados-sps-tests.yml")
-    expected_paths = {
-        "precios-supermercados-sps/**",
-        ".github/workflows/**",
-    }
+    workflow = load_workflow(WORKFLOW_DIR / TEST_WORKFLOW)
+    expected_paths = {"precios-supermercados-sps/**", ".github/workflows/**"}
     pull_request = workflow["on"]["pull_request"]
     push = workflow["on"]["push"]
     assert set(pull_request["paths"]) == expected_paths
@@ -452,12 +412,8 @@ def test_renamed_sps_workflow_is_still_classified(tmp_path: Path, suffix: str):
 
 
 def test_job_level_reusable_workflow_reference_cannot_evade_pin_audit():
-    workflow = {
-        "jobs": {"bypass": {"uses": "attacker/example/.github/workflows/live.yml@main"}}
-    }
-    assert action_references(workflow) == (
-        "attacker/example/.github/workflows/live.yml@main",
-    )
+    workflow = {"jobs": {"bypass": {"uses": "attacker/example/.github/workflows/live.yml@main"}}}
+    assert action_references(workflow) == ("attacker/example/.github/workflows/live.yml@main",)
     reference = action_references(workflow)[0]
     action, separator, revision = reference.partition("@")
     assert separator

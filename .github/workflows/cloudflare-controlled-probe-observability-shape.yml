@@ -1,8 +1,7 @@
 name: Cloudflare controlled probe - Observability shape diagnostic
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
+  push:
     branches: [main]
     paths:
       - precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json
@@ -11,101 +10,95 @@ permissions:
   contents: read
 
 concurrency:
-  group: cloudflare-controlled-probe-observability-shape-${{ github.event.pull_request.number }}
+  group: cloudflare-controlled-probe-observability-shape-main
   cancel-in-progress: false
 
 jobs:
-  verify-marker-change:
+  verify-main-marker:
     if: >-
       ${{ github.repository == 'Jchernand3z19/Portafolio' &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.user.login == 'Jchernand3z19' &&
-          github.event.pull_request.base.ref == 'main' }}
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' }}
     permissions:
       contents: read
-      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      marker_only: ${{ steps.verify.outputs.marker_only }}
-    env:
-      TARGET_PR_NUMBER: ${{ github.event.pull_request.number }}
-      EXPECTED_MARKER: precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json
+      marker_verified: ${{ steps.verify.outputs.marker_verified }}
 
     steps:
-      - name: Verify exact marker-only change from GitHub API
+      - name: Checkout immutable main revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact one-shot marker
         id: verify
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          if ! [[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]; then
-            echo "Invalid PR number" >&2
-            exit 1
-          fi
-
-          FILES_PATH="$RUNNER_TEMP/observability-marker-files.jsonl"
-          export FILES_PATH
-          gh api --paginate \
-            "repos/${GITHUB_REPOSITORY}/pulls/${TARGET_PR_NUMBER}/files?per_page=100" \
-            --jq '.[].filename | @json' > "$FILES_PATH"
-
           python - <<'PY'
           import json
           import os
           from pathlib import Path
 
-          files = [
-              json.loads(line)
-              for line in Path(os.environ["FILES_PATH"]).read_text(encoding="utf-8").splitlines()
-              if line
-          ]
-          marker_only = files == [os.environ["EXPECTED_MARKER"]]
+          marker = Path(os.environ["GITHUB_WORKSPACE"]) / "precios-supermercados-sps" / "ops" / "cloudflare-probe-observability-diagnostic-request.json"
+          payload = json.loads(marker.read_text(encoding="utf-8"))
+          expected = {
+              "schema": "cloudflare-controlled-probe-observability-diagnostic-request-1",
+              "sourceRunId": "32551882793",
+              "purpose": "sanitized-shape-observation-only",
+              "requestSequence": 3,
+              "authority": False,
+          }
+          if payload != expected:
+              raise SystemExit("controlled_observability_marker_mismatch")
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
-              output.write(f"marker_only={'true' if marker_only else 'false'}\n")
+              output.write("marker_verified=true\n")
           PY
 
-  publish-trigger-heartbeat:
-    needs: verify-marker-change
-    if: ${{ needs.verify-marker-change.outputs.marker_only == 'true' }}
+  publish-main-trigger-heartbeat:
+    needs: verify-main-marker
+    if: ${{ always() }}
     permissions:
       contents: read
       issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
-      TARGET_PR_NUMBER: ${{ github.event.pull_request.number }}
+      TARGET_PR_NUMBER: "117"
+      MARKER_VERIFIED: ${{ needs.verify-main-marker.outputs.marker_verified == 'true' }}
+
     steps:
-      - name: Prepare sanitized trigger heartbeat
+      - name: Prepare sanitized main-push heartbeat
         shell: bash
         run: |
           set -euo pipefail
-          TRIGGER_COMMENT_PATH="$RUNNER_TEMP/observability-trigger-heartbeat.json"
-          export TRIGGER_COMMENT_PATH
-          printf 'TRIGGER_COMMENT_PATH=%s\n' "$TRIGGER_COMMENT_PATH" >> "$GITHUB_ENV"
+          HEARTBEAT_PATH="$RUNNER_TEMP/observability-main-push-heartbeat.json"
+          export HEARTBEAT_PATH
           python - <<'PY'
           import json
           import os
           from pathlib import Path
 
           payload = {
-              "diagnostic_status": "trigger_observed",
-              "marker_change_verified": True,
+              "diagnostic_status": "main_push_trigger_observed",
+              "marker_verified": os.environ["MARKER_VERIFIED"].lower() == "true",
               "contains_no_event_values": True,
               "production_authority": False,
               "catalog_accepted": False,
           }
           rendered = json.dumps(payload, sort_keys=True, indent=2)
-          Path(os.environ["TRIGGER_COMMENT_PATH"]).write_text(
+          Path(os.environ["HEARTBEAT_PATH"]).write_text(
               json.dumps({
-                  "body": "## Sanitized Workers Observability diagnostic\n\n```json\n" + rendered + "\n```"
+                  "body": "## Sanitized Workers Observability main-push heartbeat\n\n```json\n" + rendered + "\n```"
               }),
               encoding="utf-8",
           )
           PY
 
-      - name: Publish sanitized trigger heartbeat
+      - name: Publish sanitized main-push heartbeat
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -118,11 +111,11 @@ jobs:
           gh api \
             --method POST \
             "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR_NUMBER}/comments" \
-            --input "$TRIGGER_COMMENT_PATH"
+            --input "$HEARTBEAT_PATH"
 
   inspect-observability-shape:
-    needs: verify-marker-change
-    if: ${{ needs.verify-marker-change.outputs.marker_only == 'true' }}
+    needs: verify-main-marker
+    if: ${{ needs.verify-main-marker.outputs.marker_verified == 'true' }}
     permissions:
       contents: read
       actions: read
@@ -133,14 +126,14 @@ jobs:
     env:
       PROBE_PUBLIC_KEY_SPKI_B64URL: ${{ vars.CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      TARGET_PR_NUMBER: ${{ github.event.pull_request.number }}
+      TARGET_PR_NUMBER: "117"
 
     steps:
       - name: Prepare sanitized fallback comment
         shell: bash
         run: |
           set -euo pipefail
-          PROBE_DIAGNOSTIC_COMMENT_PATH="$RUNNER_TEMP/probe-shape-comment.json"
+          PROBE_DIAGNOSTIC_COMMENT_PATH="$RUNNER_TEMP/probe-shape-main-comment.json"
           export PROBE_DIAGNOSTIC_COMMENT_PATH
           printf 'PROBE_DIAGNOSTIC_COMMENT_PATH=%s\n' "$PROBE_DIAGNOSTIC_COMMENT_PATH" >> "$GITHUB_ENV"
           python - <<'PY'
@@ -163,10 +156,10 @@ jobs:
           )
           PY
 
-      - name: Checkout trusted base revision only
+      - name: Checkout immutable main revision only
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Locate diagnostic project
@@ -215,7 +208,7 @@ jobs:
           set -euo pipefail
           python "$DIAGNOSTIC_SCRIPT"
 
-      - name: Publish sanitized diagnostic to triggering PR
+      - name: Publish sanitized diagnostic to marker PR
         if: ${{ always() }}
         env:
           GH_TOKEN: ${{ github.token }}
