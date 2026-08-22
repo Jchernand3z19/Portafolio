@@ -19,6 +19,18 @@ function clockDate(clock) {
   return value;
 }
 
+function safeDiagnosticText(value, fallback) {
+  const text = typeof value === "string" && value ? value : fallback;
+  return text.replace(/[\u0000-\u001f\u007f]+/gu, " ").slice(0, 240);
+}
+
+export function controlledProbeJwksTransportDiagnostic(error) {
+  return Object.freeze({
+    name: safeDiagnosticText(error?.name, "UnknownError"),
+    message: safeDiagnosticText(error?.message, "no_message"),
+  });
+}
+
 async function readBoundedJwks(response) {
   if (!(response instanceof Response)) fail("jwks_response_invalid");
   if (response.redirected || response.status !== 200) fail("jwks_http_invalid");
@@ -96,7 +108,11 @@ export function createControlledProbeOidcAuthenticator({
         redirect: "error",
         headers: Object.freeze({ accept: "application/json" }),
       });
-    } catch {
+    } catch (error) {
+      console.error(
+        "controlled_probe_jwks_transport_error",
+        JSON.stringify(controlledProbeJwksTransportDiagnostic(error)),
+      );
       fail("jwks_transport_error");
     }
     const jwks = await readBoundedJwks(response);
