@@ -10,6 +10,7 @@ Proyecto para recolectar, normalizar, validar, historizar y comparar precios de 
 Corte verificado al **2026-08-22 (America/Tegucigalpa)**:
 
 - base técnica del corte: `da342bf9439e260a8bc213c8c83e805412c5741d` (merge de **#154**);
+- último PR documental integrado antes de este corte: **#155**;
 - última suite completa observada: **1462/1462 pruebas aprobadas** + `compileall`;
 - GATE-17: `PASS_PRODUCTIVE_EVIDENCE`;
 - no existe autorización live activa para La Colonia;
@@ -20,7 +21,9 @@ Corte verificado al **2026-08-22 (America/Tegucigalpa)**:
 
 La sonda Cloudflare contra infraestructura propia **sí fue ejecutada físicamente**. El run `32551882793` demostró OIDC, Durable Object, fetch al origen controlado y receipt Ed25519; un verifier-only posterior revalidó firma/bytes/identidad. La reconciliación estricta del custom span contra la API pública de Workers Observability permanece sin cerrar porque esa API no expone el detalle requerido. El verificador no se rebajó para fabricar un PASS.
 
-La persistencia Google Sheets está implementada **offline** hasta el adapter read-modify-write, rehidratación/restauración durable, bootstrap manual y batch comercial. PR #150–#153 añadieron además guard de autoridad, binding durable de replay y un loader read-only Google Sheets → estado comercial restaurado. No se considera productiva todavía porque no se ha observado una escritura real con la configuración externa prevista.
+La persistencia Google Sheets está implementada offline hasta el adapter read-modify-write, rehidratación/restauración durable, bootstrap manual y batch comercial. PR #150–#153 añadieron además guard de autoridad, binding durable de replay y un loader read-only Google Sheets → estado comercial restaurado.
+
+Además, ya existe un workbook físico canónico **`Precios Supermercados SPS - Storage`** en la cuenta Google conectada. Se materializaron y releyeron las seis tablas comunes con configuración fail-closed; las cuatro tablas `fact_*` permanecen sin filas. Esto demuestra el artefacto físico de storage, pero **no** demuestra todavía la ruta GitHub Actions → service account → Google Sheets ni autoriza persistencia de ofertas.
 
 PR #154 añadió una proyección semántica read-only para Power BI que centraliza precio actual, baseline histórico aceptado, ahorro real, dirección del precio, precio regular reportado, promoción, disponibilidad, certeza de ubicación y estado de revisión. Power BI no debe recalcular estas reglas por su cuenta.
 
@@ -35,7 +38,7 @@ extraction_enabled = false
 
 PR #145–#148 dejaron preparada una radiografía mínima y sanitizada para decidir si el contexto comercial varía por `city` o por `store`. Su workflow sigue bloqueado, el fuse live está apagado y la allow-list de autorizaciones está vacía.
 
-**Cualquier siguiente acción live sobre La Colonia requiere una nueva autorización humana explícita.** Mientras tanto pueden seguir avanzando verificaciones offline y de infraestructura de storage que no contacten la fuente.
+**Cualquier siguiente acción live sobre La Colonia requiere una nueva autorización humana explícita.** Mientras tanto pueden seguir avanzando verificaciones de infraestructura que no contacten la fuente.
 
 ## Contratos protegidos
 
@@ -72,6 +75,8 @@ fact_scrape_runs
 fact_quality_events
 ```
 
+El workbook físico ya refleja este contrato y tiene timezone `America/Tegucigalpa`. Su configuración conserva a SPS dentro de alcance pero con extracción apagada y binding técnico no confirmado; Tegucigalpa permanece fuera del alcance inicial. No hay ofertas, históricos, runs ni quality events persistidos todavía.
+
 El diseño protege estas reglas:
 
 - una sola estructura para todos los supermercados;
@@ -84,6 +89,8 @@ El diseño protege estas reglas:
 - escritura atómica planificada mediante `spreadsheets.batchUpdate`;
 - lectura de Google Sheets separada de la frontera de escritura;
 - ninguna decisión caller-controlled puede conceder autoridad productiva.
+
+La ruta pendiente de storage es enlazar este workbook a GitHub Actions mediante una service account dedicada, validar primero `mode=check` read-only y sólo después comprobar `apply-config`. Eso no requiere tráfico a La Colonia.
 
 BigQuery y Cloud Run se reservan para una fase posterior, cuando el proceso esté estable.
 
@@ -109,14 +116,14 @@ El dataset/refresh productivo sigue bloqueado hasta disponer de persistencia com
 radiografía y binding de ubicación
 -> validación live exacta del catálogo
 -> aceptación autoritativa
--> Google Sheets productivo
+-> persistencia comercial en Google Sheets
 -> ejecución diaria
 -> dataset/refresh Power BI
 -> cerrar La Colonia end-to-end
 -> supermercado #2
 ```
 
-Sin tocar La Colonia todavía puede verificarse la configuración externa prevista de Google Sheets y la seguridad del bootstrap.
+La infraestructura física de Google Sheets ya existe; la autenticación de GitHub Actions sigue siendo una dependencia externa separada de la autorización live de La Colonia.
 
 ## Pruebas
 
@@ -140,4 +147,4 @@ compileall PASS
 
 Sin una autorización humana explícita y vigente están prohibidos nuevos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl hacia La Colonia.
 
-No se inventan ni reutilizan authorization IDs. `production_authority` y `catalog_accepted` sólo pueden cambiar por una frontera explícita que aporte evidencia suficiente; una prueba offline, un fingerprint de replay o una radiografía de ubicación no los concede.
+No se inventan ni reutilizan authorization IDs. `production_authority` y `catalog_accepted` sólo pueden cambiar por una frontera explícita que aporte evidencia suficiente; una prueba offline, un fingerprint de replay, un workbook físico o una radiografía de ubicación no los concede.
