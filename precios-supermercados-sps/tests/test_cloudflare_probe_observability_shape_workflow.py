@@ -25,9 +25,13 @@ def _load() -> tuple[str, dict[str, object]]:
     return raw, value
 
 
-def test_shape_diagnostic_is_read_only_push_main_and_self_scoped():
+def test_shape_diagnostic_is_push_main_self_scoped_and_comment_only_write():
     raw, workflow = _load()
-    assert workflow["permissions"] == {"contents": "read", "actions": "read"}
+    assert workflow["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+        "issues": "write",
+    }
     triggers = workflow["on"]
     assert isinstance(triggers, dict) and set(triggers) == {"push"}
     push = triggers["push"]
@@ -40,6 +44,8 @@ def test_shape_diagnostic_is_read_only_push_main_and_self_scoped():
     assert "id-token" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_URL" not in raw
+    assert "pull-requests: write" not in raw
+    assert "contents: write" not in raw
 
 
 def test_shape_diagnostic_has_no_gateway_or_physical_fetch_capability():
@@ -72,8 +78,25 @@ def test_shape_diagnostic_is_bound_to_existing_signed_evidence_and_sanitized():
     assert "expected_custom_span_match_counts" in raw
     assert "metadata_presence_counts" in raw
     assert "standard_attribute_presence_counts" in raw
+    assert "safe_keys" in raw
     assert "print(event" not in raw
     assert "json.dumps(artifact" not in raw
+
+
+def test_shape_diagnostic_publishes_only_generated_sanitized_summary_to_fixed_pr():
+    raw, workflow = _load()
+    steps = workflow["jobs"]["inspect-observability-shape"]["steps"]
+    publish = next(step for step in steps if step["name"] == "Publish sanitized diagnostic to technical PR")
+    assert publish["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    script = publish["run"]
+    assert 'repos/${GITHUB_REPOSITORY}/issues/103/comments' in script
+    assert "--input .probe-shape-comment.json" in script
+    assert "--method POST" in script
+    assert "curl " not in script
+    assert ".probe-evidence" not in script
+    assert "PROBE_OBSERVABILITY_TOKEN" not in script
+    assert 'Path(".probe-shape-comment.json").write_text' in raw
+    assert '"body": "## Sanitized Workers Observability shape diagnostic' in raw
 
 
 def test_shape_diagnostic_actions_are_pinned_and_checkout_is_immutable():
