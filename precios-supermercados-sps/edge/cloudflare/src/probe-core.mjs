@@ -57,12 +57,14 @@ export function validateControlledProbeOriginUrl(rawUrl) {
   if (baseUrl.username || baseUrl.password) fail("probe_origin_credentials_forbidden");
   if (baseUrl.search !== "") fail("probe_origin_query_forbidden");
   if (baseUrl.hash !== "") fail("probe_origin_fragment_forbidden");
-  if (baseUrl.pathname !== "/") fail("probe_origin_path_invalid");
+  if (baseUrl.pathname !== "/" && baseUrl.pathname !== CONTROLLED_PROBE_ORIGIN_PATH) {
+    fail("probe_origin_path_invalid");
+  }
   if (!WORKERS_DEV_HOST_RE.test(baseUrl.hostname)) fail("probe_origin_host_not_workers_dev");
   if (baseUrl.hostname === "www.lacolonia.com" || baseUrl.hostname.endsWith(".lacolonia.com")) {
     fail("probe_origin_lacolonia_forbidden");
   }
-  const requestUrl = new URL(CONTROLLED_PROBE_ORIGIN_PATH, baseUrl);
+  const requestUrl = new URL(CONTROLLED_PROBE_ORIGIN_PATH, baseUrl.origin);
   return Object.freeze({
     url: requestUrl.toString(),
     targetHost: baseUrl.hostname,
