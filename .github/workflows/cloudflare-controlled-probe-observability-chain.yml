@@ -1,11 +1,10 @@
-name: Cloudflare controlled probe - Observability shape diagnostic
+name: Cloudflare controlled probe - Observability chained diagnostic
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
-    branches: [main]
-    paths:
-      - precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json
+  workflow_run:
+    workflows:
+      - Precios Supermercados SPS - Pruebas base
+    types: [completed]
 
 permissions:
   contents: read
@@ -13,25 +12,26 @@ permissions:
   issues: write
 
 concurrency:
-  group: cloudflare-controlled-probe-observability-shape-${{ github.event.pull_request.number }}
+  group: cloudflare-controlled-probe-observability-chain-107
   cancel-in-progress: false
 
 jobs:
-  inspect-observability-shape:
+  inspect-existing-evidence:
     if: >-
       ${{ github.repository == 'Jchernand3z19/Portafolio' &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.user.login == 'Jchernand3z19' &&
-          github.event.pull_request.base.ref == 'main' &&
-          github.event.pull_request.changed_files == 1 }}
+          github.event.workflow_run.event == 'pull_request' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          github.event.workflow_run.head_branch == 'diag/precios-sps-observability-request-001' &&
+          github.event.workflow_run.actor.login == 'Jchernand3z19' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: cloudflare-probe
     env:
       PROBE_PUBLIC_KEY_SPKI_B64URL: ${{ vars.CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      TARGET_PR_NUMBER: ${{ github.event.pull_request.number }}
-      PROBE_DIAGNOSTIC_COMMENT_PATH: ${{ runner.temp }}/probe-shape-comment.json
+      TARGET_PR_NUMBER: "107"
+      PROBE_DIAGNOSTIC_COMMENT_PATH: ${{ runner.temp }}/probe-shape-chain-comment.json
 
     steps:
       - name: Prepare sanitized fallback comment
@@ -58,10 +58,10 @@ jobs:
           )
           PY
 
-      - name: Checkout trusted base revision only
+      - name: Checkout trusted default-branch revision only
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Locate diagnostic project
@@ -110,7 +110,7 @@ jobs:
           set -euo pipefail
           python "$DIAGNOSTIC_SCRIPT"
 
-      - name: Publish sanitized diagnostic to triggering PR
+      - name: Publish sanitized diagnostic to marker PR
         if: ${{ always() }}
         env:
           GH_TOKEN: ${{ github.token }}
