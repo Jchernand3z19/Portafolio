@@ -137,12 +137,14 @@ jobs:
 
           from precios_supermercados.cloudflare_controlled_probe_observability import (
               ControlledProbeObservabilityError,
-              ControlledProbeObservabilityVerifierClient,
+          )
+          from precios_supermercados.cloudflare_controlled_probe_trace_query import (
+              ControlledProbeTraceQueryVerifierClient,
           )
           from precios_supermercados.cloudflare_observability_http_transport import CloudflareObservabilityHttpTransport
 
           artifact = json.loads(Path(".probe-evidence/cloudflare-probe-result.json").read_text(encoding="utf-8"))
-          verifier = ControlledProbeObservabilityVerifierClient(
+          verifier = ControlledProbeTraceQueryVerifierClient(
               os.environ["CLOUDFLARE_ACCOUNT_ID"],
               CloudflareObservabilityHttpTransport(),
           )
