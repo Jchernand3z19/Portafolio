@@ -49,7 +49,7 @@ jobs:
               "schema": "cloudflare-controlled-probe-observability-diagnostic-request-1",
               "sourceRunId": "32551882793",
               "purpose": "sanitized-shape-observation-only",
-              "requestSequence": 3,
+              "requestSequence": 4,
               "authority": False,
           }
           if payload != expected:
@@ -64,6 +64,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      statuses: write
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
@@ -97,6 +98,19 @@ jobs:
               encoding="utf-8",
           )
           PY
+
+      - name: Publish immutable commit-status heartbeat
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context="precios-sps/observability-shape-trigger" \
+            -f description="trigger observed; marker_verified=${MARKER_VERIFIED}"
 
       - name: Publish sanitized main-push heartbeat
         env:

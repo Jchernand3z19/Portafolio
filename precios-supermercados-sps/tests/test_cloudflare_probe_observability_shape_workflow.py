@@ -13,6 +13,7 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "cloudflare-controlled-probe-ob
 MARKER = "precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json"
 SCRIPT_NAME = "diagnosticar_observability_sonda_cloudflare.py"
 TARGET_PR = "117"
+STATUS_CONTEXT = "precios-sps/observability-shape-trigger"
 
 PINNED_ACTIONS = {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
@@ -82,7 +83,7 @@ def test_main_marker_is_verified_before_environment_or_observability_access():
     assert '"schema": "cloudflare-controlled-probe-observability-diagnostic-request-1"' in script
     assert '"sourceRunId": "32551882793"' in script
     assert '"purpose": "sanitized-shape-observation-only"' in script
-    assert '"requestSequence": 3' in script
+    assert '"requestSequence": 4' in script
     assert '"authority": False' in script
     assert "payload != expected" in script
     assert "controlled_observability_marker_mismatch" in script
@@ -93,18 +94,22 @@ def test_main_marker_is_verified_before_environment_or_observability_access():
     assert "github.event.pull_request" not in raw
 
 
-def test_main_push_heartbeat_is_always_visible_without_cloudflare_secrets():
+def test_main_push_heartbeat_is_visible_by_status_and_comment_without_cloudflare_secrets():
     _, workflow = _load()
     job = workflow["jobs"]["publish-main-trigger-heartbeat"]
     assert job["needs"] == "verify-main-marker"
     assert job["if"] == "${{ always() }}"
-    assert job["permissions"] == {"contents": "read", "issues": "write"}
+    assert job["permissions"] == {
+        "contents": "read",
+        "issues": "write",
+        "statuses": "write",
+    }
     assert "environment" not in job
     assert job["env"] == {
         "TARGET_PR_NUMBER": TARGET_PR,
         "MARKER_VERIFIED": "${{ needs.verify-main-marker.outputs.marker_verified == 'true' }}",
     }
-    assert len(job["steps"]) == 2
+    assert len(job["steps"]) == 3
 
     prepare = job["steps"][0]
     assert prepare["name"] == "Prepare sanitized main-push heartbeat"
@@ -116,7 +121,17 @@ def test_main_push_heartbeat_is_always_visible_without_cloudflare_secrets():
     assert '"production_authority": False' in script
     assert '"catalog_accepted": False' in script
 
-    publish = job["steps"][1]
+    status = job["steps"][1]
+    assert status["name"] == "Publish immutable commit-status heartbeat"
+    assert status["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    status_script = status["run"]
+    assert 'statuses/${GITHUB_SHA}' in status_script
+    assert "-f state=success" in status_script
+    assert f'-f context="{STATUS_CONTEXT}"' in status_script
+    assert 'marker_verified=${MARKER_VERIFIED}' in status_script
+    assert "PROBE_OBSERVABILITY_TOKEN" not in status_script
+
+    publish = job["steps"][2]
     assert publish["name"] == "Publish sanitized main-push heartbeat"
     assert publish["env"] == {"GH_TOKEN": "${{ github.token }}"}
     publish_script = publish["run"]
