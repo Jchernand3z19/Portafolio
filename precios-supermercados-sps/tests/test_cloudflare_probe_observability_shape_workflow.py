@@ -27,21 +27,17 @@ def _load() -> tuple[str, dict[str, object]]:
     return raw, value
 
 
-def _assert_controlled_condition(condition: str) -> None:
+def _assert_owner_gate(condition: str) -> None:
     assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
     assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
     assert "github.event.pull_request.user.login == 'Jchernand3z19'" in condition
     assert "github.event.pull_request.base.ref == 'main'" in condition
-    assert "github.event.pull_request.changed_files == 1" in condition
+    assert "github.event.pull_request.changed_files" not in condition
 
 
 def test_shape_diagnostic_uses_controlled_pull_request_target_only():
     raw, workflow = _load()
-    assert workflow["permissions"] == {
-        "contents": "read",
-        "actions": "read",
-        "issues": "write",
-    }
+    assert workflow["permissions"] == {"contents": "read"}
     triggers = workflow["on"]
     assert isinstance(triggers, dict) and set(triggers) == {"pull_request_target"}
     trigger = triggers["pull_request_target"]
@@ -50,11 +46,23 @@ def test_shape_diagnostic_uses_controlled_pull_request_target_only():
     assert trigger["paths"] == [MARKER]
 
     jobs = workflow["jobs"]
-    assert set(jobs) == {"publish-trigger-heartbeat", "inspect-observability-shape"}
-    _assert_controlled_condition(jobs["publish-trigger-heartbeat"]["if"])
-    _assert_controlled_condition(jobs["inspect-observability-shape"]["if"])
-    assert "environment" not in jobs["publish-trigger-heartbeat"]
-    assert jobs["inspect-observability-shape"]["environment"] == "cloudflare-probe"
+    assert set(jobs) == {
+        "verify-marker-change",
+        "publish-trigger-heartbeat",
+        "inspect-observability-shape",
+    }
+    preflight = jobs["verify-marker-change"]
+    heartbeat = jobs["publish-trigger-heartbeat"]
+    diagnostic = jobs["inspect-observability-shape"]
+    _assert_owner_gate(preflight["if"])
+    assert heartbeat["needs"] == "verify-marker-change"
+    assert diagnostic["needs"] == "verify-marker-change"
+    expected_gate = "${{ needs.verify-marker-change.outputs.marker_only == 'true' }}"
+    assert heartbeat["if"] == expected_gate
+    assert diagnostic["if"] == expected_gate
+    assert "environment" not in preflight
+    assert "environment" not in heartbeat
+    assert diagnostic["environment"] == "cloudflare-probe"
     assert "id-token" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_URL" not in raw
@@ -62,22 +70,53 @@ def test_shape_diagnostic_uses_controlled_pull_request_target_only():
     assert "contents: write" not in raw
     assert "workflow_run" not in raw
     assert "workflow_dispatch" not in raw
+    assert "github.event.pull_request.changed_files" not in raw
+
+
+def test_marker_change_is_verified_from_github_api_before_privileged_jobs():
+    raw, workflow = _load()
+    job = workflow["jobs"]["verify-marker-change"]
+    assert job["permissions"] == {
+        "contents": "read",
+        "pull-requests": "read",
+    }
+    assert job["timeout-minutes"] == "2"
+    assert job["outputs"] == {"marker_only": "${{ steps.verify.outputs.marker_only }}"}
+    assert job["env"] == {
+        "TARGET_PR_NUMBER": "${{ github.event.pull_request.number }}",
+        "EXPECTED_MARKER": MARKER,
+    }
+    assert len(job["steps"]) == 1
+    step = job["steps"][0]
+    assert step["name"] == "Verify exact marker-only change from GitHub API"
+    assert step["id"] == "verify"
+    assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    script = step["run"]
+    assert '[[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]' in script
+    assert 'FILES_PATH="$RUNNER_TEMP/observability-marker-files.jsonl"' in script
+    assert 'pulls/${TARGET_PR_NUMBER}/files?per_page=100' in script
+    assert "--paginate" in script
+    assert "@json" in script
+    assert 'files == [os.environ["EXPECTED_MARKER"]]' in script
+    assert "GITHUB_OUTPUT" in script
+    assert "marker_only={'true' if marker_only else 'false'}" in script
+    assert "actions/checkout@" not in str(job)
+    assert "actions/download-artifact@" not in str(job)
+    assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in str(job)
+    assert "secrets." not in str(job)
+    assert "environment" not in job
+    assert "github.event.pull_request.changed_files" not in raw
 
 
 def test_runner_temp_is_resolved_only_after_runner_exists():
     raw, workflow = _load()
     assert "${{ runner.temp }}" not in raw
 
+    preflight = workflow["jobs"]["verify-marker-change"]
     heartbeat = workflow["jobs"]["publish-trigger-heartbeat"]
     diagnostic = workflow["jobs"]["inspect-observability-shape"]
-    assert heartbeat["env"] == {
-        "TARGET_PR_NUMBER": "${{ github.event.pull_request.number }}",
-    }
-    assert diagnostic["env"] == {
-        "PROBE_PUBLIC_KEY_SPKI_B64URL": "${{ vars.CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL }}",
-        "CLOUDFLARE_ACCOUNT_ID": "${{ vars.CLOUDFLARE_ACCOUNT_ID }}",
-        "TARGET_PR_NUMBER": "${{ github.event.pull_request.number }}",
-    }
+    preflight_script = preflight["steps"][0]["run"]
+    assert 'FILES_PATH="$RUNNER_TEMP/observability-marker-files.jsonl"' in preflight_script
 
     heartbeat_prepare = heartbeat["steps"][0]["run"]
     assert 'TRIGGER_COMMENT_PATH="$RUNNER_TEMP/observability-trigger-heartbeat.json"' in heartbeat_prepare
@@ -91,8 +130,10 @@ def test_runner_temp_is_resolved_only_after_runner_exists():
 
 
 def test_trigger_heartbeat_is_sanitized_and_has_no_environment_or_repository_code():
-    raw, workflow = _load()
+    _, workflow = _load()
     job = workflow["jobs"]["publish-trigger-heartbeat"]
+    assert job["needs"] == "verify-marker-change"
+    assert job["permissions"] == {"contents": "read", "issues": "write"}
     assert "environment" not in job
     assert job["timeout-minutes"] == "2"
     assert job["env"] == {
@@ -105,6 +146,7 @@ def test_trigger_heartbeat_is_sanitized_and_has_no_environment_or_repository_cod
     assert "env" not in prepare
     prepare_script = prepare["run"]
     assert '"diagnostic_status": "trigger_observed"' in prepare_script
+    assert '"marker_change_verified": True' in prepare_script
     assert '"contains_no_event_values": True' in prepare_script
     assert '"production_authority": False' in prepare_script
     assert '"catalog_accepted": False' in prepare_script
@@ -126,12 +168,18 @@ def test_trigger_heartbeat_is_sanitized_and_has_no_environment_or_repository_cod
     assert "run-id: 32551882793" not in str(job)
     assert "la-colonia" not in str(job).lower()
     assert "lacolonia" not in str(job).lower()
-    assert raw.count("github.event.pull_request.head") == 2
 
 
 def test_pull_request_target_executes_only_trusted_base_revision_and_modern_script():
     raw, workflow = _load()
-    steps = workflow["jobs"]["inspect-observability-shape"]["steps"]
+    job = workflow["jobs"]["inspect-observability-shape"]
+    assert job["needs"] == "verify-marker-change"
+    assert job["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+        "issues": "write",
+    }
+    steps = job["steps"]
     checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout["name"] == "Checkout trusted base revision only"
     assert checkout["with"] == {
@@ -201,6 +249,11 @@ def test_shape_diagnostic_always_publishes_only_sanitized_comment_to_triggering_
 
 def test_shape_diagnostic_actions_are_pinned():
     _, workflow = _load()
+    preflight = workflow["jobs"]["verify-marker-change"]
+    heartbeat = workflow["jobs"]["publish-trigger-heartbeat"]
+    assert all("uses" not in step for step in preflight["steps"])
+    assert all("uses" not in step for step in heartbeat["steps"])
+
     steps = workflow["jobs"]["inspect-observability-shape"]["steps"]
     uses_steps = [step for step in steps if "uses" in step]
     for step in uses_steps:

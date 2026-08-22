@@ -55,11 +55,7 @@ CLOUDFLARE_ACCOUNT_VAR = "CLOUDFLARE_ACCOUNT_ID"
 
 EXPECTED_PERMISSIONS = {
     PROBE_WORKFLOW: {"contents": "read"},
-    DIAGNOSTIC_WORKFLOW: {
-        "contents": "read",
-        "actions": "read",
-        "issues": "write",
-    },
+    DIAGNOSTIC_WORKFLOW: {"contents": "read"},
     "precios-supermercados-sps-la-colonia-command.yml": {
         "contents": "read",
         "pull-requests": "read",
@@ -80,7 +76,22 @@ ALLOWED_JOB_PERMISSIONS = {
             "contents": "read",
             "id-token": "write",
         }
-    }
+    },
+    DIAGNOSTIC_WORKFLOW: {
+        "verify-marker-change": {
+            "contents": "read",
+            "pull-requests": "read",
+        },
+        "publish-trigger-heartbeat": {
+            "contents": "read",
+            "issues": "write",
+        },
+        "inspect-observability-shape": {
+            "contents": "read",
+            "actions": "read",
+            "issues": "write",
+        },
+    },
 }
 
 EXPECTED_TRIGGERS = {
@@ -346,22 +357,45 @@ def test_pull_request_target_never_checks_out_untrusted_pr_code():
             assert trigger["branches"] == ["main"]
             assert trigger["paths"] == [DIAGNOSTIC_MARKER_PATH]
             assert not all_jobs_blocked(workflow)
+
             diagnostic_jobs = jobs(workflow)
-            assert set(diagnostic_jobs) == {"publish-trigger-heartbeat", "inspect-observability-shape"}
+            assert set(diagnostic_jobs) == {
+                "verify-marker-change",
+                "publish-trigger-heartbeat",
+                "inspect-observability-shape",
+            }
+            preflight_job = diagnostic_jobs["verify-marker-change"]
             heartbeat_job = diagnostic_jobs["publish-trigger-heartbeat"]
             diagnostic_job = diagnostic_jobs["inspect-observability-shape"]
-            for controlled_job in (heartbeat_job, diagnostic_job):
-                condition = str(controlled_job.get("if", ""))
-                assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
-                assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
-                assert "github.event.pull_request.user.login == 'Jchernand3z19'" in condition
-                assert "github.event.pull_request.base.ref == 'main'" in condition
-                assert "github.event.pull_request.changed_files == 1" in condition
+
+            preflight_condition = str(preflight_job.get("if", ""))
+            assert "github.repository == 'Jchernand3z19/Portafolio'" in preflight_condition
+            assert "github.event.pull_request.head.repo.full_name == github.repository" in preflight_condition
+            assert "github.event.pull_request.user.login == 'Jchernand3z19'" in preflight_condition
+            assert "github.event.pull_request.base.ref == 'main'" in preflight_condition
+            assert "github.event.pull_request.changed_files" not in preflight_condition
+            assert preflight_job["permissions"] == {
+                "contents": "read",
+                "pull-requests": "read",
+            }
+            assert "environment" not in preflight_job
+            assert "actions/checkout@" not in str(preflight_job)
+            assert "secrets." not in str(preflight_job)
+            preflight_raw = str(preflight_job)
+            assert 'pulls/${TARGET_PR_NUMBER}/files?per_page=100' in preflight_raw
+            assert "EXPECTED_MARKER" in preflight_raw
+            assert "marker_only" in preflight_raw
+
+            expected_gate = "${{ needs.verify-marker-change.outputs.marker_only == 'true' }}"
+            assert heartbeat_job.get("needs") == "verify-marker-change"
+            assert diagnostic_job.get("needs") == "verify-marker-change"
+            assert heartbeat_job.get("if") == expected_gate
+            assert diagnostic_job.get("if") == expected_gate
             assert "environment" not in heartbeat_job
             assert diagnostic_job.get("environment") == "cloudflare-probe"
             assert "actions/checkout@" not in str(heartbeat_job)
             assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in str(heartbeat_job)
-            assert raw.count("github.event.pull_request.head") == 2
+            assert "github.event.pull_request.changed_files" not in raw
             assert "github.event.pull_request.head.sha" not in raw
             assert "github.event.pull_request.head.ref" not in raw
             assert checkout

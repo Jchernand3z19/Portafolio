@@ -9,21 +9,69 @@ on:
 
 permissions:
   contents: read
-  actions: read
-  issues: write
 
 concurrency:
   group: cloudflare-controlled-probe-observability-shape-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
-  publish-trigger-heartbeat:
+  verify-marker-change:
     if: >-
       ${{ github.repository == 'Jchernand3z19/Portafolio' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.event.pull_request.user.login == 'Jchernand3z19' &&
-          github.event.pull_request.base.ref == 'main' &&
-          github.event.pull_request.changed_files == 1 }}
+          github.event.pull_request.base.ref == 'main' }}
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      marker_only: ${{ steps.verify.outputs.marker_only }}
+    env:
+      TARGET_PR_NUMBER: ${{ github.event.pull_request.number }}
+      EXPECTED_MARKER: precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json
+
+    steps:
+      - name: Verify exact marker-only change from GitHub API
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]; then
+            echo "Invalid PR number" >&2
+            exit 1
+          fi
+
+          FILES_PATH="$RUNNER_TEMP/observability-marker-files.jsonl"
+          export FILES_PATH
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/pulls/${TARGET_PR_NUMBER}/files?per_page=100" \
+            --jq '.[].filename | @json' > "$FILES_PATH"
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          files = [
+              json.loads(line)
+              for line in Path(os.environ["FILES_PATH"]).read_text(encoding="utf-8").splitlines()
+              if line
+          ]
+          marker_only = files == [os.environ["EXPECTED_MARKER"]]
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"marker_only={'true' if marker_only else 'false'}\n")
+          PY
+
+  publish-trigger-heartbeat:
+    needs: verify-marker-change
+    if: ${{ needs.verify-marker-change.outputs.marker_only == 'true' }}
+    permissions:
+      contents: read
+      issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
@@ -43,6 +91,7 @@ jobs:
 
           payload = {
               "diagnostic_status": "trigger_observed",
+              "marker_change_verified": True,
               "contains_no_event_values": True,
               "production_authority": False,
               "catalog_accepted": False,
@@ -72,12 +121,12 @@ jobs:
             --input "$TRIGGER_COMMENT_PATH"
 
   inspect-observability-shape:
-    if: >-
-      ${{ github.repository == 'Jchernand3z19/Portafolio' &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.user.login == 'Jchernand3z19' &&
-          github.event.pull_request.base.ref == 'main' &&
-          github.event.pull_request.changed_files == 1 }}
+    needs: verify-marker-change
+    if: ${{ needs.verify-marker-change.outputs.marker_only == 'true' }}
+    permissions:
+      contents: read
+      actions: read
+      issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: cloudflare-probe
