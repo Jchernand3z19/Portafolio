@@ -24,6 +24,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
@@ -33,6 +34,43 @@ jobs:
       EXPECTED_MARKER: precios-supermercados-sps/ops/cloudflare-probe-observability-diagnostic-request.json
 
     steps:
+      - name: Publish sanitized raw pull_request_target heartbeat
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$TARGET_PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]; then
+            echo "Invalid PR number" >&2
+            exit 1
+          fi
+          HEARTBEAT_PATH="$RUNNER_TEMP/observability-prt-raw-heartbeat.json"
+          export HEARTBEAT_PATH
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+              "diagnostic_status": "pull_request_target_observed",
+              "marker_change_verified": False,
+              "contains_no_event_values": True,
+              "production_authority": False,
+              "catalog_accepted": False,
+          }
+          rendered = json.dumps(payload, sort_keys=True, indent=2)
+          Path(os.environ["HEARTBEAT_PATH"]).write_text(
+              json.dumps({
+                  "body": "## Sanitized Workers Observability trigger heartbeat\n\n```json\n" + rendered + "\n```"
+              }),
+              encoding="utf-8",
+          )
+          PY
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${TARGET_PR_NUMBER}/comments" \
+            --input "$HEARTBEAT_PATH"
+
       - name: Verify exact marker-only change from GitHub API
         id: verify
         env:
