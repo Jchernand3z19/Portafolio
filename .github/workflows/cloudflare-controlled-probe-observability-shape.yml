@@ -78,6 +78,7 @@ jobs:
           set -euo pipefail
           HEARTBEAT_PATH="$RUNNER_TEMP/observability-main-push-heartbeat.json"
           export HEARTBEAT_PATH
+          printf 'HEARTBEAT_PATH=%s\n' "$HEARTBEAT_PATH" >> "$GITHUB_ENV"
           python - <<'PY'
           import json
           import os
