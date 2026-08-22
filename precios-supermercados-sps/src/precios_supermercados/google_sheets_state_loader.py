@@ -22,7 +22,11 @@ from .commercial_state_restore import (
     CommercialStateRestoreError,
     restore_commercial_state,
 )
-from .google_sheets_adapter import GoogleSheetsAdapterError, WorkbookSnapshot
+from .google_sheets_adapter import (
+    GoogleSheetsAdapterError,
+    WorkbookSnapshot,
+    snapshot_row_counts,
+)
 from .tabular_persistence import (
     FACT_OFFER_HISTORY,
     FACT_OFFERS_CURRENT,
@@ -32,7 +36,7 @@ from .tabular_rehydration import (
     TabularRehydrationError,
     rehydrate_commercial_snapshot,
 )
-from .tabular_store import TabularStoreError
+from .tabular_store import InMemoryTabularStore, TabularStoreError
 
 
 class WorkbookSnapshotLoaderLike(Protocol):
@@ -90,11 +94,23 @@ def load_commercial_state_from_google_sheets(
 
     if not isinstance(workbook, WorkbookSnapshot):
         raise GoogleSheetsStateLoaderError("workbook_snapshot_invalid")
+    if not isinstance(workbook.store, InMemoryTabularStore):
+        raise GoogleSheetsStateLoaderError("workbook_store_invalid")
+    if not isinstance(workbook.requested_ranges, tuple) or any(
+        not isinstance(value, str) or not value
+        for value in workbook.requested_ranges
+    ):
+        raise GoogleSheetsStateLoaderError("workbook_requested_ranges_invalid")
 
     try:
+        actual_row_counts = snapshot_row_counts(workbook.store)
+        if dict(workbook.row_counts) != dict(actual_row_counts):
+            raise GoogleSheetsStateLoaderError("workbook_row_counts_mismatch")
         current_rows = workbook.store.rows(FACT_OFFERS_CURRENT.name)
         history_rows = workbook.store.rows(FACT_OFFER_HISTORY.name)
         scrape_run_rows = workbook.store.rows(FACT_SCRAPE_RUNS.name)
+    except GoogleSheetsStateLoaderError:
+        raise
     except TabularStoreError as exc:
         raise GoogleSheetsStateLoaderError("workbook_store_read_failed") from exc
 
@@ -113,7 +129,7 @@ def load_commercial_state_from_google_sheets(
 
     return LoadedCommercialState(
         state=restored.state,
-        row_counts=workbook.row_counts,
+        row_counts=actual_row_counts,
         requested_ranges=workbook.requested_ranges,
         current_count=restored.current_count,
         history_period_count=restored.history_period_count,
