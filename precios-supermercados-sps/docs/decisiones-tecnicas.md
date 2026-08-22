@@ -6,7 +6,7 @@ El proyecto vive en `precios-supermercados-sps/`. Los workflows viven en `.githu
 
 ## DT-002 — Contratos Python conservadores y dependencias explícitas
 
-Los contratos de dominio usan `dataclass`, `StrEnum`, `Decimal`, `datetime` y validaciones propias. Las dependencias externas del proyecto se declaran en `requirements.txt`; actualmente incluyen `pytest`, `playwright` y `PyYAML`. No se presenta la biblioteca estándar como única dependencia del proyecto completo.
+Los contratos de dominio usan `dataclass`, `StrEnum`, `Decimal`, `datetime` y validaciones propias. Las dependencias externas del proyecto se declaran en `requirements.txt`; actualmente incluyen `pytest`, `playwright`, `PyYAML` y `cryptography`. No se presenta la biblioteca estándar como única dependencia del proyecto completo.
 
 ## DT-003 — Nomenclatura única
 
@@ -80,7 +80,7 @@ Cada periodo registra `change_type`, `changed_fields`, ejecución de apertura/ci
 
 ## DT-020 — Google Sheets es contrato histórico, no backend elegido
 
-El modelo documenta ocho tabs compatibles con una primera etapa en Google Sheets, pero no conecta Google Sheets ni solicita credenciales. Esa documentación no obliga a escoger Sheets, BigQuery, SQLite o PostgreSQL como backend productivo antes de cerrar la frontera de aceptación autoritativa.
+El modelo documenta estructuras compatibles con una primera etapa en Google Sheets, pero no conecta Google Sheets ni solicita credenciales. Esa documentación no obliga a escoger Sheets, BigQuery, SQLite o PostgreSQL como backend productivo antes de cerrar la frontera de aceptación autoritativa.
 
 ## DT-021 — Sitio público fuera de alcance
 
@@ -90,7 +90,7 @@ No se modifica Mundial 2026, `js/main.js`, el registro de proyectos ni la págin
 
 `commercial_state.py` implementa la transición current/history sin almacenamiento externo. Sólo un run `success` o `warning` con catálogo aceptado puede mutar estado. `running`, `rejected`, `failed`, `abandoned` o catálogo no aceptado no mutan. La capa revalida `state_hash`, exige cronología `observed_at_utc <= validated_at_utc <= decided_at_utc`, hace replay idempotente y rechaza reutilización conflictiva de `scrape_run_id`.
 
-Una oferta ausente de un payload posterior no se interpreta como eliminación, `not_listed` ni `out_of_stock`; esos estados requieren evidencia explícita. El booleano `catalog_accepted` de esta capa no concede autoridad live: en producción debe provenir de un collector autoritativo con provenance independiente.
+Una oferta ausente de un payload posterior no se interpreta como eliminación, `not_listed` ni `out_of_stock`; esos estados requieren evidencia explícita. El booleano `catalog_accepted` de esta capa no concede autoridad live: en producción debe provenir de una decisión autoritativa derivada de provenance independiente.
 
 ## DT-023 — CI en PR y defensa en profundidad sobre `main`
 
@@ -138,12 +138,35 @@ En PR #29, con `main` reportado como `protected: true`, GitHub rechazó un inten
 
 Por esa evidencia, `GATE-17 = PASS_PRODUCTIVE_EVIDENCE`. Esto protege la gobernanza de `main`, pero no concede autoridad live ni sustituye el trusted collector o el enforcement físico de egress/claim/fencing.
 
-## DT-031 — Frontera física productiva en Google Cloud
+## DT-031 — Diseño Google Cloud evaluado y supersedido
 
-La arquitectura elegida para cerrar provenance física usa Cloud Run para el collector autoritativo, Direct VPC egress `all-traffic`, una subred dedicada y Secure Web Proxy en modo next-hop con política default-deny. Secure Web Proxy aporta un registro independiente de las transacciones físicas en Cloud Logging.
+La arquitectura con Cloud Run, Direct VPC egress, Secure Web Proxy, Cloud Logging y Cloud KMS fue diseñada como una posible frontera física independiente. No llegó a convertirse en infraestructura productiva y dejó de ser la ruta seleccionada cuando la implementación Cloudflare alcanzó las mismas fronteras necesarias con menor dependencia operativa.
 
-El collector emite recibos canónicos firmados mediante una clave asimétrica de Cloud KMS y un verifier separado reconcilia esos recibos contra los transaction logs del proxy. El verifier produce una attestation final con una segunda clave KMS; sólo esa attestation podrá retirar `trusted_collector_provenance_unavailable` en la ruta productiva.
+Se conserva esta decisión únicamente como historial arquitectónico. No debe interpretarse como requisito actual, fallback obligatorio ni condición para retirar `trusted_collector_provenance_unavailable`.
 
-GitHub Actions actúa sólo como controller mediante OIDC/Workload Identity Federation y no recibe permisos para firmar. Collector y verifier usan service accounts y claves separadas. No se aceptan booleanos caller-controlled, HMAC local, archivos/markers ni un proxy explícito que la aplicación pueda omitir como sustituto de evidencia física.
+## DT-032 — Cloudflare es la frontera física seleccionada
 
-El diseño completo, threat model, esquema de receipts, IAM, pruebas negativas y secuencia de despliegue vive en `docs/trusted-collector-productivo.md`. El diseño no implica que los recursos estén desplegados ni autoriza tráfico live; GATE-06 y GATE-18 continúan cerrados hasta evidencia productiva real.
+La ruta seleccionada usa **Cloudflare Workers + Durable Objects SQLite + GitHub OIDC + Ed25519 + Workers Observability**.
+
+La implementación productiva preparada fija repo, repository ID, `main`, workflow, environment, event, audience, host/path/método GraphQL y límites. El caller no puede elegir un destino arbitrario. El Durable Object controla presupuesto, pacing, single-flight, replay y fencing. El Worker liga receipts Ed25519 a request, run, commit, release y respuesta cruda; la capa Python verifica firma/body y reconcilia evidencia contra Workers Observability.
+
+Esta decisión describe la arquitectura elegida, no un despliegue existente. Mientras los componentes sólo hayan sido ejercitados offline:
+
+```text
+production_authority = false
+trusted_collector_provenance_unavailable = presente
+```
+
+## DT-033 — Completitud técnica no equivale a aceptación productiva
+
+La cadena integrada puede cerrar offline structural discovery autenticado, derivar el plan canónico de catálogo, recolectar páginas a través del contrato edge, verificar receipts, reconciliar observability y construir un manifest completo del run.
+
+`CatalogAcceptanceReadiness` separa explícitamente ese hecho técnico de la autoridad productiva. Puede indicar que toda la evidencia técnicamente demostrable está completa, pero no produce `catalog_accepted=true` ni `production_authority=true`. La persistencia productiva deberá consumir una futura decisión de autoridad verificable; no un booleano caller-controlled.
+
+## DT-034 — Cloudflare se prueba primero contra un origen controlado no-La-Colonia
+
+Antes de cualquier validación física del collector contra La Colonia, la infraestructura Cloudflare debe probarse contra un origen controlado propio. La sonda se diseña con Worker de origen, gateway, Durable Object, OIDC audience/environment, claves, signing key ID, schema y dominio criptográfico **separados** de la ruta productiva.
+
+El caller no puede suministrar la URL física. La sonda sólo admite HTTPS `*.workers.dev` con path exacto y rechaza La Colonia antes de cualquier fetch. Un receipt de sonda no puede convertirse en evidencia de catálogo ni conceder autoridad productiva.
+
+A la fecha de esta decisión, PR #84 contiene la implementación preparada y CI verde, pero continúa fuera de `main` mientras permanezca sin integrar. Integrar o desplegar la sonda tampoco autoriza tráfico live a La Colonia; esa autorización sigue siendo humana, explícita y separada.

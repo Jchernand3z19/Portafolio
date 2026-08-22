@@ -1,38 +1,34 @@
-# Diseño alternativo — Trusted collector gratuito con Cloudflare Workers
+# Trusted collector con Cloudflare Workers
 
-Estado: **DISEÑO SELECCIONADO PARA PROTOTIPO OFFLINE/EDGE, NO DESPLEGADO**.
+Estado: **ARQUITECTURA SELECCIONADA / IMPLEMENTADA OFFLINE / NO DESPLEGADA / NO LIVE**.
 
-Este documento define una alternativa sin infraestructura de coste continuo para la provenance física del collector. No autoriza tráfico live, no despliega recursos y no cambia GATE-06/GATE-18.
+> El nombre histórico de este archivo incluye `cloudflare-free` porque la primera evaluación buscaba una alternativa de coste cero. Cloudflare dejó de ser una alternativa experimental: es la ruta de ingeniería seleccionada. El estado canónico general vive en `docs/arquitectura.md` y el cierre productivo en `docs/trusted-collector-productivo.md`.
 
-La arquitectura Google Cloud documentada en `trusted-collector-productivo.md` permanece como fallback de mayor aislamiento operativo. Esta alternativa busca demostrar si el mismo objetivo de seguridad puede lograrse con Cloudflare Workers Free antes de asumir costes de infraestructura.
+Este documento conserva el rationale técnico de la selección de Cloudflare. No autoriza tráfico live, no demuestra un despliegue y no cambia por sí solo GATE-06/GATE-18.
 
 ## 1. Motivo
 
-La frontera que falta no es capacidad de hacer HTTP: el extractor ya existe. Lo que falta es evidencia independiente de que una respuesta concreta provino de una solicitud física real y que el caller no pudo fabricar esa evidencia.
+La frontera que falta no es capacidad de hacer HTTP: el extractor ya existe. Lo que debe demostrarse productivamente es que una respuesta concreta provino de una solicitud física real y que el caller no pudo fabricar esa evidencia.
 
-Cloudflare Workers puede actuar como **collector/proxy físico independiente**:
+La arquitectura seleccionada usa Cloudflare Workers como collector/proxy físico independiente:
 
-1. el caller no contacta directamente a La Colonia;
-2. el Worker recibe una solicitud canónica autorizada;
-3. el Worker realiza el `fetch()` HTTPS hacia el origen permitido;
-4. el Worker lee los bytes exactos de la respuesta;
-5. calcula SHA-256 sobre esos bytes;
-6. firma un receipt con una clave privada que sólo existe como Worker Secret;
-7. devuelve los bytes originales y el receipt firmado;
-8. el repositorio/verifier sólo conoce la clave pública.
+1. GitHub Actions presenta identidad OIDC;
+2. el Worker valida claims y request canónico;
+3. un Durable Object controla presupuesto, pacing, single-flight, replay y fencing;
+4. el Worker realiza el `fetch()` HTTPS únicamente al destino productivo allowlisted;
+5. lee los bytes exactos de la respuesta y calcula SHA-256;
+6. firma un receipt con una private key Ed25519 que sólo debe existir en Cloudflare;
+7. devuelve bytes + receipt + firma;
+8. Python verifica criptografía y body;
+9. un verifier externo reconcilia cada request con Workers Observability.
 
-A diferencia de un HMAC compartido con GitHub, la clave privada de provenance **no vive en GitHub**. GitHub puede solicitar una observación, pero no puede fabricar una firma válida sin que el Worker la emita.
+GitHub puede solicitar una observación autorizada, pero no posee la private key y no puede fabricar por sí solo un receipt productivo válido.
 
-## 2. Capacidad y coste objetivo
+## 2. Capacidad y coste
 
-Según documentación oficial de Cloudflare verificada en agosto de 2026:
+La selección se hizo buscando una frontera con coste operativo bajo y suficiente capacidad para el proyecto. Los límites/precios de Cloudflare pueden cambiar y deben verificarse antes de un despliegue real; no forman parte de la semántica de seguridad del código.
 
-- Workers Free permite hasta 100,000 requests por día;
-- el runtime expone Web Crypto con SHA-256 y Ed25519;
-- Durable Objects con backend SQLite están disponibles en Workers Free;
-- si se exceden límites del plan Free, las operaciones fallan en vez de convertirse automáticamente en uso ilimitado de pago.
-
-Referencias oficiales:
+Referencias oficiales usadas durante el diseño:
 
 - https://developers.cloudflare.com/workers/platform/limits/
 - https://developers.cloudflare.com/workers/platform/pricing/
@@ -41,56 +37,56 @@ Referencias oficiales:
 - https://developers.cloudflare.com/workers/configuration/secrets/
 - https://developers.cloudflare.com/durable-objects/platform/pricing/
 
-La carga esperada del proyecto está muy por debajo del límite diario. Antes de declarar aptitud para un recorrido completo se medirá CPU y consumo real en un origen controlado, sin usar La Colonia.
+El criterio productivo no es “cabe en el plan Free”, sino que la infraestructura real respete todos los límites de seguridad y falle cerrado si un límite de plataforma impide continuar.
 
-## 3. Arquitectura
+## 3. Arquitectura productiva preparada
 
 ```text
-GitHub Actions (controller protegido)
+GitHub Actions protegido
         |
-        | GitHub OIDC token
-        | Environment humana: la-colonia-live
+        | GitHub OIDC
         v
-Cloudflare Worker: provenance-gateway
+Cloudflare Worker: precios-sps-provenance
         |
-        | valida OIDC + claims + presupuesto
-        | serializa por Durable Object
+        | valida identidad + request
         v
-fetch HTTPS hardcoded/allowlisted
+Durable Object: AuthorizationGateway
+        |
+        | budget / pacing / replay / fencing
+        v
+fetch HTTPS allowlisted
         |
         v
 La Colonia / VTEX
         |
         v
-Worker lee bytes exactos
+bytes exactos de respuesta
         |
-        +--> SHA-256(response bytes)
-        +--> receipt canónico v2
-        +--> firma Ed25519 con Worker Secret
-        |
-        v
-response bytes + receipt + signature
+        +--> SHA-256
+        +--> receipt v2 Ed25519
+        +--> Workers Observability
         |
         v
-verifier con PUBLIC KEY
+verificadores Python
         |
         v
-reconciliación primary + reconciliation
+manifest estructural / catálogo
+        |
+        v
+readiness técnica
 ```
+
+La última salida sigue sin ser autoridad productiva mientras no exista evidencia de un despliegue real.
 
 ## 4. Transporte canónico de La Colonia
 
-El extractor versionado actual construye una consulta **GET** a:
+El extractor versionado construye una consulta **GET** a:
 
 ```text
 https://www.lacolonia.com/_v/segment/graphql/v1
 ```
 
-con `workspace`, `maxAge`, `appsEtag`, `domain`, `locale`, `operationName`, `query` y `variables` en el query string.
-
-Por tanto, el primer gateway Cloudflare debe preservar **GET**. No se cambia a POST por conveniencia arquitectónica porque POST no ha sido validado live dentro de la autorización actual.
-
-La regla productiva inicial será:
+La implementación productiva fija y valida:
 
 ```text
 scheme: https
@@ -100,63 +96,33 @@ method: GET
 redirect: manual + reject 3xx
 ```
 
-El contrato `edge_provenance.py` admite únicamente GET o POST para mantenerse neutral al proveedor/origen. Eso **no** significa que el caller pueda elegir libremente el método. Cada adapter/gateway productivo debe fijar uno. Para La Colonia, el método actual es GET hasta que una revisión técnica autorizada demuestre lo contrario.
+También valida operación/query/variables permitidas, `hideUnavailableItems=false`, `skusFilter=ALL`, órdenes allowlisted y ventanas dentro de límites. No reenvía cookies, Authorization, GPS, dirección ni otros datos personales del caller.
+
+El allowlist productivo **no se amplía para hacer pruebas**.
 
 ## 5. Autenticación del controller
 
-No se añadirá una API pública que firme cualquier request.
-
-El Worker debe exigir un token OIDC emitido por GitHub Actions y validar como mínimo:
+El Worker productivo exige un token OIDC emitido por GitHub Actions con identidad fijada en código. Entre los claims relevantes están:
 
 ```text
 iss == https://token.actions.githubusercontent.com
-aud == audiencia dedicada del provenance-gateway
+aud == urn:precios-sps:cloudflare:collector:v1
 repository == Jchernand3z19/Portafolio
 repository_id == 1282475205
 ref == refs/heads/main
-workflow_ref == workflow live canónico esperado
+workflow_ref == workflow live canónico en main
 environment == la-colonia-live
-sha == commit aprobado/protegido
-event_name == workflow_dispatch durante la fase live manual
+event_name == workflow_dispatch
+sha == commit aprobado
 ```
 
-También se validan `exp`, `nbf`, `iat`, `jti`, firma JWT y `kid` contra el JWKS oficial de GitHub.
+También se validan firma JWT, `kid`, `exp`, `nbf`, `iat`, `jti`, `run_id` y `run_attempt` según el contrato implementado.
 
-GitHub documenta `repository_id`, `ref`, `workflow_ref`, `environment`, `run_id`, `run_attempt` y demás claims dentro del token OIDC. El repositorio fue creado antes del rollout automático de subjects inmutables de julio de 2026, por lo que la política debe basarse además en `repository_id` y no sólo en el texto de `sub`.
+OIDC no sustituye la autorización humana para live. El workflow live sigue globalmente bloqueado mientras no exista una autorización explícita vigente.
 
-El workflow live deberá usar un **GitHub Environment con aprobación humana requerida**. La presencia de OIDC no sustituye la autorización humana.
+## 6. Receipt físico v2
 
-## 6. Allowlist física y consulta GraphQL
-
-El Worker no acepta URL arbitraria del caller.
-
-La versión inicial fija en código/configuración versionada:
-
-```text
-scheme: https
-host: www.lacolonia.com
-path: /_v/segment/graphql/v1
-method: GET
-```
-
-El gateway debe construir o validar los parámetros de búsqueda a partir de campos permitidos, no reenviar una URL completa suministrada por el caller.
-
-Controles mínimos:
-
-- `operationName = productSearchV3`;
-- query GraphQL equivalente a la consulta versionada en `la_colonia_graphql.py`;
-- `hideUnavailableItems = false`;
-- `skusFilter = ALL`;
-- `orderBy` dentro del allowlist canónico;
-- `from` y `to` coherentes con el presupuesto autorizado;
-- redirects rechazados;
-- no reenvío de cookies, Authorization, GPS, dirección ni otros headers/datos personales del caller.
-
-## 7. Receipt físico v2
-
-La forma canónica vive en `src/precios_supermercados/edge_provenance.py`.
-
-Cada receipt liga al menos:
+La forma canónica se mantiene en los contratos edge del proyecto. Cada receipt liga, entre otros:
 
 ```text
 schema_version
@@ -182,174 +148,190 @@ signing_algorithm / signing_key_id
 nonce
 ```
 
-La respuesta se devuelve sin reserializar para que `raw_response_sha256` corresponda exactamente a los bytes consumidos por el crawler.
+La respuesta se verifica contra su hash antes de convertirse en evidencia de catálogo.
 
-`physical_provenance.py` v1 conserva el prototipo GCP anterior. No debe convertirse en contrato productivo nuevo; la ruta edge se construye sobre v2.
+`physical_provenance.py` v1 conserva un prototipo anterior y no es el contrato nuevo para la ruta productiva Cloudflare.
 
-## 8. Clave de firma
+## 7. Clave de firma
 
-La clave privada Ed25519 se guarda como **Worker Secret**, nunca como `vars`, archivo del repositorio ni GitHub Secret.
+La private key Ed25519 se guarda como **Worker Secret**, nunca como `vars`, archivo de repositorio, GitHub Secret, log o artefacto.
 
-La clave pública/verificador sí puede vivir versionada en el repositorio.
+La public key puede distribuirse al verifier. `signing_key_id` versiona la confianza y permite rotación sin reescribir evidencia histórica.
 
-Rotación:
+Una firma válida demuestra integridad/autenticidad respecto de la clave; no demuestra por sí sola que el request físico ocurrió ni concede `production_authority`.
 
-- `signing_key_id` incluido en cada receipt;
-- varias claves públicas pueden mantenerse durante una ventana de transición;
-- una clave revocada nunca acepta receipts nuevos;
-- evidencia histórica firmada no se reescribe.
+## 8. Durable Object
 
-## 9. One-shot / presupuesto / pacing con Durable Object
+`AuthorizationGateway` usa almacenamiento SQLite y serializa la ejecución autorizada.
 
-Un Durable Object SQLite serializa el estado de cada ejecución autorizada.
+Reglas implementadas offline incluyen:
 
-Estado mínimo:
+- presupuesto cerrado;
+- deadline/expiración;
+- reservas one-shot;
+- unicidad de request/reservation/nonce;
+- pacing mínimo;
+- single-flight;
+- replay idempotente sin refetch físico;
+- fencing por autorización y por `run_id:run_attempt` OIDC;
+- error de estado => deny, nunca bypass directo;
+- ruta canónica con `max_retries = 0`.
 
-```text
-authorization_id
-run_id
-approved_commit_sha
-created_at
-expires_at
-max_requests
-requests_used
-min_start_interval_seconds
-last_physical_start
-request_digests_used[]
-nonces_used[]
-state = active | consumed | rejected | expired
-```
+## 9. Workers Observability
 
-Reglas:
+Una firma del mismo Worker no se considera evidencia física suficiente. La segunda evidencia proviene de Workers Observability y se consulta desde fuera del collector.
 
-- presupuesto cerrado antes del primer request;
-- ningún request puede incrementarlo;
-- cada `request_digest`, `request_id`, `reservation_id` y nonce es único;
-- el Durable Object serializa reservas para evitar carreras;
-- pacing mínimo se aplica antes del inicio físico;
-- al alcanzar presupuesto queda `consumed`;
-- al expirar falla cerrado;
-- 403/429/captcha/auth/location/redirect inesperado detiene la ejecución según la política de seguridad;
-- pérdida/error de Durable Object => deny, nunca bypass directo.
+El proyecto ya implementa offline:
 
-## 10. Flujo por request
+- custom spans versionados;
+- atributos de correlación;
+- parsers/verifiers de telemetría;
+- reconciliación exacta de request/receipt/evidence IDs;
+- release/commit/run/target/status/timestamps;
+- identidad exacta entre la página criptográfica y la observación reconciliada;
+- manifest completo del run.
 
-1. validar método de entrada y tamaño;
-2. verificar JWT OIDC y claims exactos;
-3. validar parámetros GraphQL permitidos;
-4. construir URL GET canónica;
-5. calcular `canonical_request_sha256` y `request_digest`;
-6. reservar request en Durable Object;
-7. aplicar pacing;
-8. hacer exactamente un `fetch` al origen allowlisted con `redirect: manual`;
-9. rechazar 3xx y señales stop;
-10. leer `ArrayBuffer` de respuesta;
-11. SHA-256 de bytes exactos;
-12. construir receipt v2;
-13. firmarlo con clave privada Worker Secret;
-14. cerrar reserva/evidencia en Durable Object;
-15. devolver bytes exactos + receipt + firma;
-16. el caller verifica firma antes de parsear o usar la evidencia.
+La especificación detallada está en `docs/cloudflare-tracing-provenance.md`.
 
-Si cualquier paso 8–15 queda incierto, no existe receipt aceptable.
+## 10. Structural discovery y catálogo
 
-## 11. Formato de retorno
+La cadena offline ya no termina en el receipt individual.
 
-Preferido mientras el receipt permanezca debajo de límites seguros de headers:
+### Structural discovery
 
 ```text
-HTTP body: bytes exactos de La Colonia
-X-PSPS-Receipt: base64url(canonical receipt JSON)
-X-PSPS-Signature: base64url(signature)
-X-PSPS-Key-Id: versión pública
+plan estructural
+-> gateway edge
+-> receipt firmado
+-> body validado
+-> Workers Observability
+-> VerifiedStructuralDiscovery
 ```
 
-Antes de fijarlo definitivamente se prueba el tamaño máximo. Si crece, se usa un envelope explícito o evidence-id; nunca se trunca silenciosamente.
+### Catálogo
+
+```text
+VerifiedStructuralDiscovery
+-> canonical_authenticated_provenance_plan
+-> VerifiedCatalogEdgeCollector
+-> receipt/body verificados por página
+-> Workers Observability por página
+-> VerifiedCatalogProvenanceFinalizer
+-> manifest del run
+-> CatalogAcceptanceReadiness
+```
+
+El caller no elige URL, page size, orden, traversal IDs ni particiones canónicas arbitrarias en esa ruta.
+
+## 11. Readiness técnica no es autoridad
+
+La cadena puede alcanzar offline:
+
+```text
+technical_catalog_complete = true
+ready_for_productive_authority_evidence = true
+catalog_accepted = false
+production_authority = false
+```
+
+El reason `trusted_collector_provenance_unavailable` permanece obligatorio hasta evidencia productiva real.
+
+No se aceptan como sustituto:
+
+- `trusted=true`;
+- `provenance_ok=true`;
+- un `catalog_accepted=true` del caller;
+- markers/archivos/comentarios;
+- HMAC local;
+- receipt firmado únicamente en pruebas offline.
 
 ## 12. Amenazas y controles
 
 | Amenaza | Control |
 |---|---|
-| caller inventa `trusted=true` | no existe ese parámetro |
+| caller inventa autoridad | no existe un parámetro productivo que la conceda |
 | caller fabrica receipt | no posee private signing key |
-| PR malicioso invoca Worker | OIDC exige repo ID + main + workflow/environment canónicos |
-| replay | nonce/request digest + Durable Object |
-| ejecución reutilizada | run/authorization consumidos/expirados |
-| destino arbitrario | host/path/method allowlisted |
+| PR malicioso invoca Worker | OIDC exige identidad productiva exacta |
+| replay | Durable Object + IDs/nonces únicos |
+| ejecución reutilizada | fencing run/attempt + estado durable |
+| destino arbitrario | host/path/método productivos allowlisted |
 | redirect | `redirect: manual` + 3xx fail-closed |
-| consulta GraphQL arbitraria | operación/query/variables validadas |
-| GitHub modifica response | hash firmado deja de coincidir |
-| GitHub inventa status/body | receipt firmado cubre status/hash/bytes |
-| primary = reconciliation | traversals, orderings, requests y nonces distintos |
+| GraphQL arbitrario | operación/query/variables validadas |
+| response modificada | hash firmado + verificación de body |
+| primary sustituye reconciliation | traversals/evidencias independientes y manifest exacto |
 | pérdida de estado | Durable Object error => deny |
-| límite Free alcanzado | error/deny; no degradar a ruta directa |
+| observability ausente/inconsistente | no existe provenance productiva aceptable |
 
-## 13. Lo que esta arquitectura NO demuestra
+## 13. Sonda controlada antes de La Colonia
 
-- que Cloudflare sea inmune a compromiso administrativo;
-- que la fuente represente específicamente SPS;
-- que el catálogo esté completo;
-- que el sitio autorice un recorrido full;
-- que un receipt firmado sea automáticamente `catalog_accepted`.
+Cloudflare debe probarse físicamente primero contra un origen propio **no-La-Colonia**.
 
-SPS sigue `UNCONFIRMED` y la completitud depende de la reconciliación canónica.
+PR #84 prepara una sonda separada con:
 
-## 14. Pruebas obligatorias antes de live
+- Worker de origen controlado;
+- gateway de sonda independiente;
+- Durable Object `ProbeLedger` independiente;
+- environment `cloudflare-probe`;
+- audience OIDC exclusiva;
+- llaves Ed25519 y signing key ID distintos;
+- schema `probe-1` y dominio criptográfico distintos;
+- origen fijado por binding Cloudflare, nunca por input del caller;
+- sólo HTTPS `*.workers.dev` y path exacto;
+- rechazo de La Colonia antes de cualquier fetch.
+
+Su CI está verde, pero mientras #84 siga fuera de `main` se clasifica `READY_TO_INTEGRATE`, no como infraestructura disponible.
+
+Un receipt de sonda no verifica como receipt productivo y nunca concede `catalog_accepted`.
+
+## 14. Pruebas obligatorias
 
 ### Offline
 
-- canonicalización Worker ↔ Python idéntica;
-- vectores Ed25519 válidos/inválidos;
-- response alterada rompe hash;
-- receipt alterado rompe firma;
-- JWT OIDC inválido o claims incorrectos se rechazan;
-- host/path/method fuera de allowlist se rechazan;
-- GET canónico de La Colonia se construye exactamente desde variables permitidas;
-- POST no se usa para La Colonia sin evidencia/autorización nueva;
-- redirect se rechaza;
-- duplicate nonce/request digest se rechaza;
-- presupuesto agotado se rechaza;
-- concurrencia no excede pacing/budget;
-- `production_authority` local permanece false.
+Ya se exige en CI, entre otros:
+
+- canonicalización Worker ↔ Python;
+- Ed25519 válido/inválido;
+- body/receipt alterado rechazado;
+- OIDC/JWKS claims incorrectos rechazados;
+- host/path/method fuera de allowlist rechazados;
+- redirect fail-closed;
+- duplicate nonce/request/reservation rechazado;
+- presupuesto/replay/fencing;
+- Workers Observability y sustitución de evidencia;
+- manifests completos;
+- `production_authority=false` en fronteras offline.
 
 ### Edge sin La Colonia
 
-- desplegar Worker contra origen de prueba controlado;
-- comprobar firma sobre bytes exactos;
-- comprobar Durable Object/replay;
-- comprobar límites/CPU del plan Free;
-- comprobar OIDC real de GitHub contra el Worker.
+Pendiente externamente:
 
-### Live
+1. integrar la sonda preparada;
+2. desplegar origen controlado;
+3. generar llaves exclusivas de sonda y guardar private key sólo en Cloudflare;
+4. desplegar gateway/DO de sonda;
+5. ejecutar OIDC real desde el workflow manual;
+6. comprobar version metadata, firma, replay y observability reales;
+7. confirmar **0 requests a La Colonia**.
 
-Requiere autorización humana explícita nueva. Primero sólo observación mínima. Ningún full crawl se habilita por desplegar el Worker.
+### Live La Colonia
 
-## 15. Criterio de preferencia frente a GCP
+Requiere una nueva autorización humana explícita. Primero sólo se ejecutará la observación mínima necesaria para resolver SPS. Desplegar Cloudflare o aprobar la sonda no autoriza ese tráfico.
 
-Cloudflare pasa a ser ruta preferida sólo si las pruebas offline + edge demuestran:
+## 15. Estado actual
 
-```text
-coste = 0 dentro del plan Free
-firma asimétrica independiente = PASS
-OIDC main/environment = PASS
-one-shot/budget/pacing = PASS
-response hash físico = PASS
-redirect/allowlist fail-closed = PASS
-sin bypass directo aceptable = PASS
-```
-
-Si cualquiera falla, la arquitectura GCP permanece como fallback y GATE-06/GATE-18 siguen cerrados.
-
-## 16. Estado actual
-
-- diseño: definido;
-- contrato Python v2 provider-neutral: implementado offline;
-- transporte canónico La Colonia: GET, documentado desde código versionado;
-- Worker: no implementado todavía;
-- Cloudflare account/deploy: no configurado;
-- Google Cloud: proyecto creado, Billing no activado por prepago requerido;
-- tráfico live: 0;
+- Cloudflare: arquitectura seleccionada;
+- Worker/DO productivos: implementados offline, no desplegados;
+- OIDC/JWKS/Ed25519/replay/fencing: implementados offline;
+- Workers Observability: adapters/verifiers implementados offline;
+- structural discovery autenticado: implementado offline;
+- transporte/finalización de catálogo: implementado offline;
+- readiness técnica: implementada offline, sin authority;
+- sonda controlada: PR #84 preparado y verde, todavía fuera de `main`;
+- Google Cloud: diseño histórico supersedido, no ruta actual;
+- tráfico live a La Colonia: 0;
 - autorización live activa: ninguna;
-- GATE-06: abierto;
-- GATE-18: fail-closed;
+- GATE-06: abierto productivamente;
+- GATE-18: abierto productivamente;
 - SPS: `UNCONFIRMED`.
+
+El siguiente hito externo correcto es probar Cloudflare contra el origen controlado. No se debe contactar La Colonia antes de completar esa frontera y obtener después una autorización humana separada.

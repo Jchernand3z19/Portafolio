@@ -1,20 +1,31 @@
-# Extractor controlado — La Colonia
+# Registro histórico — Extractor controlado de La Colonia
 
-## Estado
+## Estado del documento
 
-Prueba técnica funcional y corregida después de la revisión del PR #6. No incluye extracción completa, persistencia ni programación diaria.
+**SNAPSHOT HISTÓRICO DE LA FASE INICIAL (PR #6). NO ES LA FUENTE DE ESTADO ACTUAL NI UNA AUTORIZACIÓN LIVE.**
 
-## Fuente
+Este documento conserva la evidencia técnica de la primera prueba controlada del extractor. El estado vigente del proyecto, autorizaciones, Cloudflare, SPS, cobertura y gates se consulta únicamente en `../arquitectura.md`.
 
-La tienda utiliza VTEX Store Framework. El extractor consulta la operación pública `productSearchV3` en:
+Estado vigente al momento de esta reclasificación:
+
+- no existe autorización live activa;
+- una autorización histórica consumida no puede reutilizarse;
+- SPS continúa `UNCONFIRMED`;
+- los entrypoints live de La Colonia permanecen globalmente bloqueados;
+- la suite integrada actual ya no es la de 67 pruebas de este snapshot;
+- no ejecutar los comandos históricos de este archivo sin una nueva autorización humana explícita.
+
+## Fuente observada en la fase histórica
+
+La tienda utiliza VTEX Store Framework. El extractor consultó la operación pública `productSearchV3` en:
 
 ```text
 https://www.lacolonia.com/_v/segment/graphql/v1
 ```
 
-La consulta explícita se deriva de `QueryProductSearchV3` del paquete oficial `vtex.store-resources` y solicita únicamente los campos necesarios. El primer hash persistido evaluado respondió `PERSISTED_QUERY_NOT_FOUND`, por lo que fue eliminado y no se realizan intentos de enumeración.
+La consulta explícita se derivó de `QueryProductSearchV3` del paquete oficial `vtex.store-resources` y solicitó únicamente los campos necesarios. El primer hash persistido evaluado respondió `PERSISTED_QUERY_NOT_FOUND`, por lo que fue eliminado y no se realizaron intentos de enumeración.
 
-No se utilizan las rutas `/api*`, `/busca*` o `/buscapagina*`, excluidas por `robots.txt`. Tampoco se utiliza `mobile.lacolonia.com`.
+No se utilizaron las rutas `/api*`, `/busca*` o `/buscapagina*`, excluidas por `robots.txt`. Tampoco se utilizó `mobile.lacolonia.com`.
 
 ## Productos y SKU
 
@@ -65,6 +76,8 @@ location_confidence = null
 
 El extractor no relaciona el catálogo con una tienda física, seller regional ni `regionId`.
 
+Esa conclusión histórica es coherente con el estado vigente: SPS permanece `UNCONFIRMED` hasta una nueva observación mínima expresamente autorizada.
+
 ## Contrato
 
 Cada SKU válido produce el `RawProduct` existente. Precio, precio regular informado, promoción, disponibilidad, unidad comercial y valores originales de auditoría se conservan en `raw_values`; no se crean contratos comerciales paralelos.
@@ -79,26 +92,28 @@ Cada SKU válido produce el `RawProduct` existente. Precio, precio regular infor
 
 La cantidad cero junto a un precio positivo no se considera evidencia inequívoca de agotado porque el catálogo se consulta sin contexto regional confirmado.
 
-## Pruebas offline
+## Pruebas offline de aquella fase
 
-GitHub Actions ejecutó:
+GitHub Actions ejecutó entonces:
 
 ```bash
 python -m compileall precios-supermercados-sps/src
 pytest precios-supermercados-sps/tests
 ```
 
-Resultado:
+Resultado histórico:
 
 ```text
 67 passed in 0.35s
 ```
 
-Las pruebas incluyen productos de un SKU y varios SKU, cinco productos con el primero mult SKU, preservación de productos posteriores, SKU disponible, sin precio y agotado, deduplicación por llave estable, filtro `ALL` y métricas separadas.
+Ese conteo **no representa la suite actual**. Se conserva únicamente como evidencia de la fase PR #6. El conteo vigente está documentado en `../arquitectura.md`.
 
-## Prueba live de diez productos
+Las pruebas de aquella fase incluían productos de un SKU y varios SKU, cinco productos con el primero multi-SKU, preservación de productos posteriores, SKU disponible, sin precio y agotado, deduplicación por llave estable, filtro `ALL` y métricas separadas.
 
-La muestra principal solicitó diez productos y procesó todos sus SKU:
+## Prueba live histórica de diez productos
+
+En una autorización histórica ya consumida, la muestra principal solicitó diez productos y procesó todos sus SKU:
 
 ```text
 products_requested: 10
@@ -115,7 +130,9 @@ structural_events: 0
 
 Los diez SKU conservaron identificador interno, nombre, URL individual, marca, presentación, categoría y precio. Los diez quedaron con disponibilidad `unknown` por la combinación precio positivo/cantidad cero.
 
-## Búsquedas dirigidas limitadas
+Esta evidencia describe lo que ocurrió en aquella ejecución; **no concede permiso para repetirla**.
+
+## Búsquedas dirigidas históricas
 
 Se ejecutaron tres consultas adicionales de tres productos como máximo cada una:
 
@@ -123,16 +140,18 @@ Se ejecutaron tres consultas adicionales de tres productos como máximo cada una
 - `churros`: produjo tres SKU y confirmó dos SKU promocionales.
 - `coca cola`: produjo tres SKU, pero no se encontró un producto con varios SKU.
 
-Promociones confirmadas en la consulta dirigida:
+Promociones observadas en aquella consulta:
 
 | SKU | Producto | Precio actual | Precio regular informado |
 |---|---|---:|---:|
 | `18142` | Churro Zambos Camote Con Sal Marina 100 Gr | 36.85 | 40.95 |
 | `18141` | Churro Yummies Taqueritos Lava Extra Picante 180Gr | 35.05 | 38.95 |
 
-La ausencia de un caso pesable o mult SKU en estas búsquedas se registra como limitación; no se amplió la búsqueda ni se recorrió el catálogo.
+Los precios son evidencia histórica de esa observación, no precios actuales. La ausencia de un caso pesable o multi-SKU se registró como limitación; no se amplió la búsqueda ni se recorrió el catálogo.
 
-## Ejecución
+## Comando histórico — no ejecutar sin autorización nueva
+
+El comando usado en aquella fase fue:
 
 ```bash
 PYTHONPATH=precios-supermercados-sps/src \
@@ -141,14 +160,18 @@ python precios-supermercados-sps/scripts/probar_la_colonia.py \
   --directed-limit 3
 ```
 
-El workflow live queda exclusivamente bajo `workflow_dispatch`. No se ejecuta diariamente ni automáticamente con cada cambio.
+Se conserva sólo para reproducibilidad histórica. **No debe ejecutarse contra La Colonia mientras `ACTIVE_AUTHORIZATION_IDS` esté vacío.**
 
-## Fuera de alcance
+La existencia de `workflow_dispatch`, un archivo de comando, un comentario o este documento no crea autoridad live.
+
+## Fuera de alcance de aquella fase
 
 - recorrido completo;
 - persistencia e historial;
 - validación regional de inventario;
-- Google Sheets;
+- almacenamiento productivo;
 - scraping diario;
 - comparación entre supermercados;
-- Power BI, BigQuery o Cloud Run.
+- Power BI.
+
+Varias de esas áreas avanzaron posteriormente offline; consultar `../arquitectura.md` para el estado real actual.
