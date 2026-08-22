@@ -28,12 +28,14 @@ jobs:
     timeout-minutes: 2
     env:
       TARGET_PR_NUMBER: ${{ github.event.pull_request.number }}
-      TRIGGER_COMMENT_PATH: ${{ runner.temp }}/observability-trigger-heartbeat.json
     steps:
       - name: Prepare sanitized trigger heartbeat
         shell: bash
         run: |
           set -euo pipefail
+          TRIGGER_COMMENT_PATH="$RUNNER_TEMP/observability-trigger-heartbeat.json"
+          export TRIGGER_COMMENT_PATH
+          printf 'TRIGGER_COMMENT_PATH=%s\n' "$TRIGGER_COMMENT_PATH" >> "$GITHUB_ENV"
           python - <<'PY'
           import json
           import os
@@ -83,13 +85,15 @@ jobs:
       PROBE_PUBLIC_KEY_SPKI_B64URL: ${{ vars.CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       TARGET_PR_NUMBER: ${{ github.event.pull_request.number }}
-      PROBE_DIAGNOSTIC_COMMENT_PATH: ${{ runner.temp }}/probe-shape-comment.json
 
     steps:
       - name: Prepare sanitized fallback comment
         shell: bash
         run: |
           set -euo pipefail
+          PROBE_DIAGNOSTIC_COMMENT_PATH="$RUNNER_TEMP/probe-shape-comment.json"
+          export PROBE_DIAGNOSTIC_COMMENT_PATH
+          printf 'PROBE_DIAGNOSTIC_COMMENT_PATH=%s\n' "$PROBE_DIAGNOSTIC_COMMENT_PATH" >> "$GITHUB_ENV"
           python - <<'PY'
           import json
           import os

@@ -27,13 +27,15 @@ jobs:
     env:
       TARGET_PR_NUMBER: "117"
       SOURCE_CI_SUCCESS: ${{ github.event.workflow_run.conclusion == 'success' }}
-      CHAIN_HEARTBEAT_PATH: ${{ runner.temp }}/probe-shape-chain-heartbeat.json
 
     steps:
       - name: Prepare sanitized chain heartbeat
         shell: bash
         run: |
           set -euo pipefail
+          CHAIN_HEARTBEAT_PATH="$RUNNER_TEMP/probe-shape-chain-heartbeat.json"
+          export CHAIN_HEARTBEAT_PATH
+          printf 'CHAIN_HEARTBEAT_PATH=%s\n' "$CHAIN_HEARTBEAT_PATH" >> "$GITHUB_ENV"
           python - <<'PY'
           import json
           import os
@@ -84,13 +86,15 @@ jobs:
       PROBE_PUBLIC_KEY_SPKI_B64URL: ${{ vars.CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       TARGET_PR_NUMBER: "117"
-      PROBE_DIAGNOSTIC_COMMENT_PATH: ${{ runner.temp }}/probe-shape-chain-comment.json
 
     steps:
       - name: Prepare sanitized fallback comment
         shell: bash
         run: |
           set -euo pipefail
+          PROBE_DIAGNOSTIC_COMMENT_PATH="$RUNNER_TEMP/probe-shape-chain-comment.json"
+          export PROBE_DIAGNOSTIC_COMMENT_PATH
+          printf 'PROBE_DIAGNOSTIC_COMMENT_PATH=%s\n' "$PROBE_DIAGNOSTIC_COMMENT_PATH" >> "$GITHUB_ENV"
           python - <<'PY'
           import json
           import os
