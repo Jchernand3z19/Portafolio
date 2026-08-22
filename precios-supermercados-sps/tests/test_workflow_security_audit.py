@@ -50,10 +50,13 @@ RECOVERY_WORKFLOW = "precios-supermercados-sps-la-colonia-dispatch-recovery.yml"
 LA_DIAGNOSTIC_WORKFLOW = "precios-supermercados-sps-la-colonia-diagnostic.yml"
 FACET_WORKFLOW = "precios-supermercados-sps-la-colonia-facet-discovery.yml"
 LIVE_WORKFLOW = "precios-supermercados-sps-la-colonia-live.yml"
+GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storage.yml"
 PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
 PROBE_OBSERVABILITY_SECRET = "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN"
 PROBE_PUBLIC_KEY_VAR = "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL"
 CLOUDFLARE_ACCOUNT_VAR = "CLOUDFLARE_ACCOUNT_ID"
+GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET = "PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON"
+GOOGLE_SHEETS_SPREADSHEET_VAR = "PRECIOS_SPS_GOOGLE_SPREADSHEET_ID"
 
 EXPECTED_PERMISSIONS = {
     PROBE_WORKFLOW: {"contents": "read"},
@@ -62,6 +65,7 @@ EXPECTED_PERMISSIONS = {
     LA_DIAGNOSTIC_WORKFLOW: {"contents": "read"},
     FACET_WORKFLOW: {"contents": "read"},
     LIVE_WORKFLOW: {"contents": "read"},
+    GOOGLE_SHEETS_STORAGE_WORKFLOW: {"contents": "read"},
     TEST_WORKFLOW: {"contents": "read"},
 }
 
@@ -78,6 +82,7 @@ EXPECTED_TRIGGERS = {
     RECOVERY_WORKFLOW: {"workflow_run"},
     FACET_WORKFLOW: {"workflow_dispatch"},
     LIVE_WORKFLOW: {"workflow_dispatch"},
+    GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch"},
     TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
 }
 
@@ -91,9 +96,11 @@ BLOCKED_ENTRYPOINTS = {
 
 ALLOWED_SECRET_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_GATEWAY_SECRET, PROBE_OBSERVABILITY_SECRET},
+    GOOGLE_SHEETS_STORAGE_WORKFLOW: {GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET},
 }
 ALLOWED_VAR_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
+    GOOGLE_SHEETS_STORAGE_WORKFLOW: {GOOGLE_SHEETS_SPREADSHEET_VAR},
 }
 
 
@@ -332,6 +339,74 @@ def test_network_capable_scripts_exist_only_inside_blocked_jobs():
         if any(command in commands for command in sensitive_commands):
             assert path.name in BLOCKED_ENTRYPOINTS
             assert all_jobs_blocked(workflow)
+
+
+def test_google_sheets_storage_is_manual_main_only_and_least_privilege():
+    path = WORKFLOW_DIR / GOOGLE_SHEETS_STORAGE_WORKFLOW
+    workflow = load_workflow(path)
+    triggers = workflow["on"]
+    assert set(triggers) == {"workflow_dispatch"}
+    dispatch = triggers["workflow_dispatch"]
+    assert isinstance(dispatch, dict)
+    assert set(dispatch) == {"inputs"}
+    inputs = dispatch["inputs"]
+    assert set(inputs) == {"mode"}
+    mode = inputs["mode"]
+    assert mode["required"] == "true"
+    assert mode["default"] == "check"
+    assert mode["type"] == "choice"
+    assert mode["options"] == ["check", "apply-config"]
+
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"] == {
+        "group": "precios-sps-google-sheets-storage",
+        "cancel-in-progress": "false",
+    }
+    storage_jobs = jobs(workflow)
+    assert set(storage_jobs) == {"storage"}
+    storage = storage_jobs["storage"]
+    assert storage.get("environment") == "precios-sps-storage"
+    assert "permissions" not in storage
+    assert storage.get("if") == (
+        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
+        "github.ref == 'refs/heads/main' && "
+        "(inputs.mode == 'check' || inputs.mode == 'apply-config') }}"
+    )
+
+    runtime_steps = [
+        step
+        for step in job_steps(storage)
+        if "scripts/inicializar_google_sheets.py" in str(step.get("run", ""))
+    ]
+    assert len(runtime_steps) == 1
+    runtime = runtime_steps[0]
+    assert runtime["env"] == {
+        "PRECIOS_SPS_GOOGLE_SPREADSHEET_ID": (
+            "${{ vars.PRECIOS_SPS_GOOGLE_SPREADSHEET_ID }}"
+        ),
+        "PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON": (
+            "${{ secrets.PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON }}"
+        ),
+        "STORAGE_MODE": "${{ inputs.mode }}",
+    }
+    assert runtime["run"] == (
+        'python precios-supermercados-sps/scripts/inicializar_google_sheets.py '
+        '--mode "$STORAGE_MODE"'
+    )
+
+    raw = path.read_text(encoding="utf-8")
+    assert "pull_request:" not in raw
+    assert "pull_request_target:" not in raw
+    assert "push:" not in raw
+    assert "schedule:" not in raw
+    assert "issue_comment:" not in raw
+    assert "id-token" not in raw
+    assert "actions: write" not in raw
+    assert "scripts/probar_la_colonia.py" not in raw
+    assert "scripts/diagnosticar_ventanas_la_colonia.py" not in raw
+    assert "scripts/descubrir_facets_la_colonia.py" not in raw
+    assert ".workers.dev" not in raw
+    assert "CLOUDFLARE_PROBE_GATEWAY_URL" not in raw
 
 
 def test_ci_paths_cover_project_policy_and_every_sps_workflow():
