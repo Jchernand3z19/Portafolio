@@ -50,6 +50,7 @@ def test_cloudflare_node_suite() -> None:
         "structural-trace-context.test.mjs",
         "structural-gateway-runtime.test.mjs",
         "structural-worker-adapter.test.mjs",
+        "probe.test.mjs",
     ]
     result = subprocess.run(
         [
@@ -152,3 +153,46 @@ def test_wrangler_config_declares_sqlite_do_and_only_secret_names() -> None:
     serialized = json.dumps(config)
     assert "BEGIN PRIVATE KEY" not in serialized
     assert "PRIVATE_KEY_PKCS8_B64URL\":" not in serialized
+
+
+def test_controlled_probe_configs_are_isolated_from_productive_worker() -> None:
+    productive = json.loads((EDGE_ROOT / "wrangler.json").read_text(encoding="utf-8"))
+    probe = json.loads((EDGE_ROOT / "wrangler.probe.json").read_text(encoding="utf-8"))
+    origin = json.loads((EDGE_ROOT / "wrangler.probe-origin.json").read_text(encoding="utf-8"))
+
+    assert productive["name"] == "precios-sps-provenance"
+    assert productive["main"] == "src/index.mjs"
+    assert "PROBE_LEDGER" not in json.dumps(productive)
+    assert "PROBE_ORIGIN_URL" not in json.dumps(productive)
+
+    assert probe["name"] == "precios-sps-controlled-probe"
+    assert probe["main"] == "src/probe-worker.mjs"
+    assert probe["preview_urls"] is False
+    assert "migrations" not in probe
+    assert probe["durable_objects"]["bindings"] == [
+        {
+            "name": "PROBE_LEDGER",
+            "class_name": "ProbeLedger",
+        }
+    ]
+    assert probe["exports"]["ProbeLedger"] == {
+        "type": "durable-object",
+        "storage": "sqlite",
+    }
+    assert probe["version_metadata"]["binding"] == "CF_VERSION_METADATA"
+    assert set(probe["secrets"]["required"]) == {
+        "PROBE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL",
+        "PROBE_RECEIPT_PUBLIC_KEY_SPKI_B64URL",
+        "PROBE_ORIGIN_URL",
+    }
+    assert "EDGE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL" not in json.dumps(probe)
+
+    assert origin["name"] == "precios-sps-controlled-origin"
+    assert origin["main"] == "src/probe-origin.mjs"
+    assert origin["preview_urls"] is False
+    assert "durable_objects" not in origin
+    assert "secrets" not in origin
+
+    serialized = json.dumps({"probe": probe, "origin": origin})
+    assert "BEGIN PRIVATE KEY" not in serialized
+    assert "www.lacolonia.com" not in serialized
