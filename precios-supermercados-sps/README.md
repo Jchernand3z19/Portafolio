@@ -1,127 +1,114 @@
 # Precios de Supermercados de San Pedro Sula
 
-Fundación técnica para recolectar, normalizar, validar y conservar cambios relevantes de precios y disponibilidad de supermercados con alcance inicial en San Pedro Sula.
+Proyecto para recolectar, normalizar, validar y conservar cambios relevantes de precios y disponibilidad de supermercados, con alcance inicial en San Pedro Sula.
 
-## Estado
+## Estado actual
 
-**Ingeniería offline de La Colonia integrada; live globalmente bloqueado.**
+**La ingeniería offline de La Colonia está avanzada; el acceso live sigue cerrado y no existe aceptación productiva del catálogo.**
 
-Estado verificado al 2026-08-20:
+Estado verificado al **2026-08-21 (America/Tegucigalpa)**:
 
-- Las revisiones de CI, frontera comercial, identidad, evidencia auditable y pricing histórico están integradas en `main`.
-- El HEAD mutable de `main` se verifica directamente en GitHub y no se fija como “SHA actual” dentro de este archivo, porque el propio merge de documentación cambiaría ese SHA.
-- `main` está protegido por el ruleset productivo `main-protection`; GitHub reporta `protected: true`.
-- PR #29 verificó funcionalmente el enforcement: GitHub rechazó el merge con `tests` pendiente y volvió a rechazarlo con una conversación de review sin resolver.
-- `main` conserva los entrypoints live con guard global fail-closed.
+- `main` está protegida; GATE-17 permanece `PASS_PRODUCTIVE_EVIDENCE`.
+- La revisión integrada más reciente de este corte es PR #83.
+- Suite integrada: **1209/1209 pruebas aprobadas** + `compileall`.
 - No existen autorizaciones live activas.
 - `SPS-context-and-root-facets-001` está consumida; `002` no está autorizada.
 - SPS technical context continúa `UNCONFIRMED`.
-- No se declara catálogo live completo.
-- GATE-17 está `PASS_PRODUCTIVE_EVIDENCE`.
-- El collector autoritativo con provenance física independiente sigue pendiente; la aceptación canónica del catálogo permanece fail-closed.
-- `live_safety.py` es un modelo offline, no un enforcement productivo de red.
-- `commercial_state.py` implementa una frontera comercial offline atómica e idempotente: runs no aceptados no mutan estado y las ausencias no se convierten en bajas implícitas.
-- La frontera recalcula `source_product_id` y `offer_id` deterministas, preserva la relación estable con la llave fuente y rechaza deriva de moneda para una oferta existente.
-- `current` conserva la evidencia del último run aceptado incluso cuando el `state_hash` no cambia; el histórico mantiene la evidencia de apertura del periodo.
-- La evidencia `raw_values` se guarda y se expone mediante snapshots defensivos para impedir mutaciones posteriores del current/history.
-- `changed_fields` usa la misma canonicalización textual que `state_hash`, por lo que diferencias cosméticas no crean cambios falsos.
-- El replay terminal liga decisión, estado y evidencia persistible/auditable; `running` es transitorio y no consume anticipadamente el `scrape_run_id` terminal.
-- `commercial_pricing.py` deriva reducciones reales exclusivamente contra el `current_price` del periodo aceptado inmediatamente anterior; `reported_regular_price` nunca demuestra ahorro real.
-- La capa de pricing revalida identidad determinista, `state_hash`, cronología, contigüidad y metadatos de apertura/cierre antes de calcular.
-- La última suite completa verificada contiene **850/850 pruebas aprobadas**, además de `compileall`, en GitHub Actions con Python 3.12.14.
-- No existe todavía un backend productivo conectado para current/history.
+- Los entrypoints live hacia La Colonia permanecen globalmente bloqueados.
+- **Requests live a La Colonia durante estas fases: 0.**
+- Cloudflare Workers/Durable Objects/OIDC/Ed25519/Workers Observability están implementados y probados **offline**, pero no desplegados.
+- Structural discovery, transporte de catálogo, reconciliación de observability y manifest de run están conectados offline.
+- La readiness técnica del catálogo ya se distingue de autoridad productiva: puede comprobarse completitud técnica sin producir `catalog_accepted=true` ni `production_authority=true`.
+- `trusted_collector_provenance_unavailable` permanece en la aceptación canónica hasta evidencia productiva real.
+- `commercial_state.py` y `commercial_pricing.py` implementan current/history y reducción real offline; no existe backend productivo conectado.
+- PR #84 prepara una sonda Cloudflare aislada contra un origen controlado no-La-Colonia y obtuvo **1212/1212** en CI, pero mientras no esté integrado no se cuenta como parte de `main`.
 
-La fuente canónica única del estado y los gates es [`docs/arquitectura.md`](docs/arquitectura.md). La evidencia específica de GATE-17 está en [`docs/gate-17-verification.md`](docs/gate-17-verification.md). Los documentos bajo `docs/supermercados/` conservan evidencia e historia y no conceden autoridad operativa.
+La fuente canónica del estado es [`docs/arquitectura.md`](docs/arquitectura.md). La evidencia de GATE-17 está en [`docs/gate-17-verification.md`](docs/gate-17-verification.md).
 
 ## Contratos protegidos
 
 - `RawProduct`: observación fiel a la fuente.
-- `NormalizedOffer`: formato común que permite campos normalizados pendientes sin inventar datos.
-- `ValidatedOffer`: hash, revisión y eventos de calidad antes de persistir.
+- `NormalizedOffer`: formato común sin inventar datos faltantes.
+- `ValidatedOffer`: oferta validada con `state_hash`, revisión y evidencia de calidad.
 
-Una oferta `in_stock` exige `current_price > 0`. Los estados `out_of_stock`, `not_listed` y `unknown` pueden conservar precio nulo. Marca, categoría, subcategoría y presentación pueden quedar pendientes con `review_status = needs_review`.
+No se modifican estos contratos sin necesidad demostrada y una tarea explícita que lo requiera.
+
+Una oferta `in_stock` exige `current_price > 0`. `out_of_stock`, `not_listed` y `unknown` pueden conservar precio nulo.
 
 ## Regla comercial del histórico
 
-`reported_regular_price` es un dato informado por el supermercado y no demuestra ahorro real. La reducción real se calcula contra el `current_price` del periodo histórico aceptado inmediatamente anterior. Una ejecución `rejected`, `failed` o `abandoned` nunca actualiza estado comercial ni abre falsos periodos históricos.
+`reported_regular_price` es un dato informado por el supermercado; **no demuestra ahorro real**.
 
-La frontera offline actual además exige:
+La reducción real se calcula contra el `current_price` del periodo histórico **aceptado inmediatamente anterior**. `reported_regular_price` e `is_promotion` no forman parte de esa fórmula. Si no existe baseline confiable, no se inventa una reducción.
 
-- `success` o `warning` más `catalog_accepted = true` para permitir mutación comercial;
-- `source_product_id` y `offer_id` recalculados desde sus componentes deterministas;
-- una identidad lógica de oferta no puede fragmentarse entre IDs distintos ni moverse entre ubicaciones;
-- la relación `supermarket_id + source_product_id -> source_key` permanece estable;
-- la moneda de una oferta existente permanece estable;
-- `state_hash` recalculado y válido antes de aplicar;
-- cronología cerrada `observed_at_utc <= validated_at_utc <= decided_at_utc`;
-- un `scrape_run_id` terminal no puede reutilizarse con otra decisión, timestamps ni evidencia persistible/auditable;
-- `running` no consume la identidad terminal y puede evolucionar a una decisión final del mismo run;
-- el mismo hash confirma el periodo abierto sin duplicar historial y refresca la evidencia de `current` al último run aceptado;
-- `raw_values` queda aislado mediante snapshots defensivos al entrar y salir de la frontera comercial;
-- `changed_fields` compara textos con la canonicalización usada por `state_hash`;
-- un cambio cierra exactamente un periodo y abre exactamente uno nuevo;
-- una oferta ausente de un payload posterior no se interpreta como `not_listed`, `out_of_stock` ni eliminación.
+Runs `rejected`, `failed`, `abandoned` o no autoritativos no alteran current/history.
 
-Para derivar ahorro real, `commercial_pricing.py` exige que current/history reconcilien: mismo `offer_id`, IDs fuente deterministas, un único periodo abierto al final, periodos contiguos, evidencia temporal válida y coherencia entre el run que cierra un periodo y el que abre el siguiente. Si la evidencia no reconcilia, falla cerrado y no produce una reducción.
+## La Colonia
 
-## Identidad VTEX de La Colonia
-
-Producto:
-
-`productId -> productReference -> linkText`
-
-SKU:
-
-`itemId`
-
-Deduplicar no demuestra completitud. El evaluador exige evidencia estructural, cobertura total, estabilidad de totales, reconciliación independiente y unión consistente; aun así la aceptación permanece cerrada mientras falte provenance confiable del collector.
-
-## Estructura principal
+Identidad VTEX:
 
 ```text
-precios-supermercados-sps/
-├── .automation/
-├── config/supermercados/la-colonia.yaml
-├── docs/
-│   ├── arquitectura.md
-│   ├── decisiones-tecnicas.md
-│   ├── gate-17-verification.md
-│   ├── modelo-datos.md
-│   └── supermercados/
-├── reports/discovery/
-├── scripts/
-│   ├── probar_la_colonia.py
-│   ├── diagnosticar_ventanas_la_colonia.py
-│   ├── descubrir_facets_la_colonia.py
-│   └── control/publicación del dispatcher
-├── src/precios_supermercados/
-│   ├── commercial_state.py
-│   ├── commercial_pricing.py
-│   ├── models.py
-│   ├── identifiers.py
-│   ├── live_safety.py
-│   ├── automation/
-│   ├── diagnostics/
-│   └── scrapers/
-│       ├── la_colonia.py
-│       ├── la_colonia_graphql.py
-│       ├── la_colonia_runner.py
-│       ├── la_colonia_catalog_partitions.py
-│       ├── la_colonia_catalog_coverage.py
-│       ├── la_colonia_facet_discovery*.py
-│       └── la_colonia_window_diagnostic*.py
-└── tests/
-    ├── fixtures/
-    ├── test_commercial_state*.py
-    ├── test_commercial_pricing*.py
-    ├── pruebas de contratos e identidad
-    ├── pruebas de crawler/completitud/reconciliación
-    ├── pruebas de SPS/diagnósticos
-    ├── pruebas de live safety
-    └── auditoría de workflows
+Producto: productId -> productReference -> linkText
+SKU:      itemId
 ```
 
-Los workflows del proyecto viven en `.github/workflows/`.
+Deduplicar no demuestra completitud. La validación offline comprueba árbol/facets, membership, totals, ventanas, gaps, truncamiento, repetición, reconciliación independiente, unión producto/SKU y conflictos de owner.
+
+## Cadena Cloudflare offline
+
+La ruta de ingeniería actual es:
+
+```text
+GitHub Actions
+-> GitHub OIDC
+-> Cloudflare Worker
+-> Durable Object
+-> request físico permitido
+-> receipt Ed25519 + hash de respuesta
+-> verificación criptográfica Python
+-> Workers Observability
+-> manifest estructural / catálogo
+-> readiness técnica
+```
+
+Ya existen offline:
+
+- política OIDC cerrada a repo/ref/workflow/environment/run;
+- JWKS de GitHub con origen fijo;
+- allowlist exacto del endpoint GraphQL de La Colonia en el Worker productivo;
+- presupuesto, pacing, single-flight, replay y fencing en Durable Object;
+- firmas Ed25519 y release ligada a `CF_VERSION_METADATA`;
+- observability por request;
+- discovery estructural autenticado;
+- plan de catálogo derivado internamente, no elegido por caller;
+- collector de páginas que reconstruye las URLs canónicas;
+- finalizador que reconcilia cada página con observability y crea un manifest de run;
+- evaluación de readiness que **nunca** convierte evidencia offline en autoridad productiva.
+
+Nada de esto equivale a un despliegue real. No hay Worker remoto, Durable Object remoto, clave privada real en Cloudflare ni spans productivos verificados.
+
+## Sonda controlada antes de La Colonia
+
+PR #84 prepara una prueba física separada contra un origen propio `workers.dev`. La sonda usa Worker, Durable Object, OIDC audience/environment, llaves y dominio de firma **distintos** de la ruta productiva de La Colonia.
+
+La finalidad es comprobar Cloudflare físicamente sin tocar La Colonia. La sonda no concede autoridad de catálogo.
+
+## Persistencia
+
+La lógica comercial actual es backend-neutral y offline. El modelo lógico contempla:
+
+- `cfg_supermarkets`;
+- `cfg_locations`;
+- `dim_products`;
+- `map_source_products`;
+- `fact_scrape_runs`;
+- `fact_offers_current`;
+- `fact_offer_history`;
+- `fact_quality_events`.
+
+No existe almacenamiento productivo seleccionado/conectado. Google Sheets y BigQuery permanecen como opciones históricas/evolutivas, no como infraestructura activa.
+
+Un backend productivo no debe recibir un booleano `catalog_accepted` controlable por caller; debe consumir una decisión autoritativa verificable cuando esa frontera exista.
 
 ## Pruebas
 
@@ -132,27 +119,18 @@ python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scr
 pytest precios-supermercados-sps/tests
 ```
 
-Hitos de validación verificados:
+La CI también ejecuta la suite Node de `edge/cloudflare` y auditoría fail-closed de workflows.
 
-- baseline integrado mediante PR #7: **770/770**;
-- PR #19 — frontera comercial, cronología y hardening de CI: **796/796**;
-- PR #20 — coherencia de evidencia `current` y canonicalización de `changed_fields`: **798/798**;
-- PR #22 — replay ligado a evidencia persistible y transición `running -> terminal`: **801/801**;
-- PR #23 — continuidad de identidad de oferta: **810/810**;
-- PR #24 — IDs deterministas revalidados en la frontera: **808/808**;
-- PR #25 — snapshots defensivos de evidencia: **812/812**;
-- PR #26 — reducción real contra histórico aceptado: **844/844**;
-- PR #27 — reconciliación fail-closed de evidencia de pricing: **850/850**;
-- PR #29 — verificación productiva del ruleset: **850/850 + compileall**; además demostró que `tests` pendiente y conversaciones sin resolver bloquean el merge.
+## Bloqueos actuales
 
-Las variaciones de conteo entre revisiones corresponden a adición/reemplazo de regresiones, no a relajación de gates. La CI canónica se ejecuta en pull requests, manualmente y en pushes a `main` que afecten el proyecto o sus workflows.
+Antes de scraping comercial productivo todavía faltan, en este orden:
 
-## Bloqueos productivos actuales
+1. integrar y luego desplegar/probar la sonda Cloudflare contra un origen controlado no-La-Colonia;
+2. demostrar físicamente OIDC, Durable Object, firma, release y observability en Cloudflare;
+3. establecer una frontera de autoridad productiva del collector;
+4. obtener autorización humana nueva para cualquier request a La Colonia;
+5. confirmar SPS mediante una observación live mínima autorizada;
+6. ejecutar validación exacta del catálogo bajo presupuesto cerrado;
+7. sólo entonces conectar persistencia, automatización diaria y Power BI.
 
-- autorización humana nueva antes de cualquier tráfico live;
-- trusted collector con provenance independiente y no controlable por caller;
-- enforcement físico productivo de egress/claim/fencing;
-- confirmación técnica SPS mediante evidencia live autorizada;
-- aceptación canónica antes de conectar un backend comercial productivo.
-
-Google Sheets, BigQuery, scraping diario y Power BI no deben activarse para datos comerciales hasta cerrar esas dependencias. La lógica de transición current/history y las derivaciones de pricing pueden probarse y evolucionar offline sin tráfico live ni infraestructura externa.
+El segundo supermercado espera a que esta plataforma común quede estable.
