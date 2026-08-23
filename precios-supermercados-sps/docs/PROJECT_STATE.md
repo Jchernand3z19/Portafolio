@@ -6,11 +6,14 @@ Este documento es la **fuente canónica del estado operativo mutable**. [`arquit
 
 Estado verificado al **2026-08-22 (America/Tegucigalpa)**.
 
+El corte técnico inmediatamente anterior a este sync documental es:
+
 ```text
-base técnica del corte = 2c3c0f956a05de10c2e0ed415d2f227ca889aff5 (merge de PR #161)
-últimos hitos técnicos integrados = #157, #158, #159, #160, #161
-última suite completa observada = 1481/1481 PASS (merge-ref final de PR #161, run 32607400298)
+main = b89ad78daded0bb7fdf0b2ad5a12d7256d928119 (merge de PR #185)
+última suite completa observada = 1490/1490 PASS (PR #185, run 32616699428)
+python -m pip check = PASS
 compileall = PASS
+GitHub Actions Node-24-compatible pins = VERIFIED
 GATE-17 = PASS_PRODUCTIVE_EVIDENCE
 ACTIVE_AUTHORIZATION_IDS = []
 LIVE_REQUESTS_CURRENT_RUN = 0
@@ -19,6 +22,8 @@ SPS_TECHNICAL_CONTEXT = UNCONFIRMED
 production_authority = false
 catalog_accepted = false
 ```
+
+El SHA anterior identifica el corte auditado, no pretende ser un HEAD autorreferencial después del merge de este documento.
 
 ## Semántica de estado
 
@@ -30,86 +35,49 @@ catalog_accepted = false
 | `PARTIAL_PRODUCTIVE` | Parte de la cadena se demostró físicamente, pero la frontera completa sigue abierta. |
 | `BLOCKED_LIVE` | Requiere una observación real de la fuente. |
 | `BLOCKED_HUMAN_DECISION` | Requiere autorización humana explícita. |
-| `BLOCKED_EXTERNAL` | Requiere ejecución/configuración de un servicio externo. |
+| `BLOCKED_EXTERNAL` | La siguiente evidencia depende de un servicio externo o de datos que éste ya no expone. |
 | `BLOCKED_DEPENDENCIES` | Depende de cerrar una frontera anterior. |
 
 ## Fase 0
 
-| Área | Estado | Hecho verificable / bloqueo |
+| Área | Estado | Evidencia / conclusión |
 |---|---|---|
-| 0A — suite completa | `DONE` | Suite Python + Node canónica; Node usa `edge/cloudflare/package.json` como única lista de verdad. |
-| 0B — hardening físico de catálogo | `DONE` | PR #158 recuperó rechazo temprano de reutilización de `physical_evidence_id` / `fetch_span_id`. |
-| 0C — ramas históricas | `DONE` | PR #160 auditó 158 ramas: 102 `MERGED_OR_SUBSUMED`, 55 `CLOSED_SUPERSEDED`, 0 `UNIQUE_UNMERGED`; la única `OPEN_CURRENT` era el propio PR de auditoría. |
-| 0E — Raw → Normalized → Validated | `DONE` | PR #159 conectó la transformación real sin persistencia ni autoridad. |
-| 0F — semántica de ubicación | `DONE_OFFLINE` | PR #161 fija `la_colonia_online` como contexto fuente raw `UNKNOWN`; no puede promoverirse bajo ese mismo ID a SPS/TGU/tienda. |
-| 0G — identidad/dimensión de producto | `DONE_OFFLINE` | PR #161 valida GTIN, conserva `pending_product_mapping` y añade `dim_products` + `map_source_products`. |
-| 0H — documentación canónica | `IN_PROGRESS` | PR documental actual sincroniza README, arquitectura, modelo, decisiones, AGENTS y este estado. |
-| 0I — workbook físico base | `DONE_PRODUCTIVE` para existencia/configuración inicial | Workbook físico creado/releído con seis tabs del contrato anterior; cero filas `fact_*`. |
-| 0J — GitHub Actions → Google Sheets | `PARTIAL_PRODUCTIVE / BLOCKED_EXTERNAL` | Workflow seguro existe; falta ejecutar `check -> apply-config -> check` sobre `main` para migrar/verificar las ocho tabs actuales. |
-| 0K — verifier Cloudflare/Observability | `PARTIAL_PRODUCTIVE / BLOCKED_EXTERNAL` | Sonda física y verificación Ed25519 existen; falta ejecutar con éxito el verifier actual `traces -> events` contra esa evidencia existente. |
-| 0L — CI/protección | `DONE_PRODUCTIVE` para GATE-17; auditoría continua | Ruleset de `main` demostró enforcement; workflows SPS siguen bajo auditoría fail-closed. |
+| 0A — suite completa | `DONE` | Suite Python + Node canónica. Último run observado: 1490/1490 PASS. |
+| 0B — hardening físico de catálogo | `DONE` | Rechazo temprano de reutilización conflictiva de `physical_evidence_id` / `fetch_span_id`. |
+| 0C — ramas históricas | `DONE` | Auditoría reproducible cerró el inventario sin `UNIQUE_UNMERGED`. |
+| 0E — Raw → Normalized → Validated | `DONE` | Transformación operacional conectada sin conceder autoridad. |
+| 0F — semántica de ubicación | `DONE_OFFLINE` | `la_colonia_online` es contexto fuente raw `UNKNOWN`; no puede convertirse bajo ese ID en SPS/TGU/tienda. |
+| 0G — identidad/dimensión de producto | `DONE_OFFLINE` | GTIN fuerte, mapping pendiente explícito, `dim_products` + `map_source_products`; PR #185 revalida también el `prod_pending_*` determinista antes de persistir. |
+| 0H — documentación canónica | `DONE` | README, arquitectura, modelo, decisiones y estado separan arquitectura estable de estado operativo mutable. |
+| 0I — workbook físico base | `DONE_PRODUCTIVE` | Workbook físico existe y fue auditado sin introducir ofertas. |
+| 0J — GitHub Actions → Google Sheets | `DONE_PRODUCTIVE` | Se demostró `check -> apply-config -> check` con service account, write controlado y read-back físico de ocho tablas. |
+| 0K — verifier Cloudflare/Observability | `BLOCKED_EXTERNAL` | Una única re-evaluación controlada del verifier actual terminó en `probe_discovery_trace_missing`; no se debilitó el contrato ni se repitió la sonda. |
+| 0L — CI/protección | `DONE` | Enforcement de `main` ya demostrado; `pip check`, compileall, suite completa y actions oficiales Node-24-compatible fijadas por SHA completo. |
 
-## Contratos y producto
+## Google Sheets — estado productivo de la infraestructura
 
-`RawProduct`, `NormalizedOffer` y `ValidatedOffer` permanecen contratos protegidos.
-
-La identidad se separa en:
+Google Sheets es el backend temporal estructurado de la primera fase. La ruta productiva de infraestructura quedó demostrada sin escribir ofertas comerciales:
 
 ```text
-source_product_id = identidad dentro de la fuente
-product_id        = identidad comparable entre fuentes
-offer_id          = supermercado + ubicación comercial + producto fuente
+GitHub Actions
+-> Environment precios-sps-storage
+-> service account
+-> workbook
+-> lectura segura
+-> apply-config controlado
+-> read-back
+-> check final sin escritura
 ```
 
-Un GTIN válido se normaliza a GTIN-14 y puede producir `prod_gtin_*`. Barcode ausente/inválido conserva `prod_pending_*` + `pending_product_mapping`.
+Secuencia relevante:
 
-Presentaciones multipack no se colapsan: `2 x 500 ml` conserva 2 unidades, 500 ml por unidad y 1000 ml total.
+- PR #179: `check` de solo lectura → `ok-wrote-false`;
+- PR #180: primer `apply-config` → fallo real `workbook_batch_update_failed`;
+- PR #181: corrigió el planner porque Google Sheets rechaza `rowCount=1` junto con `frozenRowCount=1`;
+- PR #182: `apply-config` corregido → `ok-wrote-true`;
+- PR #183: `check` posterior → `ok-wrote-false`.
 
-## La Colonia — ubicación y live
-
-Contexto raw actual:
-
-```text
-location_id = la_colonia_online
-location_status = unknown
-location_confidence = null
-```
-
-Ese ID representa el catálogo público en línea observado; no es una ubicación comercial.
-
-Estado de la ubicación candidata `la_colonia_sps`:
-
-```text
-city = San Pedro Sula
-in_scope = true
-granularity = unknown
-technical_binding_confirmed = false
-source_location_key = null
-extraction_enabled = false
-```
-
-La UI conocida expone SPS y Tegucigalpa, pero eso no demuestra si precio/inventario cambia por ciudad o por tienda. La radiografía preparada continúa bloqueada y requiere una **nueva autorización humana explícita y limitada** antes de cualquier request a La Colonia.
-
-Una autorización de radiografía no cubre smoke, facets, GraphQL replay, crawl, persistencia ni ejecución diaria.
-
-## Cloudflare
-
-Evidencia física existente:
-
-```text
-physical probe source run = 32551882793
-verifier-only run         = 32552932554
-```
-
-La sonda demostró OIDC, Worker/Durable Object, fetch al origen controlado, bytes esperados y receipt Ed25519; el verifier-only revalidó firma/bytes/identidad.
-
-El código actual ya consulta Workers Observability con discovery de traces y detalle `view: events`, exigiendo custom span único y child fetch reconciliado. La antigua conclusión de que la API pública necesariamente impedía esa reconciliación queda como diagnóstico histórico, no como estado canónico.
-
-**0K sigue abierto** hasta observar un PASS real del verifier actual sobre la evidencia existente. No hace falta repetir una request a La Colonia para esa prueba.
-
-## Persistencia
-
-Contrato lógico actual de ocho tablas:
+Read-back físico final:
 
 ```text
 cfg_supermarkets
@@ -122,38 +90,110 @@ fact_scrape_runs
 fact_quality_events
 ```
 
-`dim_products` contiene atributos normalizados/canónicos por `product_id`. `map_source_products` conserva identidad fuente, mapping y la cola de revisión.
+La pestaña ajena `Sheet1` se preservó. `dim_products`, `map_source_products` y las cuatro tablas `fact_*` permanecen sin filas comerciales. La configuración conserva La Colonia y sus ubicaciones candidatas sin activar extracción.
 
-El workbook físico fue materializado antes de integrar esas dos tablas nuevas. Por tanto:
+La concurrencia del workflow de storage es single-writer (`cancel-in-progress: false`) y el trigger automático sólo acepta el marker controlado sobre `main`.
 
-- existencia física del workbook: demostrada;
-- configuración física original de seis tabs: demostrada;
-- esquema lógico actual de ocho tabs: integrado y probado offline;
-- migración física a ocho tabs por GitHub Actions: **pendiente**;
-- persistencia comercial de ofertas: **bloqueada** por ubicación y autoridad.
+## Cloudflare / Workers Observability
 
-La ruta prevista para 0J es:
+Evidencia física de sonda ya existente:
 
 ```text
-main + workflow manual de storage
--> mode=check
--> autenticación service account
--> lectura del workbook
--> mode=apply-config
--> materialización atómica de las ocho tabs/config
--> mode=check
--> read-back consistente
+physical probe source run = 32551882793
+source run attempt        = 1
+source commit             = cc15edef22709911beb1d1b027ae4c9992da1944
 ```
 
-No se deben introducir ofertas para demostrar 0J.
+La evidencia firmada conserva la demostración histórica de OIDC, Worker/Durable Object, fetch a origen controlado, bytes y receipt Ed25519.
 
-Configuración externa esperada, sin publicar valores:
+La re-evaluación controlada del verifier actual se ejecutó exactamente una vez mediante PR #176. El merge commit `5f6ea161e99c4ac3d740141035da74fa3c7ee6f4` publicó:
 
 ```text
-Environment: precios-sps-storage
-Variable: PRECIOS_SPS_GOOGLE_SPREADSHEET_ID
-Secret: PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON
+precios-sps/cloudflare-evidence-verifier = failure
+precios-sps/cloudflare-verifier-result/probe_discovery_trace_missing = failure
 ```
+
+Conclusión canónica:
+
+- el verifier actual no encontró el trace requerido en Workers Observability;
+- no hay evidencia suficiente para declarar PASS de esa reconciliación;
+- el estado permanece `BLOCKED_EXTERNAL`;
+- no se repetirá la sonda ni una segunda re-evaluación sólo para intentar obtener otro resultado;
+- no se debilita `traces -> events`, custom span, parent/child ni la reconciliación física;
+- esta frontera no concede ni revoca autoridad de catálogo.
+
+## CI y dependencias
+
+PR #184 migró las actions SPS a generaciones oficiales compatibles con Node 24 y mantuvo pins SHA completos verificados. El runner observado (`2.336.0`) ejecutó directamente esas generaciones sin la advertencia anterior de actions Node 20 forzadas a Node 24.
+
+CI actual ejecuta:
+
+```text
+Python 3.12
+-> instalar requirements.txt
+-> python -m pip check
+-> python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
+-> pytest precios-supermercados-sps/tests
+```
+
+Los seis requerimientos directos están fijados a versión exacta. No existe lockfile con hashes de todo el grafo transitivo; por tanto la instalación es reproducible a nivel de dependencias directas, pero no hermética.
+
+Lint, type checking, coverage y vulnerability scanning fueron evaluados. No se añadieron gates decorativos sin baseline/umbral y política de fallo definidos. Si una necesidad concreta aparece, debe añadirse como control exigible y probado, no como métrica ornamental.
+
+## Identidad de producto
+
+Se mantiene la separación:
+
+```text
+source_product_id = identidad dentro de la fuente
+product_id        = identidad comparable entre fuentes
+offer_id          = supermercado + ubicación comercial + producto fuente
+```
+
+Reglas vigentes:
+
+- `source_product_id` es determinista;
+- GTIN-8/12/13/14 válido por check digit se normaliza a GTIN-14 y puede producir `prod_gtin_*`;
+- sin GTIN fuerte, `prod_pending_*` debe coincidir exactamente con `generate_pending_product_id(source_product_id)` antes de clasificarse como pendiente;
+- un prefijo `prod_pending_` forjado falla cerrado;
+- mapping revisado explícito continúa permitido;
+- `dim_products` sólo materializa productos mapeados;
+- `map_source_products` conserva la relación fuente → producto y la cola pendiente.
+
+Antes de incorporar supermercado #2 debe existir una política operativa explícita para resolver equivalencias cuando no haya GTIN compartido ni mapping revisado; no se deben unir productos sólo por semejanza de nombre.
+
+## La Colonia — ubicación y autoridad live
+
+Contexto raw vigente:
+
+```text
+location_id = la_colonia_online
+location_status = unknown
+location_confidence = null
+```
+
+`la_colonia_online` representa el catálogo público en línea observado y no una ubicación comercial.
+
+Ubicación candidata `la_colonia_sps`:
+
+```text
+city = San Pedro Sula
+in_scope = true
+granularity = unknown
+technical_binding_confirmed = false
+source_location_key = null
+extraction_enabled = false
+```
+
+La UI conocida expone SPS y Tegucigalpa, pero eso no demuestra si precio/inventario cambia por ciudad o por tienda. La radiografía preparada permanece bloqueada hasta una **nueva autorización humana explícita y limitada**.
+
+Una autorización de radiografía no autoriza smoke, facets, GraphQL replay, crawl, persistencia comercial ni ejecución diaria.
+
+## Persistencia comercial
+
+La infraestructura de storage está lista, pero **persistencia comercial de La Colonia no está autorizada** porque ubicación y autoridad de catálogo continúan cerradas.
+
+Sólo una ejecución aceptada y autoritativa puede mutar current/history. Runs rechazados/fallidos/no autoritativos pueden registrarse según su contrato, pero no materializan dimensión/mapping/current/history comercial.
 
 ## Regla comercial del precio
 
@@ -171,17 +211,23 @@ max(previous_accepted_price - current_price, 0)
 
 `reported_regular_price` e `is_promotion` no sustituyen el histórico propio.
 
-## Próximas acciones sin tráfico a La Colonia
+## Power BI
 
-1. fusionar el sync documental 0H;
-2. ejecutar y cerrar 0J con `check -> apply-config -> check` desde GitHub Actions sobre `main`;
-3. ejecutar y cerrar 0K usando la evidencia física existente de la sonda;
-4. reauditar 0L tras cualquier cambio de workflow/configuración.
+`power_bi_projection.py` permanece read-only/offline respecto a producción. Dataset y refresh productivo sólo pueden consumir datos comerciales aceptados y durables; Power BI no concede autoridad ni redefine la semántica de precio.
 
-Sólo después de cerrar Fase 0 corresponde pedir una nueva autorización humana para una radiografía mínima de ubicación.
+## Frontera actual
+
+Las tareas técnicas de Fase 0 que podían resolverse sin nuevas requests a La Colonia están cerradas o tienen un bloqueo externo explícito y no falsificable.
+
+La siguiente frontera que requiere decisión humana es la **radiografía mínima de binding de ubicación de La Colonia**. Sin una nueva autorización explícita no se enviará ninguna request.
 
 ## Tráfico live
 
-Los PR #157–#161 y el trabajo documental posterior se realizaron sin nuevas requests a La Colonia.
+Desde el cierre de la autorización anterior, todo el trabajo de storage, CI, documentación y hardening de identidad descrito aquí se realizó con:
 
-Esto no significa que nunca existieron pruebas live históricas; sólo describe el bloque actual de trabajo y la allow-list vigente vacía.
+```text
+ACTIVE_AUTHORIZATION_IDS = []
+LIVE_REQUESTS_CURRENT_RUN = 0
+```
+
+No se realizaron nuevas requests a La Colonia durante este bloque de trabajo.
