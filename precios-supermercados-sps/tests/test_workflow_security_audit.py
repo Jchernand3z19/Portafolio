@@ -52,6 +52,9 @@ FACET_WORKFLOW = "precios-supermercados-sps-la-colonia-facet-discovery.yml"
 LIVE_WORKFLOW = "precios-supermercados-sps-la-colonia-live.yml"
 LOCATION_BINDING_WORKFLOW = "precios-supermercados-sps-la-colonia-location-binding.yml"
 GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storage.yml"
+GOOGLE_SHEETS_STORAGE_REQUEST = (
+    "precios-supermercados-sps/.automation/google-sheets-storage-request.json"
+)
 PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
 PROBE_OBSERVABILITY_SECRET = "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN"
 PROBE_PUBLIC_KEY_VAR = "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL"
@@ -75,6 +78,9 @@ ALLOWED_JOB_PERMISSIONS = {
     PROBE_WORKFLOW: {
         "controlled-probe": {"contents": "read", "id-token": "write"},
     },
+    GOOGLE_SHEETS_STORAGE_WORKFLOW: {
+        "publish-status": {"statuses": "write"},
+    },
 }
 
 EXPECTED_TRIGGERS = {
@@ -85,7 +91,7 @@ EXPECTED_TRIGGERS = {
     FACET_WORKFLOW: {"workflow_dispatch"},
     LIVE_WORKFLOW: {"workflow_dispatch"},
     LOCATION_BINDING_WORKFLOW: {"workflow_dispatch"},
-    GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch"},
+    GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch", "push"},
     TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
 }
 
@@ -346,11 +352,12 @@ def test_network_capable_scripts_exist_only_inside_blocked_jobs():
             assert all_jobs_blocked(workflow)
 
 
-def test_google_sheets_storage_is_manual_main_only_and_least_privilege():
+def test_google_sheets_storage_has_controlled_main_trigger_and_least_privilege():
     path = WORKFLOW_DIR / GOOGLE_SHEETS_STORAGE_WORKFLOW
     workflow = load_workflow(path)
     triggers = workflow["on"]
-    assert set(triggers) == {"workflow_dispatch"}
+    assert set(triggers) == {"workflow_dispatch", "push"}
+
     dispatch = triggers["workflow_dispatch"]
     assert isinstance(dispatch, dict)
     assert set(dispatch) == {"inputs"}
@@ -362,20 +369,43 @@ def test_google_sheets_storage_is_manual_main_only_and_least_privilege():
     assert mode["type"] == "choice"
     assert mode["options"] == ["check", "apply-config"]
 
+    push = triggers["push"]
+    assert push == {
+        "branches": ["main"],
+        "paths": [GOOGLE_SHEETS_STORAGE_REQUEST],
+    }
+
     assert workflow["permissions"] == {"contents": "read"}
     assert workflow["concurrency"] == {
         "group": "precios-sps-google-sheets-storage",
         "cancel-in-progress": "false",
     }
+
     storage_jobs = jobs(workflow)
-    assert set(storage_jobs) == {"storage"}
+    assert set(storage_jobs) == {"preflight", "storage", "publish-status"}
+    preflight = storage_jobs["preflight"]
     storage = storage_jobs["storage"]
+    publisher = storage_jobs["publish-status"]
+
+    assert "environment" not in preflight
+    assert "permissions" not in preflight
+    assert preflight.get("if") == (
+        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
+        "github.ref == 'refs/heads/main' }}"
+    )
+    assert preflight["outputs"] == {
+        "allowed": "${{ steps.request.outputs.allowed }}",
+        "mode": "${{ steps.request.outputs.mode }}",
+        "request_sequence": "${{ steps.request.outputs.request_sequence }}",
+    }
+
     assert storage.get("environment") == "precios-sps-storage"
+    assert storage.get("needs") == "preflight"
     assert "permissions" not in storage
     assert storage.get("if") == (
-        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
-        "github.ref == 'refs/heads/main' && "
-        "(inputs.mode == 'check' || inputs.mode == 'apply-config') }}"
+        "${{ needs.preflight.outputs.allowed == 'true' && "
+        "(needs.preflight.outputs.mode == 'check' || "
+        "needs.preflight.outputs.mode == 'apply-config') }}"
     )
 
     runtime_steps = [
@@ -392,17 +422,39 @@ def test_google_sheets_storage_is_manual_main_only_and_least_privilege():
         "PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON": (
             "${{ secrets.PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON }}"
         ),
-        "STORAGE_MODE": "${{ inputs.mode }}",
+        "STORAGE_MODE": "${{ needs.preflight.outputs.mode }}",
     }
     assert runtime["run"] == (
         'python precios-supermercados-sps/scripts/inicializar_google_sheets.py '
         '--mode "$STORAGE_MODE"'
     )
 
+    assert publisher.get("needs") == ["preflight", "storage"]
+    assert publisher.get("permissions") == {"statuses": "write"}
+    assert "environment" not in publisher
+    assert publisher.get("if") == (
+        "${{ always() && needs.preflight.outputs.allowed == 'true' }}"
+    )
+
+    preflight_raw = "\n".join(str(step) for step in job_steps(preflight))
+    publisher_raw = "\n".join(str(step) for step in job_steps(publisher))
+    assert GOOGLE_SHEETS_STORAGE_REQUEST in preflight_raw
+    assert "GITHUB_EVENT_PATH" in preflight_raw
+    assert "storage_trigger_not_marker_only" in preflight_raw
+    assert "precios-sps-google-sheets-storage-request/v1" in preflight_raw
+    assert "storage_request_authority_must_be_false" in preflight_raw
+    assert "requestSequence" in preflight_raw
+    assert "allowed=true" in preflight_raw
+    assert "createCommitStatus" in publisher_raw
+    assert "precios-sps/google-sheets-storage" in publisher_raw
+    assert GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET not in preflight_raw
+    assert GOOGLE_SHEETS_SPREADSHEET_VAR not in preflight_raw
+    assert GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET not in publisher_raw
+    assert GOOGLE_SHEETS_SPREADSHEET_VAR not in publisher_raw
+
     raw = path.read_text(encoding="utf-8")
     assert "pull_request:" not in raw
     assert "pull_request_target:" not in raw
-    assert "push:" not in raw
     assert "schedule:" not in raw
     assert "issue_comment:" not in raw
     assert "id-token" not in raw
