@@ -34,47 +34,28 @@ jobs:
       request_sequence: ${{ steps.request.outputs.request_sequence }}
 
     steps:
-      - name: Validar superficie del trigger antes de checkout
+      - name: Validar superficie del trigger contra el commit
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           STORAGE_REQUEST_PATH: precios-supermercados-sps/.automation/google-sheets-storage-request.json
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          event_name = os.environ.get("GITHUB_EVENT_NAME", "")
-          if os.environ.get("GITHUB_REF") != "refs/heads/main":
-              raise SystemExit("storage_trigger_ref_invalid")
-          if event_name == "workflow_dispatch":
-              raise SystemExit(0)
-          if event_name != "push":
-              raise SystemExit("storage_trigger_event_invalid")
-
-          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
-          commits = event.get("commits")
-          if not isinstance(commits, list) or not commits:
-              raise SystemExit("storage_trigger_commits_missing")
-
-          expected = os.environ["STORAGE_REQUEST_PATH"]
-          changed: set[str] = set()
-          removed: set[str] = set()
-          for commit in commits:
-              if not isinstance(commit, dict):
-                  raise SystemExit("storage_trigger_commit_invalid")
-              for field in ("added", "modified", "removed"):
-                  values = commit.get(field)
-                  if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
-                      raise SystemExit("storage_trigger_file_list_invalid")
-                  changed.update(values)
-                  if field == "removed":
-                      removed.update(values)
-
-          if changed != {expected} or expected in removed:
-              raise SystemExit("storage_trigger_not_marker_only")
-          PY
+        with:
+          script: |
+            const expected = process.env.STORAGE_REQUEST_PATH;
+            const { data: commit } = await github.rest.repos.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              per_page: 100,
+            });
+            const files = Array.isArray(commit.files) ? commit.files : [];
+            if (
+              files.length !== 1 ||
+              files[0].filename !== expected ||
+              files[0].status === 'removed'
+            ) {
+              core.setFailed('storage_trigger_not_marker_only');
+            }
 
       - name: Descargar revisión inmutable sin credenciales
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -96,6 +77,9 @@ jobs:
           from pathlib import Path
 
           event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+          if os.environ.get("GITHUB_REF") != "refs/heads/main":
+              raise SystemExit("storage_trigger_ref_invalid")
+
           mode = ""
           sequence = "manual"
           if event_name == "workflow_dispatch":
@@ -128,9 +112,39 @@ jobs:
               handle.write(f"request_sequence={sequence}\n")
           PY
 
-  storage:
+  publish-trigger-status:
     needs: preflight
-    if: ${{ needs.preflight.outputs.allowed == 'true' && (needs.preflight.outputs.mode == 'check' || needs.preflight.outputs.mode == 'apply-config') }}
+    if: ${{ needs.preflight.outputs.allowed == 'true' }}
+    permissions:
+      statuses: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Publicar trigger aceptado
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          STORAGE_MODE: ${{ needs.preflight.outputs.mode }}
+        with:
+          script: |
+            const mode = process.env.STORAGE_MODE;
+            if (!['check', 'apply-config'].includes(mode)) {
+              core.setFailed('storage status mode invalid');
+              return;
+            }
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'pending',
+              context: 'precios-sps/google-sheets-storage',
+              description: `storage ${mode}: trigger accepted`,
+            });
+
+  storage:
+    needs:
+      - preflight
+      - publish-trigger-status
+    if: ${{ needs.preflight.outputs.allowed == 'true' && needs.publish-trigger-status.result == 'success' && (needs.preflight.outputs.mode == 'check' || needs.preflight.outputs.mode == 'apply-config') }}
     runs-on: ubuntu-latest
     environment: precios-sps-storage
 
@@ -164,8 +178,9 @@ jobs:
   publish-status:
     needs:
       - preflight
+      - publish-trigger-status
       - storage
-    if: ${{ always() && needs.preflight.outputs.allowed == 'true' }}
+    if: ${{ always() && github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' }}
     permissions:
       statuses: write
     runs-on: ubuntu-latest
@@ -174,22 +189,25 @@ jobs:
       - name: Publicar resultado sanitizado
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
           STORAGE_MODE: ${{ needs.preflight.outputs.mode }}
           STORAGE_RESULT: ${{ needs.storage.result }}
         with:
           script: |
+            const preflight = process.env.PREFLIGHT_RESULT;
             const mode = process.env.STORAGE_MODE;
             const jobResult = process.env.STORAGE_RESULT;
-            if (!['check', 'apply-config'].includes(mode)) {
-              core.setFailed('storage status mode invalid');
-              return;
+            let state = 'failure';
+            let description = 'storage trigger rejected';
+            if (preflight === 'success' && ['check', 'apply-config'].includes(mode)) {
+              state = jobResult === 'success' ? 'success' : 'failure';
+              description = `storage ${mode}: ${state}`;
             }
-            const state = jobResult === 'success' ? 'success' : 'failure';
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state,
               context: 'precios-sps/google-sheets-storage',
-              description: `storage ${mode}: ${state}`,
+              description,
             });
