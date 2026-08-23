@@ -140,6 +140,18 @@ jobs:
               for key, value in values.items():
                   handle.write(f'{key}={value}\n')
           PY
+      - name: Ejecutar radiografía estructural ampliada
+        if: ${{ always() && steps.report.outputs.stop_reason == 'target_city_not_found' }}
+        shell: bash
+        run: python precios-supermercados-sps/scripts/radiografiar_ubicacion_la_colonia_v2.py
+      - name: Publicar radiografía estructural ampliada
+        if: ${{ always() && steps.report.outputs.stop_reason == 'target_city_not_found' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: la-colonia-location-radiography-v2-${{ github.run_id }}
+          path: precios-supermercados-sps/diagnostic-artifacts/location-radiography-v2
+          if-no-files-found: error
+          retention-days: 14
       - name: Reflejar conclusión técnica
         if: always()
         shell: bash
