@@ -97,6 +97,21 @@ _TOPMOST_AT_CENTER_JS = """
   return Boolean(hit && (hit === element || element.contains(hit)));
 }
 """
+_LOCATION_SELECTOR_HANDLER_JS = """
+(element) => {
+  if (typeof element.onclick === 'function') return true;
+  for (const key of Object.keys(element)) {
+    if (
+      key.startsWith('__reactProps$') ||
+      key.startsWith('__reactEventHandlers$')
+    ) {
+      const props = element[key];
+      if (props && typeof props.onClick === 'function') return true;
+    }
+  }
+  return false;
+}
+"""
 _VISUAL_RECT_TOLERANCE_PX = 1.5
 
 
@@ -442,13 +457,7 @@ def resolve_location_selector(page: Any) -> ResolvedLocationSelector:
 
 
 def _location_selector_modal_presented(page: Any) -> bool:
-    """Confirma que el click del opener produjo una superficie real del modal.
-
-    En storefronts hidratados el botón puede existir antes de que JavaScript haya
-    conectado su handler. Un click temprano puede ser un no-op silencioso. Se usa
-    como confirmación únicamente evidencia estructural ya observada en La Colonia:
-    el contenedor de botones de ciudad o el prompt visible del modal.
-    """
+    """Confirma que el click del opener produjo una superficie real del modal."""
 
     try:
         if _presented_items(page.locator(CITY_BUTTON_CONTAINER_CSS)):
@@ -463,6 +472,24 @@ def _location_selector_modal_presented(page: Any) -> bool:
     return False
 
 
+def _location_selector_has_attached_handler(locator: Any) -> bool:
+    """Detecta handlers observables sin depender del framework como identidad.
+
+    ``onclick`` cubre handlers DOM directos. React conserva las props del nodo bajo
+    claves privadas con prefijos estables por familia; sólo se usa esa señal para
+    saber que un click ya fue aceptado por la capa hidratada, nunca para seleccionar
+    el control ni para demostrar contexto comercial.
+    """
+
+    evaluator = getattr(locator, "evaluate", None)
+    if evaluator is None:
+        return False
+    try:
+        return bool(evaluator(_LOCATION_SELECTOR_HANDLER_JS))
+    except Exception:
+        return False
+
+
 def _wait_for_next_location_selector_probe(page: Any) -> bool:
     waiter = getattr(page, "wait_for_timeout", None)
     if waiter is None:
@@ -475,19 +502,20 @@ def _wait_for_next_location_selector_probe(page: Any) -> bool:
 
 
 def open_location_selector(page: Any) -> ResolvedLocationSelector:
-    """Abre el modal y reintenta sólo mientras el click sea un no-op de hidratación.
+    """Abre el modal y reintenta sólo ante un click pre-hidratación verificable.
 
-    La evidencia live mostró que ``btn-modal-selector`` puede renderizarse antes de
-    que su handler esté hidratado. Cada retry ocurre sólo después de comprobar que
-    todavía no existe una superficie presentada del modal. En cuanto aparece el
-    prompt o ``.cont-btn-ciudad`` se detienen los clicks, evitando alternar un modal
-    ya abierto. Los dobles offline sin reloj conservan el comportamiento histórico
-    de un solo click.
+    Si el opener ya expone un handler DOM/React, el click se emite una sola vez y la
+    readiness posterior del control de ciudad absorbe una apertura asíncrona. Si no
+    hay handler observable y tampoco aparece el modal, se reintenta bounded: esto
+    cubre el caso live donde el botón se renderiza antes de que el frontend conecte
+    su interacción. En cuanto aparece una superficie real o un handler observable,
+    no se vuelve a pulsar el opener.
     """
 
     resolved = resolve_location_selector(page)
+    handler_was_ready = _location_selector_has_attached_handler(resolved.locator)
     resolved.locator.click()
-    if _location_selector_modal_presented(page):
+    if handler_was_ready or _location_selector_modal_presented(page):
         return resolved
 
     wait_count = LOCATION_SELECTOR_OPEN_TIMEOUT_MS // LOCATION_SELECTOR_OPEN_POLL_MS
@@ -497,6 +525,9 @@ def open_location_selector(page: Any) -> ResolvedLocationSelector:
         if _location_selector_modal_presented(page):
             return resolved
         resolved = resolve_location_selector(page)
+        if _location_selector_has_attached_handler(resolved.locator):
+            resolved.locator.click()
+            return resolved
         resolved.locator.click()
         if _location_selector_modal_presented(page):
             return resolved
