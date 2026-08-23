@@ -11,7 +11,7 @@ import precios_supermercados.diagnostics.la_colonia_location_binding_capture as 
 
 
 SYNTHETIC_AUTH = "LC-location-binding-777"
-AUTHORIZED_LIVE_AUTH = "LC-location-binding-336"
+CONSUMED_AUTH = "LC-location-binding-336"
 
 
 def _html(*, store_mode: str = "strong") -> str:
@@ -80,22 +80,23 @@ def local_site():
         server.server_close()
 
 
-def test_live_has_only_the_explicit_versioned_authorization() -> None:
-    assert capture.LIVE_EXECUTION_ENABLED is True
-    assert capture.ACTIVE_AUTHORIZATION_IDS == frozenset({AUTHORIZED_LIVE_AUTH})
-    assert capture.CONSUMED_AUTHORIZATION_IDS == frozenset()
-    capture.validate_capture_authorization(
-        authorization_id=AUTHORIZED_LIVE_AUTH,
-        network_policy="live",
-    )
+def test_live_is_closed_and_authorization_336_is_consumed() -> None:
+    assert capture.LIVE_EXECUTION_ENABLED is False
+    assert capture.ACTIVE_AUTHORIZATION_IDS == frozenset()
+    assert capture.CONSUMED_AUTHORIZATION_IDS == frozenset({CONSUMED_AUTH})
 
-    result = capture.run_capture(authorization_id=SYNTHETIC_AUTH)
-    assert result.browser_started is False
-    assert result.target_navigation_started is False
-    assert result.stop_reason == "authorization_id_not_active"
-    assert result.production_authority is False
-    assert result.catalog_accepted is False
-    assert result.extraction_enabled is False
+    consumed = capture.run_capture(authorization_id=CONSUMED_AUTH)
+    assert consumed.browser_started is False
+    assert consumed.target_navigation_started is False
+    assert consumed.stop_reason == "authorization_id_consumed"
+
+    unrelated = capture.run_capture(authorization_id=SYNTHETIC_AUTH)
+    assert unrelated.browser_started is False
+    assert unrelated.target_navigation_started is False
+    assert unrelated.stop_reason == "authorization_id_not_active"
+    assert unrelated.production_authority is False
+    assert unrelated.catalog_accepted is False
+    assert unrelated.extraction_enabled is False
 
 
 def test_live_runtime_cannot_override_allow_list_or_fuse() -> None:
