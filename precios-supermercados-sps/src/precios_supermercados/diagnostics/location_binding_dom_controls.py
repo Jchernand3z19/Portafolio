@@ -14,7 +14,8 @@ from typing import Any
 
 
 CITY_CONTROL_ROLES: tuple[str, ...] = ("option", "radio", "menuitem", "button")
-LOCATION_SELECTOR_CSS = "button.btn-modal-selector"
+LOCATION_SELECTOR_CLASS = "btn-modal-selector"
+LOCATION_SELECTOR_CSS = f"button.{LOCATION_SELECTOR_CLASS}"
 _LOCATION_SELECTOR_ACCESSIBLE_PATTERN = re.compile(
     r"selecciona\s+tu\s+tienda|selecciona\s+una\s+tienda|ubicaci[oó]n",
     re.I,
@@ -80,6 +81,14 @@ def _label(locator: Any) -> str | None:
         return _clean_label(locator.inner_text())
     except Exception:
         return None
+
+
+def _has_css_class(locator: Any, class_name: str) -> bool:
+    try:
+        raw = locator.get_attribute("class") or ""
+    except Exception:
+        return False
+    return class_name in str(raw).split()
 
 
 def _visible_items(collection: Any) -> list[Any]:
@@ -159,6 +168,11 @@ def _visible_role_matches(page: Any, *, role: str, exact_name: re.Pattern[str]) 
     for index in range(matches.count()):
         candidate = matches.nth(index)
         try:
+            if role == "button" and _has_css_class(candidate, LOCATION_SELECTOR_CLASS):
+                # El botón del encabezado muestra la ciudad actual pero no es una
+                # opción del modal. Nunca debe competir con el control que cambia
+                # realmente la ciudad.
+                continue
             parent_select = candidate.locator("xpath=ancestor::select[1]")
             if candidate.is_visible() or (role == "option" and parent_select.count() == 1):
                 visible.append(candidate)
@@ -207,7 +221,9 @@ def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl
 
     El orden de roles no es un fallback permisivo: todos los roles permitidos se
     inspeccionan y el resultado sólo se acepta si existe exactamente un elemento
-    candidato en el conjunto completo. Así un DOM ambiguo falla cerrado.
+    candidato en el conjunto completo. El botón de encabezado
+    ``btn-modal-selector`` se excluye explícitamente porque sólo refleja la ciudad
+    actual y no representa una opción de cambio. Así un DOM ambiguo falla cerrado.
     """
 
     normalized = _clean_label(city_name)
