@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 SCRIPT = (
     Path(__file__).resolve().parents[1]
@@ -33,6 +35,45 @@ def test_safe_error_code_rejects_values_that_could_leak_or_inject() -> None:
     )
     assert module._safe_error_code(UnsafeError()) == (
         "storage_bootstrap_unexpected_error"
+    )
+
+
+def test_required_storage_envs_reports_all_missing_credentials(monkeypatch) -> None:
+    module = load_module()
+    monkeypatch.delenv(module.SPREADSHEET_ID_ENV, raising=False)
+    monkeypatch.delenv(module.SERVICE_ACCOUNT_JSON_ENV, raising=False)
+
+    with pytest.raises(module.StorageCliError) as exc_info:
+        module._required_storage_envs()
+
+    assert exc_info.value.code == (
+        "missing_precios_sps_google_spreadsheet_id_and_service_account_json"
+    )
+
+
+def test_required_storage_envs_reports_each_missing_credential(monkeypatch) -> None:
+    module = load_module()
+    monkeypatch.setenv(module.SPREADSHEET_ID_ENV, "spreadsheet-id")
+    monkeypatch.delenv(module.SERVICE_ACCOUNT_JSON_ENV, raising=False)
+    with pytest.raises(module.StorageCliError) as exc_info:
+        module._required_storage_envs()
+    assert exc_info.value.code == "missing_precios_sps_google_service_account_json"
+
+    monkeypatch.delenv(module.SPREADSHEET_ID_ENV, raising=False)
+    monkeypatch.setenv(module.SERVICE_ACCOUNT_JSON_ENV, "{}")
+    with pytest.raises(module.StorageCliError) as exc_info:
+        module._required_storage_envs()
+    assert exc_info.value.code == "missing_precios_sps_google_spreadsheet_id"
+
+
+def test_required_storage_envs_returns_nonempty_values(monkeypatch) -> None:
+    module = load_module()
+    monkeypatch.setenv(module.SPREADSHEET_ID_ENV, "spreadsheet-id")
+    monkeypatch.setenv(module.SERVICE_ACCOUNT_JSON_ENV, "{\"type\":\"service_account\"}")
+
+    assert module._required_storage_envs() == (
+        "spreadsheet-id",
+        "{\"type\":\"service_account\"}",
     )
 
 

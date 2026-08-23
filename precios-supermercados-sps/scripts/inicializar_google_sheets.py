@@ -44,6 +44,32 @@ def _required_env(name: str) -> str:
     return value
 
 
+def _required_storage_envs() -> tuple[str, str]:
+    """Valida ambas credenciales antes de construir transporte o tocar la red."""
+
+    values = {
+        SPREADSHEET_ID_ENV: os.environ.get(SPREADSHEET_ID_ENV),
+        SERVICE_ACCOUNT_JSON_ENV: os.environ.get(SERVICE_ACCOUNT_JSON_ENV),
+    }
+    missing = tuple(
+        name
+        for name, value in values.items()
+        if not isinstance(value, str) or not value.strip()
+    )
+    if missing == (SPREADSHEET_ID_ENV, SERVICE_ACCOUNT_JSON_ENV):
+        raise StorageCliError(
+            "missing_precios_sps_google_spreadsheet_id_and_service_account_json"
+        )
+    if missing:
+        raise StorageCliError(f"missing_{missing[0].casefold()}")
+
+    spreadsheet_id = values[SPREADSHEET_ID_ENV]
+    service_account_json = values[SERVICE_ACCOUNT_JSON_ENV]
+    assert isinstance(spreadsheet_id, str)
+    assert isinstance(service_account_json, str)
+    return spreadsheet_id, service_account_json
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -60,8 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(mode: str) -> dict[str, object]:
-    spreadsheet_id = _required_env(SPREADSHEET_ID_ENV)
-    service_account_json = _required_env(SERVICE_ACCOUNT_JSON_ENV)
+    spreadsheet_id, service_account_json = _required_storage_envs()
     transport = GoogleSheetsHttpTransport.from_service_account_json(
         spreadsheet_id,
         service_account_json,
