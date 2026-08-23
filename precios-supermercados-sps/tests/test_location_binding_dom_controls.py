@@ -39,25 +39,49 @@ class FakeSelect:
         self.selected = label
 
 
-class MissingSelect:
+class FakeListbox:
+    def __init__(self, options):
+        self.options = list(options)
+
+    def count(self):
+        return 1
+
+    def get_by_role(self, role):
+        assert role == "option"
+        return FakeCollection(self.options)
+
+
+class MissingContainer:
     def count(self):
         return 0
 
 
 class FakeControl:
-    def __init__(self, *, label, role, visible=True, parent_select=None):
+    def __init__(
+        self,
+        *,
+        label,
+        role,
+        visible=True,
+        parent_select=None,
+        parent_listbox=None,
+    ):
         self.label = label
         self.role = role
         self.visible = visible
         self.parent_select = parent_select
+        self.parent_listbox = parent_listbox
         self.clicked = False
 
     def is_visible(self):
         return self.visible
 
     def locator(self, selector):
-        assert selector == "xpath=ancestor::select[1]"
-        return self.parent_select or MissingSelect()
+        if selector == "xpath=ancestor::select[1]":
+            return self.parent_select or MissingContainer()
+        if selector == "xpath=ancestor::*[@role='listbox'][1]":
+            return self.parent_listbox or MissingContainer()
+        raise AssertionError(selector)
 
     def get_attribute(self, name):
         assert name == "aria-label"
@@ -100,6 +124,22 @@ def test_native_select_preserves_real_city_labels_and_activates_exact_target() -
     activate_city_control(resolved, "San Pedro Sula")
     assert parent.selected == "San Pedro Sula"
     assert sps.clicked is False
+
+
+def test_custom_listbox_preserves_visible_city_siblings() -> None:
+    sps = FakeControl(label="San Pedro Sula", role="option")
+    tgu = FakeControl(label="Tegucigalpa", role="option")
+    hidden = FakeControl(label="La Ceiba", role="option", visible=False)
+    listbox = FakeListbox([sps, tgu, hidden])
+    sps.parent_listbox = listbox
+    tgu.parent_listbox = listbox
+    hidden.parent_listbox = listbox
+    page = FakePage([sps, tgu, hidden])
+
+    resolved = resolve_exact_city_control(page, "San Pedro Sula")
+
+    assert resolved.role == "option"
+    assert resolved.available_cities == ("San Pedro Sula", "Tegucigalpa")
 
 
 def test_custom_button_city_is_accepted_only_when_exact_and_unique() -> None:
