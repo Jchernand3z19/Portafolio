@@ -18,6 +18,7 @@ CONSUMED_AUTHS = frozenset(
         "LC-location-binding-332",
         "LC-location-binding-333",
         "LC-location-binding-334",
+        "LC-location-binding-335",
     }
 )
 
@@ -285,5 +286,43 @@ def test_public_result_rejects_any_attempt_to_grant_authority() -> None:
     with pytest.raises(
         capture.LocationBindingCaptureError,
         match="capture_cannot_grant_commercial_authority",
+    ):
+        result.public_dict()
+
+
+def test_public_result_accepts_only_bounded_city_control_diagnostic() -> None:
+    result = capture.LocationBindingCaptureResult(
+        mode="synthetic_local",
+        started_at="fixture",
+        city_control_diagnostic={
+            "stage": "role",
+            "role": "radio",
+            "candidate_count": 2,
+            "effective_count": 2,
+        },
+    )
+    rendered = result.public_dict()
+    assert rendered["city_control_diagnostic"] == {
+        "stage": "role",
+        "role": "radio",
+        "candidate_count": 2,
+        "effective_count": 2,
+    }
+
+
+def test_public_result_rejects_raw_dom_detail_in_city_control_diagnostic() -> None:
+    result = capture.LocationBindingCaptureResult(
+        mode="synthetic_local",
+        started_at="fixture",
+        city_control_diagnostic={
+            "stage": "role",
+            "role": "radio",
+            "candidate_count": 2,
+            "selector": "div.secret-layout > input",
+        },
+    )
+    with pytest.raises(
+        capture.LocationBindingCaptureError,
+        match="city_control_diagnostic_invalid",
     ):
         result.public_dict()
