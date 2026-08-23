@@ -1,16 +1,15 @@
 """Captura controlada del binding de ubicación de La Colonia.
 
-La capa live queda deliberadamente desactivada en código. Preparar/ejecutar tests
-locales no concede autorización para tocar La Colonia. Una ejecución live futura
-requiere simultáneamente:
+Las autorizaciones históricas por ID se conservan únicamente para compatibilidad y
+evidencia. Desde la instrucción humana del 2026-08-23T21:02:02Z existe además una
+autorización permanente para observación pública read-only. Esa ruta requiere una
+invocación explícita con ``standing_public_read_only=True`` y mantiene target,
+presupuesto, pacing y artefacto sanitizado cerrados en código.
 
-1. ``LIVE_EXECUTION_ENABLED = True`` en una revisión explícita;
-2. un authorization-id presente en ``ACTIVE_AUTHORIZATION_IDS``;
-3. invocación explícita con ``network_policy='live'``.
-
-Los parámetros inyectables de allow-list/fuse existen exclusivamente para tests
-``local_only``. En modo live se rechaza cualquier override runtime: la autoridad
-sólo puede provenir de constantes versionadas y revisadas.
+El modo permanente read-only no concede autoridad comercial, no usa secretos, no
+realiza checkout ni mutaciones externas y no permite cambiar el target live por
+runtime. Los parámetros inyectables de allow-list/fuse continúan existiendo sólo
+para tests ``local_only``.
 
 El artefacto sólo contiene nombres públicos de ciudades/tiendas, nombres de
 mecanismos de contexto, contadores DOM sanitizados y SHA-256 de valores opacos. No
@@ -57,6 +56,8 @@ from precios_supermercados.diagnostics.location_binding_dom_controls import (
 TARGET_URL = "https://www.lacolonia.com/"
 TARGET_CITY = "San Pedro Sula"
 LIVE_EXECUTION_ENABLED = False
+STANDING_PUBLIC_READ_ONLY_AUTHORIZED = True
+STANDING_PUBLIC_READ_ONLY_AUTHORIZED_AT = "2026-08-23T21:02:02Z"
 ACTIVE_AUTHORIZATION_IDS: frozenset[str] = frozenset()
 CONSUMED_AUTHORIZATION_IDS: frozenset[str] = frozenset(
     {
@@ -441,6 +442,7 @@ def validate_capture_authorization(
     active_ids: Iterable[str] | None = None,
     consumed_ids: Iterable[str] | None = None,
     live_execution_enabled: bool | None = None,
+    standing_public_read_only: bool = False,
 ) -> None:
     if network_policy not in {"live", "local_only"}:
         raise LocationBindingCaptureError("network_policy_invalid")
@@ -452,10 +454,18 @@ def validate_capture_authorization(
             or live_execution_enabled is not None
         ):
             raise LocationBindingCaptureError("live_runtime_overrides_forbidden")
+        if standing_public_read_only:
+            if authorization_id is not None:
+                raise LocationBindingCaptureError("authorization_mode_conflict")
+            if not STANDING_PUBLIC_READ_ONLY_AUTHORIZED:
+                raise LocationBindingCaptureError("standing_public_read_only_not_authorized")
+            return
         effective_active_ids = ACTIVE_AUTHORIZATION_IDS
         effective_consumed_ids = CONSUMED_AUTHORIZATION_IDS
         effective_live_enabled = LIVE_EXECUTION_ENABLED
     else:
+        if standing_public_read_only:
+            raise LocationBindingCaptureError("standing_public_read_only_live_only")
         effective_active_ids = frozenset(active_ids or ())
         effective_consumed_ids = frozenset(consumed_ids or ())
         effective_live_enabled = False
@@ -490,6 +500,9 @@ def _stop_reason(error: BaseException) -> str:
         "authorization_id_invalid_format",
         "authorization_id_consumed",
         "authorization_id_not_active",
+        "authorization_mode_conflict",
+        "standing_public_read_only_not_authorized",
+        "standing_public_read_only_live_only",
         "live_execution_disabled",
         "live_runtime_overrides_forbidden",
         "live_target_not_exact_la_colonia_home",
@@ -526,16 +539,18 @@ def run_capture(
     active_ids: Iterable[str] | None = None,
     consumed_ids: Iterable[str] | None = None,
     live_execution_enabled: bool | None = None,
+    standing_public_read_only: bool = False,
     network_policy: str = "live",
     target_url: str = TARGET_URL,
     city_name: str = TARGET_CITY,
 ) -> LocationBindingCaptureResult:
-    """Ejecuta la captura sólo tras todos los gates; ``local_only`` sirve a CI.
+    """Ejecuta una captura bounded de binding; ``local_only`` sirve a CI.
 
-    En modo live no se admiten overrides de autorización/fuse. La función no
-    realiza replay GraphQL ni visita páginas de producto. El máximo son cuatro
-    acciones lógicas: abrir home, abrir selector, elegir ciudad sólo si hace falta y,
-    únicamente si aparece, elegir una tienda.
+    La ruta live puede usar el modelo legado por authorization-id o la autorización
+    permanente pública read-only. Ninguna ruta concede autoridad comercial. La
+    función no realiza replay GraphQL ni visita páginas de producto. El máximo son
+    cuatro acciones lógicas: abrir home, abrir selector, elegir ciudad sólo si hace
+    falta y, únicamente si aparece, elegir una tienda.
     """
 
     budget = budget or DiagnosticBudget(max_logical_requests=4)
@@ -557,6 +572,7 @@ def run_capture(
             active_ids=active_ids,
             consumed_ids=consumed_ids,
             live_execution_enabled=live_execution_enabled,
+            standing_public_read_only=standing_public_read_only,
         )
 
         try:

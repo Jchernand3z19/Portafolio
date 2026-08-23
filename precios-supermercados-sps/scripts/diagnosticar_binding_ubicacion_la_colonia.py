@@ -1,9 +1,8 @@
-"""CLI cerrada para la radiografía live de binding de ubicación de La Colonia.
+"""CLI cerrada para observación del binding de ubicación de La Colonia.
 
 No expone flags para cambiar target, política de red, allow-list ni fuse live.
-Esos controles permanecen versionados en
-``diagnostics.la_colonia_location_binding_capture`` y sólo pueden cambiarse por
-un PR explícito y revisado.
+Puede usar el mecanismo histórico por authorization-id o la autorización permanente
+pública read-only vigente desde 2026-08-23T21:02:02Z.
 """
 
 from __future__ import annotations
@@ -19,12 +18,17 @@ from precios_supermercados.diagnostics.la_colonia_location_binding_capture impor
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Radiografía cerrada del binding de ubicación de La Colonia",
+        description="Observación cerrada del binding de ubicación de La Colonia",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
         "--authorization-id",
-        required=True,
-        help="ID de autorización live previamente versionado y activo",
+        help="ID histórico de autorización live versionado y activo",
+    )
+    mode.add_argument(
+        "--standing-public-read-only",
+        action="store_true",
+        help="Usa la autorización permanente para observación pública read-only",
     )
     parser.add_argument(
         "--output-path",
@@ -57,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     result = run_capture(
         authorization_id=args.authorization_id,
+        standing_public_read_only=bool(args.standing_public_read_only),
         output_path=Path(args.output_path),
     )
     print(json.dumps(_summary(result), ensure_ascii=False, sort_keys=True))

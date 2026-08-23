@@ -1,39 +1,62 @@
-name: La Colonia - Radiografía manual de ubicación
+name: La Colonia - Binding público read-only
 
 on:
   workflow_dispatch:
-    inputs:
-      authorization_id:
-        description: ID de autorización live previamente aprobado y versionado
-        required: true
-        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/requests/la-colonia-location-binding-standing-request.json
 
 permissions:
   contents: read
 
 concurrency:
-  group: la-colonia-location-binding-radiography
+  group: la-colonia-location-binding-read-only
   cancel-in-progress: false
 
 jobs:
-  radiography:
-    # Fail-closed: LC-location-binding-336, LC-location-binding-331, LC-location-binding-332,
-    # LC-location-binding-333, LC-location-binding-334, LC-location-binding-335 y
-    # LC-location-binding-337 ya fueron consumidas. La radiografía completa autorizada
-    # el 2026-08-23 también fue consumida y no concede una nueva ejecución.
-    # Una autorización futura requiere un PR separado que active simultáneamente este job y los gates versionados.
-    if: ${{ false }}
+  binding:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
-      AUTHORIZATION_ID: ${{ inputs.authorization_id }}
     steps:
       - name: Descargar revisión inmutable
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Validar solicitud autónoma versionada
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('.github/workflows/requests/la-colonia-location-binding-standing-request.json')
+          if not path.is_file():
+              raise SystemExit('standing_request_missing')
+          value = json.loads(path.read_text(encoding='utf-8'))
+          expected = {
+              'schemaVersion': 'precios-sps-standing-public-readonly-location-binding/v1',
+              'standingAuthorizationAt': '2026-08-23T21:02:02Z',
+              'targetUrl': 'https://www.lacolonia.com/',
+              'targetCity': 'San Pedro Sula',
+              'authority': False,
+          }
+          for key, wanted in expected.items():
+              if value.get(key) != wanted:
+                  raise SystemExit(f'standing_request_invalid:{key}')
+          sequence = value.get('requestSequence')
+          if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
+              raise SystemExit('standing_request_sequence_invalid')
+          purpose = value.get('purpose')
+          if purpose != 'verify-location-binding':
+              raise SystemExit('standing_request_purpose_invalid')
+          PY
       - name: Configurar Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -41,13 +64,13 @@ jobs:
       - name: Instalar dependencias cerradas
         shell: bash
         run: python -m pip install -r precios-supermercados-sps/requirements.txt
-      - name: Ejecutar radiografía cerrada
-        id: radiography
+      - name: Ejecutar observación bounded de binding
+        id: binding
         shell: bash
         run: |
           set +e
           python precios-supermercados-sps/scripts/diagnosticar_binding_ubicacion_la_colonia.py \
-            --authorization-id "$AUTHORIZATION_ID" \
+            --standing-public-read-only \
             --output-path precios-supermercados-sps/diagnostic-artifacts/location-binding-radiography.json
           exit_code=$?
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
@@ -64,7 +87,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          exit_code="${{ steps.radiography.outputs.exit_code }}"
+          exit_code="${{ steps.binding.outputs.exit_code }}"
           case "$exit_code" in
             "0") exit 0 ;;
             "2") exit 2 ;;
