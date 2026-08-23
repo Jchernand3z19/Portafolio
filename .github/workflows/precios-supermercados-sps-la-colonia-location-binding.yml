@@ -36,6 +36,7 @@ jobs:
               'precios-supermercados-sps/src/precios_supermercados/diagnostics/la_colonia_location_binding_capture.py',
               'precios-supermercados-sps/tests/test_la_colonia_location_binding_capture.py',
               'precios-supermercados-sps/tests/test_la_colonia_location_binding_workflow.py',
+              'precios-supermercados-sps/tests/test_location_binding_331_consumed_policy.py',
               'precios-supermercados-sps/tests/test_workflow_security_audit.py',
             ].sort();
             const expectedAuthorizationId = 'LC-location-binding-332';
