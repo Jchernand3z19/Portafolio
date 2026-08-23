@@ -1,12 +1,11 @@
-name: La Colonia - Radiografía manual de ubicación
+name: La Colonia - Radiografía controlada de ubicación
 
 on:
-  workflow_dispatch:
-    inputs:
-      authorization_id:
-        description: ID de autorización live previamente aprobado y versionado
-        required: true
-        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/requests/la-colonia-location-binding-request.json
 
 permissions:
   contents: read
@@ -16,15 +15,113 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      allowed: ${{ steps.request.outputs.allowed }}
+      authorization_id: ${{ steps.request.outputs.authorization_id }}
+      request_sequence: ${{ steps.request.outputs.request_sequence }}
+    steps:
+      - name: Validar autorización versionada y commit exacto
+        id: request
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
+        with:
+          script: |
+            const marker = '.github/workflows/requests/la-colonia-location-binding-request.json';
+            const expectedFiles = [
+              '.github/workflows/precios-supermercados-sps-la-colonia-location-binding.yml',
+              marker,
+              'precios-supermercados-sps/src/precios_supermercados/diagnostics/la_colonia_location_binding_capture.py',
+              'precios-supermercados-sps/tests/test_la_colonia_location_binding_capture.py',
+              'precios-supermercados-sps/tests/test_la_colonia_location_binding_workflow.py',
+              'precios-supermercados-sps/tests/test_location_binding_331_consumed_policy.py',
+              'precios-supermercados-sps/tests/test_workflow_security_audit.py',
+            ].sort();
+            const expectedAuthorizationId = 'LC-location-binding-337';
+            const consumedAuthorizationIds = new Set([
+              'LC-location-binding-336',
+              'LC-location-binding-331',
+              'LC-location-binding-332',
+              'LC-location-binding-333',
+              'LC-location-binding-334',
+              'LC-location-binding-335',
+            ]);
+
+            core.setOutput('allowed', 'false');
+            if (consumedAuthorizationIds.has(expectedAuthorizationId)) {
+              core.setFailed('location_binding_authorization_id_consumed');
+              return;
+            }
+
+            const { data: commit } = await github.rest.repos.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+            });
+            const actualFiles = (commit.files || []).map((file) => file.filename).sort();
+            if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
+              core.setFailed('location_binding_trigger_not_exact_authorized_commit');
+              return;
+            }
+
+            const { data: file } = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: marker,
+              ref: context.sha,
+            });
+            if (Array.isArray(file) || file.type !== 'file' || !file.content) {
+              core.setFailed('location_binding_request_file_invalid');
+              return;
+            }
+
+            let request;
+            try {
+              request = JSON.parse(Buffer.from(file.content, file.encoding || 'base64').toString('utf8'));
+            } catch (error) {
+              core.setFailed('location_binding_request_json_invalid');
+              return;
+            }
+
+            if (request.schemaVersion !== 'precios-sps-la-colonia-location-binding-request/v1') {
+              core.setFailed('location_binding_request_schema_invalid');
+              return;
+            }
+            if (request.authorizationId !== expectedAuthorizationId) {
+              core.setFailed('location_binding_authorization_id_not_exact');
+              return;
+            }
+            if (request.requestSequence !== 1) {
+              core.setFailed('location_binding_request_sequence_invalid');
+              return;
+            }
+            if (request.targetCity !== 'San Pedro Sula') {
+              core.setFailed('location_binding_target_city_invalid');
+              return;
+            }
+            if (request.maxLogicalActions !== 4) {
+              core.setFailed('location_binding_budget_invalid');
+              return;
+            }
+            if (request.authority !== false) {
+              core.setFailed('location_binding_request_authority_must_be_false');
+              return;
+            }
+
+            core.setOutput('authorization_id', expectedAuthorizationId);
+            core.setOutput('request_sequence', String(request.requestSequence));
+            core.setOutput('allowed', 'true');
+
   radiography:
-    # Fail-closed: LC-location-binding-336, LC-location-binding-331, LC-location-binding-332, LC-location-binding-333, LC-location-binding-334 y LC-location-binding-335 ya fueron consumidas.
-    # Una autorización futura requiere un PR separado que active simultáneamente este job y los gates versionados.
-    if: ${{ false }}
+    needs: preflight
+    if: ${{ needs.preflight.outputs.allowed == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
-      AUTHORIZATION_ID: ${{ inputs.authorization_id }}
+      AUTHORIZATION_ID: ${{ needs.preflight.outputs.authorization_id }}
     steps:
       - name: Descargar revisión inmutable
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,7 +135,7 @@ jobs:
       - name: Instalar dependencias cerradas
         shell: bash
         run: python -m pip install -r precios-supermercados-sps/requirements.txt
-      - name: Ejecutar radiografía cerrada
+      - name: Ejecutar única radiografía autorizada
         id: radiography
         shell: bash
         run: |
