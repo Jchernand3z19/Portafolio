@@ -8,24 +8,27 @@ Proyecto para recolectar, normalizar, validar, historizar y comparar precios de 
 
 ## Estado actual
 
-Corte verificado al **2026-08-22 (America/Tegucigalpa)**:
+Corte verificado al **2026-08-23 (America/Tegucigalpa)**:
 
 - contratos `RawProduct -> NormalizedOffer -> ValidatedOffer`: conectados operacionalmente;
 - contexto raw de ubicación separado de ubicación comercial;
 - identidad de producto con GTIN fuerte, mapping pendiente explícito y revalidación determinista de `prod_pending_*`;
 - Google Sheets: ruta productiva de infraestructura `check -> apply-config -> check` demostrada y ocho tablas gestionadas verificadas por read-back;
-- última suite completa observada: **1490/1490 PASS**, `python -m pip check` PASS y `compileall` PASS;
+- última suite completa observada: **1509/1509 PASS**, `python -m pip check` PASS y `compileall` PASS;
 - GitHub Actions SPS migradas a generaciones oficiales compatibles con Node 24 y fijadas por SHA completo;
 - GATE-17: `PASS_PRODUCTIVE_EVIDENCE`;
 - Workers Observability: `BLOCKED_EXTERNAL` por `probe_discovery_trace_missing` en la única re-evaluación controlada del verifier actual;
 - `ACTIVE_AUTHORIZATION_IDS=[]`;
+- location-binding IDs consumidos: `LC-location-binding-336`, `LC-location-binding-331`, `LC-location-binding-332`;
 - `LIVE_REQUESTS_CURRENT_RUN=0`;
 - `READY_FOR_LIVE=NO`;
 - `SPS_TECHNICAL_CONTEXT=UNCONFIRMED`;
 - `production_authority=false`;
 - `catalog_accepted=false`.
 
-La Colonia continúa deliberadamente bloqueada para nuevas peticiones live. El contexto raw utilizado por el extractor es **`la_colonia_online`** y representa únicamente el catálogo público en línea observado; **no es SPS, Tegucigalpa ni una tienda**. Ese contexto permanece `location_status=unknown` hasta que una frontera de binding separada produzca una ubicación comercial demostrada.
+La Colonia continúa deliberadamente bloqueada para nuevas peticiones live. Las tres radiografías mínimas autorizadas de ubicación ya fueron consumidas: las dos primeras terminaron en `target_city_not_found` y `LC-location-binding-332` terminó en `target_city_not_unique`. PR #203 endureció offline el caso compatible de selects nativos duplicados ocultos, sin convertir ese diagnóstico en evidencia física ni relajar el fallo cerrado entre controles visibles.
+
+El contexto raw utilizado por el extractor es **`la_colonia_online`** y representa únicamente el catálogo público en línea observado; **no es SPS, Tegucigalpa ni una tienda**. Ese contexto permanece `location_status=unknown` hasta que una frontera de binding separada produzca una ubicación comercial demostrada.
 
 ## Contratos protegidos
 
@@ -100,6 +103,8 @@ extraction_enabled = false
 ```
 
 Registrar una ciudad visible no demuestra granularidad comercial. Antes de etiquetar precios como SPS debe saberse si precio/inventario cambia por ciudad, tienda u otro nivel y debe existir un binding técnico verificable.
+
+El resolver offline vigente espera de forma acotada el render del modal, excluye el botón visible `button.btn-modal-selector` como falsa opción de ciudad y, para `<option>` nativos, sólo acepta candidatos cuyo `<select>` ancestro sea visible. Un duplicado oculto no compite; dos controles visibles equivalentes continúan fallando cerrado. Ninguno de estos contratos sustituye una observación live autorizada.
 
 ## Persistencia inicial
 
