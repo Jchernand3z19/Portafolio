@@ -14,23 +14,25 @@ Corte verificado al **2026-08-23 (America/Tegucigalpa)**:
 - contexto raw de ubicación separado de ubicación comercial;
 - identidad de producto con GTIN fuerte, mapping pendiente explícito y revalidación determinista de `prod_pending_*`;
 - Google Sheets: ruta productiva de infraestructura `check -> apply-config -> check` demostrada y ocho tablas gestionadas verificadas por read-back;
-- última suite completa observada: **1511/1511 PASS** en PR #207, `python -m pip check` PASS y `compileall` PASS;
+- última suite completa observada: **1519/1519 PASS** en PR #217, `python -m pip check` PASS y `compileall` PASS;
 - GitHub Actions SPS fijadas por SHA completo y compatibles con Node 24;
 - GATE-17: `PASS_PRODUCTIVE_EVIDENCE`;
 - Workers Observability: `BLOCKED_EXTERNAL` por `probe_discovery_trace_missing` en la única re-evaluación controlada del verifier actual;
 - `ACTIVE_AUTHORIZATION_IDS=[]`;
-- location-binding IDs consumidos: `LC-location-binding-336`, `LC-location-binding-331`, `LC-location-binding-332`, `LC-location-binding-333`;
+- location-binding IDs consumidos: `LC-location-binding-336`, `LC-location-binding-331`, `LC-location-binding-332`, `LC-location-binding-333`, `LC-location-binding-334`, `LC-location-binding-335`;
 - `READY_FOR_LIVE=NO`;
 - `SPS_TECHNICAL_CONTEXT=UNCONFIRMED`;
 - `production_authority=false`;
 - `catalog_accepted=false`;
 - `extraction_enabled=false`.
 
-La Colonia continúa deliberadamente bloqueada para nuevas peticiones live. Las cuatro radiografías mínimas autorizadas de ubicación ya fueron consumidas: las dos primeras terminaron en `target_city_not_found`; `LC-location-binding-332` y `LC-location-binding-333` terminaron en `target_city_not_unique`, ambas después de cargar la home y abrir el flujo de ubicación pero antes de seleccionar ciudad.
+La Colonia continúa deliberadamente bloqueada para nuevas peticiones live. Las seis radiografías mínimas autorizadas de ubicación ya fueron consumidas. Las dos primeras terminaron en `target_city_not_found`; las cuatro siguientes (`332`, `333`, `334`, `335`) terminaron en `target_city_not_unique`, siempre después de cargar la home y abrir el flujo de ubicación pero antes de seleccionar ciudad.
 
-Después de LC-333, el usuario aportó una captura del modal que aparece al pulsar `button.btn-modal-selector`. La pantalla muestra el prompt **“¿Desde qué ciudad nos visita?”** y dos tarjetas de selección: **TEGUCIGALPA** y **SAN PEDRO SULA**, con indicadores visuales tipo radio. PR #207 incorporó esa estructura al resolver offline: acota la búsqueda al modal identificado por el prompt y prioriza `radio > option > menuitem > button`, evitando que un radio y una superficie button de una misma tarjeta creen una falsa ambigüedad. Dos candidatos del mismo rol continúan fallando cerrado.
+La ejecución más reciente, `LC-location-binding-335` (`run 32655634910`), confirmó nuevamente que el navegador llegó a la home y abrió el selector, pero se detuvo con dos acciones lógicas antes de reservar `select_city`. Por tanto, **todavía no existe evidencia live de que el automatismo haya hecho clic en San Pedro Sula**.
 
-Esa evidencia y sus pruebas offline mejoran la próxima observación, pero no confirman todavía el binding técnico real de SPS.
+Después de LC-335, PR #217 cerró permanentemente ese ID y endureció el resolver offline. Además del filtro de controles fuera del viewport, ahora colapsa únicamente coincidencias DOM estrictamente anidadas ancestro/descendiente que pueden representar un mismo gesto accesible; dos candidatos hermanos o ubicados en ramas distintas continúan siendo una ambigüedad fail-closed. También quedó disponible un diagnóstico futuro limitado a `stage`, `role`, `candidate_count` y `effective_count`, sin HTML, selectores, atributos, URLs ni valores crudos.
+
+La integración browser-loopback de PR #217 reproduce un modal con prompt anidado y una tarjeta de San Pedro Sula representada por radio contenedor + radio descendiente; el resolver selecciona correctamente SPS en ese escenario sintético. Esto mejora la próxima observación, pero **no confirma todavía** el binding técnico real de producción.
 
 El contexto raw utilizado por el extractor es **`la_colonia_online`** y representa únicamente el catálogo público en línea observado; **no es SPS, Tegucigalpa ni una tienda**. Ese contexto permanece `location_status=unknown` hasta que una frontera de binding separada produzca una ubicación comercial demostrada.
 
@@ -108,7 +110,7 @@ extraction_enabled = false
 
 Registrar una ciudad visible no demuestra granularidad comercial. Antes de etiquetar precios como SPS debe saberse si precio/inventario cambia por ciudad, tienda u otro nivel y debe existir un binding técnico verificable.
 
-El resolver offline vigente abre exactamente el selector estructural `button.btn-modal-selector`, espera de forma acotada el render del modal y reconoce el prompt `¿Desde qué ciudad nos visita?`. Cuando el prompt está presente, la resolución se acota a ese modal y prioriza el control semántico de la tarjeta de ciudad. Para `<option>` nativos sólo acepta candidatos cuyo `<select>` ancestro esté visible. El botón del header nunca se usa como opción de ciudad. Ninguno de estos contratos sustituye una observación live autorizada.
+El resolver offline vigente abre exactamente el selector estructural `button.btn-modal-selector`, espera de forma acotada el render del modal y reconoce el prompt `¿Desde qué ciudad nos visita?`. Acota la resolución al modal, prioriza `radio > option > menuitem > button`, ignora controles ocultos o completamente fuera del viewport, excluye el botón del header y colapsa sólo representaciones DOM anidadas del mismo gesto. Ninguno de estos contratos sustituye una observación live autorizada.
 
 ## Persistencia inicial
 
@@ -192,8 +194,16 @@ pytest precios-supermercados-sps/tests
 
 La suite también ejecuta la suite Node canónica declarada en `edge/cloudflare/package.json` y la auditoría fail-closed de GitHub Actions.
 
+Último resultado completo observado:
+
+```text
+PR #217
+run 32656851068
+1519 passed in 83.66s
+```
+
 ## Seguridad live
 
 Sin una autorización humana explícita y vigente están prohibidos nuevos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl hacia La Colonia.
 
-No se inventan ni reutilizan authorization IDs. `production_authority` y `catalog_accepted` sólo pueden cambiar por una frontera explícita que aporte evidencia suficiente; una prueba offline, un fingerprint de replay, un workbook físico o una radiografía de ubicación no los concede.
+No se inventan ni reutilizan authorization IDs. `LC-location-binding-336`, `331`, `332`, `333`, `334` y `335` están consumidas. `production_authority` y `catalog_accepted` sólo pueden cambiar por una frontera explícita que aporte evidencia suficiente; una prueba offline, un fingerprint de replay, un workbook físico o una radiografía de ubicación no los concede.
