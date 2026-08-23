@@ -70,23 +70,39 @@ def _visible_role_matches(page: Any, *, role: str, exact_name: re.Pattern[str]) 
     return visible
 
 
-def _native_select_labels(option: Any) -> tuple[str, ...] | None:
-    """Lista ciudades de un select nativo sin exigir visibilidad a cada option."""
+def _usable_labels(options: Any, *, require_visible: bool) -> tuple[str, ...]:
+    labels: list[str] = []
+    for index in range(options.count()):
+        option = options.nth(index)
+        if require_visible:
+            try:
+                if not option.is_visible():
+                    continue
+            except Exception:
+                continue
+        label = _label(option)
+        if label and label.casefold() not in _IGNORED_CITY_LABELS:
+            labels.append(label)
+    return tuple(sorted(set(labels), key=str.casefold))
+
+
+def _option_container_labels(option: Any) -> tuple[str, ...] | None:
+    """Conserva ciudades hermanas sólo en contenedores inequívocos de options."""
 
     try:
         parent = option.locator("xpath=ancestor::select[1]")
     except Exception:
-        return None
-    if parent.count() != 1:
-        return None
+        parent = None
+    if parent is not None and parent.count() == 1:
+        return _usable_labels(parent.locator("option"), require_visible=False)
 
-    labels: list[str] = []
-    options = parent.locator("option")
-    for index in range(options.count()):
-        label = _label(options.nth(index))
-        if label and label.casefold() not in _IGNORED_CITY_LABELS:
-            labels.append(label)
-    return tuple(sorted(set(labels), key=str.casefold))
+    try:
+        listbox = option.locator("xpath=ancestor::*[@role='listbox'][1]")
+    except Exception:
+        return None
+    if listbox.count() != 1:
+        return None
+    return _usable_labels(listbox.get_by_role("option"), require_visible=True)
 
 
 def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl:
@@ -115,7 +131,7 @@ def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl
         raise LocationControlResolutionError("target_city_not_unique")
 
     role, locator = candidates[0]
-    labels = _native_select_labels(locator) if role == "option" else None
+    labels = _option_container_labels(locator) if role == "option" else None
     if not labels:
         labels = (normalized,)
     return ResolvedCityControl(locator=locator, role=role, available_cities=labels)
