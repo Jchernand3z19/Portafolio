@@ -40,6 +40,9 @@ jobs:
       - name: Instalar dependencias
         run: python -m pip install -r precios-supermercados-sps/requirements.txt
 
+      - name: Verificar consistencia de dependencias instaladas
+        run: python -m pip check
+
       - name: Compilar src y scripts
         run: python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
 
