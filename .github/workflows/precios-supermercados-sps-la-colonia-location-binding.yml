@@ -140,13 +140,14 @@ jobs:
             const fs = require('fs');
             const sha = context.sha;
             const limit = (value) => String(value).slice(0, 140);
+            const contextLimit = (value) => String(value).slice(0, 100);
             const publish = async (contextName, state, description) => {
               await github.rest.repos.createCommitStatus({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 sha,
                 state,
-                context: contextName,
+                context: contextLimit(contextName),
                 description: limit(description),
               });
             };
@@ -220,12 +221,13 @@ jobs:
             const report = evidence.binding_report && typeof evidence.binding_report === 'object'
               ? evidence.binding_report
               : {};
-            const granularity = String(report.granularity_candidate || 'none').replace(/[^a-z0-9_-]/gi, '_');
-            const confidence = String(report.confidence || 'none').replace(/[^a-z0-9_-]/gi, '_');
+            const sanitize = (value) => String(value).replace(/[^a-z0-9_-]/gi, '_');
+            const granularity = sanitize(report.granularity_candidate || 'none');
+            const confidence = sanitize(report.confidence || 'none');
             const binding = report.technical_binding_observed === true;
             const stop = evidence.stop_reason === null || evidence.stop_reason === undefined
               ? 'none'
-              : String(evidence.stop_reason).replace(/[^a-z0-9_-]/gi, '_');
+              : sanitize(evidence.stop_reason);
             const technicalOk = stop === 'none' && ['city', 'store'].includes(granularity) && binding;
 
             await publish(
@@ -242,4 +244,20 @@ jobs:
               'precios-sps/location-binding-evidence',
               technicalOk ? 'success' : 'failure',
               `granularity=${granularity}; confidence=${confidence}; binding=${binding}; store_selector=${evidence.store_selection_observed}`
+            );
+
+            await publish(
+              `precios-sps/lb-run-${sanitize(runId)}-${sanitize(sourceConclusion)}`,
+              'success',
+              'sanitized source run identity'
+            );
+            await publish(
+              `precios-sps/lb-o-${stop.slice(0, 32)}-a${evidence.logical_actions}-br${evidence.browser_started ? 1 : 0}-n${evidence.target_navigation_started ? 1 : 0}-d${evidence.target_navigation_completed ? 1 : 0}`,
+              technicalOk ? 'success' : 'failure',
+              'sanitized capture outcome'
+            );
+            await publish(
+              `precios-sps/lb-e-g${granularity.slice(0, 16)}-c${confidence.slice(0, 12)}-b${binding ? 1 : 0}-ss${evidence.store_selection_observed ? 1 : 0}-ci${evidence.available_cities.length}-st${evidence.available_stores.length}`,
+              technicalOk ? 'success' : 'failure',
+              'sanitized binding evidence'
             );
