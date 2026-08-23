@@ -1,0 +1,226 @@
+{
+  "schema": "precios-sps-historical-branch-overrides-1",
+  "as_of_main": "94bf90671d92046515e0820894d083826d676358",
+  "overrides": {
+    "chore/precios-sps-canonical-state-ci": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Cadena temprana de estado comercial/CI. Sus defensas de atomicidad, replay, snapshots, latest evidence e identidad determinista están en commercial_state.py actual y fueron endurecidas por PRs #24/#25 y sucesores; su documentación quedó reemplazada por el estado canónico posterior."
+    },
+    "chore/precios-sps-gate17-verification": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Documento histórico de verificación de GATE-17. El estado actual registra PASS_PRODUCTIVE_EVIDENCE y la evidencia vigente está reconciliada en PROJECT_STATE/decisiones; no contiene código ni hardening perdido."
+    },
+    "diag/precios-sps-observability-request-001": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Marcador diagnóstico histórico únicamente. PR #107 fue cerrado explícitamente como supersedido y el cambio sólo incrementa requestSequence sobre el mismo artefacto controlado."
+    },
+    "diag/precios-sps-observability-request-007": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Marcador diagnóstico histórico únicamente. PR #117 sólo ejercitó triggers/heartbeat con authority=false sobre el artefacto controlado existente; no aporta capacidad productiva."
+    },
+    "docs/precios-sps-gate17-closed": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Sin código. Documentación de cierre de GATE-17 absorbida y posteriormente actualizada por la documentación canónica de main."
+    },
+    "docs/precios-sps-productive-collector-boundary": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Diseño GCP/Cloud Run/SWP/KMS previo. La arquitectura productiva fue sustituida explícitamente por Cloudflare en PR #85 y la cadena actual usa Worker/DO/OIDC/Ed25519/Workers Observability."
+    },
+    "docs/precios-sps-project-state": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Primera versión de PROJECT_STATE; el archivo mutable actual contiene estados mucho posteriores. No hay código ni decisión vigente exclusiva."
+    },
+    "docs/precios-sps-sync-commercial-pricing": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Sin código. La semántica que documentaba está implementada en commercial_state.py/commercial_pricing.py actuales y la documentación posterior la reemplazó."
+    },
+    "docs/precios-sps-sync-main-6703fbc": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Snapshot documental histórico de main/PR #20; quedó superado por múltiples sincronizaciones canónicas posteriores."
+    },
+    "feat/precios-sps-authenticated-live-preflight": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Composición offline de preflight ya integrada/evolucionada por la cadena de provenance autenticada y PR #69; main conserva el preflight fail-closed sin autoridad caller-controlled."
+    },
+    "feat/precios-sps-authenticated-provenance-plan": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "La capacidad de ligar el plan al discovery autenticado existe en main y es consumida por transporte/finalización/readiness posteriores."
+    },
+    "feat/precios-sps-authenticated-run-manifest": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "La composición run-level autenticada está en main mediante authenticated_provenance_run.py y es usada por el finalizador actual; branch intermedio superado."
+    },
+    "feat/precios-sps-authenticated-settings-preflight": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Preflight intermedio de Script Settings absorbido por la evidencia/configuración Cloudflare posterior; no es una frontera productiva independiente en la arquitectura actual."
+    },
+    "feat/precios-sps-catalog-acceptance-readiness": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "PR #82 cerrado sin merge; PR #83 integró la misma frontera de readiness sobre main endurecido, manteniendo catalog_accepted=false y production_authority=false."
+    },
+    "feat/precios-sps-catalog-edge-runtime": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "PR #76 cerrado; la implementación canónica se integró mediante PR #77 con cobertura adicional y es la base del collector/finalizer actual."
+    },
+    "feat/precios-sps-catalog-physical-finalizer": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "PR #80 cerrado. El finalizador base está en main y el hardening útil perdido de reuse de physical_evidence_id/fetch_span_id fue recuperado explícitamente en PR #158 con corte temprano probado."
+    },
+    "feat/precios-sps-cloudflare-core-offline": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Core inicial del gateway. Sus módulos/pruebas evolucionaron hacia el Worker/DO actual y permanecen cubiertos por la suite Node canónica de package.json; no hay capacidad exclusiva pendiente."
+    },
+    "feat/precios-sps-cloudflare-worker-adapter": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Cadena incremental del adapter Worker. Main contiene la versión posterior con front door, run fence, JWKS gate, receipt preflight y configuración Wrangler; la rama es un estado anterior."
+    },
+    "feat/precios-sps-derived-provenance-plan": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "La derivación cerrada del plan desde StructuralDiscoveryReport fue integrada por PR #56 y sigue siendo dependencia de los planes autenticados actuales."
+    },
+    "feat/precios-sps-edge-authorization-ledger": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Ledger/single-flight/pacing incremental absorbido por el Durable Object/runtime actual; package.json ejecuta las regresiones Node vigentes."
+    },
+    "feat/precios-sps-edge-client-independent-digest": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Hardening del cliente Python para digest independiente incorporado en edge_gateway_client.py actual y sus regresiones; rama intermedia."
+    },
+    "feat/precios-sps-edge-python-client": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Cliente edge inicial evolucionado en main con validación de body, criptografía y contratos posteriores; no contiene una ruta productiva distinta."
+    },
+    "feat/precios-sps-edge-runtime-offline": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Store/runtime offline inicial absorbido por el Durable Object y gateway runtime actuales, incluido replay criptográfico y single-flight."
+    },
+    "feat/precios-sps-edge-structural-requests": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Canonización root_total/category_tree integrada por PR #58 y usada por la ruta estructural actual."
+    },
+    "feat/precios-sps-finalize-verified-facet-discovery": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Finalizador estructural está integrado en main y forma parte de la cadena VerifiedStructuralDiscovery actual; branch intermedio sin hardening exclusivo."
+    },
+    "feat/precios-sps-live-readiness-evidence": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Manifest run-level incremental integrado por PR #52 y posteriormente ligado al plan autenticado por PR #68; main conserva checks de unicidad/orden/tiempos."
+    },
+    "feat/precios-sps-physical-provenance-contract": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Prototipo v1 ligado al diseño GCP anterior. PR #34 introdujo provenance v2 neutral al proveedor y la arquitectura Cloudflare posterior lo sustituyó."
+    },
+    "feat/precios-sps-provenance-attestation": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Attestation experimental separada de la cadena antigua. No existe en main por diseño: la arquitectura vigente reconcilia receipts Ed25519 con PlatformReconciledEdgePage/Workers Observability y cierra el manifest autenticado; no se revive el prototipo."
+    },
+    "feat/precios-sps-provenance-run-manifest": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "PR #54 quedó supersedido; PR #55/#52 y la composición autenticada posterior integraron/evolucionaron el manifest run-level en main."
+    },
+    "feat/precios-sps-provider-neutral-provenance": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Contrato v2 provider-neutral integrado por PR #34 y utilizado por la arquitectura Cloudflare vigente."
+    },
+    "feat/precios-sps-python-canonical-request": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Validador GET canónico/digest cross-runtime está presente y es reutilizado por el transporte actual; rama histórica de construcción."
+    },
+    "feat/precios-sps-real-price-reduction": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "commercial_pricing.py actual conserva exactamente la regla: ahorro real sólo current_price actual vs previous accepted current_price, nunca reported_regular_price, con reconciliación fail-closed de current/history."
+    },
+    "feat/precios-sps-structural-body-validation": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Validación estricta de bodies root/tree integrada por PR #61 y consumida por el pipeline estructural actual."
+    },
+    "feat/precios-sps-structural-discovery-coordinator": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Coordinación inicial de discovery/tracing absorbida por la composición/finalización estructural posterior de main; no constituye una segunda ruta operativa vigente."
+    },
+    "feat/precios-sps-structural-gateway-client": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Cliente Python estructural integrado por PR #72 y posteriormente endurecido; main conserva la frontera inyectable/verificada."
+    },
+    "feat/precios-sps-structural-observability-adapter": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Adapter/verifier estructural inicial absorbido por la reconciliación de Observability y finalizador estructural actuales."
+    },
+    "feat/precios-sps-structural-provenance": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Receipts estructurales Ed25519 integrados por PR #60 y cableados después al Worker protegido; main contiene la versión vigente."
+    },
+    "feat/precios-sps-structural-run-manifest": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Manifest de discovery estructural está integrado y es requisito de VerifiedStructuralDiscovery; rama histórica incremental."
+    },
+    "feat/precios-sps-structural-trace-context": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Tracing estructural integrado por PR #65 y actualmente cubierto por la suite Node canónica."
+    },
+    "feat/precios-sps-structural-trace-evidence": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Evidencia física/observación estructural fue integrada y evolucionada en main; no hay contrato exclusivo pendiente en esta rama."
+    },
+    "feat/precios-sps-structural-worker-runtime": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Ruta /v1/structural-execute y runtime fail-closed integrados por PR #71 y endurecidos posteriormente; rama histórica incremental."
+    },
+    "feat/precios-sps-verified-catalog-transport": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "PR #78 fue cerrado explícitamente como supersedido por PR #77; la implementación actual incluye la frontera canónica y evidencia de cobertura adicional."
+    },
+    "feat/precios-sps-verified-facet-runtime-transport": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Transporte estructural verificado forma parte de la cadena root/tree actual y fue endurecido por invariantes firmadas posteriores; rama incremental."
+    },
+    "feat/precios-sps-verified-structural-observation": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Composición de observación estructural verificada está presente/evolucionada en main y alimenta la evidencia estructural posterior."
+    },
+    "fix/precios-sps-audit-snapshot": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Hardening de snapshots defensivos está en commercial_state.py actual (deepcopy recursivo al guardar y al leer) y fue integrado por PR #25."
+    },
+    "fix/precios-sps-current-latest-evidence": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Main conserva opening evidence en history y refresca latest accepted evidence en current para confirmaciones same-hash; branch ya absorbido."
+    },
+    "fix/precios-sps-deterministic-ids": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "PR #24 integró la revalidación determinista de source_product_id/offer_id; commercial_state.py actual recalcula ambos antes de mutar."
+    },
+    "fix/precios-sps-edge-canonical-time": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Canonicalización temporal cross-runtime fue absorbida por el runtime/receipts edge vigentes y sus tests Node; no queda implementación paralela requerida."
+    },
+    "fix/precios-sps-edge-http-method-contract": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "PR #35 alineó el contrato provider-neutral y fijó GET para La Colonia; el validador/request builder actual conserva esa semántica."
+    },
+    "fix/precios-sps-observability-ci-route": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "PR #119 fue un experimento diagnóstico cerrado sin merge que aisló runner.temp inválido en env de job. Los workflows actuales usan RUNNER_TEMP/contexto de step y no necesitan revivir la ruta temporal."
+    },
+    "fix/precios-sps-offer-identity": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "commercial_state.py actual protege identidad lógica, source key estable y moneda, además de IDs deterministas; hardening absorbido."
+    },
+    "fix/precios-sps-pricing-history-audit": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "PR #27 integró checks de integridad histórica de pricing; commercial_pricing.py actual exige IDs deterministas, cronología, contigüidad y runs de apertura/cierre coherentes."
+    },
+    "fix/precios-sps-prt-raw-heartbeat": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Instrumentación temporal para observar pull_request_target; sólo diagnóstico histórico, sin lógica de producto ni hardening requerido por la ruta actual."
+    },
+    "fix/precios-sps-replay-evidence": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Semántica terminal de replay y fingerprint está integrada/evolucionada en commercial_state.py y luego extendida a evidencia durable por PR #151/#152."
+    },
+    "hardening/precios-sps-catalog-physical-finalizer": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "La identidad exacta página→trace ya está en el finalizador actual (`page.page is observation.page`) y sus invariantes se complementaron con el corte temprano de reuse recuperado en PR #158."
+    }
+  }
+}
