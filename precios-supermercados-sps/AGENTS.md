@@ -7,7 +7,7 @@
 - Árbol principal: `precios-supermercados-sps/`.
 - Workflows relacionados: `.github/workflows/`.
 
-Antes de modificar, inspecciona `main`, PRs abiertos, CI y código. [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) es la fuente canónica del estado operativo mutable y [`docs/arquitectura.md`](docs/arquitectura.md) describe la arquitectura estable. Runs, PRs, ramas y artifacts son evidencia/historia; no conceden autoridad.
+Antes de modificar, inspecciona `main`, PRs abiertos, CI y código. [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) es la fuente canónica del estado operativo mutable y [`docs/arquitectura.md`](docs/arquitectura.md) describe la arquitectura estable. Runs, PRs, ramas y artifacts son evidencia/historia; no conceden autoridad comercial.
 
 Si `PROJECT_STATE.md` contradice evidencia más nueva en `main`, corrige primero el documento mediante PR; no reviertas código nuevo por seguir un corte viejo.
 
@@ -41,30 +41,37 @@ offer_id          = supermercado + ubicación comercial + producto fuente
 
 `dim_products` es canónica/normalizada y no debe adquirir columnas específicas de supermercado, ubicación, precio o run. `map_source_products` conserva la relación fuente -> producto y la cola de revisión.
 
-## Autoridad y tráfico live
+## Autonomía y tráfico público read-only
 
-La política por defecto es **deny**.
+Desde la instrucción humana explícita del **2026-08-23T21:02:02Z**, el proyecto tiene autorización permanente para realizar, sin pedir aprobación por ejecución, observaciones **read-only** sobre páginas y APIs públicas de supermercados cuando sean necesarias para desarrollar, diagnosticar, validar o ejecutar el producto.
 
-```text
-ACTIVE_AUTHORIZATION_IDS = []
-LIVE_REQUESTS_CURRENT_RUN = 0
-READY_FOR_LIVE = NO
-SPS_TECHNICAL_CONTEXT = UNCONFIRMED
-production_authority = false
-catalog_accepted = false
-```
+Esta autorización permanente incluye, con límites técnicos razonables:
 
-Siempre verifica `PROJECT_STATE.md` y el código antes de asumir que esos valores cambiaron.
+- HTTP/HTTPS público;
+- Playwright/browser automation sobre superficies públicas;
+- radiografía/reconocimiento de páginas;
+- diagnóstico de ubicación y contexto técnico;
+- smoke tests;
+- descubrimiento de facets, paginación y fuentes de datos;
+- extracción/crawl público necesario para validar y operar el catálogo;
+- reintentos posteriores justificados por cambios reales de código o de la fuente.
 
-Sin autorización humana explícita y vigente están prohibidos nuevos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl hacia La Colonia.
+No se requiere un Authorization ID humano por cada run. Los IDs históricos de un solo uso permanecen registrados únicamente como evidencia histórica y **no deben reutilizarse ni convertirse en requisito operativo nuevo**.
 
-- ningún agente inventa un authorization ID;
-- una autorización consumida no se reutiliza;
-- una autorización para radiografía no autoriza otras operaciones;
-- no ejecutes accidentalmente `--live`;
-- Reviewer, Tests y Documentación permanecen offline salvo autorización distinta explícita.
+La autorización permanente **no** cubre acciones con efectos externos distintos de lectura. Sigue siendo necesaria intervención humana cuando haga falta cualquiera de estas cosas:
 
-Cuando una prueba live esté expresamente autorizada, conserva `concurrency=1`, pacing cerrado, cero retries ocultos salvo decisión revisada, presupuesto/deadline acotados y stop ante 403 persistente, 429, CAPTCHA, login obligatorio, datos personales obligatorios o riesgo de carga excesiva.
+- credenciales, secretos, cuentas o permisos que el agente no posee;
+- billing, compras o gasto nuevo;
+- login obligatorio con una cuenta del usuario;
+- modificar datos o configuración en sistemas externos ajenos a GitHub del proyecto;
+- checkout, pedidos, reservas, formularios que creen estado del lado servidor o cualquier transacción;
+- despliegues productivos nuevos que creen coste o cambien infraestructura externa fuera de la ruta ya autorizada;
+- decisiones manuales reales de mapping de producto cuando no puedan resolverse determinísticamente;
+- trabajo puramente manual dentro de Power BI.
+
+Para tráfico público read-only conserva `concurrency=1` cuando aplique, pacing razonable, presupuesto/deadline acotados y stop ante 403 persistente, 429, CAPTCHA, login obligatorio, datos personales obligatorios o riesgo de carga excesiva. No evadas controles anti-bot ni aumentes carga para forzar un resultado.
+
+Los runs read-only no conceden por sí solos `production_authority`, `catalog_accepted` ni autoridad para persistir estado comercial. Esas fronteras siguen gobernadas por evidencia y contratos del producto.
 
 ## Ubicación
 
@@ -81,7 +88,7 @@ Una ubicación comercial requiere:
 
 Para `la_colonia_sps`, mientras `granularity=unknown` o `technical_binding_confirmed=false`, la persistencia comercial debe fallar cerrada.
 
-La radiografía preparada sólo puede proponer una transición. Si evidencia granularidad `store`, no colapses múltiples tiendas bajo una sola ciudad.
+La radiografía puede proponer una transición. Si evidencia granularidad `store`, no colapses múltiples tiendas bajo una sola ciudad.
 
 ## Cloudflare
 
@@ -94,7 +101,7 @@ La ruta edge está en `edge/cloudflare/`. No flexibilices por conveniencia:
 - presupuesto/pacing/single-flight/replay/fencing;
 - requisitos de tracing/Observability.
 
-La sonda controlada ya produjo evidencia física contra origen propio. No autoriza La Colonia ni autoridad de catálogo. No la repitas sin una hipótesis nueva justificada.
+La sonda controlada ya produjo evidencia física contra origen propio. No la repitas sin una hipótesis nueva justificada.
 
 El verifier actual de Observability usa discovery de traces y detalle `view: events`; el estado productivo de esa reconciliación se determina por una ejecución real, no por diagnósticos históricos ni por rebajar el contrato.
 
@@ -145,7 +152,8 @@ Antes de modificar workflows, lee `.github/workflows/AGENTS.md`.
 - `persist-credentials: false`;
 - todo workflow SPS nuevo entra en `test_workflow_security_audit.py`;
 - no debilites el auditor para hacer pasar una configuración;
-- entrypoints capaces de tocar La Colonia permanecen bloqueados sin autorización explícita.
+- entrypoints públicos read-only pueden ejecutarse bajo la autorización permanente si están acotados y auditados;
+- entrypoints con secretos, mutación externa, costes o autoridad comercial siguen fail-closed hasta cerrar su frontera correspondiente.
 
 ## Seguridad de datos
 
