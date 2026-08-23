@@ -13,11 +13,22 @@ from dataclasses import dataclass
 from typing import Any
 
 
-CITY_CONTROL_ROLES: tuple[str, ...] = ("option", "radio", "menuitem", "button")
+# La pantalla observada por el usuario presenta tarjetas de ciudad con indicador
+# tipo radio. Cuando un mismo gesto visual expone simultáneamente un radio y una
+# superficie button con el mismo nombre accesible, el radio es el control semántico
+# específico y la superficie genérica no debe convertir esa única opción visual en
+# una ambigüedad artificial. La unicidad sigue siendo obligatoria dentro del rol
+# elegido: dos radios visibles para la misma ciudad continúan fallando cerrado.
+CITY_CONTROL_ROLES: tuple[str, ...] = ("radio", "option", "menuitem", "button")
 CITY_CONTROL_READY_TIMEOUT_MS = 3_000
 CITY_CONTROL_READY_POLL_MS = 100
+CITY_MODAL_SCOPE_MAX_ANCESTORS = 8
 LOCATION_SELECTOR_CLASS = "btn-modal-selector"
 LOCATION_SELECTOR_CSS = f"button.{LOCATION_SELECTOR_CLASS}"
+CITY_MODAL_PROMPT_PATTERN = re.compile(
+    r"^\s*¿?\s*desde\s+qu[eé]\s+ciudad\s+nos\s+visita\??\s*$",
+    re.I,
+)
 _LOCATION_SELECTOR_ACCESSIBLE_PATTERN = re.compile(
     r"selecciona\s+tu\s+tienda|selecciona\s+una\s+tienda|ubicaci[oó]n",
     re.I,
@@ -117,7 +128,7 @@ def _visible_location(label: str | None) -> str | None:
 def resolve_location_selector(page: Any) -> ResolvedLocationSelector:
     """Resuelve primero el botón estructural observado y luego el fallback legado.
 
-    La evidencia HTML actual de La Colonia expone la ubicación seleccionada como
+    La evidencia HTML aportada por el usuario expone la ubicación seleccionada como
     ``<button class="btn-modal-selector">San pedro sula</button>``. Ese selector
     estructural se usa sólo si existe exactamente un botón visible. Si no existe,
     se conserva el fallback accesible histórico. Cualquier ambigüedad falla cerrado.
@@ -179,8 +190,8 @@ def _visible_native_select(parent_select: Any) -> bool:
         return False
 
 
-def _visible_role_matches(page: Any, *, role: str, exact_name: re.Pattern[str]) -> list[Any]:
-    matches = page.get_by_role(role, name=exact_name)
+def _visible_role_matches(scope: Any, *, role: str, exact_name: re.Pattern[str]) -> list[Any]:
+    matches = scope.get_by_role(role, name=exact_name)
     visible: list[Any] = []
     for index in range(matches.count()):
         candidate = matches.nth(index)
@@ -198,6 +209,50 @@ def _visible_role_matches(page: Any, *, role: str, exact_name: re.Pattern[str]) 
         except Exception:
             continue
     return visible
+
+
+def _city_modal_scope(page: Any, exact_name: re.Pattern[str]) -> Any:
+    """Acota la búsqueda al modal visual cuando el prompt observado está presente.
+
+    La captura aportada por el usuario muestra el prompt exacto
+    ``¿Desde qué ciudad nos visita?``. Si ese prompt está visible, se toma el menor
+    ancestro que además contiene una opción exacta para la ciudad objetivo. Así un
+    control homónimo fuera del modal no compite con la decisión que el usuario ve.
+    Si el prompt no existe se conserva el resolver histórico para selects/listboxes.
+    """
+
+    try:
+        prompts = _visible_items(page.get_by_text(CITY_MODAL_PROMPT_PATTERN))
+    except Exception:
+        return page
+    if not prompts:
+        return page
+    if len(prompts) != 1:
+        raise LocationControlResolutionError("target_city_not_unique")
+
+    scope = prompts[0]
+    for _ in range(CITY_MODAL_SCOPE_MAX_ANCESTORS):
+        try:
+            parent = scope.locator("xpath=..")
+        except Exception:
+            break
+        try:
+            if parent.count() != 1:
+                break
+        except Exception:
+            break
+        for role in CITY_CONTROL_ROLES:
+            try:
+                if _visible_role_matches(parent, role=role, exact_name=exact_name):
+                    return parent
+            except Exception:
+                continue
+        scope = parent
+
+    # El modal ya está identificado físicamente pero todavía no presenta una opción
+    # interactiva; el bucle exterior puede volver a sondear durante la ventana
+    # acotada de readiness.
+    raise LocationControlResolutionError("target_city_not_found")
 
 
 def _usable_labels(options: Any, *, require_visible: bool) -> tuple[str, ...]:
@@ -235,25 +290,50 @@ def _option_container_labels(option: Any) -> tuple[str, ...] | None:
     return _usable_labels(listbox.get_by_role("option"), require_visible=True)
 
 
+def _radio_scope_labels(scope: Any) -> tuple[str, ...] | None:
+    """Conserva las ciudades hermanas cuando el modal usa radios semánticos."""
+
+    try:
+        radios = scope.get_by_role("radio")
+    except Exception:
+        return None
+    labels: list[str] = []
+    for index in range(radios.count()):
+        radio = radios.nth(index)
+        try:
+            if not radio.is_visible():
+                continue
+        except Exception:
+            continue
+        label = _label(radio)
+        if label and label.casefold() not in _IGNORED_CITY_LABELS:
+            labels.append(label)
+    return tuple(sorted(set(labels), key=str.casefold)) or None
+
+
 def _resolve_exact_city_control_once(page: Any, normalized: str) -> ResolvedCityControl:
     exact = re.compile(rf"^{re.escape(normalized)}$", re.I)
-    candidates: list[tuple[str, Any]] = []
+    scope = _city_modal_scope(page, exact)
+
     for role in CITY_CONTROL_ROLES:
-        candidates.extend(
-            (role, candidate)
-            for candidate in _visible_role_matches(page, role=role, exact_name=exact)
-        )
+        candidates = _visible_role_matches(scope, role=role, exact_name=exact)
+        if not candidates:
+            continue
+        if len(candidates) != 1:
+            raise LocationControlResolutionError("target_city_not_unique")
 
-    if not candidates:
-        raise LocationControlResolutionError("target_city_not_found")
-    if len(candidates) != 1:
-        raise LocationControlResolutionError("target_city_not_unique")
+        locator = candidates[0]
+        if role == "option":
+            labels = _option_container_labels(locator)
+        elif role == "radio":
+            labels = _radio_scope_labels(scope)
+        else:
+            labels = None
+        if not labels:
+            labels = (normalized,)
+        return ResolvedCityControl(locator=locator, role=role, available_cities=labels)
 
-    role, locator = candidates[0]
-    labels = _option_container_labels(locator) if role == "option" else None
-    if not labels:
-        labels = (normalized,)
-    return ResolvedCityControl(locator=locator, role=role, available_cities=labels)
+    raise LocationControlResolutionError("target_city_not_found")
 
 
 def _wait_for_next_city_probe(page: Any) -> None:
@@ -268,16 +348,19 @@ def _wait_for_next_city_probe(page: Any) -> None:
 
 
 def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl:
-    """Resuelve un control exacto, esperando de forma acotada al render del modal.
+    """Resuelve la opción visual exacta de ciudad tras abrir el modal.
 
-    El orden de roles no es un fallback permisivo: todos los roles permitidos se
-    inspeccionan y el resultado sólo se acepta si existe exactamente un elemento
-    candidato en el conjunto completo. El botón de encabezado
-    ``btn-modal-selector`` se excluye explícitamente porque sólo refleja la ciudad
-    actual y no representa una opción de cambio. En selects nativos, sólo compiten
-    options cuyo ``select`` ancestro está visible; duplicados ocultos de layouts
-    alternativos se ignoran. La ausencia temporal puede reintentarse durante tres
-    segundos; una ambigüedad entre controles visibles falla de inmediato.
+    Si está visible el prompt ``¿Desde qué ciudad nos visita?`` la búsqueda se acota
+    al menor ancestro que contiene la opción objetivo. Dentro de ese scope se usan
+    roles por especificidad semántica: ``radio`` > ``option`` > ``menuitem`` >
+    ``button``. Un radio único puede coexistir con una superficie button decorativa
+    del mismo gesto visual sin generar un falso ``target_city_not_unique``; dos
+    candidatos visibles dentro del mismo rol siguen fallando cerrado.
+
+    El botón de encabezado ``btn-modal-selector`` se excluye siempre. En selects
+    nativos sólo compiten options cuyo ``select`` ancestro está visible. La ausencia
+    temporal puede reintentarse durante tres segundos; una ambigüedad real falla de
+    inmediato.
     """
 
     normalized = _clean_label(city_name)
