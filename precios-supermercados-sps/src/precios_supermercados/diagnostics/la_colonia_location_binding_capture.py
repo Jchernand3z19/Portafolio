@@ -51,7 +51,9 @@ TARGET_URL = "https://www.lacolonia.com/"
 TARGET_CITY = "San Pedro Sula"
 LIVE_EXECUTION_ENABLED = False
 ACTIVE_AUTHORIZATION_IDS: frozenset[str] = frozenset()
-CONSUMED_AUTHORIZATION_IDS: frozenset[str] = frozenset({"LC-location-binding-336"})
+CONSUMED_AUTHORIZATION_IDS: frozenset[str] = frozenset(
+    {"LC-location-binding-336", "LC-location-binding-331"}
+)
 AUTHORIZATION_PATTERN = re.compile(r"^LC-location-binding-\d{3}$")
 
 _CONTEXT_ALIASES = {
