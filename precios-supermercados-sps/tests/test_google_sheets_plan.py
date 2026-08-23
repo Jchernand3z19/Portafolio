@@ -78,7 +78,7 @@ def test_headers_are_written_frozen_and_bold() -> None:
         if item["properties"]["title"] == "fact_offers_current"
     )
     assert add["properties"]["gridProperties"]["frozenRowCount"] == 1
-    assert add["properties"]["gridProperties"]["rowCount"] == 1
+    assert add["properties"]["gridProperties"]["rowCount"] == 2
     assert add["properties"]["gridProperties"]["columnCount"] == len(
         FACT_OFFERS_CURRENT.columns
     )
@@ -99,6 +99,14 @@ def test_headers_are_written_frozen_and_bold() -> None:
     assert bold["cell"]["userEnteredFormat"]["textFormat"]["bold"] is True
 
 
+def test_empty_managed_tabs_keep_one_unfrozen_visible_row() -> None:
+    plan = build_atomic_workbook_plan(configured_store(), SpreadsheetMetadata({}))
+
+    for add in requests_of(plan, "addSheet"):
+        grid = add["properties"]["gridProperties"]
+        assert grid["rowCount"] > grid["frozenRowCount"]
+
+
 def test_existing_managed_tabs_are_reused_and_extra_tabs_are_preserved() -> None:
     metadata = SpreadsheetMetadata(
         {
@@ -116,7 +124,7 @@ def test_existing_managed_tabs_are_reused_and_extra_tabs_are_preserved() -> None
         if item["properties"]["sheetId"] == 7
     )
     grid = properties["properties"]["gridProperties"]
-    assert grid["rowCount"] == 1
+    assert grid["rowCount"] == 2
     assert grid["columnCount"] == len(FACT_OFFERS_CURRENT.columns)
     assert grid["frozenRowCount"] == 1
 
