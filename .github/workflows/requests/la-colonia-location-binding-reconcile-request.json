@@ -1,9 +1,0 @@
-{
-  "schemaVersion": "precios-sps-la-colonia-full-location-radiography-request/v1",
-  "authorizedAt": "2026-08-23T18:54:18Z",
-  "authorizationSource": "explicit-user-instruction",
-  "targetUrl": "https://www.lacolonia.com/",
-  "targetCity": "San Pedro Sula",
-  "singleUse": true,
-  "authority": false
-}
