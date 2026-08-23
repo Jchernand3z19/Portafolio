@@ -17,16 +17,25 @@ def _html() -> str:
 <html><body>
   <div class="vtex-flex-layout-0-x-flexColChild vtex-flex-layout-0-x-flexColChild--notificationBarRight pb0" style="height: 100%;">
     <div class="cont-btn-selector">
-      <button class="btn-modal-selector" onclick="document.getElementById('panel').hidden=false">San pedro sula</button>
+      <button class="btn-modal-selector" onclick="openLocation()">San pedro sula</button>
     </div>
   </div>
   <div id="panel" hidden>
-    <select aria-label="Ciudad" onchange="if(this.value==='San Pedro Sula'){localStorage.setItem('regionId','opaque-region-sps')}">
-      <option>Selecciona tu ciudad</option>
-      <option aria-label="San Pedro Sula">San Pedro Sula</option>
-      <option aria-label="Tegucigalpa">Tegucigalpa</option>
-    </select>
+    <div id="city-slot"></div>
   </div>
+  <script>
+    function openLocation() {
+      document.getElementById('panel').hidden = false;
+      setTimeout(() => {
+        document.getElementById('city-slot').innerHTML = `
+          <select aria-label="Ciudad" onchange="if(this.value==='San Pedro Sula'){localStorage.setItem('regionId','opaque-region-sps')}">
+            <option>Selecciona tu ciudad</option>
+            <option aria-label="San Pedro Sula">San Pedro Sula</option>
+            <option aria-label="Tegucigalpa">Tegucigalpa</option>
+          </select>`;
+      }, 700);
+    }
+  </script>
 </body></html>'''
 
 
@@ -57,7 +66,7 @@ def local_page_url():
 
 
 @pytest.mark.skipif(os.environ.get("CI") != "true", reason="browser loopback se valida en GitHub runner")
-def test_capture_uses_user_observed_btn_modal_selector(local_page_url) -> None:
+def test_capture_waits_for_delayed_city_controls_after_user_observed_button(local_page_url) -> None:
     result = capture.run_capture(
         authorization_id=AUTH,
         active_ids={AUTH},
