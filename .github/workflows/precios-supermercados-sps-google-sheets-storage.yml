@@ -41,6 +41,7 @@ jobs:
           STORAGE_REQUEST_PATH: precios-supermercados-sps/.automation/google-sheets-storage-request.json
         with:
           script: |
+            // La lista del commit es autoritativa; no dependemos de GITHUB_EVENT_PATH.
             const expected = process.env.STORAGE_REQUEST_PATH;
             const { data: commit } = await github.rest.repos.getCommit({
               owner: context.repo.owner,
@@ -112,39 +113,9 @@ jobs:
               handle.write(f"request_sequence={sequence}\n")
           PY
 
-  publish-trigger-status:
-    needs: preflight
-    if: ${{ needs.preflight.outputs.allowed == 'true' }}
-    permissions:
-      statuses: write
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Publicar trigger aceptado
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        env:
-          STORAGE_MODE: ${{ needs.preflight.outputs.mode }}
-        with:
-          script: |
-            const mode = process.env.STORAGE_MODE;
-            if (!['check', 'apply-config'].includes(mode)) {
-              core.setFailed('storage status mode invalid');
-              return;
-            }
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.sha,
-              state: 'pending',
-              context: 'precios-sps/google-sheets-storage',
-              description: `storage ${mode}: trigger accepted`,
-            });
-
   storage:
-    needs:
-      - preflight
-      - publish-trigger-status
-    if: ${{ needs.preflight.outputs.allowed == 'true' && needs.publish-trigger-status.result == 'success' && (needs.preflight.outputs.mode == 'check' || needs.preflight.outputs.mode == 'apply-config') }}
+    needs: preflight
+    if: ${{ needs.preflight.outputs.allowed == 'true' && (needs.preflight.outputs.mode == 'check' || needs.preflight.outputs.mode == 'apply-config') }}
     runs-on: ubuntu-latest
     environment: precios-sps-storage
 
@@ -178,9 +149,8 @@ jobs:
   publish-status:
     needs:
       - preflight
-      - publish-trigger-status
       - storage
-    if: ${{ always() && github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' }}
+    if: ${{ always() && needs.preflight.outputs.allowed == 'true' }}
     permissions:
       statuses: write
     runs-on: ubuntu-latest
@@ -189,25 +159,22 @@ jobs:
       - name: Publicar resultado sanitizado
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
-          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
           STORAGE_MODE: ${{ needs.preflight.outputs.mode }}
           STORAGE_RESULT: ${{ needs.storage.result }}
         with:
           script: |
-            const preflight = process.env.PREFLIGHT_RESULT;
             const mode = process.env.STORAGE_MODE;
             const jobResult = process.env.STORAGE_RESULT;
-            let state = 'failure';
-            let description = 'storage trigger rejected';
-            if (preflight === 'success' && ['check', 'apply-config'].includes(mode)) {
-              state = jobResult === 'success' ? 'success' : 'failure';
-              description = `storage ${mode}: ${state}`;
+            if (!['check', 'apply-config'].includes(mode)) {
+              core.setFailed('storage status mode invalid');
+              return;
             }
+            const state = jobResult === 'success' ? 'success' : 'failure';
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state,
               context: 'precios-sps/google-sheets-storage',
-              description,
+              description: `storage ${mode}: ${state}`,
             });
