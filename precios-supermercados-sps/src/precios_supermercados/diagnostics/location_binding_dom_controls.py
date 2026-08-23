@@ -14,6 +14,8 @@ from typing import Any
 
 
 CITY_CONTROL_ROLES: tuple[str, ...] = ("option", "radio", "menuitem", "button")
+CITY_CONTROL_READY_TIMEOUT_MS = 3_000
+CITY_CONTROL_READY_POLL_MS = 100
 LOCATION_SELECTOR_CLASS = "btn-modal-selector"
 LOCATION_SELECTOR_CSS = f"button.{LOCATION_SELECTOR_CLASS}"
 _LOCATION_SELECTOR_ACCESSIBLE_PATTERN = re.compile(
@@ -216,21 +218,8 @@ def _option_container_labels(option: Any) -> tuple[str, ...] | None:
     return _usable_labels(listbox.get_by_role("option"), require_visible=True)
 
 
-def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl:
-    """Resuelve sólo un control interactivo con nombre exacto.
-
-    El orden de roles no es un fallback permisivo: todos los roles permitidos se
-    inspeccionan y el resultado sólo se acepta si existe exactamente un elemento
-    candidato en el conjunto completo. El botón de encabezado
-    ``btn-modal-selector`` se excluye explícitamente porque sólo refleja la ciudad
-    actual y no representa una opción de cambio. Así un DOM ambiguo falla cerrado.
-    """
-
-    normalized = _clean_label(city_name)
-    if normalized is None:
-        raise LocationControlResolutionError("target_city_name_invalid")
+def _resolve_exact_city_control_once(page: Any, normalized: str) -> ResolvedCityControl:
     exact = re.compile(rf"^{re.escape(normalized)}$", re.I)
-
     candidates: list[tuple[str, Any]] = []
     for role in CITY_CONTROL_ROLES:
         candidates.extend(
@@ -248,6 +237,44 @@ def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl
     if not labels:
         labels = (normalized,)
     return ResolvedCityControl(locator=locator, role=role, available_cities=labels)
+
+
+def _wait_for_next_city_probe(page: Any) -> None:
+    """Espera un intervalo acotado sin convertir errores de DOM en autoridad."""
+
+    try:
+        page.wait_for_timeout(CITY_CONTROL_READY_POLL_MS)
+    except Exception:
+        # Dobles de prueba sin reloj Playwright siguen pudiendo ejercitar el
+        # contrato de resolución; en browser real la espera sí consume el intervalo.
+        return
+
+
+def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl:
+    """Resuelve un control exacto, esperando de forma acotada al render del modal.
+
+    El orden de roles no es un fallback permisivo: todos los roles permitidos se
+    inspeccionan y el resultado sólo se acepta si existe exactamente un elemento
+    candidato en el conjunto completo. El botón de encabezado
+    ``btn-modal-selector`` se excluye explícitamente porque sólo refleja la ciudad
+    actual y no representa una opción de cambio. La ausencia temporal puede
+    reintentarse durante tres segundos; una ambigüedad falla de inmediato.
+    """
+
+    normalized = _clean_label(city_name)
+    if normalized is None:
+        raise LocationControlResolutionError("target_city_name_invalid")
+
+    wait_count = CITY_CONTROL_READY_TIMEOUT_MS // CITY_CONTROL_READY_POLL_MS
+    for attempt in range(wait_count + 1):
+        try:
+            return _resolve_exact_city_control_once(page, normalized)
+        except LocationControlResolutionError as exc:
+            if str(exc) != "target_city_not_found" or attempt == wait_count:
+                raise
+            _wait_for_next_city_probe(page)
+
+    raise AssertionError("unreachable")
 
 
 def activate_city_control(control: ResolvedCityControl, city_name: str) -> None:
