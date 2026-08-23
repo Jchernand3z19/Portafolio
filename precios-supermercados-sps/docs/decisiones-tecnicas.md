@@ -198,3 +198,15 @@ La frontera sigue abierta hasta observar una ejecución exitosa del verifier act
 La auditoría de ramas `precios-sps` usa ancestry, igualdad de tree y patch-equivalence antes de recurrir a inspección manual. Las decisiones `CLOSED_SUPERSEDED` quedan versionadas y ligadas al SHA exacto de `main` auditado.
 
 El inventario falla cerrado si cambia el snapshot sin renovar la inspección, aparece una rama no resuelta o queda un `UNIQUE_UNMERGED`. El cierre de una rama histórica nunca sustituye la recuperación focalizada de hardening útil; ese patrón se aplicó al hardening de evidencia física recuperado antes del cierre del inventario.
+
+## DT-040 — Google Sheets es el backend temporal seleccionado
+
+DT-020 se conserva como decisión histórica de una etapa en la que el backend todavía no estaba elegido. Queda **supersedida** por esta decisión: Google Sheets es el backend temporal estructurado de la primera fase y BigQuery queda como evolución posterior.
+
+La selección no acopla la lógica comercial al proveedor. `TabularBatch`, current/history, rehidratación, identidad, pricing y autoridad permanecen backend-neutral. El acceso productivo a Sheets usa un Environment dedicado, service account, workflow de un solo escritor, preflight sin secretos, operación controlada y read-back. La existencia del workbook nunca concede `production_authority` ni `catalog_accepted`.
+
+## DT-041 — Un `prod_pending_*` también es identidad determinista protegida
+
+El prefijo reservado `prod_pending_` no basta para clasificar un producto como pendiente legítimo. Antes de materializar `dim_products` o `map_source_products`, la frontera tabular recalcula `generate_pending_product_id(source_product_id)` y exige coincidencia exacta.
+
+Un ID pendiente forjado o inconsistente falla cerrado. Esto preserva la cola de revisión sin permitir que un caller fabrique una identidad provisional arbitraria. Un mapping explícito/revisado sigue pudiendo reemplazar posteriormente el `product_id` provisional sin alterar `source_product_id` ni `offer_id`.
