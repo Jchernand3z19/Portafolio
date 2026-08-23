@@ -14,10 +14,16 @@ from typing import Any, Mapping
 
 
 # La pantalla observada por el usuario presenta tarjetas de ciudad con indicador
-# tipo radio. Cuando un mismo gesto visual expone simultáneamente un radio y una
-# superficie button con el mismo nombre accesible, el radio es el control semántico
-# específico y la superficie genérica no debe convertir esa única opción visual en
-# una ambigüedad artificial. La unicidad sigue siendo obligatoria dentro del rol
+# tipo radio. La evidencia HTML más específica confirma que las opciones reales son
+# botones dentro de ``.cont-btn-ciudad`` y que su estado se expresa mediante
+# ``.btn-ciudad-selected`` / ``.btn-ciudad-noselected``. Esa estructura se resuelve
+# antes que cualquier heurística ARIA. Los roles accesibles permanecen como fallback
+# para no acoplar todo el contrato a una sola implementación visual.
+#
+# Cuando un mismo gesto visual expone simultáneamente un radio y una superficie
+# button con el mismo nombre accesible, el radio es el control semántico específico
+# y la superficie genérica no debe convertir esa única opción visual en una
+# ambigüedad artificial. La unicidad sigue siendo obligatoria dentro del rol
 # elegido: dos radios realmente presentados para la misma ciudad continúan fallando
 # cerrado. Un duplicado DOM fuera del viewport no representa una segunda opción que
 # el usuario tenga delante. Tampoco se considera una segunda opción cuando Playwright
@@ -29,6 +35,14 @@ CITY_CONTROL_READY_POLL_MS = 100
 CITY_MODAL_SCOPE_MAX_ANCESTORS = 8
 LOCATION_SELECTOR_CLASS = "btn-modal-selector"
 LOCATION_SELECTOR_CSS = f"button.{LOCATION_SELECTOR_CLASS}"
+CITY_BUTTON_CONTAINER_CLASS = "cont-btn-ciudad"
+CITY_BUTTON_SELECTED_CLASS = "btn-ciudad-selected"
+CITY_BUTTON_UNSELECTED_CLASS = "btn-ciudad-noselected"
+CITY_BUTTON_CONTAINER_CSS = f".{CITY_BUTTON_CONTAINER_CLASS}"
+CITY_BUTTON_CSS = (
+    f"button.{CITY_BUTTON_SELECTED_CLASS}, "
+    f"button.{CITY_BUTTON_UNSELECTED_CLASS}"
+)
 CITY_MODAL_PROMPT_PATTERN = re.compile(
     r"^\s*¿?\s*desde\s+qu[eé]\s+ciudad\s+nos\s+visita\??\s*$",
     re.I,
@@ -237,6 +251,68 @@ def _presented_items(collection: Any) -> list[Any]:
     return presented
 
 
+def _structural_city_button(page: Any, normalized: str) -> ResolvedCityControl | None:
+    """Resuelve la estructura exacta confirmada para el selector de La Colonia.
+
+    Evidencia aportada por el usuario::
+
+        <div class="cont-btn-ciudad">
+          <button class="btn-ciudad-noselected">Tegucigalpa</button>
+          <button class="btn-ciudad-selected">San pedro sula</button>
+        </div>
+
+    Sólo se consideran contenedores y botones realmente presentados en el viewport.
+    La clase selected/no-selected sirve para identificar superficies válidas, no
+    para asumir cuál ciudad debe elegirse: el nombre visible exacto sigue siendo la
+    identidad. Más de una superficie presentada para la ciudad objetivo falla
+    cerrado.
+    """
+
+    try:
+        containers = _collapse_nested_presented_items(
+            _presented_items(page.locator(CITY_BUTTON_CONTAINER_CSS))
+        )
+    except Exception:
+        return None
+    if not containers:
+        return None
+
+    target_matches: list[tuple[Any, tuple[str, ...]]] = []
+    for container in containers:
+        try:
+            buttons = _presented_items(container.locator(CITY_BUTTON_CSS))
+        except Exception:
+            continue
+        labels: list[str] = []
+        exact_matches: list[Any] = []
+        for button in buttons:
+            label = _label(button)
+            if not label or label.casefold() in _IGNORED_CITY_LABELS:
+                continue
+            labels.append(label)
+            if label.casefold() == normalized.casefold():
+                exact_matches.append(button)
+
+        available = tuple(sorted(set(labels), key=str.casefold))
+        for button in exact_matches:
+            target_matches.append((button, available or (normalized,)))
+
+    if len(target_matches) > 1:
+        raise LocationControlResolutionError(
+            "target_city_not_unique",
+            diagnostic={
+                "stage": "role",
+                "role": "button",
+                "candidate_count": len(target_matches),
+                "effective_count": len(target_matches),
+            },
+        )
+    if len(target_matches) == 1:
+        locator, labels = target_matches[0]
+        return ResolvedCityControl(locator=locator, role="button", available_cities=labels)
+    return None
+
+
 def _visible_location(label: str | None) -> str | None:
     normalized = _clean_label(label)
     if normalized is None:
@@ -439,6 +515,10 @@ def _radio_scope_labels(scope: Any) -> tuple[str, ...] | None:
 
 
 def _resolve_exact_city_control_once(page: Any, normalized: str) -> ResolvedCityControl:
+    structural = _structural_city_button(page, normalized)
+    if structural is not None:
+        return structural
+
     exact = re.compile(rf"^{re.escape(normalized)}$", re.I)
     scope = _city_modal_scope(page, exact)
 
@@ -488,13 +568,21 @@ def _wait_for_next_city_probe(page: Any) -> None:
 def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl:
     """Resuelve la opción visual exacta de ciudad tras abrir el modal.
 
-    Si está presentado el prompt ``¿Desde qué ciudad nos visita?`` la búsqueda se
-    acota al menor ancestro que contiene la opción objetivo. Dentro de ese scope se
-    usan roles por especificidad semántica: ``radio`` > ``option`` > ``menuitem`` >
-    ``button``. Un radio único puede coexistir con una superficie button decorativa
-    del mismo gesto visual sin generar un falso ``target_city_not_unique``; dos
-    candidatos del mismo rol realmente presentados siguen fallando cerrado salvo
-    que sean estrictamente ancestro/descendiente del mismo control accesible.
+    Primero se usa el contrato estructural confirmado para La Colonia:
+    ``.cont-btn-ciudad`` con botones ``.btn-ciudad-selected`` y
+    ``.btn-ciudad-noselected``. El nombre visible exacto determina la ciudad, por lo
+    que funciona tanto si San Pedro Sula ya aparece selected como si aparece
+    no-selected. Esto evita depender de que el sitio publique correctamente el rol
+    accesible del botón.
+
+    Si esa estructura no está presentada, se conserva el fallback genérico. Si está
+    presentado el prompt ``¿Desde qué ciudad nos visita?`` la búsqueda se acota al
+    menor ancestro que contiene la opción objetivo. Dentro de ese scope se usan roles
+    por especificidad semántica: ``radio`` > ``option`` > ``menuitem`` > ``button``.
+    Un radio único puede coexistir con una superficie button decorativa del mismo
+    gesto visual sin generar un falso ``target_city_not_unique``; dos candidatos del
+    mismo rol realmente presentados siguen fallando cerrado salvo que sean
+    estrictamente ancestro/descendiente del mismo control accesible.
 
     El botón de encabezado ``btn-modal-selector`` se excluye siempre. En selects
     nativos sólo compiten options cuyo ``select`` ancestro está presentado en el
