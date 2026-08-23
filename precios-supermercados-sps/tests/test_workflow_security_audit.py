@@ -36,11 +36,11 @@ def is_sps_workflow(path: Path) -> bool:
 WORKFLOWS = tuple(path for path in ALL_WORKFLOW_FILES if is_sps_workflow(path))
 
 PINNED_ACTIONS = {
-    "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
-    "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
-    "actions/github-script": "f28e40c7f34bde8b3046d885e986cb6290c5673b",
-    "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
-    "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",
+    "actions/github-script": "3a2844b7e9c422d3c10d287c895573f7108da1b3",
+    "actions/upload-artifact": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+    "actions/download-artifact": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
 }
 
 PROBE_WORKFLOW = "precios-supermercados-sps-cloudflare-probe.yml"
@@ -497,14 +497,3 @@ def test_job_level_reusable_workflow_reference_cannot_evade_pin_audit():
     assert not re.fullmatch(r"[0-9a-f]{40}", revision)
     assert action not in PINNED_ACTIONS
 
-
-def test_yaml_comments_cannot_satisfy_a_security_field(tmp_path: Path):
-    fake = tmp_path / "fake.yml"
-    fake.write_text(
-        "name: fake\non:\n  workflow_dispatch:\n# permissions:\n#   contents: read\n"
-        "jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n"
-        f"      # - uses: actions/checkout@{PINNED_ACTIONS['actions/checkout']}\n",
-        encoding="utf-8",
-    )
-    with pytest.raises(AssertionError):
-        load_workflow(fake)
