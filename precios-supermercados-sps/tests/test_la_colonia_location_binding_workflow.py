@@ -9,8 +9,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github/workflows/precios-supermercados-sps-la-colonia-location-binding.yml"
 SCRIPT = REPO_ROOT / "precios-supermercados-sps/scripts/diagnosticar_binding_ubicacion_la_colonia.py"
-REQUEST = ".github/workflows/requests/la-colonia-location-binding-request.json"
-AUTHORIZED_ID = "LC-location-binding-336"
+RECONCILE_REQUEST = ".github/workflows/requests/la-colonia-location-binding-reconcile-request.json"
+SOURCE_SHA = "56c940515b9d1ddc46de4843d4437b20ea12215f"
 
 
 def load_workflow() -> dict:
@@ -27,80 +27,77 @@ def load_script_module():
     return module
 
 
-def test_workflow_has_only_controlled_main_marker_trigger() -> None:
+def test_radiography_is_manual_least_privilege_and_globally_blocked() -> None:
     workflow = load_workflow()
     assert workflow["permissions"] == {"contents": "read"}
-    assert set(workflow["on"]) == {"push"}
-    assert workflow["on"]["push"] == {
-        "branches": ["main"],
-        "paths": [REQUEST],
-    }
-    assert workflow["concurrency"] == {
-        "group": "la-colonia-location-binding-radiography",
-        "cancel-in-progress": "false",
-    }
+    assert set(workflow["on"]) == {"workflow_dispatch", "push"}
+    dispatch = workflow["on"]["workflow_dispatch"]
+    assert set(dispatch) == {"inputs"}
+    assert set(dispatch["inputs"]) == {"authorization_id"}
+    authorization = dispatch["inputs"]["authorization_id"]
+    assert authorization["required"] == "true"
+    assert authorization["type"] == "string"
 
+    push = workflow["on"]["push"]
+    assert push == {"branches": ["main"], "paths": [RECONCILE_REQUEST]}
 
-def test_preflight_is_unprivileged_and_requires_exact_versioned_request() -> None:
-    workflow = load_workflow()
-    assert set(workflow["jobs"]) == {"preflight", "radiography"}
-    preflight = workflow["jobs"]["preflight"]
-    assert "environment" not in preflight
-    assert "permissions" not in preflight
-    assert preflight["if"] == (
-        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
-        "github.ref == 'refs/heads/main' }}"
-    )
-    assert preflight["outputs"] == {
-        "allowed": "${{ steps.request.outputs.allowed }}",
-        "authorization_id": "${{ steps.request.outputs.authorization_id }}",
-        "request_sequence": "${{ steps.request.outputs.request_sequence }}",
-    }
-
-    raw = "\n".join(str(step) for step in preflight["steps"])
-    assert REQUEST in raw
-    assert AUTHORIZED_ID in raw
-    assert "precios-sps-la-colonia-location-binding-request/v1" in raw
-    assert "requestSequence" in raw
-    assert "maxLogicalActions" in raw
-    assert "location_binding_trigger_not_exact_authorized_commit" in raw
-    assert "location_binding_request_authority_must_be_false" in raw
-    assert "getCommit" in raw
-    assert "getContent" in raw
-    assert "allowed', 'true" in raw
-
-
-def test_radiography_runs_only_after_preflight_and_has_no_secret_authority() -> None:
-    workflow = load_workflow()
     job = workflow["jobs"]["radiography"]
-    assert job["needs"] == "preflight"
-    assert job["if"] == "${{ needs.preflight.outputs.allowed == 'true' }}"
+    assert job["if"] == "${{ false }}"
     assert "environment" not in job
     assert "permissions" not in job
     assert job["timeout-minutes"] == "10"
-    assert job["env"] == {
-        "PYTHONPATH": "${{ github.workspace }}/precios-supermercados-sps/src",
-        "AUTHORIZATION_ID": "${{ needs.preflight.outputs.authorization_id }}",
-    }
 
+
+def test_reconciliation_is_offline_github_only_and_exactly_scoped() -> None:
+    workflow = load_workflow()
+    assert set(workflow["jobs"]) == {"radiography", "reconcile-consumed-authorization"}
+    job = workflow["jobs"]["reconcile-consumed-authorization"]
+    assert job["if"] == (
+        "${{ github.event_name == 'push' && "
+        "github.repository == 'Jchernand3z19/Portafolio' && "
+        "github.ref == 'refs/heads/main' }}"
+    )
+    assert job["permissions"] == {
+        "actions": "read",
+        "contents": "read",
+        "statuses": "write",
+    }
+    assert "environment" not in job
+    raw = "\n".join(str(step) for step in job["steps"])
+    assert SOURCE_SHA in raw
+    assert "listWorkflowRuns" in raw
+    assert "head_sha" in raw
+    assert "event: 'push'" in raw
+    assert "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" in raw
+    assert "location-binding-radiography.json" in raw
+    assert "createCommitStatus" in raw
+    assert "precios-sps/location-binding-reconcile" in raw
+    assert "precios-sps/location-binding-outcome" in raw
+    assert "precios-sps/location-binding-evidence" in raw
+    assert "www.lacolonia.com" not in raw
+    assert "page.goto" not in raw
+    assert "requests.get" not in raw
+
+
+def test_workflow_does_not_expose_secrets_or_live_overrides() -> None:
     raw = WORKFLOW.read_text(encoding="utf-8")
     assert "secrets." not in raw
     assert "vars." not in raw
     assert "id-token" not in raw
-    assert "actions: write" not in raw
     assert "pull_request_target" not in raw
     assert "issue_comment" not in raw
     assert "schedule:" not in raw
-    assert "workflow_dispatch" not in raw
     assert "--target" not in raw
     assert "--network-policy" not in raw
     assert "--live-execution" not in raw
     assert "--active-id" not in raw
+    assert "www.lacolonia.com" not in raw
 
 
-def test_authorization_is_passed_only_through_preflight_output_and_environment() -> None:
+def test_dispatch_input_is_passed_only_through_environment_not_shell_interpolation() -> None:
     workflow = load_workflow()
     job = workflow["jobs"]["radiography"]
+    assert job["env"]["AUTHORIZATION_ID"] == "${{ inputs.authorization_id }}"
     run_steps = [
         step
         for step in job["steps"]
@@ -109,8 +106,7 @@ def test_authorization_is_passed_only_through_preflight_output_and_environment()
     assert len(run_steps) == 1
     command = run_steps[0]["run"]
     assert '"$AUTHORIZATION_ID"' in command
-    assert "${{ needs.preflight.outputs.authorization_id }}" not in command
-    assert "${{ github.event" not in command
+    assert "${{ inputs." not in command
 
 
 def test_checkout_and_artifact_actions_are_pinned_and_output_is_only_sanitized_json() -> None:
@@ -129,7 +125,7 @@ def test_checkout_and_artifact_actions_are_pinned_and_output_is_only_sanitized_j
     )
 
 
-def test_cli_has_no_live_override_flags_and_unrelated_id_stays_blocked(tmp_path: Path) -> None:
+def test_consumed_authorization_and_unrelated_ids_stay_blocked(tmp_path: Path) -> None:
     raw = SCRIPT.read_text(encoding="utf-8")
     for forbidden in (
         "--target-url",
@@ -144,18 +140,24 @@ def test_cli_has_no_live_override_flags_and_unrelated_id_stays_blocked(tmp_path:
         assert forbidden not in raw
 
     module = load_script_module()
-    output = tmp_path / "blocked.json"
-    exit_code = module.main(
-        [
-            "--authorization-id",
-            "LC-location-binding-777",
-            "--output-path",
-            str(output),
-        ]
-    )
-    assert exit_code == 3
-    assert output.exists()
-    rendered = output.read_text(encoding="utf-8")
-    assert '"production_authority": false' in rendered
-    assert '"catalog_accepted": false' in rendered
-    assert '"extraction_enabled": false' in rendered
+    for authorization_id, expected_reason in (
+        ("LC-location-binding-336", "authorization_id_consumed"),
+        ("LC-location-binding-777", "authorization_id_not_active"),
+    ):
+        output = tmp_path / f"{authorization_id}.json"
+        exit_code = module.main(
+            [
+                "--authorization-id",
+                authorization_id,
+                "--output-path",
+                str(output),
+            ]
+        )
+        assert exit_code == 3
+        rendered = output.read_text(encoding="utf-8")
+        assert f'"stop_reason": "{expected_reason}"' in rendered
+        assert '"browser_started": false' in rendered
+        assert '"target_navigation_started": false' in rendered
+        assert '"production_authority": false' in rendered
+        assert '"catalog_accepted": false' in rendered
+        assert '"extraction_enabled": false' in rendered
