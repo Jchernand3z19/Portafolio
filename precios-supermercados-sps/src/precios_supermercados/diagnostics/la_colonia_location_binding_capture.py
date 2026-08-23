@@ -1,8 +1,7 @@
 """Captura controlada del binding de ubicación de La Colonia.
 
-La capa live queda deliberadamente desactivada en código. Preparar/ejecutar tests
-locales no concede autorización para tocar La Colonia. Una ejecución live futura
-requiere simultáneamente:
+La capa live permanece denegada salvo una autorización explícita versionada.
+Una ejecución live requiere simultáneamente:
 
 1. ``LIVE_EXECUTION_ENABLED = True`` en una revisión explícita;
 2. un authorization-id presente en ``ACTIVE_AUTHORIZATION_IDS``;
@@ -50,8 +49,8 @@ from precios_supermercados.diagnostics.location_binding_dom_controls import (
 
 TARGET_URL = "https://www.lacolonia.com/"
 TARGET_CITY = "San Pedro Sula"
-LIVE_EXECUTION_ENABLED = False
-ACTIVE_AUTHORIZATION_IDS: frozenset[str] = frozenset()
+LIVE_EXECUTION_ENABLED = True
+ACTIVE_AUTHORIZATION_IDS: frozenset[str] = frozenset({"LC-location-binding-332"})
 CONSUMED_AUTHORIZATION_IDS: frozenset[str] = frozenset(
     {"LC-location-binding-336", "LC-location-binding-331"}
 )
