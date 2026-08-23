@@ -9,13 +9,14 @@ Estado verificado al **2026-08-22 (America/Tegucigalpa)**.
 El corte técnico inmediatamente anterior a este sync documental es:
 
 ```text
-main = b89ad78daded0bb7fdf0b2ad5a12d7256d928119 (merge de PR #185)
-última suite completa observada = 1490/1490 PASS (PR #185, run 32616699428)
+main = a9464a503e1bff79242f61315c378c1727690662 (merge de PR #190)
+última suite completa observada = 1490/1490 PASS (PR #190, run 32618693673)
 python -m pip check = PASS
 compileall = PASS
 GitHub Actions Node-24-compatible pins = VERIFIED
 GATE-17 = PASS_PRODUCTIVE_EVIDENCE
 ACTIVE_AUTHORIZATION_IDS = []
+CONSUMED_LOCATION_BINDING_AUTHORIZATION_IDS = [LC-location-binding-336]
 LIVE_REQUESTS_CURRENT_RUN = 0
 READY_FOR_LIVE = NO
 SPS_TECHNICAL_CONTEXT = UNCONFIRMED
@@ -46,7 +47,7 @@ El SHA anterior identifica el corte auditado, no pretende ser un HEAD autorrefer
 | 0B — hardening físico de catálogo | `DONE` | Rechazo temprano de reutilización conflictiva de `physical_evidence_id` / `fetch_span_id`. |
 | 0C — ramas históricas | `DONE` | Auditoría reproducible cerró el inventario sin `UNIQUE_UNMERGED`. |
 | 0E — Raw → Normalized → Validated | `DONE` | Transformación operacional conectada sin conceder autoridad. |
-| 0F — semántica de ubicación | `DONE_OFFLINE` | `la_colonia_online` es contexto fuente raw `UNKNOWN`; no puede convertirse bajo ese ID en SPS/TGU/tienda. |
+| 0F — semántica de ubicación | `DONE_OFFLINE` | `la_colonia_online` es contexto fuente raw `UNKNOWN`; no puede convertirse bajo ese ID en SPS/TGU/tienda. La radiografía live `LC-location-binding-336` no resolvió el binding y no altera esa semántica. |
 | 0G — identidad/dimensión de producto | `DONE_OFFLINE` | GTIN fuerte, mapping pendiente explícito, `dim_products` + `map_source_products`; PR #185 revalida también el `prod_pending_*` determinista antes de persistir. |
 | 0H — documentación canónica | `DONE` | README, arquitectura, modelo, decisiones y estado separan arquitectura estable de estado operativo mutable. |
 | 0I — workbook físico base | `DONE_PRODUCTIVE` | Workbook físico existe y fue auditado sin introducir ofertas. |
@@ -185,9 +186,51 @@ source_location_key = null
 extraction_enabled = false
 ```
 
-La UI conocida expone SPS y Tegucigalpa, pero eso no demuestra si precio/inventario cambia por ciudad o por tienda. La radiografía preparada permanece bloqueada hasta una **nueva autorización humana explícita y limitada**.
+### Radiografía mínima `LC-location-binding-336`
 
-Una autorización de radiografía no autoriza smoke, facets, GraphQL replay, crawl, persistencia comercial ni ejecución diaria.
+El usuario autorizó una única radiografía mínima de binding para San Pedro Sula. La autorización quedó versionada, se ejecutó una sola vez y después fue consumida y retirada de todos los entrypoints temporales.
+
+Evidencia reconciliada de la ejecución única:
+
+```text
+source run = 32617926053
+source conclusion = failure
+stop_reason = target_city_not_found
+logical_actions = 2
+browser_started = true
+target_navigation_started = true
+target_navigation_completed = true
+available_cities = 0
+available_stores = 0
+granularity_candidate = none
+confidence = none
+technical_binding_observed = false
+store_selection_observed = false
+production_authority = false
+catalog_accepted = false
+extraction_enabled = false
+```
+
+Interpretación estricta:
+
+- la home exacta de La Colonia sí fue alcanzada;
+- el selector de ubicación pudo abrirse, porque la captura consumió las dos primeras acciones lógicas antes de detenerse;
+- el capturador no pudo resolver de forma única `San Pedro Sula` con el contrato DOM vigente;
+- no existe evidencia suficiente para afirmar binding por ciudad ni por tienda;
+- el fallo no convierte `la_colonia_online` en `la_colonia_sps`;
+- no se ejecutó GraphQL replay, facets, smoke, crawl ni persistencia comercial;
+- no se autoriza un retry con `LC-location-binding-336`.
+
+Cadena de cierre:
+
+- PR #187 activó exclusivamente `LC-location-binding-336` y produjo el único run live;
+- PR #188 consumió inmediatamente la autorización y dejó el job live bloqueado;
+- PR #189 leyó offline el mismo artefacto y publicó el detalle sanitizado sin repetir tráfico;
+- PR #190 retiró los markers y el trigger temporal de reconciliación, dejando nuevamente el workflow manual globalmente bloqueado.
+
+La UI conocida históricamente expone SPS y Tegucigalpa, pero la ejecución `LC-location-binding-336` no consiguió identificar el control de ciudad en el DOM observado. Por tanto `SPS_TECHNICAL_CONTEXT` continúa `UNCONFIRMED`.
+
+Cualquier nueva radiografía requiere una **nueva autorización humana explícita y limitada**. Esa autorización no puede reutilizar `LC-location-binding-336` y tampoco autoriza smoke, facets, GraphQL replay, crawl, persistencia comercial ni ejecución diaria.
 
 ## Persistencia comercial
 
@@ -219,15 +262,21 @@ max(previous_accepted_price - current_price, 0)
 
 Las tareas técnicas de Fase 0 que podían resolverse sin nuevas requests a La Colonia están cerradas o tienen un bloqueo externo explícito y no falsificable.
 
-La siguiente frontera que requiere decisión humana es la **radiografía mínima de binding de ubicación de La Colonia**. Sin una nueva autorización explícita no se enviará ninguna request.
+La radiografía `LC-location-binding-336` cerró de forma inconclusa: confirmó que el flujo llega a la home y abre el selector, pero no resolvió el control de `San Pedro Sula`. El siguiente intento físico de resolver el binding requiere una **nueva autorización humana explícita**; hasta entonces no se enviará otra request a La Colonia.
 
 ## Tráfico live
 
-Desde el cierre de la autorización anterior, todo el trabajo de storage, CI, documentación y hardening de identidad descrito aquí se realizó con:
+La única nueva interacción live de este bloque fue la radiografía mínima autorizada como `LC-location-binding-336`. Se limitó a la home y al selector de ubicación y terminó antes de seleccionar ciudad.
+
+Después del cierre de PR #190, el estado vuelve a ser:
 
 ```text
 ACTIVE_AUTHORIZATION_IDS = []
+CONSUMED_LOCATION_BINDING_AUTHORIZATION_IDS = [LC-location-binding-336]
 LIVE_REQUESTS_CURRENT_RUN = 0
+READY_FOR_LIVE = NO
+production_authority = false
+catalog_accepted = false
 ```
 
-No se realizaron nuevas requests a La Colonia durante este bloque de trabajo.
+No se realizaron retries, smoke, facets, GraphQL replay, crawl ni escrituras comerciales con esa autorización.
