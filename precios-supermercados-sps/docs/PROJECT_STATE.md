@@ -9,12 +9,9 @@ Estado verificado al **2026-08-23 (America/Tegucigalpa)**.
 Corte técnico inmediatamente anterior a este sync documental:
 
 ```text
-main = a2d4ec130f9de0fe21d65b63f58a5088e72e76e0 (merge de PR #217)
-última suite completa observada = 1519/1519 PASS (PR #217, run 32656851068)
-python -m pip check = PASS
-compileall = PASS
+main = d78010f740e2b67940c710df37946a2a11b7ed30 (merge de PR #225)
+PR #225 CI = PASS (run 32662803489)
 ACTIVE_AUTHORIZATION_IDS = []
-CONSUMED_LOCATION_BINDING_AUTHORIZATION_IDS = [LC-location-binding-336, LC-location-binding-331, LC-location-binding-332, LC-location-binding-333, LC-location-binding-334, LC-location-binding-335]
 READY_FOR_LIVE = NO
 SPS_TECHNICAL_CONTEXT = UNCONFIRMED
 production_authority = false
@@ -44,128 +41,144 @@ El contexto fuente `la_colonia_online` continúa siendo un contexto raw de catá
 
 Hasta demostrar binding técnico no se habilitan extracción comercial, persistencia de ofertas ni aceptación de catálogo.
 
-## Radiografías live de ubicación consumidas
+## Evidencia live e IDs consumidos
 
-Se ejecutaron seis radiografías mínimas, cada una bajo una autorización humana explícita, independiente y de un solo uso. Todas están consumidas y ningún ID puede reutilizarse.
-
-| Authorization ID | Run | Resultado | Acciones lógicas | Conclusión |
-|---|---:|---|---:|---|
-| `LC-location-binding-336` | `32617926053` | `target_city_not_found` | 2 | no encontró control seleccionable de ciudad |
-| `LC-location-binding-331` | `32619994748` | `target_city_not_found` | 2 | no encontró control seleccionable de ciudad |
-| `LC-location-binding-332` | `32644498929` | `target_city_not_unique` | 2 | encontró más de un candidato exacto para SPS |
-| `LC-location-binding-333` | `32651129634` | `target_city_not_unique` | 2 | ambigüedad antes de seleccionar ciudad |
-| `LC-location-binding-334` | `32653410569` | `target_city_not_unique` | 2 | persistió ambigüedad después de acotar por modal/rol |
-| `LC-location-binding-335` | `32655634910` | `target_city_not_unique` | 2 | persistió ambigüedad después de filtrar controles fuera del viewport |
-
-Ninguna de estas ejecuciones realizó smoke de catálogo, facet discovery, GraphQL replay, crawl, extracción de productos ni persistencia comercial.
-
-### Evidencia sanitizada de LC-335
-
-La sexta ejecución es la observación live más reciente y gobierna cualquier conclusión sobre el estado actual.
+Las autorizaciones de binding usadas históricamente son de un solo uso. Operacionalmente están consumidas y **no pueden reutilizarse**:
 
 ```text
-authorization = LC-location-binding-335
-source merge = ad8b3d2abf9b4fb41c887a7f25b0c6b7055a1964
-source run = 32655634910
-source conclusion = failure
-stop_reason = target_city_not_unique
-logical_actions = 2
-browser_started = true
-target_navigation_started = true
-target_navigation_completed = true
-visible_location = null
-available_cities = 0
-available_stores = 0
-binding_report = null
-store_selection_observed = false
-production_authority = false
-catalog_accepted = false
-extraction_enabled = false
-artifact id = 9497365576
-artifact sha256 = e03a79f9f47e3068f33f7125d3adde2aa1f53aec9a99e37f4dfe4d386b8b41ec
+LC-location-binding-336
+LC-location-binding-331
+LC-location-binding-332
+LC-location-binding-333
+LC-location-binding-334
+LC-location-binding-335
+LC-location-binding-337
 ```
 
-La reconciliación GitHub-only de LC-335 validó la existencia y forma del artifact sin repetir tráfico a La Colonia. El cierre posterior retiró el reconciliador temporal, eliminó su marker, restauró el workflow a `workflow_dispatch` con `radiography if:false`, vació la allow-list y registró `LC-location-binding-335` como consumida.
+El código de captura en `main` todavía sólo persiste hasta `LC-location-binding-335`; agregar `LC-location-binding-337` al set canónico es deuda de seguridad pendiente y no debe interpretarse como permiso para reutilizarlo.
 
-Por lo tanto, **todavía no existe evidencia live de que el automatismo haya hecho clic en San Pedro Sula**. La ejecución se detuvo antes de reservar la tercera acción lógica `select_city`.
+Observaciones históricas relevantes:
 
-## Evidencia humana del modal de ciudad
+| Authorization ID | Run | Resultado | Conclusión |
+|---|---:|---|---|
+| `LC-location-binding-336` | `32617926053` | `target_city_not_found` | no encontró control seleccionable de ciudad |
+| `LC-location-binding-331` | `32619994748` | `target_city_not_found` | no encontró control seleccionable de ciudad |
+| `LC-location-binding-332` | `32644498929` | `target_city_not_unique` | encontró más de un candidato exacto para SPS |
+| `LC-location-binding-333` | `32651129634` | `target_city_not_unique` | ambigüedad antes de seleccionar ciudad |
+| `LC-location-binding-334` | `32653410569` | `target_city_not_unique` | persistió ambigüedad después de acotar por modal/rol |
+| `LC-location-binding-335` | `32655634910` | `target_city_not_unique` | persistió ambigüedad después de filtrar controles fuera del viewport |
+| `LC-location-binding-337` | `32658270045` | `target_city_not_found` | el resolver previo no identificó la superficie real de ciudad |
 
-La evidencia aportada por el usuario muestra el control superior:
+Ninguna de esas ejecuciones concedió `production_authority`, aceptó catálogo ni persistió ofertas comerciales.
+
+## Radiografía completa de 2026-08-23
+
+El usuario autorizó una única radiografía live completa enfocada en entender el selector de ubicación. La activación se fusionó en PR #222 mediante el commit fuente:
+
+```text
+52d305e97f98840f1b3786b3d7358cbaa5e87e46
+```
+
+El workflow live fue cerrado inmediatamente después en PR #223. La reconciliación GitHub-only de PR #224 no consiguió recuperar/verificar el artifact de esa ejecución y publicó fallo de reconciliación. Ese fallo **no demuestra que la selección haya fallado ni que haya funcionado**; sólo deja esa ejecución sin evidencia recuperada suficiente para cerrar el binding.
+
+El workflow de ubicación permanece fail-closed para tráfico live.
+
+## Evidencia DOM aportada por el usuario
+
+La evidencia humana ya no se limita a una captura visual. El usuario aportó la estructura DOM exacta de las opciones de ciudad:
 
 ```html
-<div class="vtex-flex-layout-0-x-flexColChild vtex-flex-layout-0-x-flexColChild--notificationBarRight pb0" style="height: 100%;">
-  <div class="cont-btn-selector">
-    <button class="btn-modal-selector">San pedro sula</button>
-  </div>
+<div class="cont-btn-ciudad">
+  <button class="btn-ciudad-noselected">
+    <span class="radio"></span>
+    Tegucigalpa
+  </button>
+  <button class="btn-ciudad-selected">
+    <span class="radio"></span>
+    San pedro sula
+  </button>
 </div>
 ```
 
-Al pulsarlo, la captura visual muestra:
+Esto demuestra estructuralmente que:
 
-```text
-¿Desde qué ciudad nos visita?
-TEGUCIGALPA
-SAN PEDRO SULA
-*Los precios e inventario pueden variar dependiendo la ciudad
+- `.cont-btn-ciudad` agrupa las ciudades;
+- `.btn-ciudad-selected` representa la ciudad seleccionada;
+- `.btn-ciudad-noselected` representa una ciudad seleccionable no activa;
+- la identidad de ciudad está en el texto visible del `button`;
+- `San pedro sula` estaba seleccionada en la evidencia aportada.
+
+También se mantiene la evidencia del botón superior:
+
+```html
+<div class="cont-btn-selector">
+  <button class="btn-modal-selector">San pedro sula</button>
+</div>
 ```
 
-Las opciones se presentan como tarjetas con indicador visual tipo radio. Esta evidencia demuestra el flujo visual que debe reproducir el resolver, pero no identifica por sí sola el nodo DOM único que recibe el gesto, ni el canal de contexto VTEX que prueba el binding comercial.
+La evidencia DOM sí identifica ahora el nodo real que representa cada ciudad y el estado visual seleccionado/no seleccionado. **Todavía no demuestra por sí sola qué cookie/storage/request/VTEX binding gobierna precios e inventario**, por lo que `SPS_TECHNICAL_CONTEXT` permanece `UNCONFIRMED`.
 
-Por eso `SPS_TECHNICAL_CONTEXT` permanece `UNCONFIRMED`.
+## Resolver vigente — PR #225
 
-## Hardening offline vigente tras LC-335
-
-PR #217 integró una nueva corrección completamente offline y dejó de nuevo cerrada la frontera live.
-
-El resolver vigente conserva todas las defensas previas y además:
-
-- abre exactamente el selector de ubicación observado `button.btn-modal-selector` cuando es único;
-- reconoce el prompt exacto `¿Desde qué ciudad nos visita?`;
-- filtra controles que Playwright considera visibles pero cuya caja está completamente fuera del viewport;
-- prioriza `radio > option > menuitem > button`;
-- excluye el botón del header como falsa opción de ciudad;
-- conserva soporte fail-closed para `<select>` nativos y duplicados ocultos;
-- colapsa coincidencias **estrictamente anidadas** ancestro/descendiente cuando Playwright representa el mismo gesto visual con varios nodos accesibles;
-- conserva el nodo más específico de ese único gesto;
-- mantiene ambigüedad fail-closed si existen dos candidatos hermanos o en ramas DOM distintas;
-- nunca usa esta deduplicación para elegir arbitrariamente entre dos opciones físicamente distintas;
-- si una ambigüedad persiste en una futura observación autorizada, puede persistir únicamente diagnóstico acotado `stage`, `role`, `candidate_count`, `effective_count`;
-- prohíbe en ese diagnóstico HTML, selectores, atributos, URLs y valores de contexto crudos.
-
-La integración browser-loopback reproduce un modal con prompt anidado y un radio contenedor + radio descendiente para `San Pedro Sula`; el resolver colapsa el único gesto visual, selecciona SPS y observa un cambio técnico sintético sin conceder autoridad comercial.
-
-CI de PR #217:
+PR #225 (`Resuelve botones reales del selector de ciudad de La Colonia`) fue fusionado en `main` con merge:
 
 ```text
-run = 32656851068
-pip check = PASS
-compileall = PASS
-pytest = 1519/1519 PASS
+d78010f740e2b67940c710df37946a2a11b7ed30
 ```
 
-Esto demuestra el comportamiento **offline**. No demuestra que el DOM productivo actual use exactamente esa forma.
+El resolver ahora:
+
+- abre `button.btn-modal-selector` cuando es único;
+- busca primero la estructura confirmada `.cont-btn-ciudad`;
+- sólo considera `button.btn-ciudad-selected` y `button.btn-ciudad-noselected` dentro de ese contenedor;
+- identifica la ciudad por texto visible exacto case-insensitive;
+- conserva las ciudades hermanas observadas;
+- ignora contenedores fuera del viewport;
+- falla cerrado si existen múltiples superficies válidas para la misma ciudad;
+- usa roles ARIA únicamente como fallback cuando la estructura confirmada no está presentada.
+
+CI de PR #225:
+
+```text
+run = 32662803489
+job = tests
+conclusion = success
+```
+
+Esto demuestra resolución **offline** de la estructura aportada. No demuestra todavía una transición productiva real.
+
+## Deuda inmediata detectada después de PR #225
+
+El resolver ya encuentra correctamente la ciudad, pero el flujo de captura todavía requiere hardening antes de una futura verificación live:
+
+1. `ResolvedCityControl` aún no transporta explícitamente el estado `selected|noselected`.
+2. La activación actual hace click en un botón estructural incluso si ya tiene `btn-ciudad-selected`.
+3. El capturador duplica lógica de activación en `_activate_option` en vez de usar una única frontera state-aware.
+4. No existe todavía una verificación explícita `before -> action/no-op -> after` que compruebe el estado estructural de la ciudad y el header.
+5. Falta una integración browser-loopback que reproduzca exactamente `.cont-btn-ciudad`, la transición de clases y evidencia técnica sintética.
+6. `LC-location-binding-337` debe incorporarse al set versionado de IDs consumidos.
+7. El reconciliador temporal y su marker de la radiografía completa siguen presentes en `main` aunque el job live esté bloqueado; deben retirarse de forma segura y restaurar el workflow a manual-only.
+
+Todo lo anterior es trabajo offline justificable y debe cerrarse antes de solicitar otra observación live.
 
 ## Seguridad live vigente
 
-Estado confirmado después de PR #217:
+Estado efectivo:
 
 ```text
 LIVE_EXECUTION_ENABLED = False
 ACTIVE_AUTHORIZATION_IDS = []
-CONSUMED_AUTHORIZATION_IDS = {
-  LC-location-binding-336,
-  LC-location-binding-331,
-  LC-location-binding-332,
-  LC-location-binding-333,
-  LC-location-binding-334,
-  LC-location-binding-335
-}
+radiography workflow job = if: false
+production_authority = false
+catalog_accepted = false
+extraction_enabled = false
 ```
 
-El workflow de radiografía está bloqueado. Sin una autorización humana nueva y explícita están prohibidos nuevos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl hacia La Colonia.
+Sin una autorización humana nueva, explícita, vigente y de un solo uso están prohibidos nuevos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl hacia La Colonia.
 
-Una autorización futura de radiografía sólo autorizaría **una** observación mínima de binding dentro de sus límites. No autorizaría catálogo, facets, GraphQL replay, crawl, persistencia comercial ni ejecución diaria.
+Ningún agente puede inventar un Authorization ID y ningún ID consumido puede reutilizarse.
+
+Una futura autorización de binding sólo autorizaría el alcance que el usuario apruebe; no concede automáticamente catálogo, facets, crawl, persistencia comercial ni ejecución diaria.
 
 ## Catálogo y autoridad
 
@@ -175,6 +188,7 @@ Reglas vigentes:
 
 - `catalog_accepted` no puede venir de un boolean caller-controlled;
 - readiness técnica no equivale a autoridad;
+- una selección visual de ciudad no equivale a binding técnico;
 - evidencia estructural o Cloudflare por sí sola no concede `production_authority`;
 - current/history sólo pueden mutar tras una decisión autoritativa aceptada;
 - runs rechazados, fallidos o no autoritativos no alteran estado comercial.
@@ -242,8 +256,17 @@ Power BI sigue siendo el dashboard final. La proyección semántica común ya es
 
 ## Próxima dependencia real
 
-Con PR #217 quedó cerrado el trabajo offline justificable con la evidencia disponible: cierre operacional de LC-335, filtro de viewport, deduplicación estricta de nodos anidados y diagnóstico sanitizado para una posible ambigüedad futura.
+Primero cerrar completamente offline el contrato de selección de ciudad con la estructura DOM confirmada:
 
-El siguiente paso capaz de cambiar `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` requiere una **nueva autorización humana explícita y de un solo uso** para una única radiografía mínima de ubicación usando el resolver de PR #217 o posterior.
+```text
+resolver estado selected/noselected
+-> no-op seguro cuando SPS ya está selected
+-> click sólo cuando SPS está noselected
+-> verificar estado visual/header
+-> integración browser-loopback + contexto técnico sintético
+-> registrar LC-location-binding-337 como consumida
+-> retirar reconciliador temporal
+-> suite completa + revisión de seguridad + merge
+```
 
-El usuario debe elegir un authorization ID nuevo. No se inventa ni reutiliza uno desde el código o desde la automatización.
+Sólo después, el siguiente paso capaz de cambiar `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` requiere una **nueva autorización humana explícita y de un solo uso** para una única observación controlada de binding con el resolver corregido.
