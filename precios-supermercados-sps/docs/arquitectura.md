@@ -1,110 +1,131 @@
 # Arquitectura — Precios de Supermercados SPS
 
-Este documento describe la **arquitectura estable** del proyecto. El estado operativo mutable, SHA de `main`, último conteo de pruebas, autorizaciones y bloqueos vigentes se mantienen exclusivamente en [`PROJECT_STATE.md`](PROJECT_STATE.md).
+Este documento describe la **arquitectura estable**. El estado operativo mutable, autorizaciones, evidencia productiva y último conteo de pruebas viven exclusivamente en [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
-No uses un PR histórico ni este documento para inferir una autorización live.
+No uses PRs históricos, ramas o este documento para inferir autorización live.
 
-## 1. Objetivo
+## 1. Objetivo y principios
 
-Construir una plataforma que pueda recolectar precios de varios supermercados, normalizarlos a un contrato común, validar calidad/completitud, conservar únicamente cambios comerciales relevantes y exponer un dataset confiable a Power BI.
+Construir una plataforma que recolecte precios de varios supermercados, los normalice a un contrato común, valide calidad/completitud, historice sólo cambios comerciales relevantes y exponga datos confiables a Power BI.
 
-Alcance geográfico inicial: **San Pedro Sula**.
+Alcance inicial: **San Pedro Sula**, un supermercado a la vez.
 
-Principio de expansión: **un supermercado a la vez**, manteniendo la misma frontera de datos y reutilizando infraestructura común.
+Principios:
 
-## 2. Principios
+1. la fuente manda; no se inventan atributos ni ubicación;
+2. contexto fuente y ubicación comercial son conceptos distintos;
+3. granularidad (`city`, `store`, etc.) debe demostrarse;
+4. corrección técnica no equivale a autoridad productiva;
+5. toda ambigüedad crítica falla cerrada;
+6. nuevo periodo histórico sólo ante cambio relevante;
+7. todo run terminal se registra;
+8. un mismo esquema sirve a todos los supermercados;
+9. lógica comercial independiente del backend;
+10. logs, artifacts, hashes y telemetry no conceden autoridad.
 
-1. **La fuente manda:** no inventar marca, presentación, precio, disponibilidad, ciudad, tienda ni promoción.
-2. **Ubicación verificable:** un precio sólo se etiqueta con una ubicación cuando el contexto técnico que lo produjo está demostrado.
-3. **Granularidad explícita:** una fuente puede variar por ciudad, tienda u otro nivel; no se asume `city` por conveniencia.
-4. **Autoridad separada de corrección:** una ejecución puede ser técnicamente correcta y aun así no estar autorizada para mutar current/history.
-5. **Fail-closed:** ambigüedad de identidad, ubicación, completitud, provenance o autoridad bloquea promoción/persistencia comercial.
-6. **Histórico por cambio:** no crear un nuevo periodo si el estado comercial relevante no cambió.
-7. **Todo run se registra:** incluso cuando no hay cambios o el run termina rechazado/fallido.
-8. **Un mismo esquema para todos los supermercados.**
-9. **Backend intercambiable:** lógica comercial independiente de Google Sheets/BigQuery.
-10. **Observabilidad no concede autoridad:** logs, comments, artifacts y telemetry documentan hechos; no autorizan tráfico ni catálogo.
-
-## 3. Capas
+## 2. Flujo principal
 
 ```text
-Fuente / sitio
-    ↓
-Extractor específico del supermercado
-    ↓
+Fuente
+  ↓
+Extractor específico
+  ↓
 RawProduct
-    ↓
+  ↓
 Normalización
-    ↓
+  ↓
 NormalizedOffer
-    ↓
+  ↓
 Validación + identidad + state_hash
-    ↓
+  ↓
 ValidatedOffer
-    ↓
-Completitud / provenance / decisión comercial
-    ↓
+  ↓
+Completitud / provenance / decisión autoritativa
+  ↓
 Máquina current/history
-    ↓
+  ↓
 TabularBatch común
-    ↓
+  ↓
 Adapter de persistencia
-    ↓
+  ↓
 Google Sheets (fase inicial)
-    ↓
-Dataset de Power BI
+  ↓
+Proyección semántica
+  ↓
+Power BI
 ```
 
-BigQuery y Cloud Run quedan como evolución posterior cuando extracción, calidad, identidad, persistencia y operación diaria sean estables.
+BigQuery queda como evolución posterior cuando extracción, calidad, identidad, persistencia y operación diaria sean estables.
 
-## 4. Contratos protegidos
+## 3. Contratos protegidos
 
 ### `RawProduct`
-
-Observación fiel a la fuente. Conserva lo que el extractor realmente pudo demostrar.
+Observación fiel a la fuente. Conserva sólo lo que el extractor pudo demostrar.
 
 ### `NormalizedOffer`
-
-Forma común entre supermercados. Normalizar no significa completar datos inexistentes.
+Forma común entre supermercados. Normalizar no significa completar información inexistente.
 
 ### `ValidatedOffer`
+Oferta normalizada que pasó validaciones y contiene `state_hash`, revisión y quality events.
 
-Oferta normalizada que pasó validaciones de identidad/estado y contiene `state_hash`, revisión y evidencia de calidad.
+Los tres contratos son generales y no se cambian para acomodar una anomalía particular sin una necesidad demostrada y pruebas de compatibilidad.
 
-Estos contratos no se cambian sólo para acomodar una anomalía de un supermercado; primero se comprueba que el cambio sea generalizable y compatible.
+## 4. Identidad de producto y oferta
 
-## 5. Identidad
-
-Cada supermercado puede tener identificadores fuente diferentes, pero la plataforma construye identidad durable de producto/oferta.
-
-Para La Colonia/VTEX la jerarquía observada es:
+Se separan:
 
 ```text
-Producto: productId -> productReference -> linkText
-SKU:      itemId
+source_product_id = identidad del producto dentro de la fuente
+product_id        = identidad normalizada/comparable entre fuentes
+offer_id          = supermercado + ubicación comercial + producto fuente
 ```
 
-Los IDs derivados y `state_hash` se recalculan en fronteras críticas y durante rehidratación. Un valor persistido no se confía sólo porque ya estaba almacenado.
+`source_product_id` y `offer_id` son deterministas y se recalculan en fronteras críticas.
 
-## 6. Ubicaciones
+Para identidad cross-supermercado, un GTIN-8/12/13/14 sólo se acepta si supera su check digit y se normaliza a GTIN-14. Si no existe una identidad fuerte usable, el producto queda bajo `prod_pending_*` y `pending_product_mapping` hasta revisión. Un mapping explícito puede reemplazar el `product_id` provisional sin alterar la identidad fuente.
 
-La ubicación se modela separando:
+Precio, promoción, disponibilidad y fecha nunca forman parte de IDs estables.
 
-- supermercado;
-- ciudad visible/declarada;
-- alcance del proyecto;
-- granularidad comercial (`city`, `store`, `unknown`, etc.);
-- binding técnico con la fuente;
-- estado de evidencia en cada oferta;
-- habilitación de extracción.
+## 5. Presentación
 
-Una ubicación no puede habilitarse si su granularidad sigue `unknown`.
+Las presentaciones se representan con componentes independientes:
 
-Para fuentes con selección explícita de ubicación, `technical_binding_confirmed` y `source_location_key` deben estar demostrados antes de persistir ofertas como pertenecientes a esa ubicación.
+```text
+unit_count
+content_per_unit
+measurement_unit
+total_content
+```
+
+No se colapsan multipacks. Una presentación `2 x 500 ml` sigue siendo dos unidades de 500 ml, aunque el total sea 1000 ml. Si la fuente no permite demostrar un componente, queda nulo y puede requerir revisión.
+
+## 6. Ubicación: contexto fuente vs ubicación comercial
+
+La arquitectura distingue explícitamente:
+
+- **source location context**: contexto raw en que se obtuvo el payload;
+- **commercial location**: ciudad/tienda demostrada a la que puede atribuirse una oferta.
+
+Para La Colonia:
+
+```text
+la_colonia_online = contexto fuente raw, no ciudad/tienda
+la_colonia_sps    = ubicación comercial candidata dentro del alcance
+la_colonia_tgu    = ubicación comercial conocida fuera del alcance inicial
+```
+
+`la_colonia_online` debe permanecer `location_status=unknown`; bajo ese mismo ID no puede promoverse a SPS mediante `confirmed` o `inferred`. La promoción de ubicación pertenece a una frontera de binding separada que debe producir una ubicación comercial distinta.
+
+Una ubicación comercial no puede habilitarse si:
+
+- su granularidad sigue `unknown`;
+- la fuente requiere selección y `technical_binding_confirmed=false`;
+- falta `source_location_key` cuando el binding lo requiere;
+- está fuera de alcance o no disponible.
 
 ### Radiografía de binding
 
-La radiografía de ubicación compara snapshots en tres momentos:
+La radiografía preparada compara:
 
 ```text
 before
@@ -112,71 +133,41 @@ before
 -> after_store (si existe selector de tienda)
 ```
 
-Busca mecanismos comerciales conocidos, por ejemplo:
+Busca señales fuertes como `regionId`, `salesChannel`, `binding`, `store`, `storeId` o `pickupPoint`. Cambios opacos de `vtex_session`/`vtex_segment` no bastan por sí solos. Valores sensibles/opacos se representan mediante fingerprints sanitizados.
 
-- `regionId`;
-- `salesChannel`;
-- `binding`;
-- `store`;
-- `storeId`;
-- `pickupPoint`.
-
-`vtex_session` y `vtex_segment` son señales débiles: un cambio opaco de sesión no basta para declarar que dos tiendas comparten precio.
-
-Los valores opacos no deben salir al artifact; se usan fingerprints SHA-256.
-
-### Transición
-
-El resultado de radiografía no modifica configuración directamente.
-
-- `city + strong`: puede proponer binding de ciudad, manteniendo extracción apagada.
-- `store + strong`: obliga a modelar tiendas; no permite colapsarlas bajo una sola ubicación ciudad.
-- `unknown`: no cambia configuración.
+Una radiografía sólo puede proponer una transición. No activa extracción automáticamente.
 
 ## 7. Extractores
 
-Cada supermercado tiene un adapter/extractor propio, pero todos entregan los contratos comunes.
+Cada supermercado tiene su adapter específico, pero todos producen los contratos comunes.
 
-Responsabilidades del extractor:
+El extractor puede capturar:
 
-- navegar/consultar la fuente dentro del contrato autorizado;
-- capturar identificadores fuente;
-- extraer precio actual y, cuando exista, precio regular/referencia declarado;
+- identificadores fuente;
+- precio actual;
+- precio regular/referencia declarado;
 - disponibilidad;
-- marca/categoría/presentación cuando la fuente lo demuestra;
-- evidencia de ubicación;
-- metadata suficiente para trazabilidad.
+- marca/categoría/presentación cuando se demuestran;
+- contexto/evidencia de ubicación;
+- metadata de trazabilidad.
 
-Responsabilidades que **no** pertenecen al extractor:
+No le corresponde:
 
-- decidir si una promoción es “real” usando histórico;
+- decidir ahorro real;
 - mutar current/history;
 - inventar ubicación;
-- otorgar `catalog_accepted`;
+- conceder `catalog_accepted` o `production_authority`;
 - decidir persistencia productiva.
 
 ## 8. Completitud de catálogo
 
-Deduplicar resultados no demuestra que el catálogo esté completo.
+Deduplicar no demuestra completitud. La capa de catálogo valida árbol/facets, membresía, totales, ventanas, gaps, truncamiento, repeticiones, ownership, unión producto/SKU y reconciliación de páginas contra el plan canónico.
 
-La capa de completitud valida, según la fuente:
-
-- árbol/facets;
-- membresía de particiones;
-- totales independientes;
-- ventanas/paginación;
-- gaps;
-- truncamiento;
-- repeticiones;
-- conflictos de ownership;
-- unión producto/SKU;
-- reconciliación de las páginas observadas contra el plan canónico.
-
-Una ejecución puede ser `technically_complete=true` sin convertirse en catálogo comercial autoritativo.
+Una ejecución puede ser técnicamente completa y continuar sin autoridad productiva.
 
 ## 9. Frontera Cloudflare / provenance
 
-La arquitectura edge seleccionada usa:
+La arquitectura seleccionada usa:
 
 ```text
 GitHub Actions autorizado
@@ -186,171 +177,129 @@ GitHub Actions autorizado
 -> request físico allowlisted
 -> respuesta + hash
 -> receipt Ed25519
--> verificador independiente Python
+-> verificador Python independiente
 -> Workers Observability
 -> manifest / readiness
 ```
 
-### Propiedades de seguridad
+Propiedades:
 
-- OIDC cerrado a identidad esperada de repo/ref/workflow/environment/run;
+- identidad OIDC cerrada al repo/ref/workflow/environment/run esperado;
 - caller no elige libremente destino físico;
 - host/path/método/query restringidos;
-- presupuesto/pacing/single-flight/replay/fencing en Durable Object;
-- `max_retries=0` en las rutas cerradas salvo cambio explícito revisado;
-- receipt ligado a request/run/release;
-- private key sólo en Cloudflare;
-- verificador externo usa public key confiable;
-- el job con OIDC y el job que verifica código/evidencia están separados cuando aplica;
-- un resultado de sonda nunca produce `catalog_accepted=true` ni `production_authority=true`.
+- presupuesto, pacing, single-flight, replay y fencing en Durable Object;
+- cero retries ocultos en las rutas cerradas;
+- receipt ligado a request/run/release/respuesta;
+- clave privada sólo en Cloudflare;
+- verificador separado usa clave pública confiable;
+- evidencia de sonda nunca se convierte en autoridad de catálogo.
 
-### Sonda controlada
+### Observability
 
-La sonda contra origen propio `workers.dev` existe para probar la infraestructura sin involucrar La Colonia.
+El contrato actual descubre trace IDs y consulta el detalle mediante `view: events`, revalidando custom span, relación padre-hijo y fetch físico. La hipótesis histórica de que la API pública necesariamente impedía esta reconciliación ya no se usa como conclusión canónica; la frontera permanece **pendiente de una ejecución productiva exitosa del verifier actual** contra la evidencia física existente.
 
-Su estado/evidencia actual se registra en `PROJECT_STATE.md`. El runbook está en `cloudflare-controlled-probe-runbook.md`.
+No hace falta contactar La Colonia ni repetir la sonda para realizar esa verificación.
 
-La sonda usa Worker, Durable Object, audience, llaves, schema y dominio criptográfico separados de la ruta productiva.
+## 10. Current/history y replay
 
-## 10. Decisión comercial y current/history
+Sólo una decisión comercial aceptada y autoritativa puede mutar current/history.
 
-`commercial_state.py` implementa la máquina backend-neutral.
+Invariantes:
 
-Invariantes principales:
-
-- sólo una decisión comercial aceptada muta current/history;
 - `running` es transitorio;
-- replay terminal idéntico es idempotente;
-- divergencia bajo la misma identidad de run falla;
+- replay terminal idéntico es idempotente/reconciliable;
+- divergencia bajo el mismo run falla;
 - continuidad de identidad/ubicación/moneda;
 - cronología cerrada;
-- ausencia en un payload no implica `not_listed` ni `out_of_stock`;
-- evidencia se captura defensivamente;
+- ausencia no implica baja;
+- snapshot defensivo de evidencia mutable;
 - transición atómica;
-- mismo `state_hash` mantiene el periodo abierto;
-- cambio de `state_hash` cierra exactamente un periodo y abre uno nuevo.
+- mismo `state_hash` mantiene el periodo;
+- cambio de `state_hash` cierra exactamente uno y abre uno nuevo.
 
-## 11. Precio regular vs oferta real
+Un fingerprint de replay demuestra igualdad, no autoridad.
 
-Separar siempre:
+## 11. Precio regular vs ahorro real
 
 ```text
 current_price              = precio observado que paga el cliente
-reported_regular_price     = referencia/regular declarado por la tienda
-historical_previous_price  = último current_price aceptado antes del actual
+reported_regular_price     = referencia declarada por la tienda
+historical_previous_price  = current_price aceptado inmediatamente anterior
 ```
 
-La tienda puede mostrar un `reported_regular_price` útil para presentación, pero ese valor **no demuestra** el descuento real.
-
-La reducción real usa histórico propio:
+La reducción real es:
 
 ```text
-reduction = max(previous_accepted_current_price - current_price, 0)
+max(historical_previous_price - current_price, 0)
 ```
 
-Si no hay baseline aceptado, no se inventa ahorro.
+`reported_regular_price` e `is_promotion` no demuestran ahorro. Sin baseline aceptado no se inventa una reducción.
 
 ## 12. Modelo tabular común
 
-La fase inicial usa tablas compartidas por todos los supermercados:
+La fase inicial usa ocho tablas compartidas:
 
 ```text
 cfg_supermarkets
 cfg_locations
+dim_products
+map_source_products
 fact_offers_current
 fact_offer_history
 fact_scrape_runs
 fact_quality_events
 ```
 
-No se crea una tabla de current/history separada por cadena de supermercado.
+`dim_products` contiene únicamente atributos normalizados/canónicos por `product_id`; no contiene supermercado, ubicación, precio ni run. `map_source_products` conserva la relación fuente -> producto y la cola de mappings pendientes.
 
-### `fact_scrape_runs`
-
-Registra toda ejecución terminal, con o sin cambios comerciales.
-
-### `fact_offers_current`
-
-Snapshot actual por identidad comercial.
-
-### `fact_offer_history`
-
-Periodos históricos cerrados/abiertos sólo cuando cambia el estado relevante.
-
-### `fact_quality_events`
-
-Eventos de calidad con identidad determinista por run/secuencia.
+Current/history siguen siendo comunes a todas las cadenas; nunca se crea una tabla por supermercado.
 
 ## 13. Rehidratación durable
 
-La persistencia debe ser suficiente para reconstruir objetos comerciales en un runner nuevo.
+La persistencia debe permitir reconstruir un runner nuevo y revalidar IDs, `state_hash`, review status, runs de apertura/current, cronología, cierre de periodos, gaps/overlaps y correspondencia current/history.
 
-La rehidratación recalcula/verifica:
-
-- IDs derivados;
-- `state_hash`;
-- review status;
-- run de apertura/current;
-- cronología;
-- cierre de periodos;
-- gaps/overlaps;
-- correspondencia current/history.
-
-`raw_values` no forman parte del snapshot durable cuando no son necesarios para identidad/transición y pueden contener payload fuente voluminoso.
+`raw_values` no se conserva en el snapshot durable cuando no participa en identidad/hash/transición.
 
 ## 14. Batch comercial
 
-Antes de llegar al backend, el proceso construye un `TabularBatch` completo:
+Antes del backend se construye un batch completo:
 
 ```text
 estado persistido
 -> rehidratación
 -> preflight comercial
 -> transición current/history
+-> dimensión/mapping de producto
 -> registros de run/calidad
--> snapshot tabular completo
+-> snapshot tabular
 -> adapter
 ```
 
-Un backend no recibe sólo “las filas que cambiaron” si ello pudiera borrar o perder el resto del snapshot.
+Runs no aceptados no materializan dimensión/mapping/current/history. Un backend no recibe una mutación parcial que pueda dejar el snapshot incoherente.
 
-## 15. Google Sheets — fase inicial
+## 15. Google Sheets
 
-Google Sheets funciona como backend temporal estructurado y revisable.
+Google Sheets es el backend temporal estructurado de la primera fase.
 
 Capas:
 
-1. **plan**: convierte snapshot a una única operación de workbook;
-2. **transport**: autentica y restringe endpoints/scopes;
+1. **plan**: snapshot -> operación de workbook;
+2. **transport**: autenticación y endpoints/scopes cerrados;
 3. **adapter**: read-modify-write del snapshot gestionado;
-4. **bootstrap**: valida/aplica sólo configuración cuando corresponde.
+4. **bootstrap**: validación/aplicación controlada de configuración.
 
-### Seguridad del transporte
+La materialización usa una operación `spreadsheets.batchUpdate` planificada y preserva pestañas ajenas al proyecto. Texto fuente se escribe como string explícito para evitar fórmulas accidentales.
 
-- `spreadsheet_id` opaco, no URL arbitraria;
-- endpoint fijo `https://sheets.googleapis.com/v4`;
-- scope único de Sheets;
-- redirects deshabilitados;
-- errores sanitizados;
-- credenciales sólo en el step que las necesita;
-- pestañas ajenas al proyecto se preservan.
-
-### Materialización
-
-El workbook se actualiza mediante un único `spreadsheets.batchUpdate` planificado para mantener atomicidad de la solicitud.
-
-El texto fuente se escribe explícitamente como string para evitar que valores que comienzan con `=` se conviertan en fórmulas.
+El workbook físico existente fue creado bajo el contrato anterior de seis tablas. El contrato actual tiene ocho; `dim_products` y `map_source_products` deben materializarse mediante el workflow de storage y confirmarse por read-back antes de declarar la migración física terminada.
 
 ## 16. Automatización diaria
 
-La automatización diaria se activa sólo después de cerrar:
+Sólo se activa después de cerrar:
 
 1. binding de ubicación;
-2. validación live estable de la fuente;
-3. completitud/autoridad del catálogo;
+2. validación live estable;
+3. completitud y autoridad del catálogo;
 4. persistencia productiva.
-
-Flujo esperado:
 
 ```text
 schedule
@@ -359,80 +308,34 @@ schedule
 -> decisión autoritativa
 -> transición current/history
 -> persistencia
--> registro del run
--> salida para BI
+-> run log
+-> dataset BI
 ```
 
-Los fallos estructurales deben detener promoción de datos sin borrar el último snapshot confiable.
+Los fallos estructurales no borran el último snapshot confiable.
 
 ## 17. Power BI
 
-Power BI es el único dashboard previsto en la primera arquitectura de producto.
+Power BI consume la proyección semántica común sobre datos aceptados. No scrapea, no decide autoridad y no redefine el cálculo de ahorro real.
 
-Dataset objetivo:
+## 18. GitHub y CI
 
-- producto;
-- marca;
-- presentación;
-- categoría/subcategoría cuando exista;
-- supermercado;
-- ubicación comercial;
-- precio actual;
-- precio histórico anterior;
-- precio regular/referencia declarado;
-- promoción;
-- disponibilidad;
-- fecha de observación;
-- periodos históricos;
-- métricas de cambio/reducción real.
+GitHub es la fuente de código, documentación y gobernanza. Todo workflow SPS se audita por triggers exactos, mínimo privilegio, acciones fijadas por SHA, checkout seguro, secretos/variables allowlisted y bloqueo de entrypoints live.
 
-La capa BI consume datos persistidos/aceptados; no scrapea sitios ni decide autoridad.
-
-## 18. Expansión a otros supermercados
-
-Para cada nuevo supermercado:
-
-```text
-radiografía del sitio
--> determinar ubicación/granularidad
--> extractor específico
--> normalización al contrato común
--> pruebas offline
--> validación live limitada/autorizada
--> completitud
--> persistencia común
--> Power BI existente
-```
-
-La mayor parte de la infraestructura debe reutilizarse. Lo específico por supermercado debe concentrarse en el acceso/parseo de la fuente y sus reglas de identidad/ubicación demostradas.
-
-## 19. GitHub y CI
-
-GitHub es la fuente de código, documentación y gobernanza.
-
-Todo workflow SPS está sometido a auditoría fail-closed:
-
-- triggers exactos;
-- mínimo privilegio;
-- acciones fijadas por SHA;
-- checkout seguro;
-- secretos/variables allowlisted;
-- entrypoints live bloqueados cuando no existe autorización;
-- un workflow nuevo debe registrarse explícitamente en la auditoría.
-
-Suite base:
+La suite Python ejecuta también la suite Node canónica declarada en `edge/cloudflare/package.json`; no se mantiene una segunda lista manual de tests Node.
 
 ```bash
 python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
 pytest precios-supermercados-sps/tests
 ```
 
-El conteo vigente de pruebas se publica sólo en `PROJECT_STATE.md`.
+El conteo vigente se publica sólo en `PROJECT_STATE.md`.
 
-## 20. Orden arquitectónico de avance
+## 19. Orden arquitectónico
 
 ```text
 CORRECTNESS
+-> INFRASTRUCTURE PREFLIGHTS
 -> LOCATION BINDING
 -> LIVE VALIDATION
 -> AUTHORITATIVE ACCEPTANCE
@@ -442,4 +345,4 @@ CORRECTNESS
 -> NEXT SUPERMARKET
 ```
 
-No saltar una frontera para mostrar avance aparente. La plataforma debe preferir un bloqueo explícito a datos incorrectamente etiquetados o no autoritativos.
+No se salta una frontera para aparentar avance. Un bloqueo explícito es preferible a datos incorrectamente etiquetados o no autoritativos.

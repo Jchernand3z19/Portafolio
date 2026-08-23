@@ -142,7 +142,6 @@ def _cell(value: Any) -> dict[str, Any]:
     if isinstance(value, float):
         return {"userEnteredValue": {"numberValue": value}}
     if isinstance(value, str):
-        # stringValue no interpreta fórmulas; evita convertir texto fuente en fórmula.
         return {"userEnteredValue": {"stringValue": value}}
     raise GoogleSheetsPlanError(f"tipo de celda no soportado: {type(value).__name__}")
 
@@ -263,7 +262,7 @@ def build_atomic_workbook_plan(
     store: InMemoryTabularStore,
     metadata: SpreadsheetMetadata,
 ) -> AtomicWorkbookPlan:
-    """Materializa las seis tablas gestionadas en un único batch atómico.
+    """Materializa todas las tablas gestionadas en un único batch atómico.
 
     Tabs ajenos al proyecto se preservan. Tabs gestionados se dimensionan al
     snapshot actual, con encabezado congelado y filtro cuando existen datos.

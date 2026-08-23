@@ -1,89 +1,83 @@
 # Estado actual — Precios de Supermercados SPS
 
-Este documento es la **fuente canónica del estado operativo mutable** del proyecto. `docs/arquitectura.md` describe la arquitectura estable; los PR, runs, comentarios y artefactos son evidencia histórica y no sustituyen este corte.
+Este documento es la **fuente canónica del estado operativo mutable**. [`arquitectura.md`](arquitectura.md) describe la arquitectura estable; PRs, runs, ramas y artifacts son evidencia histórica y no conceden autoridad.
 
 ## Corte
 
 Estado verificado al **2026-08-22 (America/Tegucigalpa)**.
 
 ```text
-base técnica del corte = da342bf9439e260a8bc213c8c83e805412c5741d (merge de PR #154)
-último PR técnico integrado antes de este corte documental = #154
-último PR documental integrado = #155
-última suite técnica completa observada = 1462/1462 PASS
+base técnica del corte = 2c3c0f956a05de10c2e0ed415d2f227ca889aff5 (merge de PR #161)
+últimos hitos técnicos integrados = #157, #158, #159, #160, #161
+última suite completa observada = 1481/1481 PASS (merge-ref final de PR #161, run 32607400298)
 compileall = PASS
 GATE-17 = PASS_PRODUCTIVE_EVIDENCE
 ACTIVE_AUTHORIZATION_IDS = []
+LIVE_REQUESTS_CURRENT_RUN = 0
 READY_FOR_LIVE = NO
 SPS_TECHNICAL_CONTEXT = UNCONFIRMED
 production_authority = false
 catalog_accepted = false
 ```
 
-El HEAD mutable de `main` no se usa como autoridad por sí mismo; este corte fija únicamente la base técnica que fue validada antes de la actualización documental.
-
 ## Semántica de estado
 
 | Estado | Significado |
 |---|---|
 | `DONE` | Contrato/lógica integrada y estable. |
-| `DONE_OFFLINE` | Implementado y probado, pero sin afirmar efecto productivo externo. |
-| `DONE_PRODUCTIVE` | Evidencia real/productiva observada para esa capacidad concreta. |
-| `PARTIAL_PRODUCTIVE` | Una parte de la cadena se demostró físicamente, pero falta otra condición para aceptar la frontera completa. |
-| `BLOCKED_LIVE` | Requiere observación real de la fuente. |
+| `DONE_OFFLINE` | Implementado y probado sin afirmar efecto productivo externo. |
+| `DONE_PRODUCTIVE` | Evidencia física/productiva observada para esa capacidad concreta. |
+| `PARTIAL_PRODUCTIVE` | Parte de la cadena se demostró físicamente, pero la frontera completa sigue abierta. |
+| `BLOCKED_LIVE` | Requiere una observación real de la fuente. |
 | `BLOCKED_HUMAN_DECISION` | Requiere autorización humana explícita. |
-| `BLOCKED_EXTERNAL` | Requiere configuración/credencial/servicio externo no demostrado. |
+| `BLOCKED_EXTERNAL` | Requiere ejecución/configuración de un servicio externo. |
 | `BLOCKED_DEPENDENCIES` | Depende de cerrar una frontera anterior. |
 
-## Resumen por área
+## Fase 0
 
 | Área | Estado | Hecho verificable / bloqueo |
 |---|---|---|
-| Contratos `RawProduct` / `NormalizedOffer` / `ValidatedOffer` | `DONE` | Protegidos por pruebas e invariantes. |
-| Extractor La Colonia, GraphQL, ventanas, facets, particiones, coverage y reconciliación de catálogo | `DONE_OFFLINE` | Implementados con fixtures y validación adversarial; no equivalen a catálogo productivo aceptado. |
-| GATE-17 / protección de `main` | `DONE_PRODUCTIVE` | `PASS_PRODUCTIVE_EVIDENCE`. |
-| Sonda Cloudflare: OIDC → Durable Object → origen controlado → receipt Ed25519 | `DONE_PRODUCTIVE` para esas capacidades | Run físico `32551882793`; evidencia firmada revalidada posteriormente. |
-| Verificación criptográfica independiente de la sonda | `DONE_PRODUCTIVE` | Verifier-only `32552932554` revalidó firma, bytes e identidad. |
-| Reconciliación estricta contra Workers Observability | `PARTIAL_PRODUCTIVE / BLOCKED_EXTERNAL` | Existe trace candidato real, pero la API pública consultada no expone el custom span/fetch hijo requerido; el verificador estricto se conserva. |
-| Autoridad productiva del collector/catálogo | `BLOCKED_DEPENDENCIES` | No se deriva de sonda, fixtures, hashes ni caller input; sigue `production_authority=false` / `catalog_accepted=false`. |
-| Modelo común de supermercados/ubicaciones | `DONE_OFFLINE` | La Colonia registra SPS y Tegucigalpa; sólo SPS está dentro del alcance inicial. |
-| Granularidad comercial de La Colonia SPS | `BLOCKED_LIVE` | Se mantiene `unknown`; no se asume que precio/inventario varían sólo por ciudad. |
-| Binding técnico SPS | `BLOCKED_LIVE` | `technical_binding_confirmed=false`, sin `source_location_key` productiva. |
-| Radiografía de ubicación `city|store` | `DONE_OFFLINE` | Analizador, capturador Playwright, workflow manual y evaluador de transición integrados; workflow live permanece bloqueado. |
-| Current/history + ahorro real | `DONE_OFFLINE` | Máquina comercial atómica/idempotente; ahorro contra precio histórico aceptado anterior. |
-| Persistencia tabular común | `DONE_OFFLINE` | Config, current, history, runs y quality events comparten tablas para todos los supermercados. |
-| Guard de autoridad antes de persistencia | `DONE_OFFLINE` | PR #150 impide que código operativo convierta una `CommercialRunDecision` caller-controlled en mutación de current/history. |
-| Binding durable de replay | `DONE_OFFLINE` | PR #151 liga evidencia, decisión, ofertas, metadata y quality events con fingerprint `crev1_`; demuestra igualdad/replay, nunca autoridad. |
-| Rehidratación + restauración entre runners | `DONE_OFFLINE` | PR #152 restaura el motor desde current/history/runs y reserva todos los IDs terminales históricos. |
-| Google Sheets plan/transporte/adapter/bootstrap | `DONE_OFFLINE` | Plan atómico, transporte autenticado, read-modify-write y bootstrap manual implementados. |
-| Google Sheets read-side → estado comercial | `DONE_OFFLINE` | PR #153 carga snapshot validado, recalcula métricas, rehidrata current/history y restaura el motor sin writes ni autoridad. |
-| Batch comercial → Google Sheets | `DONE_OFFLINE` | Existe frontera comercial a `TabularBatch`, pero la entrada productiva mutante sigue cerrada hasta autoridad real. |
-| Workbook físico Google Sheets | `PARTIAL_PRODUCTIVE` | Se creó y releyó el workbook canónico `Precios Supermercados SPS - Storage` mediante la conexión Google autorizada; seis tabs gestionadas, timezone `America/Tegucigalpa`, configuración La Colonia SPS/TGU exacta y cero filas en todas las tablas `fact_*`. |
-| GitHub Actions → Google Sheets por service account | `BLOCKED_EXTERNAL` | El workflow seguro existe, pero no se ha demostrado el environment/variable/secret ni una ejecución `check` desde GitHub Actions. |
-| Persistencia productiva de ofertas | `BLOCKED_DEPENDENCIES` | El workbook existe, pero no puede recibir ofertas comerciales hasta cerrar ubicación y autoridad del catálogo. |
-| Proyección semántica Power BI | `DONE_OFFLINE` | PR #154 centraliza precio actual, baseline aceptado, ahorro real, dirección de precio, precio regular reportado, promoción, disponibilidad, ubicación y review status. |
-| Dataset/refresh Power BI productivo | `BLOCKED_DEPENDENCIES` | Espera persistencia durable/autoritativa; Power BI no decide autoridad ni recalcula la semántica comercial. |
-| Scraping diario | `BLOCKED_DEPENDENCIES` | Espera binding correcto, live estable, autoridad de catálogo y persistencia productiva. |
-| Segundo supermercado | `BLOCKED_DEPENDENCIES` | Se inicia después de cerrar La Colonia end-to-end sobre la plataforma común. |
+| 0A — suite completa | `DONE` | Suite Python + Node canónica; Node usa `edge/cloudflare/package.json` como única lista de verdad. |
+| 0B — hardening físico de catálogo | `DONE` | PR #158 recuperó rechazo temprano de reutilización de `physical_evidence_id` / `fetch_span_id`. |
+| 0C — ramas históricas | `DONE` | PR #160 auditó 158 ramas: 102 `MERGED_OR_SUBSUMED`, 55 `CLOSED_SUPERSEDED`, 0 `UNIQUE_UNMERGED`; la única `OPEN_CURRENT` era el propio PR de auditoría. |
+| 0E — Raw → Normalized → Validated | `DONE` | PR #159 conectó la transformación real sin persistencia ni autoridad. |
+| 0F — semántica de ubicación | `DONE_OFFLINE` | PR #161 fija `la_colonia_online` como contexto fuente raw `UNKNOWN`; no puede promoverirse bajo ese mismo ID a SPS/TGU/tienda. |
+| 0G — identidad/dimensión de producto | `DONE_OFFLINE` | PR #161 valida GTIN, conserva `pending_product_mapping` y añade `dim_products` + `map_source_products`. |
+| 0H — documentación canónica | `IN_PROGRESS` | PR documental actual sincroniza README, arquitectura, modelo, decisiones, AGENTS y este estado. |
+| 0I — workbook físico base | `DONE_PRODUCTIVE` para existencia/configuración inicial | Workbook físico creado/releído con seis tabs del contrato anterior; cero filas `fact_*`. |
+| 0J — GitHub Actions → Google Sheets | `PARTIAL_PRODUCTIVE / BLOCKED_EXTERNAL` | Workflow seguro existe; falta ejecutar `check -> apply-config -> check` sobre `main` para migrar/verificar las ocho tabs actuales. |
+| 0K — verifier Cloudflare/Observability | `PARTIAL_PRODUCTIVE / BLOCKED_EXTERNAL` | Sonda física y verificación Ed25519 existen; falta ejecutar con éxito el verifier actual `traces -> events` contra esa evidencia existente. |
+| 0L — CI/protección | `DONE_PRODUCTIVE` para GATE-17; auditoría continua | Ruleset de `main` demostró enforcement; workflows SPS siguen bajo auditoría fail-closed. |
 
-## Evidencia Cloudflare física
+## Contratos y producto
 
-La afirmación histórica “sonda no desplegada/no ejecutada” ya no es válida.
+`RawProduct`, `NormalizedOffer` y `ValidatedOffer` permanecen contratos protegidos.
+
+La identidad se separa en:
 
 ```text
-physical probe source run = 32551882793
-verifier-only run         = 32552932554
+source_product_id = identidad dentro de la fuente
+product_id        = identidad comparable entre fuentes
+offer_id          = supermercado + ubicación comercial + producto fuente
 ```
 
-La sonda demostró físicamente OIDC de GitHub, Worker/Durable Object, fetch al origen controlado `workers.dev`, challenge/body esperado, receipt Ed25519 y verificación independiente de firma/bytes/identidad.
+Un GTIN válido se normaliza a GTIN-14 y puede producir `prod_gtin_*`. Barcode ausente/inválido conserva `prod_pending_*` + `pending_product_mapping`.
 
-La reconciliación estricta del custom span + child fetch mediante la API pública de Workers Observability **no** se declara cerrada. Los diagnósticos históricos mostraron que la superficie pública disponible no entrega el detalle que exige el reconciliador. No se fabrica un PASS ni se rebaja el verificador.
-
-No se necesita repetir la sonda física salvo cambio de infraestructura o una hipótesis explícita nueva.
+Presentaciones multipack no se colapsan: `2 x 500 ml` conserva 2 unidades, 500 ml por unidad y 1000 ml total.
 
 ## La Colonia — ubicación y live
 
-Estado de `la_colonia_sps`:
+Contexto raw actual:
+
+```text
+location_id = la_colonia_online
+location_status = unknown
+location_confidence = null
+```
+
+Ese ID representa el catálogo público en línea observado; no es una ubicación comercial.
+
+Estado de la ubicación candidata `la_colonia_sps`:
 
 ```text
 city = San Pedro Sula
@@ -94,55 +88,66 @@ source_location_key = null
 extraction_enabled = false
 ```
 
-La UI conocida expone al menos San Pedro Sula y Tegucigalpa, pero eso no demuestra si el contexto comercial efectivo varía por ciudad o tienda.
+La UI conocida expone SPS y Tegucigalpa, pero eso no demuestra si precio/inventario cambia por ciudad o por tienda. La radiografía preparada continúa bloqueada y requiere una **nueva autorización humana explícita y limitada** antes de cualquier request a La Colonia.
 
-La radiografía preparada compara `before -> after_city -> after_store` y busca mecanismos fuertes como `regionId`, `salesChannel`, `binding`, `store` o `storeId`. Valores opacos se convierten en fingerprints sanitizados. `vtex_session` / `vtex_segment` no bastan por sí solos para confirmar granularidad.
+Una autorización de radiografía no cubre smoke, facets, GraphQL replay, crawl, persistencia ni ejecución diaria.
 
-El workflow de radiografía sigue deliberadamente bloqueado y la allow-list live está vacía. **No debe iniciarse ninguna petición nueva a La Colonia sin una nueva autorización humana explícita y limitada.**
+## Cloudflare
 
-Una autorización para radiografía no cubriría smoke, facets, GraphQL replay, crawl completo ni persistencia de precios.
+Evidencia física existente:
+
+```text
+physical probe source run = 32551882793
+verifier-only run         = 32552932554
+```
+
+La sonda demostró OIDC, Worker/Durable Object, fetch al origen controlado, bytes esperados y receipt Ed25519; el verifier-only revalidó firma/bytes/identidad.
+
+El código actual ya consulta Workers Observability con discovery de traces y detalle `view: events`, exigiendo custom span único y child fetch reconciliado. La antigua conclusión de que la API pública necesariamente impedía esa reconciliación queda como diagnóstico histórico, no como estado canónico.
+
+**0K sigue abierto** hasta observar un PASS real del verifier actual sobre la evidencia existente. No hace falta repetir una request a La Colonia para esa prueba.
 
 ## Persistencia
 
-Google Sheets sigue siendo el almacenamiento temporal estructurado de la primera fase; BigQuery se incorpora cuando el proceso esté estable.
-
-Tablas comunes:
+Contrato lógico actual de ocho tablas:
 
 ```text
 cfg_supermarkets
 cfg_locations
+dim_products
+map_source_products
 fact_offers_current
 fact_offer_history
 fact_scrape_runs
 fact_quality_events
 ```
 
-El workbook físico canónico ya existe en la cuenta Google conectada. Su estructura fue materializada y revalidada después de la escritura:
+`dim_products` contiene atributos normalizados/canónicos por `product_id`. `map_source_products` conserva identidad fuente, mapping y la cola de revisión.
 
-- `cfg_supermarkets`: encabezado exacto + La Colonia activa;
-- `cfg_locations`: SPS en alcance y TGU fuera de alcance;
-- SPS conserva `granularity=unknown`, `source_location_key` vacío, `extraction_enabled=false` y `technical_binding_confirmed=false`;
-- `fact_offers_current`, `fact_offer_history`, `fact_scrape_runs` y `fact_quality_events`: encabezado exacto y **cero filas de datos**;
-- timezone del Spreadsheet: `America/Tegucigalpa`;
-- la pestaña ajena por defecto se preserva porque el adapter está diseñado para ignorar tabs no gestionadas.
+El workbook físico fue materializado antes de integrar esas dos tablas nuevas. Por tanto:
 
-Esta materialización demuestra la existencia y escritura física del workbook mediante la conexión Google del usuario. **No demuestra todavía** que GitHub Actions pueda autenticarse con la service account prevista ni que exista persistencia comercial autoritativa.
+- existencia física del workbook: demostrada;
+- configuración física original de seis tabs: demostrada;
+- esquema lógico actual de ocho tabs: integrado y probado offline;
+- migración física a ocho tabs por GitHub Actions: **pendiente**;
+- persistencia comercial de ofertas: **bloqueada** por ubicación y autoridad.
 
-Reglas vigentes:
+La ruta prevista para 0J es:
 
-- un mismo esquema para todos los supermercados;
-- current/history rehidratables y restaurables entre runners;
-- nuevo periodo histórico sólo ante cambio relevante;
-- cada run final se registra aunque no cambie ningún precio;
-- runs rechazados/fallidos no alteran current/history;
-- un retry durable sólo se reconoce cuando evidencia + decisión + payload coinciden;
-- restaurar un snapshot no concede nueva autoridad;
-- ausencia de una oferta en un payload no implica baja ni `out_of_stock`;
-- Google Sheets se materializa como snapshot completo mediante un único `spreadsheets.batchUpdate` planificado;
-- el read-side de Sheets sólo lee/valida/rehidrata/restaura;
-- una decisión caller-controlled nunca sustituye evidencia autoritativa.
+```text
+main + workflow manual de storage
+-> mode=check
+-> autenticación service account
+-> lectura del workbook
+-> mode=apply-config
+-> materialización atómica de las ocho tabs/config
+-> mode=check
+-> read-back consistente
+```
 
-Configuración externa prevista para GitHub Actions:
+No se deben introducir ofertas para demostrar 0J.
+
+Configuración externa esperada, sin publicar valores:
 
 ```text
 Environment: precios-sps-storage
@@ -150,53 +155,33 @@ Variable: PRECIOS_SPS_GOOGLE_SPREADSHEET_ID
 Secret: PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON
 ```
 
-No registrar el JSON de service account en el repositorio, Drive, documentación, logs ni chat. La service account debe recibir acceso de edición al workbook y el workflow debe validarse primero con `mode=check`, que es read-only.
-
-## Regla comercial del precio y Power BI
-
-Separar siempre:
+## Regla comercial del precio
 
 ```text
-current_price              = precio observado que paga el cliente
-reported_regular_price     = referencia declarada por la tienda
-previous_accepted_price    = current_price del periodo aceptado inmediatamente anterior
+current_price           = precio observado que paga el cliente
+reported_regular_price  = referencia declarada por la tienda
+previous_accepted_price = current_price del periodo aceptado inmediatamente anterior
 ```
 
-La reducción real usa únicamente histórico propio aceptado:
+Ahorro real:
 
 ```text
-reduction = max(previous_accepted_price - current_price, 0)
+max(previous_accepted_price - current_price, 0)
 ```
 
-Si no existe baseline, no se inventa ahorro. Una subida produce reducción cero. PR #154 expone esta semántica como proyección read-only para BI junto con `price_direction`, ubicación, `review_status`, promoción y disponibilidad; Power BI no debe redefinirla en DAX.
+`reported_regular_price` e `is_promotion` no sustituyen el histórico propio.
 
-## Próximos pasos
+## Próximas acciones sin tráfico a La Colonia
 
-Trabajo de storage pendiente que **no requiere tráfico a La Colonia** pero sí configuración externa:
+1. fusionar el sync documental 0H;
+2. ejecutar y cerrar 0J con `check -> apply-config -> check` desde GitHub Actions sobre `main`;
+3. ejecutar y cerrar 0K usando la evidencia física existente de la sonda;
+4. reauditar 0L tras cualquier cambio de workflow/configuración.
 
-1. crear/seleccionar una Google service account exclusiva para este storage;
-2. compartir el workbook canónico con su `client_email` como editor;
-3. configurar en el environment GitHub `precios-sps-storage` la variable del Spreadsheet y el secret JSON de la service account;
-4. ejecutar primero el workflow manual en `mode=check` y exigir `wrote=false`;
-5. sólo después, si el check es limpio, ejecutar `apply-config` para comprobar la ruta GitHub Actions → Google Sheets sin introducir ofertas.
+Sólo después de cerrar Fase 0 corresponde pedir una nueva autorización humana para una radiografía mínima de ubicación.
 
-La **próxima dependencia humana live** continúa siendo una nueva autorización explícita para una única radiografía limitada de ubicación de La Colonia. La configuración de storage anterior es una dependencia externa distinta y no autoriza tráfico live.
+## Tráfico live
 
-Después de resolver ubicación y autoridad, el orden productivo es:
+Los PR #157–#161 y el trabajo documental posterior se realizaron sin nuevas requests a La Colonia.
 
-```text
-binding de ubicación
--> validación live exacta/autorizada del catálogo
--> decisión autoritativa del catálogo
--> persistencia comercial en Google Sheets
--> ejecución diaria
--> dataset/refresh Power BI
--> La Colonia end-to-end
--> supermercado #2
-```
-
-## Tráfico live reciente
-
-PR #135–#155, la materialización del workbook y este corte documental se realizaron **sin nuevos requests a La Colonia**.
-
-No usar esta frase para inferir que el proyecto nunca realizó pruebas live históricas; sólo describe este bloque de trabajo.
+Esto no significa que nunca existieron pruebas live históricas; sólo describe el bloque actual de trabajo y la allow-list vigente vacía.
