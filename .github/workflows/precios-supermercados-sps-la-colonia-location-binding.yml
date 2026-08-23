@@ -7,11 +7,6 @@ on:
         description: ID de autorización live previamente aprobado y versionado
         required: true
         type: string
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/requests/la-colonia-location-binding-reconcile-request.json
 
 permissions:
   contents: read
@@ -22,7 +17,9 @@ concurrency:
 
 jobs:
   radiography:
-    # Fail-closed: no existe autorización live activa; la radiografía completa de 2026-08-23 ya fue consumida.
+    # Fail-closed: todas las autorizaciones históricas de binding, incluida LC-location-binding-337, ya fueron consumidas.
+    # La radiografía completa autorizada el 2026-08-23 también fue consumida y no concede una nueva ejecución.
+    # Una autorización futura requiere un PR separado que active simultáneamente este job y los gates versionados.
     if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -72,183 +69,3 @@ jobs:
             "3") exit 3 ;;
             *) exit 5 ;;
           esac
-
-  reconcile-consumed-authorization:
-    if: ${{ github.event_name == 'push' && github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 6
-    permissions:
-      actions: read
-      contents: read
-      statuses: write
-    steps:
-      - name: Localizar ejecución única de radiografía completa
-        id: source
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
-        with:
-          script: |
-            // Sentinelas históricos exclusivos de regresión; no son la fuente consultada.
-            const historicalRegressionSource = '157458c8f169bcb1975fb998e07cd7043920c85e';
-            const priorFullBindingSource = 'dcc3894185517cb778db2d3b30e8edfa4822726f';
-            // Compatibilidad de auditoría histórica: location-binding-radiography.json
-            // precios-sps/location-binding-reconcile
-            // precios-sps/location-binding-outcome
-            // precios-sps/location-binding-evidence
-            // city_control_diagnostic allowedKeys allowedStages allowedRoles
-            // sanitized city-control diagnostic
-            const sourceSha = '52d305e97f98840f1b3786b3d7358cbaa5e87e46';
-            const workflowId = 'precios-supermercados-sps-la-colonia-location-binding.yml';
-            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-            let source = null;
-            for (let attempt = 0; attempt < 24; attempt += 1) {
-              const { data } = await github.rest.actions.listWorkflowRuns({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                workflow_id: workflowId,
-                head_sha: sourceSha,
-                event: 'push',
-                per_page: 10,
-              });
-              const matches = data.workflow_runs.filter((run) => run.head_sha === sourceSha);
-              if (matches.length > 1) {
-                core.setFailed('full_radiography_source_run_not_unique');
-                return;
-              }
-              if (matches.length === 1 && matches[0].status === 'completed') {
-                source = matches[0];
-                break;
-              }
-              await sleep(10000);
-            }
-            if (!source) {
-              core.setFailed('full_radiography_source_run_missing_or_incomplete');
-              return;
-            }
-            core.setOutput('run_id', String(source.id));
-            core.setOutput('conclusion', String(source.conclusion || 'unknown'));
-
-      - name: Descargar artefacto de radiografía completa
-        id: download
-        if: ${{ steps.source.outputs.run_id != '' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: la-colonia-full-location-radiography-${{ steps.source.outputs.run_id }}
-          path: reconciliation
-          github-token: ${{ github.token }}
-          run-id: ${{ steps.source.outputs.run_id }}
-
-      - name: Validar y publicar resumen sanitizado
-        if: always()
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
-        env:
-          SOURCE_RUN_ID: ${{ steps.source.outputs.run_id }}
-          SOURCE_CONCLUSION: ${{ steps.source.outputs.conclusion }}
-          SOURCE_DISCOVERY_OUTCOME: ${{ steps.source.outcome }}
-          DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
-        with:
-          script: |
-            const fs = require('fs');
-            const sha = context.sha;
-            const limit = (value) => String(value).slice(0, 140);
-            const contextLimit = (value) => String(value).slice(0, 100);
-            const safe = (value) => String(value).replace(/[^a-z0-9_-]/gi, '_');
-            const publish = async (contextName, state, description) => {
-              await github.rest.repos.createCommitStatus({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                sha,
-                state,
-                context: contextLimit(contextName),
-                description: limit(description),
-              });
-            };
-
-            if (process.env.SOURCE_DISCOVERY_OUTCOME !== 'success') {
-              await publish('precios-sps/full-radiography-reconcile', 'failure', 'source_run_missing_or_incomplete');
-              return;
-            }
-            const runId = process.env.SOURCE_RUN_ID || 'unknown';
-            const conclusion = process.env.SOURCE_CONCLUSION || 'unknown';
-            if (process.env.DOWNLOAD_OUTCOME !== 'success') {
-              await publish('precios-sps/full-radiography-reconcile', 'failure', `source_run=${runId}; artifact=missing`);
-              return;
-            }
-
-            let evidence;
-            try {
-              evidence = JSON.parse(fs.readFileSync('reconciliation/radiography.json', 'utf8'));
-            } catch (error) {
-              await publish('precios-sps/full-radiography-reconcile', 'failure', `source_run=${runId}; artifact=invalid_json`);
-              return;
-            }
-
-            const boolKeys = [
-              'browser_started',
-              'navigation_completed',
-              'selector_opened',
-              'selection_confirmed',
-              'authority',
-              'catalog_accepted',
-              'extraction_enabled',
-            ];
-            if (boolKeys.some((key) => typeof evidence[key] !== 'boolean')) {
-              core.setFailed('full_radiography_boolean_contract_invalid');
-              return;
-            }
-            if (evidence.authority || evidence.catalog_accepted || evidence.extraction_enabled) {
-              core.setFailed('full_radiography_authority_contract_invalid');
-              return;
-            }
-            if (
-              typeof evidence.target_url !== 'string' ||
-              !evidence.target_url.startsWith('https://') ||
-              evidence.target_city !== 'San Pedro Sula'
-            ) {
-              core.setFailed('full_radiography_target_contract_invalid');
-              return;
-            }
-            if (!Array.isArray(evidence.click_attempts) || evidence.click_attempts.length > 8) {
-              core.setFailed('full_radiography_click_attempts_invalid');
-              return;
-            }
-            if (!Array.isArray(evidence.errors)) {
-              core.setFailed('full_radiography_errors_invalid');
-              return;
-            }
-            const dom = evidence.dom_radiography && typeof evidence.dom_radiography === 'object'
-              ? evidence.dom_radiography
-              : {};
-            const targets = Array.isArray(dom.target_city_matches) ? dom.target_city_matches.length : 0;
-            const others = Array.isArray(dom.other_city_matches) ? dom.other_city_matches.length : 0;
-            const candidates = Array.isArray(dom.click_candidates) ? dom.click_candidates.length : 0;
-            const working = evidence.working_click_candidate && typeof evidence.working_click_candidate === 'object'
-              ? evidence.working_click_candidate
-              : null;
-            const tag = working && typeof working.tag === 'string' ? safe(working.tag).slice(0, 20) : 'none';
-            const depth = working && Number.isInteger(working.source_depth) ? working.source_depth : -1;
-
-            await publish(
-              'precios-sps/full-radiography-reconcile',
-              'success',
-              `source_run=${runId}; source=${conclusion}; artifact=valid`
-            );
-            await publish(
-              'precios-sps/full-radiography-selection',
-              evidence.selection_confirmed ? 'success' : 'failure',
-              `opened=${evidence.selector_opened}; selected=${evidence.selection_confirmed}; targets=${targets}; other=${others}; candidates=${candidates}`
-            );
-            await publish(
-              `precios-sps/fr-run-${safe(runId)}-${safe(conclusion)}`,
-              'success',
-              'sanitized source run identity'
-            );
-            await publish(
-              `precios-sps/fr-result-s${evidence.selection_confirmed ? 1 : 0}-t${targets}-o${others}-c${candidates}-a${evidence.click_attempts.length}`,
-              evidence.selection_confirmed ? 'success' : 'failure',
-              'sanitized radiography result'
-            );
-            await publish(
-              `precios-sps/fr-click-${tag}-d${depth}`,
-              working ? 'success' : 'failure',
-              working ? 'sanitized working click surface' : 'no working click surface confirmed'
-            );
