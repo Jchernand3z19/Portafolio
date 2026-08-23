@@ -51,6 +51,8 @@ LA_DIAGNOSTIC_WORKFLOW = "precios-supermercados-sps-la-colonia-diagnostic.yml"
 FACET_WORKFLOW = "precios-supermercados-sps-la-colonia-facet-discovery.yml"
 LIVE_WORKFLOW = "precios-supermercados-sps-la-colonia-live.yml"
 LOCATION_BINDING_WORKFLOW = "precios-supermercados-sps-la-colonia-location-binding.yml"
+LOCATION_BINDING_REQUEST = ".github/workflows/requests/la-colonia-location-binding-request.json"
+LOCATION_BINDING_AUTHORIZATION_ID = "LC-location-binding-336"
 GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storage.yml"
 GOOGLE_SHEETS_STORAGE_REQUEST = (
     "precios-supermercados-sps/.automation/google-sheets-storage-request.json"
@@ -90,7 +92,7 @@ EXPECTED_TRIGGERS = {
     RECOVERY_WORKFLOW: {"workflow_run"},
     FACET_WORKFLOW: {"workflow_dispatch"},
     LIVE_WORKFLOW: {"workflow_dispatch"},
-    LOCATION_BINDING_WORKFLOW: {"workflow_dispatch"},
+    LOCATION_BINDING_WORKFLOW: {"push"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch", "push"},
     TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
 }
@@ -101,7 +103,6 @@ BLOCKED_ENTRYPOINTS = {
     RECOVERY_WORKFLOW,
     FACET_WORKFLOW,
     LIVE_WORKFLOW,
-    LOCATION_BINDING_WORKFLOW,
 }
 
 ALLOWED_SECRET_REFERENCES = {
@@ -237,7 +238,7 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
             assert inputs == {"ref": expected_ref, "persist-credentials": "false"}
 
 
-def test_privileged_and_live_entrypoints_are_globally_blocked():
+def test_privileged_and_unrelated_live_entrypoints_are_globally_blocked():
     by_name = {path.name: workflow for path, workflow in workflows()}
     for name in BLOCKED_ENTRYPOINTS:
         assert all_jobs_blocked(by_name[name]), name
@@ -338,7 +339,7 @@ def test_pull_request_target_never_checks_out_untrusted_pr_code():
         assert all(step["with"]["ref"] == "${{ github.workflow_sha }}" for step in checkout)
 
 
-def test_network_capable_scripts_exist_only_inside_blocked_jobs():
+def test_network_capable_scripts_are_blocked_or_exactly_authorized():
     sensitive_commands = {
         "scripts/probar_la_colonia.py",
         "scripts/diagnosticar_ventanas_la_colonia.py",
@@ -347,9 +348,73 @@ def test_network_capable_scripts_exist_only_inside_blocked_jobs():
     }
     for path, workflow in workflows():
         commands = "\n".join(str(step.get("run", "")) for step in steps(workflow))
-        if any(command in commands for command in sensitive_commands):
-            assert path.name in BLOCKED_ENTRYPOINTS
-            assert all_jobs_blocked(workflow)
+        if not any(command in commands for command in sensitive_commands):
+            continue
+        if path.name == LOCATION_BINDING_WORKFLOW:
+            binding_jobs = jobs(workflow)
+            assert set(binding_jobs) == {"preflight", "radiography"}
+            assert binding_jobs["radiography"].get("needs") == "preflight"
+            assert binding_jobs["radiography"].get("if") == (
+                "${{ needs.preflight.outputs.allowed == 'true' }}"
+            )
+            continue
+        assert path.name in BLOCKED_ENTRYPOINTS
+        assert all_jobs_blocked(workflow)
+
+
+def test_location_binding_authorized_trigger_is_exact_and_least_privilege():
+    path = WORKFLOW_DIR / LOCATION_BINDING_WORKFLOW
+    workflow = load_workflow(path)
+    triggers = workflow["on"]
+    assert set(triggers) == {"push"}
+    assert triggers["push"] == {
+        "branches": ["main"],
+        "paths": [LOCATION_BINDING_REQUEST],
+    }
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"] == {
+        "group": "la-colonia-location-binding-radiography",
+        "cancel-in-progress": "false",
+    }
+
+    binding_jobs = jobs(workflow)
+    assert set(binding_jobs) == {"preflight", "radiography"}
+    preflight = binding_jobs["preflight"]
+    radiography = binding_jobs["radiography"]
+    assert "environment" not in preflight
+    assert "permissions" not in preflight
+    assert preflight.get("if") == (
+        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
+        "github.ref == 'refs/heads/main' }}"
+    )
+    assert radiography.get("needs") == "preflight"
+    assert radiography.get("if") == "${{ needs.preflight.outputs.allowed == 'true' }}"
+    assert "environment" not in radiography
+    assert "permissions" not in radiography
+
+    preflight_raw = "\n".join(str(step) for step in job_steps(preflight))
+    raw = path.read_text(encoding="utf-8")
+    assert LOCATION_BINDING_REQUEST in preflight_raw
+    assert LOCATION_BINDING_AUTHORIZATION_ID in preflight_raw
+    assert "precios-sps-la-colonia-location-binding-request/v1" in preflight_raw
+    assert "location_binding_trigger_not_exact_authorized_commit" in preflight_raw
+    assert "location_binding_request_authority_must_be_false" in preflight_raw
+    assert "getCommit" in preflight_raw
+    assert "getContent" in preflight_raw
+    assert "maxLogicalActions" in preflight_raw
+    assert "secrets." not in raw
+    assert "vars." not in raw
+    assert "workflow_dispatch" not in raw
+    assert "pull_request:" not in raw
+    assert "pull_request_target:" not in raw
+    assert "schedule:" not in raw
+    assert "issue_comment:" not in raw
+    assert "id-token" not in raw
+    assert "actions: write" not in raw
+    assert "--target" not in raw
+    assert "--network-policy" not in raw
+    assert "--live-execution" not in raw
+    assert "--active-id" not in raw
 
 
 def test_google_sheets_storage_has_controlled_main_trigger_and_least_privilege():
