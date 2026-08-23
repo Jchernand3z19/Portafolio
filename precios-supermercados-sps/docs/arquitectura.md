@@ -82,9 +82,11 @@ offer_id          = supermercado + ubicación comercial + producto fuente
 
 `source_product_id` y `offer_id` son deterministas y se recalculan en fronteras críticas.
 
-Para identidad cross-supermercado, un GTIN-8/12/13/14 sólo se acepta si supera su check digit y se normaliza a GTIN-14. Si no existe una identidad fuerte usable, el producto queda bajo `prod_pending_*` y `pending_product_mapping` hasta revisión. Un mapping explícito puede reemplazar el `product_id` provisional sin alterar la identidad fuente.
+Para identidad cross-supermercado, un GTIN-8/12/13/14 sólo se acepta si supera su check digit y se normaliza a GTIN-14. Si no existe una identidad fuerte usable, el producto queda bajo `prod_pending_*` y `pending_product_mapping` hasta revisión. El identificador pendiente también es determinista respecto a `source_product_id` y se revalida antes de materializar dimensión/mapping. Un mapping explícito puede reemplazar el `product_id` provisional sin alterar la identidad fuente.
 
 Precio, promoción, disponibilidad y fecha nunca forman parte de IDs estables.
+
+Antes de incorporar un segundo supermercado, las equivalencias sin GTIN compartido ni mapping explícitamente revisado deben permanecer pendientes; la semejanza textual por sí sola no autoriza una unión cross-supermercado.
 
 ## 5. Presentación
 
@@ -196,9 +198,9 @@ Propiedades:
 
 ### Observability
 
-El contrato actual descubre trace IDs y consulta el detalle mediante `view: events`, revalidando custom span, relación padre-hijo y fetch físico. La hipótesis histórica de que la API pública necesariamente impedía esta reconciliación ya no se usa como conclusión canónica; la frontera permanece **pendiente de una ejecución productiva exitosa del verifier actual** contra la evidencia física existente.
+El contrato descubre trace IDs y consulta detalle mediante `view: events`, revalidando custom span, relación padre-hijo y fetch físico. Si la plataforma no expone el trace/evidencia requerida, la reconciliación falla cerrada y el bloqueo operativo se registra en `PROJECT_STATE.md`; no se relaja el contrato para fabricar un PASS.
 
-No hace falta contactar La Colonia ni repetir la sonda para realizar esa verificación.
+La verificación de Observability no necesita contactar La Colonia ni convierte evidencia de sonda en autoridad de catálogo.
 
 ## 10. Current/history y replay
 
@@ -288,9 +290,11 @@ Capas:
 3. **adapter**: read-modify-write del snapshot gestionado;
 4. **bootstrap**: validación/aplicación controlada de configuración.
 
-La materialización usa una operación `spreadsheets.batchUpdate` planificada y preserva pestañas ajenas al proyecto. Texto fuente se escribe como string explícito para evitar fórmulas accidentales.
+La materialización usa una operación `spreadsheets.batchUpdate` planificada y preserva pestañas ajenas al proyecto. Texto fuente se escribe como string explícito para evitar fórmulas accidentales. El planner reserva al menos una fila visible no congelada cuando una tabla sólo contiene encabezado, porque Google Sheets no permite congelar todas las filas visibles.
 
-El workbook físico existente fue creado bajo el contrato anterior de seis tablas. El contrato actual tiene ocho; `dim_products` y `map_source_products` deben materializarse mediante el workflow de storage y confirmarse por read-back antes de declarar la migración física terminada.
+El workflow de storage implementa un único escritor mediante `concurrency`, separa preflight sin secretos, ejecución autenticada y publicación de resultado sanitizado. La existencia/configuración física del workbook se comprueba por la ruta `check -> apply-config -> check`; el resultado productivo concreto vive en `PROJECT_STATE.md`.
+
+La infraestructura de storage no concede por sí misma autoridad comercial: current/history sólo reciben datos cuando las fronteras de ubicación, completitud y aceptación autoritativa están cerradas.
 
 ## 16. Automatización diaria
 
@@ -322,9 +326,12 @@ Power BI consume la proyección semántica común sobre datos aceptados. No scra
 
 GitHub es la fuente de código, documentación y gobernanza. Todo workflow SPS se audita por triggers exactos, mínimo privilegio, acciones fijadas por SHA, checkout seguro, secretos/variables allowlisted y bloqueo de entrypoints live.
 
+Las actions oficiales deben usar generaciones compatibles con el runtime soportado por GitHub y conservar pins SHA completos verificados. CI instala dependencias directas fijadas, ejecuta `pip check`, compila `src/scripts` y corre la suite completa.
+
 La suite Python ejecuta también la suite Node canónica declarada en `edge/cloudflare/package.json`; no se mantiene una segunda lista manual de tests Node.
 
 ```bash
+python -m pip check
 python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
 pytest precios-supermercados-sps/tests
 ```
