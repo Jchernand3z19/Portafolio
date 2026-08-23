@@ -43,6 +43,7 @@ from precios_supermercados.diagnostics.la_colonia_sps_context_diagnostic import 
 )
 from precios_supermercados.diagnostics.location_binding_dom_controls import (
     LocationControlResolutionError,
+    open_location_selector,
     resolve_exact_city_control,
 )
 
@@ -107,6 +108,7 @@ class LocationBindingCaptureResult:
     completed_at: str | None = None
     target_host: str = "www.lacolonia.com"
     target_city: str = TARGET_CITY
+    visible_location: str | None = None
     available_cities: list[str] = field(default_factory=list)
     store_selection_observed: bool = False
     available_stores: list[str] = field(default_factory=list)
@@ -278,22 +280,12 @@ def _option_label(locator: Any) -> str | None:
         return None
 
 
-def _open_location_selector(page: Any) -> None:
-    pattern = re.compile(
-        r"selecciona\s+tu\s+tienda|selecciona\s+una\s+tienda|ubicaci[oó]n",
-        re.I,
-    )
-    candidates = page.get_by_role("button", name=pattern)
-    visible = [
-        candidates.nth(index)
-        for index in range(candidates.count())
-        if candidates.nth(index).is_visible()
-    ]
-    if len(visible) != 1:
-        raise LocationBindingCaptureError(
-            "location_selector_not_unique" if visible else "location_selector_not_found"
-        )
-    visible[0].click()
+def _open_location_selector(page: Any) -> str | None:
+    try:
+        resolved = open_location_selector(page)
+    except LocationControlResolutionError as exc:
+        raise LocationBindingCaptureError(str(exc)) from exc
+    return resolved.visible_location
 
 
 def _city_select_and_options(page: Any, city_name: str) -> tuple[Any, list[str]]:
@@ -441,6 +433,7 @@ def _stop_reason(error: BaseException) -> str:
         "network_policy_invalid",
         "location_selector_not_found",
         "location_selector_not_unique",
+        "location_selector_label_missing",
         "target_city_not_found",
         "target_city_not_unique",
         "store_selector_present_but_options_unresolved",
@@ -522,7 +515,7 @@ def run_capture(
             before = _stage(page, context, collector, "before")
 
             counter.reserve("open_location_selector")
-            _open_location_selector(page)
+            result.visible_location = _open_location_selector(page)
             page.wait_for_timeout(150)
             city_option, cities = _city_select_and_options(page, city_name)
             result.available_cities = cities
