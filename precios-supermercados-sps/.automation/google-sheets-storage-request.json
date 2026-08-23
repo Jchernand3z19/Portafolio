@@ -1,6 +1,6 @@
 {
   "schemaVersion": "precios-sps-google-sheets-storage-request/v1",
   "operation": "apply-config",
-  "requestSequence": 8,
+  "requestSequence": 9,
   "authority": false
 }
