@@ -1,11 +1,17 @@
-name: La Colonia - Radiografía controlada de ubicación
+name: La Colonia - Radiografía manual de ubicación
 
 on:
+  workflow_dispatch:
+    inputs:
+      authorization_id:
+        description: ID de autorización live previamente aprobado y versionado
+        required: true
+        type: string
   push:
     branches:
       - main
     paths:
-      - .github/workflows/requests/la-colonia-location-binding-request.json
+      - .github/workflows/requests/la-colonia-location-binding-reconcile-request.json
 
 permissions:
   contents: read
@@ -15,100 +21,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  preflight:
-    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      allowed: ${{ steps.request.outputs.allowed }}
-      authorization_id: ${{ steps.request.outputs.authorization_id }}
-      request_sequence: ${{ steps.request.outputs.request_sequence }}
-    steps:
-      - name: Validar autorización versionada y commit exacto
-        id: request
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
-        with:
-          script: |
-            const marker = '.github/workflows/requests/la-colonia-location-binding-request.json';
-            const expectedFiles = [
-              '.github/workflows/precios-supermercados-sps-la-colonia-location-binding.yml',
-              marker,
-              'precios-supermercados-sps/src/precios_supermercados/diagnostics/la_colonia_location_binding_capture.py',
-              'precios-supermercados-sps/tests/test_la_colonia_location_binding_capture.py',
-              'precios-supermercados-sps/tests/test_la_colonia_location_binding_workflow.py',
-              'precios-supermercados-sps/tests/test_workflow_security_audit.py',
-            ].sort();
-            const expectedAuthorizationId = 'LC-location-binding-336';
-
-            core.setOutput('allowed', 'false');
-
-            const { data: commit } = await github.rest.repos.getCommit({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.sha,
-            });
-            const actualFiles = (commit.files || []).map((file) => file.filename).sort();
-            if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
-              core.setFailed('location_binding_trigger_not_exact_authorized_commit');
-              return;
-            }
-
-            const { data: file } = await github.rest.repos.getContent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: marker,
-              ref: context.sha,
-            });
-            if (Array.isArray(file) || file.type !== 'file' || !file.content) {
-              core.setFailed('location_binding_request_file_invalid');
-              return;
-            }
-
-            let request;
-            try {
-              request = JSON.parse(Buffer.from(file.content, file.encoding || 'base64').toString('utf8'));
-            } catch (error) {
-              core.setFailed('location_binding_request_json_invalid');
-              return;
-            }
-
-            if (request.schemaVersion !== 'precios-sps-la-colonia-location-binding-request/v1') {
-              core.setFailed('location_binding_request_schema_invalid');
-              return;
-            }
-            if (request.authorizationId !== expectedAuthorizationId) {
-              core.setFailed('location_binding_authorization_id_not_exact');
-              return;
-            }
-            if (request.requestSequence !== 1) {
-              core.setFailed('location_binding_request_sequence_invalid');
-              return;
-            }
-            if (request.targetCity !== 'San Pedro Sula') {
-              core.setFailed('location_binding_target_city_invalid');
-              return;
-            }
-            if (request.maxLogicalActions !== 4) {
-              core.setFailed('location_binding_budget_invalid');
-              return;
-            }
-            if (request.authority !== false) {
-              core.setFailed('location_binding_request_authority_must_be_false');
-              return;
-            }
-
-            core.setOutput('authorization_id', expectedAuthorizationId);
-            core.setOutput('request_sequence', String(request.requestSequence));
-            core.setOutput('allowed', 'true');
-
   radiography:
-    needs: preflight
-    if: ${{ needs.preflight.outputs.allowed == 'true' }}
+    # Fail-closed: LC-location-binding-336 ya fue consumida. Una autorización
+    # futura requiere otro PR explícito que reactive simultáneamente workflow y gates.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
-      AUTHORIZATION_ID: ${{ needs.preflight.outputs.authorization_id }}
+      AUTHORIZATION_ID: ${{ inputs.authorization_id }}
     steps:
       - name: Descargar revisión inmutable
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -122,7 +43,7 @@ jobs:
       - name: Instalar dependencias cerradas
         shell: bash
         run: python -m pip install -r precios-supermercados-sps/requirements.txt
-      - name: Ejecutar única radiografía autorizada
+      - name: Ejecutar radiografía cerrada
         id: radiography
         shell: bash
         run: |
@@ -152,3 +73,173 @@ jobs:
             "3") exit 3 ;;
             *) exit 5 ;;
           esac
+
+  reconcile-consumed-authorization:
+    if: ${{ github.event_name == 'push' && github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      actions: read
+      contents: read
+      statuses: write
+    steps:
+      - name: Localizar exactamente la ejecución autorizada
+        id: source
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
+        with:
+          script: |
+            const sourceSha = '56c940515b9d1ddc46de4843d4437b20ea12215f';
+            const workflowId = 'precios-supermercados-sps-la-colonia-location-binding.yml';
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            let source = null;
+            for (let attempt = 0; attempt < 24; attempt += 1) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflowId,
+                head_sha: sourceSha,
+                event: 'push',
+                per_page: 10,
+              });
+              const matches = data.workflow_runs.filter((run) => run.head_sha === sourceSha);
+              if (matches.length > 1) {
+                core.setFailed('location_binding_source_run_not_unique');
+                return;
+              }
+              if (matches.length === 1 && matches[0].status === 'completed') {
+                source = matches[0];
+                break;
+              }
+              await sleep(10000);
+            }
+            if (!source) {
+              core.setFailed('location_binding_source_run_missing_or_incomplete');
+              return;
+            }
+            core.setOutput('run_id', String(source.id));
+            core.setOutput('conclusion', String(source.conclusion || 'unknown'));
+      - name: Descargar evidencia sanitizada de la ejecución única
+        id: download
+        if: ${{ steps.source.outputs.run_id != '' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: la-colonia-location-binding-${{ steps.source.outputs.run_id }}
+          path: reconciliation
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.source.outputs.run_id }}
+      - name: Reconciliar y publicar sólo resumen sanitizado
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
+        env:
+          SOURCE_RUN_ID: ${{ steps.source.outputs.run_id }}
+          SOURCE_CONCLUSION: ${{ steps.source.outputs.conclusion }}
+          SOURCE_DISCOVERY_OUTCOME: ${{ steps.source.outcome }}
+          DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const sha = context.sha;
+            const limit = (value) => String(value).slice(0, 140);
+            const publish = async (contextName, state, description) => {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha,
+                state,
+                context: contextName,
+                description: limit(description),
+              });
+            };
+
+            if (process.env.SOURCE_DISCOVERY_OUTCOME !== 'success') {
+              await publish(
+                'precios-sps/location-binding-reconcile',
+                'failure',
+                'source_run_missing_or_incomplete'
+              );
+              return;
+            }
+            const runId = process.env.SOURCE_RUN_ID || 'unknown';
+            const sourceConclusion = process.env.SOURCE_CONCLUSION || 'unknown';
+            if (process.env.DOWNLOAD_OUTCOME !== 'success') {
+              await publish(
+                'precios-sps/location-binding-reconcile',
+                'failure',
+                `source_run=${runId}; source=${sourceConclusion}; artifact=missing`
+              );
+              return;
+            }
+
+            let evidence;
+            try {
+              evidence = JSON.parse(
+                fs.readFileSync('reconciliation/location-binding-radiography.json', 'utf8')
+              );
+            } catch (error) {
+              await publish(
+                'precios-sps/location-binding-reconcile',
+                'failure',
+                `source_run=${runId}; artifact=invalid_json`
+              );
+              return;
+            }
+
+            const boolKeys = [
+              'store_selection_observed',
+              'browser_started',
+              'target_navigation_started',
+              'target_navigation_completed',
+              'production_authority',
+              'catalog_accepted',
+              'extraction_enabled',
+              'raw_values_exposed',
+            ];
+            for (const key of boolKeys) {
+              if (typeof evidence[key] !== 'boolean') {
+                core.setFailed(`location_binding_artifact_${key}_invalid`);
+                return;
+              }
+            }
+            if (
+              evidence.production_authority ||
+              evidence.catalog_accepted ||
+              evidence.extraction_enabled ||
+              evidence.raw_values_exposed
+            ) {
+              core.setFailed('location_binding_artifact_authority_or_raw_values_invalid');
+              return;
+            }
+            if (!Number.isInteger(evidence.logical_actions) || evidence.logical_actions < 0 || evidence.logical_actions > 4) {
+              core.setFailed('location_binding_artifact_logical_actions_invalid');
+              return;
+            }
+            if (!Array.isArray(evidence.available_cities) || !Array.isArray(evidence.available_stores)) {
+              core.setFailed('location_binding_artifact_location_lists_invalid');
+              return;
+            }
+            const report = evidence.binding_report && typeof evidence.binding_report === 'object'
+              ? evidence.binding_report
+              : {};
+            const granularity = String(report.granularity_candidate || 'none').replace(/[^a-z0-9_-]/gi, '_');
+            const confidence = String(report.confidence || 'none').replace(/[^a-z0-9_-]/gi, '_');
+            const binding = report.technical_binding_observed === true;
+            const stop = evidence.stop_reason === null || evidence.stop_reason === undefined
+              ? 'none'
+              : String(evidence.stop_reason).replace(/[^a-z0-9_-]/gi, '_');
+            const technicalOk = stop === 'none' && ['city', 'store'].includes(granularity) && binding;
+
+            await publish(
+              'precios-sps/location-binding-reconcile',
+              'success',
+              `source_run=${runId}; source=${sourceConclusion}; artifact=valid`
+            );
+            await publish(
+              'precios-sps/location-binding-outcome',
+              technicalOk ? 'success' : 'failure',
+              `stop=${stop}; actions=${evidence.logical_actions}; nav=${evidence.target_navigation_started}; nav_done=${evidence.target_navigation_completed}; cities=${evidence.available_cities.length}; stores=${evidence.available_stores.length}`
+            );
+            await publish(
+              'precios-sps/location-binding-evidence',
+              technicalOk ? 'success' : 'failure',
+              `granularity=${granularity}; confidence=${confidence}; binding=${binding}; store_selector=${evidence.store_selection_observed}`
+            );
