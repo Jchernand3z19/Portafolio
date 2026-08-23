@@ -61,7 +61,8 @@ def test_preflight_is_unprivileged_and_requires_exact_versioned_request() -> Non
     raw = "\n".join(str(step) for step in preflight["steps"])
     assert REQUEST in raw
     assert AUTHORIZED_ID in raw
-    assert CONSUMED_ID not in raw
+    assert CONSUMED_ID in raw
+    assert "location_binding_authorization_id_consumed" in raw
     assert "precios-sps-la-colonia-location-binding-request/v1" in raw
     assert "requestSequence" in raw
     assert "maxLogicalActions" in raw
