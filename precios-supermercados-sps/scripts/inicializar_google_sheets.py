@@ -86,21 +86,26 @@ def _write_github_outputs(
     result: str,
     error_code: str,
     wrote: bool | None,
-) -> None:
-    """Publica sólo señales allowlisted; nunca IDs, bodies ni credenciales."""
+) -> bool:
+    """Publica sólo señales allowlisted; un fallo del canal no oculta el resultado CLI."""
 
+    if result not in {"ok", "error"}:
+        return False
+    if not _SAFE_OUTPUT.fullmatch(error_code):
+        return False
     output_path = os.environ.get("GITHUB_OUTPUT")
     if not output_path:
-        return
-    if result not in {"ok", "error"}:
-        raise StorageCliError("github_output_result_invalid")
-    if not _SAFE_OUTPUT.fullmatch(error_code):
-        raise StorageCliError("github_output_error_code_invalid")
+        return False
+
     wrote_text = "unknown" if wrote is None else str(wrote).casefold()
-    with Path(output_path).open("a", encoding="utf-8") as handle:
-        handle.write(f"result={result}\n")
-        handle.write(f"error_code={error_code}\n")
-        handle.write(f"wrote={wrote_text}\n")
+    try:
+        with Path(output_path).open("a", encoding="utf-8") as handle:
+            handle.write(f"result={result}\n")
+            handle.write(f"error_code={error_code}\n")
+            handle.write(f"wrote={wrote_text}\n")
+    except OSError:
+        return False
+    return True
 
 
 def _report_error(code: str, *, exit_code: int) -> int:
