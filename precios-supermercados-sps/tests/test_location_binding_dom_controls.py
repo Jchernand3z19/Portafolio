@@ -117,14 +117,15 @@ class FakePage:
         assert selector == LOCATION_SELECTOR_CSS
         return FakeCollection(self.structural)
 
-    def get_by_role(self, role, *, name):
-        assert isinstance(name, re.Pattern)
+    def get_by_role(self, role, *, name=None):
+        if name is not None:
+            assert isinstance(name, re.Pattern)
         return FakeCollection(
             control
             for control in self.controls
             if control.role == role
             and control.label is not None
-            and name.fullmatch(control.label)
+            and (name is None or name.fullmatch(control.label))
         )
 
 
@@ -299,11 +300,28 @@ def test_custom_button_city_is_accepted_only_when_exact_and_unique() -> None:
     assert sps.clicked is True
 
 
-def test_duplicate_exact_city_controls_fail_closed_even_across_roles() -> None:
+def test_radio_is_preferred_over_duplicate_button_surface_for_same_city() -> None:
+    button = FakeControl(label="San Pedro Sula", role="button")
+    sps_radio = FakeControl(label="San Pedro Sula", role="radio")
+    tgu_radio = FakeControl(label="Tegucigalpa", role="radio")
+    page = FakePage([button, sps_radio, tgu_radio])
+
+    resolved = resolve_exact_city_control(page, "San Pedro Sula")
+
+    assert resolved.locator is sps_radio
+    assert resolved.role == "radio"
+    assert resolved.available_cities == ("San Pedro Sula", "Tegucigalpa")
+    activate_city_control(resolved, "San Pedro Sula")
+    assert sps_radio.clicked is True
+    assert button.clicked is False
+
+
+def test_two_visible_radios_with_same_city_still_fail_closed() -> None:
     page = FakePage(
         [
-            FakeControl(label="San Pedro Sula", role="button"),
             FakeControl(label="San Pedro Sula", role="radio"),
+            FakeControl(label="San Pedro Sula", role="radio"),
+            FakeControl(label="San Pedro Sula", role="button"),
         ]
     )
 
