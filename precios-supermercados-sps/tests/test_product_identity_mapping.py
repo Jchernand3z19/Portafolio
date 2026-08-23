@@ -10,6 +10,7 @@ from precios_supermercados.enums import AvailabilityStatus, LocationStatus, Sour
 from precios_supermercados.identifiers import (
     canonicalize_gtin,
     generate_gtin_product_id,
+    generate_pending_product_id,
 )
 from precios_supermercados.locations import LA_COLONIA_ONLINE_SOURCE_CONTEXT
 from precios_supermercados.models import RawProduct
@@ -22,6 +23,7 @@ from precios_supermercados.offer_normalization import (
 from precios_supermercados.tabular_persistence import (
     DIM_PRODUCTS,
     MAP_SOURCE_PRODUCTS,
+    TabularPersistenceError,
     product_dimension_row,
     source_product_mapping_row,
 )
@@ -101,12 +103,33 @@ def test_invalid_or_missing_gtin_stays_in_pending_mapping_queue() -> None:
     validated = validate_normalized_offer(offer, validated_at_utc=OBSERVED)
     mapping = source_product_mapping_row(validated)
 
-    assert offer.product_id.startswith("prod_pending_")
+    assert offer.product_id == generate_pending_product_id(offer.source_product_id)
     assert "pending_product_mapping" in validated.quality_events
     assert mapping["mapping_status"] == "pending"
     assert mapping["mapping_method"] == "pending"
     assert mapping["review_reason"] == "pending_product_mapping"
     assert product_dimension_row(validated) is None
+
+
+def test_forged_pending_product_id_is_rejected_before_persistence() -> None:
+    offer = normalize_raw_product(
+        raw_product(barcode="742100000001"),
+        currency="HNL",
+    )
+    forged = replace(offer, product_id="prod_pending_" + "0" * 32)
+    validated = validate_normalized_offer(forged, validated_at_utc=OBSERVED)
+
+    with pytest.raises(
+        TabularPersistenceError,
+        match="product_id_pending_no_reconcilia_con_source_product_id",
+    ):
+        source_product_mapping_row(validated)
+
+    with pytest.raises(
+        TabularPersistenceError,
+        match="product_id_pending_no_reconcilia_con_source_product_id",
+    ):
+        product_dimension_row(validated)
 
 
 def test_explicit_reviewed_mapping_overrides_default_gtin_identity() -> None:

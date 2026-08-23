@@ -34,6 +34,7 @@ from .enums import LocationStatus
 from .identifiers import (
     canonicalize_gtin,
     generate_gtin_product_id,
+    generate_pending_product_id,
     generate_source_product_id,
 )
 from .locations import (
@@ -463,6 +464,11 @@ def _validated_offer(value: ValidatedOffer) -> NormalizedOffer:
 def _mapping_method(offer: NormalizedOffer) -> tuple[str, str, str | None, str | None]:
     gtin = canonicalize_gtin(offer.barcode)
     if offer.product_id.startswith("prod_pending_"):
+        expected_product_id = generate_pending_product_id(offer.source_product_id)
+        if offer.product_id != expected_product_id:
+            raise TabularPersistenceError(
+                "product_id_pending_no_reconcilia_con_source_product_id"
+            )
         return "pending", "pending", "pending_product_mapping", gtin
     if offer.product_id.startswith("prod_gtin_"):
         if gtin is None or offer.product_id != generate_gtin_product_id(gtin):
