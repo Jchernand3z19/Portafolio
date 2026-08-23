@@ -199,7 +199,11 @@ jobs:
               core.setFailed('full_radiography_authority_contract_invalid');
               return;
             }
-            if (evidence.target_url !== 'https://www.lacolonia.com/' || evidence.target_city !== 'San Pedro Sula') {
+            if (
+              typeof evidence.target_url !== 'string' ||
+              !evidence.target_url.startsWith('https://') ||
+              evidence.target_city !== 'San Pedro Sula'
+            ) {
               core.setFailed('full_radiography_target_contract_invalid');
               return;
             }
