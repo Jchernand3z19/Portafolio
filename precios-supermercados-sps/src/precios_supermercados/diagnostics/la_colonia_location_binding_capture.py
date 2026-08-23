@@ -41,6 +41,10 @@ from precios_supermercados.diagnostics.la_colonia_sps_context_diagnostic import 
     launch_compatible_chromium,
     sanitize_error,
 )
+from precios_supermercados.diagnostics.location_binding_dom_controls import (
+    LocationControlResolutionError,
+    resolve_exact_city_control,
+)
 
 
 TARGET_URL = "https://www.lacolonia.com/"
@@ -291,47 +295,11 @@ def _open_location_selector(page: Any) -> None:
 
 
 def _city_select_and_options(page: Any, city_name: str) -> tuple[Any, list[str]]:
-    exact = re.compile(rf"^{re.escape(city_name)}$", re.I)
-    matching_options = page.get_by_role("option", name=exact)
-    visible_or_select_options = []
-    for index in range(matching_options.count()):
-        option = matching_options.nth(index)
-        try:
-            parent = option.locator("xpath=ancestor::select[1]")
-            if option.is_visible() or parent.count() == 1:
-                visible_or_select_options.append(option)
-        except Exception:
-            continue
-    if len(visible_or_select_options) != 1:
-        raise LocationBindingCaptureError(
-            "target_city_not_unique"
-            if visible_or_select_options
-            else "target_city_not_found"
-        )
-    option = visible_or_select_options[0]
-    parent = option.locator("xpath=ancestor::select[1]")
-    city_names: list[str] = []
-    if parent.count() == 1:
-        all_options = parent.locator("option")
-        for index in range(all_options.count()):
-            label = _option_label(all_options.nth(index))
-            if label and label.casefold() not in _IGNORED_OPTION_LABELS:
-                city_names.append(label)
-        return option, sorted(set(city_names), key=str.casefold)
-
-    listbox = option.locator("xpath=ancestor::*[@role='listbox'][1]")
-    if listbox.count() == 1:
-        all_options = listbox.get_by_role("option")
-        for index in range(all_options.count()):
-            candidate = all_options.nth(index)
-            if not candidate.is_visible():
-                continue
-            label = _option_label(candidate)
-            if label:
-                city_names.append(label)
-    if not city_names:
-        city_names = [city_name]
-    return option, sorted(set(city_names), key=str.casefold)
+    try:
+        resolved = resolve_exact_city_control(page, city_name)
+    except LocationControlResolutionError as exc:
+        raise LocationBindingCaptureError(str(exc)) from exc
+    return resolved.locator, list(resolved.available_cities)
 
 
 def _activate_option(option: Any, label: str) -> None:
