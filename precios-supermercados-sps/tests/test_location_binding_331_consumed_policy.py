@@ -20,15 +20,15 @@ AUTHORIZATION_IDS = frozenset(
 )
 
 
-def test_consumed_location_binding_authorizations_are_fail_closed_during_reconciliation() -> None:
+def test_consumed_location_binding_authorizations_are_permanently_fail_closed() -> None:
     assert capture.LIVE_EXECUTION_ENABLED is False
     assert capture.ACTIVE_AUTHORIZATION_IDS == frozenset()
     assert capture.CONSUMED_AUTHORIZATION_IDS == AUTHORIZATION_IDS
 
     workflow = yaml.load(WORKFLOW.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
-    assert set(workflow["on"]) == {"workflow_dispatch", "push"}
+    assert set(workflow["on"]) == {"workflow_dispatch"}
     assert workflow["jobs"]["radiography"]["if"] == "${{ false }}"
-    assert RECONCILE.exists()
+    assert not RECONCILE.exists()
 
     rules = AGENTS.read_text(encoding="utf-8")
     for authorization_id in AUTHORIZATION_IDS:
