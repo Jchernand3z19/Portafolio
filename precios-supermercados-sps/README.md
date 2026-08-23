@@ -14,19 +14,23 @@ Corte verificado al **2026-08-23 (America/Tegucigalpa)**:
 - contexto raw de ubicación separado de ubicación comercial;
 - identidad de producto con GTIN fuerte, mapping pendiente explícito y revalidación determinista de `prod_pending_*`;
 - Google Sheets: ruta productiva de infraestructura `check -> apply-config -> check` demostrada y ocho tablas gestionadas verificadas por read-back;
-- última suite completa observada: **1509/1509 PASS**, `python -m pip check` PASS y `compileall` PASS;
-- GitHub Actions SPS migradas a generaciones oficiales compatibles con Node 24 y fijadas por SHA completo;
+- última suite completa observada: **1511/1511 PASS** en PR #207, `python -m pip check` PASS y `compileall` PASS;
+- GitHub Actions SPS fijadas por SHA completo y compatibles con Node 24;
 - GATE-17: `PASS_PRODUCTIVE_EVIDENCE`;
 - Workers Observability: `BLOCKED_EXTERNAL` por `probe_discovery_trace_missing` en la única re-evaluación controlada del verifier actual;
 - `ACTIVE_AUTHORIZATION_IDS=[]`;
-- location-binding IDs consumidos: `LC-location-binding-336`, `LC-location-binding-331`, `LC-location-binding-332`;
-- `LIVE_REQUESTS_CURRENT_RUN=0`;
+- location-binding IDs consumidos: `LC-location-binding-336`, `LC-location-binding-331`, `LC-location-binding-332`, `LC-location-binding-333`;
 - `READY_FOR_LIVE=NO`;
 - `SPS_TECHNICAL_CONTEXT=UNCONFIRMED`;
 - `production_authority=false`;
-- `catalog_accepted=false`.
+- `catalog_accepted=false`;
+- `extraction_enabled=false`.
 
-La Colonia continúa deliberadamente bloqueada para nuevas peticiones live. Las tres radiografías mínimas autorizadas de ubicación ya fueron consumidas: las dos primeras terminaron en `target_city_not_found` y `LC-location-binding-332` terminó en `target_city_not_unique`. PR #203 endureció offline el caso compatible de selects nativos duplicados ocultos, sin convertir ese diagnóstico en evidencia física ni relajar el fallo cerrado entre controles visibles.
+La Colonia continúa deliberadamente bloqueada para nuevas peticiones live. Las cuatro radiografías mínimas autorizadas de ubicación ya fueron consumidas: las dos primeras terminaron en `target_city_not_found`; `LC-location-binding-332` y `LC-location-binding-333` terminaron en `target_city_not_unique`, ambas después de cargar la home y abrir el flujo de ubicación pero antes de seleccionar ciudad.
+
+Después de LC-333, el usuario aportó una captura del modal que aparece al pulsar `button.btn-modal-selector`. La pantalla muestra el prompt **“¿Desde qué ciudad nos visita?”** y dos tarjetas de selección: **TEGUCIGALPA** y **SAN PEDRO SULA**, con indicadores visuales tipo radio. PR #207 incorporó esa estructura al resolver offline: acota la búsqueda al modal identificado por el prompt y prioriza `radio > option > menuitem > button`, evitando que un radio y una superficie button de una misma tarjeta creen una falsa ambigüedad. Dos candidatos del mismo rol continúan fallando cerrado.
+
+Esa evidencia y sus pruebas offline mejoran la próxima observación, pero no confirman todavía el binding técnico real de SPS.
 
 El contexto raw utilizado por el extractor es **`la_colonia_online`** y representa únicamente el catálogo público en línea observado; **no es SPS, Tegucigalpa ni una tienda**. Ese contexto permanece `location_status=unknown` hasta que una frontera de binding separada produzca una ubicación comercial demostrada.
 
@@ -104,7 +108,7 @@ extraction_enabled = false
 
 Registrar una ciudad visible no demuestra granularidad comercial. Antes de etiquetar precios como SPS debe saberse si precio/inventario cambia por ciudad, tienda u otro nivel y debe existir un binding técnico verificable.
 
-El resolver offline vigente espera de forma acotada el render del modal, excluye el botón visible `button.btn-modal-selector` como falsa opción de ciudad y, para `<option>` nativos, sólo acepta candidatos cuyo `<select>` ancestro sea visible. Un duplicado oculto no compite; dos controles visibles equivalentes continúan fallando cerrado. Ninguno de estos contratos sustituye una observación live autorizada.
+El resolver offline vigente abre exactamente el selector estructural `button.btn-modal-selector`, espera de forma acotada el render del modal y reconoce el prompt `¿Desde qué ciudad nos visita?`. Cuando el prompt está presente, la resolución se acota a ese modal y prioriza el control semántico de la tarjeta de ciudad. Para `<option>` nativos sólo acepta candidatos cuyo `<select>` ancestro esté visible. El botón del header nunca se usa como opción de ciudad. Ninguno de estos contratos sustituye una observación live autorizada.
 
 ## Persistencia inicial
 
@@ -167,7 +171,7 @@ El dataset/refresh productivo sigue bloqueado hasta disponer de persistencia com
 ```text
 preflights de infraestructura cerrados
 -> radiografía y binding de ubicación con nueva autorización humana
--> validación live exacta del catálogo
+-> revalidación live exacta del catálogo bajo contexto SPS
 -> aceptación autoritativa
 -> persistencia comercial en Google Sheets
 -> ejecución diaria
