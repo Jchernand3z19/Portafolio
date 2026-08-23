@@ -18,7 +18,9 @@ from typing import Any
 # superficie button con el mismo nombre accesible, el radio es el control semántico
 # específico y la superficie genérica no debe convertir esa única opción visual en
 # una ambigüedad artificial. La unicidad sigue siendo obligatoria dentro del rol
-# elegido: dos radios visibles para la misma ciudad continúan fallando cerrado.
+# elegido: dos radios realmente presentados para la misma ciudad continúan fallando
+# cerrado. Un duplicado DOM fuera del viewport no representa una segunda opción que
+# el usuario tenga delante.
 CITY_CONTROL_ROLES: tuple[str, ...] = ("radio", "option", "menuitem", "button")
 CITY_CONTROL_READY_TIMEOUT_MS = 3_000
 CITY_CONTROL_READY_POLL_MS = 100
@@ -52,6 +54,21 @@ _IGNORED_VISIBLE_LOCATION_LABELS = frozenset(
         "tienda",
     }
 )
+_VIEWPORT_INTERSECTION_JS = """
+(element) => {
+  const rect = element.getBoundingClientRect();
+  const width = window.innerWidth || document.documentElement.clientWidth || 0;
+  const height = window.innerHeight || document.documentElement.clientHeight || 0;
+  return (
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.right > 0 &&
+    rect.bottom > 0 &&
+    rect.left < width &&
+    rect.top < height
+  );
+}
+"""
 
 
 class LocationControlResolutionError(RuntimeError):
@@ -104,6 +121,31 @@ def _has_css_class(locator: Any, class_name: str) -> bool:
     return class_name in str(raw).split()
 
 
+def _is_presented_in_viewport(locator: Any) -> bool:
+    """Exige visibilidad y cruce real con el viewport en un browser Playwright.
+
+    ``Locator.is_visible()`` considera visibles elementos con caja fuera de la
+    pantalla. Eso es útil para Playwright pero no para decidir qué control está
+    realmente presentado al usuario en un modal responsive. Los dobles offline que
+    no implementan ``evaluate`` conservan la semántica histórica basada en
+    ``is_visible``; un locator real que no pueda evaluarse falla cerrado.
+    """
+
+    try:
+        if not locator.is_visible():
+            return False
+    except Exception:
+        return False
+
+    evaluator = getattr(locator, "evaluate", None)
+    if evaluator is None:
+        return True
+    try:
+        return bool(evaluator(_VIEWPORT_INTERSECTION_JS))
+    except Exception:
+        return False
+
+
 def _visible_items(collection: Any) -> list[Any]:
     visible: list[Any] = []
     for index in range(collection.count()):
@@ -114,6 +156,15 @@ def _visible_items(collection: Any) -> list[Any]:
         except Exception:
             continue
     return visible
+
+
+def _presented_items(collection: Any) -> list[Any]:
+    presented: list[Any] = []
+    for index in range(collection.count()):
+        candidate = collection.nth(index)
+        if _is_presented_in_viewport(candidate):
+            presented.append(candidate)
+    return presented
 
 
 def _visible_location(label: str | None) -> str | None:
@@ -176,16 +227,16 @@ def open_location_selector(page: Any) -> ResolvedLocationSelector:
 
 
 def _visible_native_select(parent_select: Any) -> bool:
-    """Acepta options nativos sólo cuando su ``select`` ancestro es visible.
+    """Acepta options nativos sólo cuando su ``select`` está presentado.
 
     Playwright puede considerar invisibles los elementos ``option`` de un select
     nativo aun cuando el propio ``select`` sí sea interactivo. Por eso la
-    visibilidad se decide en el contenedor. Un select duplicado pero oculto no debe
-    competir con el control realmente presentado al usuario.
+    visibilidad se decide en el contenedor. Un select duplicado oculto o fuera del
+    viewport no debe competir con el control realmente presentado al usuario.
     """
 
     try:
-        return parent_select.count() == 1 and parent_select.is_visible()
+        return parent_select.count() == 1 and _is_presented_in_viewport(parent_select)
     except Exception:
         return False
 
@@ -202,9 +253,10 @@ def _visible_role_matches(scope: Any, *, role: str, exact_name: re.Pattern[str])
                 # realmente la ciudad.
                 continue
             parent_select = candidate.locator("xpath=ancestor::select[1]")
-            if candidate.is_visible() or (
-                role == "option" and _visible_native_select(parent_select)
-            ):
+            if role == "option":
+                if _visible_native_select(parent_select) or _is_presented_in_viewport(candidate):
+                    visible.append(candidate)
+            elif _is_presented_in_viewport(candidate):
                 visible.append(candidate)
         except Exception:
             continue
@@ -212,17 +264,18 @@ def _visible_role_matches(scope: Any, *, role: str, exact_name: re.Pattern[str])
 
 
 def _city_modal_scope(page: Any, exact_name: re.Pattern[str]) -> Any:
-    """Acota la búsqueda al modal visual cuando el prompt observado está presente.
+    """Acota la búsqueda al modal visual realmente presentado.
 
     La captura aportada por el usuario muestra el prompt exacto
-    ``¿Desde qué ciudad nos visita?``. Si ese prompt está visible, se toma el menor
-    ancestro que además contiene una opción exacta para la ciudad objetivo. Así un
-    control homónimo fuera del modal no compite con la decisión que el usuario ve.
-    Si el prompt no existe se conserva el resolver histórico para selects/listboxes.
+    ``¿Desde qué ciudad nos visita?``. Si ese prompt cruza el viewport, se toma el
+    menor ancestro que además contiene una opción exacta presentada para la ciudad
+    objetivo. Un duplicado responsive que Playwright considera visible pero que está
+    fuera de pantalla no compite con el modal que el usuario tiene delante. Si el
+    prompt no existe se conserva el resolver histórico para selects/listboxes.
     """
 
     try:
-        prompts = _visible_items(page.get_by_text(CITY_MODAL_PROMPT_PATTERN))
+        prompts = _presented_items(page.get_by_text(CITY_MODAL_PROMPT_PATTERN))
     except Exception:
         return page
     if not prompts:
@@ -259,12 +312,8 @@ def _usable_labels(options: Any, *, require_visible: bool) -> tuple[str, ...]:
     labels: list[str] = []
     for index in range(options.count()):
         option = options.nth(index)
-        if require_visible:
-            try:
-                if not option.is_visible():
-                    continue
-            except Exception:
-                continue
+        if require_visible and not _is_presented_in_viewport(option):
+            continue
         label = _label(option)
         if label and label.casefold() not in _IGNORED_CITY_LABELS:
             labels.append(label)
@@ -291,7 +340,7 @@ def _option_container_labels(option: Any) -> tuple[str, ...] | None:
 
 
 def _radio_scope_labels(scope: Any) -> tuple[str, ...] | None:
-    """Conserva las ciudades hermanas cuando el modal usa radios semánticos."""
+    """Conserva sólo ciudades hermanas presentadas cuando el modal usa radios."""
 
     try:
         radios = scope.get_by_role("radio")
@@ -300,10 +349,7 @@ def _radio_scope_labels(scope: Any) -> tuple[str, ...] | None:
     labels: list[str] = []
     for index in range(radios.count()):
         radio = radios.nth(index)
-        try:
-            if not radio.is_visible():
-                continue
-        except Exception:
+        if not _is_presented_in_viewport(radio):
             continue
         label = _label(radio)
         if label and label.casefold() not in _IGNORED_CITY_LABELS:
@@ -350,17 +396,17 @@ def _wait_for_next_city_probe(page: Any) -> None:
 def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl:
     """Resuelve la opción visual exacta de ciudad tras abrir el modal.
 
-    Si está visible el prompt ``¿Desde qué ciudad nos visita?`` la búsqueda se acota
-    al menor ancestro que contiene la opción objetivo. Dentro de ese scope se usan
-    roles por especificidad semántica: ``radio`` > ``option`` > ``menuitem`` >
+    Si está presentado el prompt ``¿Desde qué ciudad nos visita?`` la búsqueda se
+    acota al menor ancestro que contiene la opción objetivo. Dentro de ese scope se
+    usan roles por especificidad semántica: ``radio`` > ``option`` > ``menuitem`` >
     ``button``. Un radio único puede coexistir con una superficie button decorativa
     del mismo gesto visual sin generar un falso ``target_city_not_unique``; dos
-    candidatos visibles dentro del mismo rol siguen fallando cerrado.
+    candidatos del mismo rol realmente presentados siguen fallando cerrado.
 
     El botón de encabezado ``btn-modal-selector`` se excluye siempre. En selects
-    nativos sólo compiten options cuyo ``select`` ancestro está visible. La ausencia
-    temporal puede reintentarse durante tres segundos; una ambigüedad real falla de
-    inmediato.
+    nativos sólo compiten options cuyo ``select`` ancestro está presentado en el
+    viewport. La ausencia temporal puede reintentarse durante tres segundos; una
+    ambigüedad real falla de inmediato.
     """
 
     normalized = _clean_label(city_name)
