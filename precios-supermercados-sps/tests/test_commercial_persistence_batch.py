@@ -183,16 +183,22 @@ def test_new_accepted_run_builds_all_common_tables_atomically():
     assert prepared.table_row_counts == {
         "cfg_supermarkets": 1,
         "cfg_locations": 1,
+        "dim_products": 1,
+        "map_source_products": 1,
         "fact_offers_current": 1,
         "fact_offer_history": 1,
         "fact_scrape_runs": 1,
         "fact_quality_events": 1,
     }
+    assert prepared.batch.rows["dim_products"][0]["product_id"] == "prod-001"
+    assert prepared.batch.rows["map_source_products"][0]["mapping_method"] == "explicit"
     assert prepared.run_record.quality_event_count == 1
 
     store = InMemoryTabularStore()
     applied = store.apply(prepared.batch)
-    assert applied.created == 6
+    assert applied.created == 8
+    assert store.count("dim_products") == 1
+    assert store.count("map_source_products") == 1
     assert store.count("fact_offers_current") == 1
     assert store.count("fact_offer_history") == 1
     assert store.count("fact_scrape_runs") == 1
@@ -212,6 +218,8 @@ def test_price_change_writes_current_and_full_affected_history():
     prepared = prepare(state, second)
 
     assert prepared.apply_result.current_changed == 1
+    assert prepared.table_row_counts["dim_products"] == 1
+    assert prepared.table_row_counts["map_source_products"] == 1
     assert prepared.table_row_counts["fact_offers_current"] == 1
     assert prepared.table_row_counts["fact_offer_history"] == 2
     history_rows = prepared.batch.rows["fact_offer_history"]
@@ -247,6 +255,8 @@ def test_rejected_run_records_run_and_quality_without_touching_commercial_tables
 
     assert prepared.apply_result.commercial_update_allowed is False
     assert prepared.apply_result.offers_ignored == 1
+    assert prepared.table_row_counts["dim_products"] == 0
+    assert prepared.table_row_counts["map_source_products"] == 0
     assert prepared.table_row_counts["fact_offers_current"] == 0
     assert prepared.table_row_counts["fact_offer_history"] == 0
     assert prepared.table_row_counts["fact_scrape_runs"] == 1
