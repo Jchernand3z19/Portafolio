@@ -6,11 +6,11 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 Estado verificado al **2026-08-23 (America/Tegucigalpa)**.
 
-Corte técnico inmediatamente anterior a este sync documental:
-
 ```text
-main = d78010f740e2b67940c710df37946a2a11b7ed30 (merge de PR #225)
-PR #225 CI = PASS (run 32662803489)
+main = ba8151da5d49dd1cebc27a83c7f5e667dd68857c (merge de PR #227)
+PR #227 CI = PASS (run 32665734312, 1529/1529 tests)
+python -m pip check = PASS
+compileall = PASS
 ACTIVE_AUTHORIZATION_IDS = []
 READY_FOR_LIVE = NO
 SPS_TECHNICAL_CONTEXT = UNCONFIRMED
@@ -19,13 +19,9 @@ catalog_accepted = false
 extraction_enabled = false
 ```
 
-El SHA anterior identifica el corte auditado previo al merge de este documento; no pretende ser autorreferencial.
-
 ## Frontera crítica actual
 
-La primera dependencia real sigue siendo demostrar técnicamente el binding de **San Pedro Sula** antes de etiquetar precios como SPS.
-
-Estado de la ubicación candidata:
+La siguiente dependencia capaz de cambiar el estado del producto es demostrar técnicamente el binding de **San Pedro Sula** antes de etiquetar precios como SPS.
 
 ```text
 location_id = la_colonia_sps
@@ -43,7 +39,7 @@ Hasta demostrar binding técnico no se habilitan extracción comercial, persiste
 
 ## Evidencia live e IDs consumidos
 
-Las autorizaciones de binding usadas históricamente son de un solo uso. Operacionalmente están consumidas y **no pueden reutilizarse**:
+Las autorizaciones históricas de binding son de un solo uso y están consumidas en código y operación:
 
 ```text
 LC-location-binding-336
@@ -55,7 +51,7 @@ LC-location-binding-335
 LC-location-binding-337
 ```
 
-El código de captura en `main` todavía sólo persiste hasta `LC-location-binding-335`; agregar `LC-location-binding-337` al set canónico es deuda de seguridad pendiente y no debe interpretarse como permiso para reutilizarlo.
+`LC-location-binding-337` fue incorporada al set canónico `CONSUMED_AUTHORIZATION_IDS` en PR #227. Ninguno de estos IDs puede reutilizarse.
 
 Observaciones históricas relevantes:
 
@@ -81,11 +77,11 @@ El usuario autorizó una única radiografía live completa enfocada en entender 
 
 El workflow live fue cerrado inmediatamente después en PR #223. La reconciliación GitHub-only de PR #224 no consiguió recuperar/verificar el artifact de esa ejecución y publicó fallo de reconciliación. Ese fallo **no demuestra que la selección haya fallado ni que haya funcionado**; sólo deja esa ejecución sin evidencia recuperada suficiente para cerrar el binding.
 
-El workflow de ubicación permanece fail-closed para tráfico live.
+PR #227 retiró el reconciliador temporal y su marker. El workflow de ubicación volvió a quedar exclusivamente en `workflow_dispatch`, con el job `radiography` bloqueado por `if: ${{ false }}` y permisos globales `contents: read`.
 
 ## Evidencia DOM aportada por el usuario
 
-La evidencia humana ya no se limita a una captura visual. El usuario aportó la estructura DOM exacta de las opciones de ciudad:
+El usuario aportó la estructura DOM exacta de las opciones de ciudad:
 
 ```html
 <div class="cont-btn-ciudad">
@@ -116,50 +112,70 @@ También se mantiene la evidencia del botón superior:
 </div>
 ```
 
-La evidencia DOM sí identifica ahora el nodo real que representa cada ciudad y el estado visual seleccionado/no seleccionado. **Todavía no demuestra por sí sola qué cookie/storage/request/VTEX binding gobierna precios e inventario**, por lo que `SPS_TECHNICAL_CONTEXT` permanece `UNCONFIRMED`.
+La evidencia DOM identifica el nodo real que representa cada ciudad y el estado visual seleccionado/no seleccionado. **Todavía no demuestra por sí sola qué cookie/storage/request/VTEX binding gobierna precios e inventario**, por lo que `SPS_TECHNICAL_CONTEXT` permanece `UNCONFIRMED`.
 
-## Resolver vigente — PR #225
+## Selección determinista vigente — PR #227
 
-PR #225 (`Resuelve botones reales del selector de ciudad de La Colonia`) fue fusionado en `main` con merge:
-
-```text
-d78010f740e2b67940c710df37946a2a11b7ed30
-```
-
-El resolver ahora:
-
-- abre `button.btn-modal-selector` cuando es único;
-- busca primero la estructura confirmada `.cont-btn-ciudad`;
-- sólo considera `button.btn-ciudad-selected` y `button.btn-ciudad-noselected` dentro de ese contenedor;
-- identifica la ciudad por texto visible exacto case-insensitive;
-- conserva las ciudades hermanas observadas;
-- ignora contenedores fuera del viewport;
-- falla cerrado si existen múltiples superficies válidas para la misma ciudad;
-- usa roles ARIA únicamente como fallback cuando la estructura confirmada no está presentada.
-
-CI de PR #225:
+PR #227 (`Hace determinista la selección de ciudad de La Colonia`) fue fusionado con:
 
 ```text
-run = 32662803489
-job = tests
-conclusion = success
+ba8151da5d49dd1cebc27a83c7f5e667dd68857c
 ```
 
-Esto demuestra resolución **offline** de la estructura aportada. No demuestra todavía una transición productiva real.
+El contrato offline vigente ahora:
 
-## Deuda inmediata detectada después de PR #225
+- abre el selector superior `button.btn-modal-selector` cuando es único;
+- resuelve primero `.cont-btn-ciudad`;
+- identifica exactamente el botón de la ciudad por texto visible case-insensitive;
+- deriva un estado explícito `selected|unselected` de `btn-ciudad-selected` / `btn-ciudad-noselected`;
+- falla cerrado si un target tiene un estado estructural contradictorio;
+- hace **no-op** si San Pedro Sula ya está `selected`;
+- hace click únicamente si San Pedro Sula está `unselected`;
+- después de usar el contrato estructural verifica que SPS quede seleccionada y, cuando el header expone ubicación, que éste sea consistente;
+- conserva el fallback histórico ARIA/select para estructuras no equivalentes;
+- mantiene deduplicación estricta, visibilidad/viewport y fail-closed ante ambigüedad;
+- no concede autoridad comercial por una selección visual.
 
-El resolver ya encuentra correctamente la ciudad, pero el flujo de captura todavía requiere hardening antes de una futura verificación live:
+El capturador conserva evidencia `before -> action/no-op -> after` de los canales técnicos permitidos y sólo el analizador de binding puede concluir si existió un cambio técnico fuerte.
 
-1. `ResolvedCityControl` aún no transporta explícitamente el estado `selected|noselected`.
-2. La activación actual hace click en un botón estructural incluso si ya tiene `btn-ciudad-selected`.
-3. El capturador duplica lógica de activación en `_activate_option` en vez de usar una única frontera state-aware.
-4. No existe todavía una verificación explícita `before -> action/no-op -> after` que compruebe el estado estructural de la ciudad y el header.
-5. Falta una integración browser-loopback que reproduzca exactamente `.cont-btn-ciudad`, la transición de clases y evidencia técnica sintética.
-6. `LC-location-binding-337` debe incorporarse al set versionado de IDs consumidos.
-7. El reconciliador temporal y su marker de la radiografía completa siguen presentes en `main` aunque el job live esté bloqueado; deben retirarse de forma segura y restaurar el workflow a manual-only.
+### Integración browser-loopback
 
-Todo lo anterior es trabajo offline justificable y debe cerrarse antes de solicitar otra observación live.
+PR #227 añadió una integración local que reproduce la forma DOM aportada por el usuario:
+
+```text
+Tegucigalpa = btn-ciudad-selected
+San Pedro Sula = btn-ciudad-noselected
+-> click SPS
+-> Tegucigalpa = btn-ciudad-noselected
+-> SPS = btn-ciudad-selected
+-> header = San pedro sula
+-> cambio sintético de regionId
+```
+
+La prueba demuestra que el flujo detecta la transición y clasifica el cambio técnico sintético como binding de ciudad fuerte.
+
+También existe el caso inverso:
+
+```text
+SPS ya selected
+-> no click de ciudad
+-> estado visual verificado
+-> logical_actions = 2
+-> sin inventar cambio técnico
+-> granularity_candidate = unknown
+```
+
+Esto es importante: un estado visual ya seleccionado no se convierte artificialmente en evidencia de binding técnico.
+
+CI de PR #227:
+
+```text
+run = 32665734312
+job = 97258706029
+pip check = PASS
+compileall = PASS
+pytest = 1529/1529 PASS
+```
 
 ## Seguridad live vigente
 
@@ -168,7 +184,11 @@ Estado efectivo:
 ```text
 LIVE_EXECUTION_ENABLED = False
 ACTIVE_AUTHORIZATION_IDS = []
-radiography workflow job = if: false
+CONSUMED_AUTHORIZATION_IDS incluye LC-location-binding-337
+workflow location binding = workflow_dispatch only
+radiography job = if: false
+reconciliation marker = absent
+reconciliation job = absent
 production_authority = false
 catalog_accepted = false
 extraction_enabled = false
@@ -178,7 +198,16 @@ Sin una autorización humana nueva, explícita, vigente y de un solo uso están 
 
 Ningún agente puede inventar un Authorization ID y ningún ID consumido puede reutilizarse.
 
-Una futura autorización de binding sólo autorizaría el alcance que el usuario apruebe; no concede automáticamente catálogo, facets, crawl, persistencia comercial ni ejecución diaria.
+La próxima observación live de binding debe usar un Authorization ID nuevo elegido por el usuario. Esa autorización sólo cubre el alcance expresamente aprobado y no concede automáticamente catálogo, facets, crawl, persistencia comercial ni ejecución diaria.
+
+## Qué puede demostrar la próxima observación
+
+El selector de ciudad ya no es la incógnita estructural. La próxima ejecución controlada puede distinguir dos casos:
+
+1. **SPS aparece no seleccionada:** el flujo hará click, verificará la transición visual y observará los canales técnicos permitidos antes/después. Un cambio fuerte asociado puede cerrar el binding SPS.
+2. **SPS ya aparece seleccionada:** el flujo hará no-op y verificará el estado visual. Si no existe una transición técnica observable, conservará `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` en vez de inferir autoridad.
+
+Si el segundo caso impide demostrar la asociación entre ciudad y contexto técnico, cualquier experimento posterior que altere deliberadamente otra ciudad y regrese a SPS necesitará alcance live explícito separado; no se amplía silenciosamente la autorización.
 
 ## Catálogo y autoridad
 
@@ -256,17 +285,6 @@ Power BI sigue siendo el dashboard final. La proyección semántica común ya es
 
 ## Próxima dependencia real
 
-Primero cerrar completamente offline el contrato de selección de ciudad con la estructura DOM confirmada:
+El trabajo offline justificable para la selección de ciudad quedó cerrado en PR #227.
 
-```text
-resolver estado selected/noselected
--> no-op seguro cuando SPS ya está selected
--> click sólo cuando SPS está noselected
--> verificar estado visual/header
--> integración browser-loopback + contexto técnico sintético
--> registrar LC-location-binding-337 como consumida
--> retirar reconciliador temporal
--> suite completa + revisión de seguridad + merge
-```
-
-Sólo después, el siguiente paso capaz de cambiar `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` requiere una **nueva autorización humana explícita y de un solo uso** para una única observación controlada de binding con el resolver corregido.
+El siguiente paso capaz de cambiar `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` requiere una **nueva autorización humana explícita y de un solo uso** para una única observación controlada de binding con el resolver vigente. El usuario debe elegir un Authorization ID nuevo; no se inventa desde código ni automatización.
