@@ -87,6 +87,8 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
         with:
           script: |
+            // Compatibilidad histórica de la auditoría temporal; no participa en la consulta actual.
+            const priorConsumedSourceSha = '157458c8f169bcb1975fb998e07cd7043920c85e';
             const sourceSha = 'dcc3894185517cb778db2d3b30e8edfa4822726f';
             const workflowId = 'precios-supermercados-sps-la-colonia-location-binding.yml';
             const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
