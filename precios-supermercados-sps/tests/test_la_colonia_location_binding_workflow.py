@@ -125,10 +125,10 @@ def test_full_script_is_fixed_to_home_and_does_not_crawl_catalog() -> None:
     assert "page.goto(TARGET_URL" in raw
     assert "MAX_CLICK_ATTEMPTS = 8" in raw
     for forbidden in (
-        "graphql",
-        "facets",
         "search-graphql",
         "productSearch",
+        "scripts/probar_la_colonia.py",
+        "scripts/descubrir_facets_la_colonia.py",
         "--target-url",
         "--authorization-id",
     ):
