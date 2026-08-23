@@ -118,6 +118,10 @@ jobs:
     if: ${{ needs.preflight.outputs.allowed == 'true' && (needs.preflight.outputs.mode == 'check' || needs.preflight.outputs.mode == 'apply-config') }}
     runs-on: ubuntu-latest
     environment: precios-sps-storage
+    outputs:
+      result: ${{ steps.bootstrap.outputs.result }}
+      error_code: ${{ steps.bootstrap.outputs.error_code }}
+      wrote: ${{ steps.bootstrap.outputs.wrote }}
 
     env:
       PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
@@ -140,6 +144,7 @@ jobs:
         run: python -m pip install -r precios-supermercados-sps/requirements.txt
 
       - name: Verificar o materializar configuración
+        id: bootstrap
         env:
           PRECIOS_SPS_GOOGLE_SPREADSHEET_ID: ${{ vars.PRECIOS_SPS_GOOGLE_SPREADSHEET_ID }}
           PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON }}
@@ -161,20 +166,34 @@ jobs:
         env:
           STORAGE_MODE: ${{ needs.preflight.outputs.mode }}
           STORAGE_RESULT: ${{ needs.storage.result }}
+          STORAGE_BOOTSTRAP_RESULT: ${{ needs.storage.outputs.result }}
+          STORAGE_ERROR_CODE: ${{ needs.storage.outputs.error_code }}
+          STORAGE_WROTE: ${{ needs.storage.outputs.wrote }}
         with:
           script: |
             const mode = process.env.STORAGE_MODE;
             const jobResult = process.env.STORAGE_RESULT;
+            const bootstrapResult = process.env.STORAGE_BOOTSTRAP_RESULT;
+            const wrote = process.env.STORAGE_WROTE;
+            const rawError = process.env.STORAGE_ERROR_CODE || 'storage_job_failed';
+            const errorCode = /^[a-z0-9_.-]{1,128}$/.test(rawError)
+              ? rawError.slice(0, 72)
+              : 'storage_job_failed';
             if (!['check', 'apply-config'].includes(mode)) {
               core.setFailed('storage status mode invalid');
               return;
             }
-            const state = jobResult === 'success' ? 'success' : 'failure';
+            const state = jobResult === 'success' && bootstrapResult === 'ok'
+              ? 'success'
+              : 'failure';
+            const description = state === 'success'
+              ? `storage ${mode}: success wrote=${wrote}`
+              : `storage ${mode}: failure ${errorCode}`;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state,
               context: 'precios-sps/google-sheets-storage',
-              description: `storage ${mode}: ${state}`,
+              description,
             });
