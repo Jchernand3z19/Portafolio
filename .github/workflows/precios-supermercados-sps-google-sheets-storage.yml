@@ -186,14 +186,22 @@ jobs:
             const state = jobResult === 'success' && bootstrapResult === 'ok'
               ? 'success'
               : 'failure';
-            const description = state === 'success'
-              ? `storage ${mode}: success wrote=${wrote}`
-              : `storage ${mode}: failure ${errorCode}`;
+            const diagnostic = state === 'success'
+              ? `ok-wrote-${['true', 'false'].includes(wrote) ? wrote : 'unknown'}`
+              : errorCode;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state,
               context: 'precios-sps/google-sheets-storage',
-              description,
+              description: `storage ${mode}: ${state}`,
+            });
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state,
+              context: `precios-sps/storage-result/${diagnostic}`,
+              description: 'sanitized storage result',
             });
