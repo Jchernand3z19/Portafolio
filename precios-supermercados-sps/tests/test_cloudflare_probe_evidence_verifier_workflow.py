@@ -13,10 +13,10 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "cloudflare-controlled-probe-ev
 MARKER = ".github/workflows/requests/cloudflare-evidence-verify-request.json"
 
 PINNED_ACTIONS = {
-    "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
-    "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
-    "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
-    "actions/github-script": "f28e40c7f34bde8b3046d885e986cb6290c5673b",
+    "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",
+    "actions/download-artifact": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+    "actions/github-script": "3a2844b7e9c422d3c10d287c895573f7108da1b3",
 }
 
 
