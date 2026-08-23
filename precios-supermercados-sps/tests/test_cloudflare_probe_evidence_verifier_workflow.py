@@ -86,11 +86,11 @@ def test_push_trigger_is_marker_only_and_fixed_to_existing_evidence():
     assert "probe_verify_request_source_not_allowlisted" in preflight_raw
     assert "requestSequence" in preflight_raw
     assert "allowed=true" in preflight_raw
+    assert 'payload.get("authority") is not False' in preflight_raw
 
     assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in preflight_raw
     assert "CLOUDFLARE_ACCOUNT_ID" not in preflight_raw
     assert "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL" not in preflight_raw
-    assert "authority": False if False else True
     assert "production_authority" in raw
     assert "catalog_accepted" in raw
 
