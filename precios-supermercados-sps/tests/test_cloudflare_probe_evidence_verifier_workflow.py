@@ -10,7 +10,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "cloudflare-controlled-probe-evidence-verify.yml"
-MARKER = "precios-supermercados-sps/.automation/cloudflare-evidence-verify-request.json"
+MARKER = ".automation/cloudflare-evidence-verify-request.json"
 
 PINNED_ACTIONS = {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
