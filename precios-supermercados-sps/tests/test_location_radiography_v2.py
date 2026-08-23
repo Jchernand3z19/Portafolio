@@ -22,12 +22,14 @@ def test_radiography_target_is_fixed_and_has_no_commercial_authority() -> None:
     assert module.TARGET_URL == "https://www.lacolonia.com/"
     assert module.TARGET_CITY == "San Pedro Sula"
     assert module.OTHER_CITY == "Tegucigalpa"
+    assert module.MAX_NETWORK_EVENTS == 500
+    assert module.MAX_DOM_ROWS == 160
     raw = SCRIPT.read_text(encoding="utf-8")
     assert '"authority": False' in raw
     assert '"catalog_accepted": False' in raw
     assert '"extraction_enabled": False' in raw
     assert "graphql" in raw.casefold()
-    assert "product" in raw.casefold()
+    assert "catálogo" in raw.casefold()
 
 
 def test_safe_url_keeps_only_query_names() -> None:
@@ -57,3 +59,16 @@ def test_failed_city_resolution_triggers_bounded_radiography_in_same_job() -> No
     assert "la-colonia-location-radiography-v2-${{ github.run_id }}" in raw
     assert "diagnostic-artifacts/location-radiography-v2" in raw
     assert "secrets." not in raw
+    assert "id-token" not in raw
+    assert "actions: write" not in raw
+
+
+def test_radiography_persists_only_sanitized_context_shapes() -> None:
+    raw = SCRIPT.read_text(encoding="utf-8")
+    assert '"value_fingerprint"' in raw
+    assert '"name": str(cookie.get("name", ""))' in raw
+    assert 'cookie.get("value"' not in raw
+    assert "request.post_data" not in raw
+    assert "request.headers" not in raw
+    assert "page.content(" not in raw
+    assert "document.documentElement.innerHTML" not in raw
