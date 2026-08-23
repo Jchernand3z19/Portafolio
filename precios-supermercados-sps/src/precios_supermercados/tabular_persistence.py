@@ -1,12 +1,17 @@
 """Contrato tabular común para persistencia y revisión humana.
 
 No escribe en Google Sheets ni en otro backend. Define las columnas canónicas que
-compartirán todos los supermercados y serializa current/history sin perder la
-identidad de supermercado y ubicación.
+compartirán todos los supermercados y serializa producto, mapping, current/history
+sin perder identidad fuente ni comercial.
 
 La capa es fail-closed respecto a ubicación: una oferta no puede convertirse en
-fila persistible si su ubicación no está habilitada en ``LocationCatalog`` o si
-una fuente multiubicación no demuestra una asignación confirmada.
+fila comercial persistible si su ubicación no está habilitada en
+``LocationCatalog`` o si una fuente multiubicación no demuestra una asignación
+confirmada.
+
+``dim_products`` contiene únicamente atributos normalizados/canónicos de productos
+ya mapeados. ``map_source_products`` conserva la relación fuente -> producto y es
+la cola explícita de revisión cuando ``product_id`` sigue siendo provisional.
 
 Current e histórico conservan además la evidencia estructurada mínima necesaria
 para reconstruir un ``ValidatedOffer`` después de reiniciar un runner. No se
@@ -26,6 +31,11 @@ from typing import Any, Mapping
 
 from .commercial_state import CurrentCommercialOffer, OfferHistoryPeriod
 from .enums import LocationStatus
+from .identifiers import (
+    canonicalize_gtin,
+    generate_gtin_product_id,
+    generate_source_product_id,
+)
 from .locations import (
     DEFAULT_LOCATION_CATALOG,
     LocationCatalog,
@@ -85,6 +95,57 @@ CFG_LOCATIONS = TableSpec(
         "evidence",
     ),
     primary_key=("location_id",),
+)
+
+DIM_PRODUCTS = TableSpec(
+    name="dim_products",
+    columns=(
+        "product_id",
+        "canonical_gtin",
+        "normalized_name",
+        "normalized_brand",
+        "category",
+        "subcategory",
+        "variant",
+        "unit_count",
+        "content_per_unit",
+        "measurement_unit",
+        "total_content",
+        "review_status",
+    ),
+    primary_key=("product_id",),
+)
+
+MAP_SOURCE_PRODUCTS = TableSpec(
+    name="map_source_products",
+    columns=(
+        "source_product_id",
+        "supermarket_id",
+        "source_key_type",
+        "source_key",
+        "source_sku",
+        "source_name",
+        "source_brand",
+        "source_presentation",
+        "barcode",
+        "product_url",
+        "product_id",
+        "mapping_status",
+        "mapping_method",
+        "review_reason",
+        "normalized_name",
+        "normalized_brand",
+        "category",
+        "subcategory",
+        "variant",
+        "unit_count",
+        "content_per_unit",
+        "measurement_unit",
+        "total_content",
+        "last_observed_at_utc",
+        "last_scrape_run_id",
+    ),
+    primary_key=("source_product_id",),
 )
 
 # Estas columnas son deliberadamente explícitas. El Spreadsheet es también el
@@ -253,6 +314,8 @@ TABLE_SPECS: Mapping[str, TableSpec] = MappingProxyType(
         for spec in (
             CFG_SUPERMARKETS,
             CFG_LOCATIONS,
+            DIM_PRODUCTS,
+            MAP_SOURCE_PRODUCTS,
             FACT_OFFERS_CURRENT,
             FACT_OFFER_HISTORY,
             FACT_SCRAPE_RUNS,
@@ -383,13 +446,99 @@ def validate_offer_location_for_persistence(
     return location
 
 
+def _validated_offer(value: ValidatedOffer) -> NormalizedOffer:
+    if not isinstance(value, ValidatedOffer):
+        raise TabularPersistenceError("validated debe ser ValidatedOffer")
+    offer = value.offer
+    expected_source_product_id = generate_source_product_id(
+        offer.supermarket_id,
+        offer.source_key_type,
+        offer.source_key,
+    )
+    if offer.source_product_id != expected_source_product_id:
+        raise TabularPersistenceError("source_product_id no es determinista")
+    return offer
+
+
+def _mapping_method(offer: NormalizedOffer) -> tuple[str, str, str | None, str | None]:
+    gtin = canonicalize_gtin(offer.barcode)
+    if offer.product_id.startswith("prod_pending_"):
+        return "pending", "pending", "pending_product_mapping", gtin
+    if offer.product_id.startswith("prod_gtin_"):
+        if gtin is None or offer.product_id != generate_gtin_product_id(gtin):
+            raise TabularPersistenceError("product_id_gtin_no_reconcilia_con_barcode")
+        return "mapped", "gtin", None, gtin
+    return "mapped", "explicit", None, gtin
+
+
+def product_dimension_row(validated: ValidatedOffer) -> dict[str, Any] | None:
+    """Materializa sólo productos ya mapeados, sin columnas específicas de fuente."""
+
+    offer = _validated_offer(validated)
+    mapping_status, _, _, canonical_gtin = _mapping_method(offer)
+    if mapping_status == "pending":
+        return None
+    return _closed_row(
+        DIM_PRODUCTS,
+        {
+            "product_id": offer.product_id,
+            "canonical_gtin": canonical_gtin,
+            "normalized_name": offer.normalized_name,
+            "normalized_brand": offer.normalized_brand,
+            "category": offer.category,
+            "subcategory": offer.subcategory,
+            "variant": offer.variant,
+            "unit_count": offer.unit_count,
+            "content_per_unit": _decimal_text(offer.content_per_unit),
+            "measurement_unit": offer.measurement_unit,
+            "total_content": _decimal_text(offer.total_content),
+            "review_status": validated.review_status.value,
+        },
+    )
+
+
+def source_product_mapping_row(validated: ValidatedOffer) -> dict[str, Any]:
+    """Fila fuente -> producto; los pendientes forman la cola de revisión explícita."""
+
+    offer = _validated_offer(validated)
+    mapping_status, mapping_method, review_reason, _ = _mapping_method(offer)
+    return _closed_row(
+        MAP_SOURCE_PRODUCTS,
+        {
+            "source_product_id": offer.source_product_id,
+            "supermarket_id": offer.supermarket_id,
+            "source_key_type": offer.source_key_type.value,
+            "source_key": offer.source_key,
+            "source_sku": offer.source_sku,
+            "source_name": offer.source_name,
+            "source_brand": offer.source_brand,
+            "source_presentation": offer.source_presentation,
+            "barcode": offer.barcode,
+            "product_url": offer.product_url,
+            "product_id": offer.product_id,
+            "mapping_status": mapping_status,
+            "mapping_method": mapping_method,
+            "review_reason": review_reason,
+            "normalized_name": offer.normalized_name,
+            "normalized_brand": offer.normalized_brand,
+            "category": offer.category,
+            "subcategory": offer.subcategory,
+            "variant": offer.variant,
+            "unit_count": offer.unit_count,
+            "content_per_unit": _decimal_text(offer.content_per_unit),
+            "measurement_unit": offer.measurement_unit,
+            "total_content": _decimal_text(offer.total_content),
+            "last_observed_at_utc": _utc_text(offer.observed_at_utc),
+            "last_scrape_run_id": offer.scrape_run_id,
+        },
+    )
+
+
 def _offer_base_row(
     validated: ValidatedOffer,
     catalog: LocationCatalog,
 ) -> dict[str, Any]:
-    if not isinstance(validated, ValidatedOffer):
-        raise TabularPersistenceError("validated debe ser ValidatedOffer")
-    offer = validated.offer
+    offer = _validated_offer(validated)
     location = validate_offer_location_for_persistence(offer, catalog)
     supermarket = catalog.supermarket(offer.supermarket_id)
     return {
