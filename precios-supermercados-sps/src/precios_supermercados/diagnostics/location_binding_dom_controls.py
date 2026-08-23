@@ -14,6 +14,13 @@ from typing import Any
 
 
 CITY_CONTROL_ROLES: tuple[str, ...] = ("option", "radio", "menuitem", "button")
+_IGNORED_CITY_LABELS = frozenset(
+    {
+        "selecciona tu ciudad",
+        "selecciona una ciudad",
+        "ciudad",
+    }
+)
 
 
 class LocationControlResolutionError(RuntimeError):
@@ -77,7 +84,7 @@ def _native_select_labels(option: Any) -> tuple[str, ...] | None:
     options = parent.locator("option")
     for index in range(options.count()):
         label = _label(options.nth(index))
-        if label:
+        if label and label.casefold() not in _IGNORED_CITY_LABELS:
             labels.append(label)
     return tuple(sorted(set(labels), key=str.casefold))
 
