@@ -55,7 +55,7 @@ LOCATION_BINDING_RECONCILE_REQUEST = (
     ".github/workflows/requests/la-colonia-location-binding-reconcile-request.json"
 )
 LOCATION_BINDING_CONSUMED_ID = "LC-location-binding-336"
-LOCATION_BINDING_SOURCE_SHA = "56c940515b9d1ddc46de4843d4437b20ea12215f"
+LOCATION_BINDING_SOURCE_SHA = "76049b178fac5dbdcdad474ed9b21b179ce74e6a"
 GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storage.yml"
 GOOGLE_SHEETS_STORAGE_REQUEST = (
     "precios-supermercados-sps/.automation/google-sheets-storage-request.json"
