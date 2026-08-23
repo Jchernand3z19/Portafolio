@@ -284,7 +284,9 @@ def build_atomic_workbook_plan(
         except TabularStoreError as exc:
             raise GoogleSheetsPlanError(str(exc)) from exc
         matrix = _matrix_rows(spec, rows)
-        required_rows = len(matrix)
+        # Sheets rechaza frozenRowCount=1 cuando rowCount=1: una tabla vacía
+        # necesita una fila visible adicional aunque sólo se materialice el header.
+        required_rows = max(len(matrix), 2)
         required_columns = len(spec.columns)
         row_counts[table_name] = len(rows)
 
