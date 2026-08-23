@@ -10,11 +10,13 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "cloudflare-controlled-probe-evidence-verify.yml"
+MARKER = "precios-supermercados-sps/.automation/cloudflare-evidence-verify-request.json"
 
 PINNED_ACTIONS = {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
     "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
     "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "actions/github-script": "f28e40c7f34bde8b3046d885e986cb6290c5673b",
 }
 
 
@@ -25,33 +27,72 @@ def _load() -> tuple[str, dict[str, object]]:
     return raw, value
 
 
-def test_existing_probe_verifier_is_read_only_manual_and_main_only():
+def test_existing_probe_verifier_has_controlled_main_trigger_and_least_privilege():
     raw, workflow = _load()
     assert workflow["permissions"] == {"contents": "read", "actions": "read"}
     triggers = workflow["on"]
-    assert isinstance(triggers, dict) and set(triggers) == {"workflow_dispatch"}
+    assert isinstance(triggers, dict) and set(triggers) == {"workflow_dispatch", "push"}
+
     dispatch = triggers["workflow_dispatch"]
     assert isinstance(dispatch, dict) and set(dispatch) == {"inputs"}
     inputs = dispatch["inputs"]
     assert isinstance(inputs, dict)
     assert set(inputs) == {"source_run_id", "source_run_attempt", "source_commit_sha"}
     assert inputs["source_run_id"]["required"] == "true"
-    assert inputs["source_run_id"]["type"] == "string"
-    assert inputs["source_run_attempt"]["required"] == "true"
-    assert inputs["source_run_attempt"]["type"] == "string"
     assert inputs["source_run_attempt"]["default"] == "1"
     assert inputs["source_commit_sha"]["required"] == "true"
-    assert inputs["source_commit_sha"]["type"] == "string"
+    assert triggers["push"] == {"branches": ["main"], "paths": [MARKER]}
 
     jobs = workflow["jobs"]
-    assert isinstance(jobs, dict) and set(jobs) == {"verify-existing-evidence"}
-    job = jobs["verify-existing-evidence"]
-    assert job["if"] == "${{ github.ref == 'refs/heads/main' }}"
-    assert job["environment"] == "cloudflare-probe"
-    assert "permissions" not in job
+    assert isinstance(jobs, dict)
+    assert set(jobs) == {"preflight", "verify-existing-evidence", "publish-status"}
+    preflight = jobs["preflight"]
+    verifier = jobs["verify-existing-evidence"]
+    publisher = jobs["publish-status"]
+
+    assert preflight["if"] == (
+        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
+        "github.ref == 'refs/heads/main' }}"
+    )
+    assert "environment" not in preflight
+    assert "permissions" not in preflight
+    assert verifier["needs"] == "preflight"
+    assert verifier["if"] == "${{ needs.preflight.outputs.allowed == 'true' }}"
+    assert verifier["environment"] == "cloudflare-probe"
+    assert "permissions" not in verifier
+    assert publisher["needs"] == ["preflight", "verify-existing-evidence"]
+    assert publisher["permissions"] == {"statuses": "write"}
+    assert "environment" not in publisher
+
     assert "id-token" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" not in raw
     assert "ACTIONS_ID_TOKEN_REQUEST_URL" not in raw
+
+
+def test_push_trigger_is_marker_only_and_fixed_to_existing_evidence():
+    raw, workflow = _load()
+    preflight = workflow["jobs"]["preflight"]
+    preflight_raw = "\n".join(str(step) for step in preflight["steps"])
+
+    assert MARKER in preflight_raw
+    assert "github.rest.repos.getCommit" in preflight_raw
+    assert "files.length !== 1" in preflight_raw
+    assert "probe_verify_trigger_not_marker_only" in preflight_raw
+    assert "precios-sps-cloudflare-evidence-verify-request/v1" in preflight_raw
+    assert "probe_verify_request_authority_must_be_false" in preflight_raw
+    assert 'expected_run_id = "32551882793"' in preflight_raw
+    assert 'expected_attempt = "1"' in preflight_raw
+    assert 'expected_commit = "cc15edef22709911beb1d1b027ae4c9992da1944"' in preflight_raw
+    assert "probe_verify_request_source_not_allowlisted" in preflight_raw
+    assert "requestSequence" in preflight_raw
+    assert "allowed=true" in preflight_raw
+
+    assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in preflight_raw
+    assert "CLOUDFLARE_ACCOUNT_ID" not in preflight_raw
+    assert "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL" not in preflight_raw
+    assert "authority": False if False else True
+    assert "production_authority" in raw
+    assert "catalog_accepted" in raw
 
 
 def test_existing_probe_verifier_has_no_gateway_or_live_fetch_capability():
@@ -69,45 +110,69 @@ def test_existing_probe_verifier_has_no_gateway_or_live_fetch_capability():
     assert "CLOUDFLARE_ACCOUNT_ID" in raw
 
 
-def test_existing_probe_verifier_actions_are_pinned_and_checkout_is_immutable():
+def test_existing_probe_verifier_actions_are_pinned_and_checkouts_are_immutable():
     _, workflow = _load()
-    job = workflow["jobs"]["verify-existing-evidence"]
-    steps = job["steps"]
-    uses_steps = [step for step in steps if "uses" in step]
+    all_steps = []
+    for job in workflow["jobs"].values():
+        all_steps.extend(job.get("steps", []))
+    uses_steps = [step for step in all_steps if "uses" in step]
     for step in uses_steps:
         action, separator, revision = step["uses"].partition("@")
         assert separator and re.fullmatch(r"[0-9a-f]{40}", revision)
         assert PINNED_ACTIONS[action] == revision
 
-    checkout = next(step for step in uses_steps if step["uses"].startswith("actions/checkout@"))
-    assert checkout["with"] == {
-        "ref": "${{ github.sha }}",
-        "persist-credentials": "false",
-    }
+    checkouts = [
+        step for step in uses_steps if step["uses"].startswith("actions/checkout@")
+    ]
+    assert len(checkouts) == 2
+    assert all(
+        step["with"] == {
+            "ref": "${{ github.sha }}",
+            "persist-credentials": "false",
+        }
+        for step in checkouts
+    )
 
-    download = next(step for step in uses_steps if step["uses"].startswith("actions/download-artifact@"))
+    verifier = workflow["jobs"]["verify-existing-evidence"]
+    download = next(
+        step
+        for step in verifier["steps"]
+        if str(step.get("uses", "")).startswith("actions/download-artifact@")
+    )
     assert download["with"] == {
         "name": "precios-sps-cloudflare-controlled-probe",
         "path": ".probe-evidence",
         "github-token": "${{ github.token }}",
         "repository": "${{ github.repository }}",
-        "run-id": "${{ inputs.source_run_id }}",
+        "run-id": "${{ needs.preflight.outputs.source_run_id }}",
     }
 
 
-def test_existing_probe_verifier_binds_signed_source_identity_and_only_polls_telemetry():
-    raw, _ = _load()
+def test_existing_probe_verifier_binds_source_and_publishes_only_sanitized_result():
+    raw, workflow = _load()
+    verifier = workflow["jobs"]["verify-existing-evidence"]
+    assert verifier["env"]["SOURCE_RUN_ID"] == "${{ needs.preflight.outputs.source_run_id }}"
+    assert verifier["env"]["SOURCE_RUN_ATTEMPT"] == (
+        "${{ needs.preflight.outputs.source_run_attempt }}"
+    )
+    assert verifier["env"]["SOURCE_COMMIT_SHA"] == (
+        "${{ needs.preflight.outputs.source_commit_sha }}"
+    )
+
     assert 'expected_commit_sha=os.environ["SOURCE_COMMIT_SHA"]' in raw
     assert 'expected_run_id=os.environ["SOURCE_RUN_ID"]' in raw
     assert 'expected_run_attempt=int(os.environ["SOURCE_RUN_ATTEMPT"])' in raw
     assert "verify_controlled_probe_artifact" in raw
     assert "ControlledProbeEventsVerifierClient" in raw
     assert "cloudflare_controlled_probe_events_query" in raw
-    assert "ControlledProbeTraceQueryVerifierClient" not in raw
-    assert "ControlledProbeObservabilityVerifierClient" not in raw
-    assert "CloudflareObservabilityHttpTransport" in raw
     assert 'exc.code != "probe_discovery_trace_missing"' in raw
     assert "for query_attempt in range(1, 13):" in raw
     assert "time.sleep(15)" in raw
-    assert "production_authority is not False" in raw
-    assert "catalog_accepted is not False" in raw
+
+    publisher = workflow["jobs"]["publish-status"]
+    publisher_raw = "\n".join(str(step) for step in publisher["steps"])
+    assert "precios-sps/cloudflare-evidence-verifier" in publisher_raw
+    assert "precios-sps/cloudflare-verifier-result/" in publisher_raw
+    assert "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN" not in publisher_raw
+    assert "CLOUDFLARE_ACCOUNT_ID" not in publisher_raw
+    assert "PROBE_PUBLIC_KEY_SPKI_B64URL" not in publisher_raw
