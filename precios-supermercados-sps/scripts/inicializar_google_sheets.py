@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
+from pathlib import Path
 
 from precios_supermercados.google_sheets_adapter import (
     GoogleSheetsAdapterError,
@@ -26,6 +28,7 @@ from precios_supermercados.google_sheets_transport import (
 
 SPREADSHEET_ID_ENV = "PRECIOS_SPS_GOOGLE_SPREADSHEET_ID"
 SERVICE_ACCOUNT_JSON_ENV = "PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON"
+_SAFE_OUTPUT = re.compile(r"^[a-z0-9_.-]{1,128}$")
 
 
 class StorageCliError(ValueError):
@@ -73,9 +76,40 @@ def run(mode: str) -> dict[str, object]:
 
 def _safe_error_code(exc: Exception) -> str:
     code = getattr(exc, "code", None)
-    if isinstance(code, str) and code and len(code) <= 128:
+    if isinstance(code, str) and _SAFE_OUTPUT.fullmatch(code):
         return code
     return "storage_bootstrap_unexpected_error"
+
+
+def _write_github_outputs(
+    *,
+    result: str,
+    error_code: str,
+    wrote: bool | None,
+) -> None:
+    """Publica sólo señales allowlisted; nunca IDs, bodies ni credenciales."""
+
+    output_path = os.environ.get("GITHUB_OUTPUT")
+    if not output_path:
+        return
+    if result not in {"ok", "error"}:
+        raise StorageCliError("github_output_result_invalid")
+    if not _SAFE_OUTPUT.fullmatch(error_code):
+        raise StorageCliError("github_output_error_code_invalid")
+    wrote_text = "unknown" if wrote is None else str(wrote).casefold()
+    with Path(output_path).open("a", encoding="utf-8") as handle:
+        handle.write(f"result={result}\n")
+        handle.write(f"error_code={error_code}\n")
+        handle.write(f"wrote={wrote_text}\n")
+
+
+def _report_error(code: str, *, exit_code: int) -> int:
+    _write_github_outputs(result="error", error_code=code, wrote=None)
+    print(
+        json.dumps({"status": "error", "error_code": code}, sort_keys=True),
+        file=sys.stderr,
+    )
+    return exit_code
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -88,28 +122,14 @@ def main(argv: list[str] | None = None) -> int:
         GoogleSheetsAdapterError,
         GoogleSheetsBootstrapError,
     ) as exc:
-        print(
-            json.dumps(
-                {"status": "error", "error_code": _safe_error_code(exc)},
-                sort_keys=True,
-            ),
-            file=sys.stderr,
-        )
-        return 2
+        return _report_error(_safe_error_code(exc), exit_code=2)
     except Exception:
         # Evita que una excepción de librería imprima request/body/credenciales.
-        print(
-            json.dumps(
-                {
-                    "status": "error",
-                    "error_code": "storage_bootstrap_unexpected_error",
-                },
-                sort_keys=True,
-            ),
-            file=sys.stderr,
-        )
-        return 3
+        return _report_error("storage_bootstrap_unexpected_error", exit_code=3)
 
+    wrote = result.get("wrote")
+    wrote_value = wrote if isinstance(wrote, bool) else None
+    _write_github_outputs(result="ok", error_code="none", wrote=wrote_value)
     print(json.dumps(result, sort_keys=True))
     return 0
 
