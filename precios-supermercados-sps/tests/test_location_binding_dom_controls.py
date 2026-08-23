@@ -83,7 +83,7 @@ class FakePage:
         )
 
 
-def test_native_select_preserves_all_public_city_labels_and_activates_exact_target() -> None:
+def test_native_select_preserves_real_city_labels_and_activates_exact_target() -> None:
     sps = FakeControl(label="San Pedro Sula", role="option", visible=False)
     tgu = FakeControl(label="Tegucigalpa", role="option", visible=False)
     placeholder = FakeControl(label="Selecciona tu ciudad", role="option", visible=False)
@@ -96,11 +96,7 @@ def test_native_select_preserves_all_public_city_labels_and_activates_exact_targ
     resolved = resolve_exact_city_control(page, "San Pedro Sula")
 
     assert resolved.role == "option"
-    assert resolved.available_cities == (
-        "San Pedro Sula",
-        "Selecciona tu ciudad",
-        "Tegucigalpa",
-    )
+    assert resolved.available_cities == ("San Pedro Sula", "Tegucigalpa")
     activate_city_control(resolved, "San Pedro Sula")
     assert parent.selected == "San Pedro Sula"
     assert sps.clicked is False
