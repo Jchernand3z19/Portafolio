@@ -17,8 +17,10 @@ concurrency:
 
 jobs:
   radiography:
-    # Fail-closed: todas las autorizaciones históricas de binding, incluida LC-location-binding-337, ya fueron consumidas.
-    # La radiografía completa autorizada el 2026-08-23 también fue consumida y no concede una nueva ejecución.
+    # Fail-closed: LC-location-binding-336, LC-location-binding-331, LC-location-binding-332,
+    # LC-location-binding-333, LC-location-binding-334, LC-location-binding-335 y
+    # LC-location-binding-337 ya fueron consumidas. La radiografía completa autorizada
+    # el 2026-08-23 también fue consumida y no concede una nueva ejecución.
     # Una autorización futura requiere un PR separado que active simultáneamente este job y los gates versionados.
     if: ${{ false }}
     runs-on: ubuntu-latest
