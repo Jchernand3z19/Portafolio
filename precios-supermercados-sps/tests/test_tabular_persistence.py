@@ -27,8 +27,10 @@ from precios_supermercados.models import NormalizedOffer, ValidatedOffer
 from precios_supermercados.tabular_persistence import (
     CFG_LOCATIONS,
     CFG_SUPERMARKETS,
+    DIM_PRODUCTS,
     FACT_OFFER_HISTORY,
     FACT_OFFERS_CURRENT,
+    MAP_SOURCE_PRODUCTS,
     TABLE_SPECS,
     TabularPersistenceError,
     current_offer_row,
@@ -167,11 +169,15 @@ def test_table_specs_are_shared_not_one_table_per_supermarket() -> None:
     assert set(TABLE_SPECS) == {
         "cfg_supermarkets",
         "cfg_locations",
+        "dim_products",
+        "map_source_products",
         "fact_offers_current",
         "fact_offer_history",
         "fact_scrape_runs",
         "fact_quality_events",
     }
+    assert DIM_PRODUCTS.primary_key == ("product_id",)
+    assert MAP_SOURCE_PRODUCTS.primary_key == ("source_product_id",)
     assert FACT_OFFERS_CURRENT.primary_key == ("offer_id",)
     assert FACT_OFFER_HISTORY.primary_key == ("offer_history_id",)
     assert all("la_colonia" not in name for name in TABLE_SPECS)
