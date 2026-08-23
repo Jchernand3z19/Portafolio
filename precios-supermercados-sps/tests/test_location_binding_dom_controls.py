@@ -5,10 +5,14 @@ import re
 import pytest
 
 from precios_supermercados.diagnostics.location_binding_dom_controls import (
+    LOCATION_SELECTOR_CSS,
     LocationControlResolutionError,
     ResolvedCityControl,
+    ResolvedLocationSelector,
     activate_city_control,
+    open_location_selector,
     resolve_exact_city_control,
+    resolve_location_selector,
 )
 
 
@@ -95,16 +99,75 @@ class FakeControl:
 
 
 class FakePage:
-    def __init__(self, controls):
+    def __init__(self, controls, *, structural=()):
         self.controls = list(controls)
+        self.structural = list(structural)
+
+    def locator(self, selector):
+        assert selector == LOCATION_SELECTOR_CSS
+        return FakeCollection(self.structural)
 
     def get_by_role(self, role, *, name):
         assert isinstance(name, re.Pattern)
         return FakeCollection(
             control
             for control in self.controls
-            if control.role == role and name.fullmatch(control.label)
+            if control.role == role
+            and control.label is not None
+            and name.fullmatch(control.label)
         )
+
+
+def test_structural_location_button_matches_user_supplied_html_and_exposes_city() -> None:
+    button = FakeControl(label="San pedro sula", role="button")
+    legacy = FakeControl(label="Ubicación", role="button")
+    page = FakePage([legacy], structural=[button])
+
+    resolved = resolve_location_selector(page)
+
+    assert resolved == ResolvedLocationSelector(
+        locator=button,
+        source="btn-modal-selector",
+        visible_location="San pedro sula",
+    )
+    opened = open_location_selector(page)
+    assert opened == resolved
+    assert button.clicked is True
+    assert legacy.clicked is False
+
+
+def test_structural_location_button_ambiguity_fails_closed() -> None:
+    page = FakePage(
+        [],
+        structural=[
+            FakeControl(label="San Pedro Sula", role="button"),
+            FakeControl(label="Tegucigalpa", role="button"),
+        ],
+    )
+
+    with pytest.raises(LocationControlResolutionError, match="location_selector_not_unique"):
+        resolve_location_selector(page)
+
+
+def test_structural_location_button_requires_readable_label() -> None:
+    page = FakePage([], structural=[FakeControl(label=None, role="button")])
+
+    with pytest.raises(LocationControlResolutionError, match="location_selector_label_missing"):
+        resolve_location_selector(page)
+
+
+def test_legacy_location_selector_remains_supported_without_false_city() -> None:
+    legacy = FakeControl(label="Selecciona tu tienda", role="button")
+    resolved = resolve_location_selector(FakePage([legacy]))
+
+    assert resolved.source == "accessible-fallback"
+    assert resolved.visible_location is None
+    assert resolved.locator is legacy
+
+
+def test_location_selector_missing_fails_closed() -> None:
+    with pytest.raises(LocationControlResolutionError, match="location_selector_not_found"):
+        resolve_location_selector(FakePage([]))
 
 
 def test_native_select_preserves_real_city_labels_and_activates_exact_target() -> None:
