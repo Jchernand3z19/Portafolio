@@ -13,8 +13,9 @@ Los parámetros inyectables de allow-list/fuse existen exclusivamente para tests
 sólo puede provenir de constantes versionadas y revisadas.
 
 El artefacto sólo contiene nombres públicos de ciudades/tiendas, nombres de
-mecanismos de contexto y SHA-256 de valores opacos. No guarda precios, productos,
-URLs con parámetros, cookies en claro ni payloads GraphQL.
+mecanismos de contexto, contadores DOM sanitizados y SHA-256 de valores opacos. No
+guarda precios, productos, HTML, selectores dinámicos, URLs con parámetros, cookies
+en claro ni payloads GraphQL.
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ from precios_supermercados.diagnostics.la_colonia_sps_context_diagnostic import 
     sanitize_error,
 )
 from precios_supermercados.diagnostics.location_binding_dom_controls import (
+    CITY_CONTROL_ROLES,
     LocationControlResolutionError,
     open_location_selector,
     resolve_exact_city_control,
@@ -59,6 +61,7 @@ CONSUMED_AUTHORIZATION_IDS: frozenset[str] = frozenset(
         "LC-location-binding-332",
         "LC-location-binding-333",
         "LC-location-binding-334",
+        "LC-location-binding-335",
     }
 )
 AUTHORIZATION_PATTERN = re.compile(r"^LC-location-binding-\d{3}$")
@@ -101,10 +104,25 @@ _IGNORED_OPTION_LABELS = frozenset(
         "sucursal",
     }
 )
+_ALLOWED_CITY_CONTROL_DIAGNOSTIC_STAGES = frozenset(
+    {"prompt", "prompt_scope", "role", "role_scan"}
+)
+_ALLOWED_CITY_CONTROL_DIAGNOSTIC_KEYS = frozenset(
+    {"stage", "role", "candidate_count", "effective_count"}
+)
 
 
 class LocationBindingCaptureError(RuntimeError):
     """Fallo controlado del capturador de ubicación."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        diagnostic: Mapping[str, str | int] | None = None,
+    ) -> None:
+        super().__init__(reason)
+        self.diagnostic = dict(diagnostic or {})
 
 
 @dataclass(slots=True)
@@ -120,6 +138,7 @@ class LocationBindingCaptureResult:
     available_stores: list[str] = field(default_factory=list)
     selected_store: str | None = None
     binding_report: Mapping[str, Any] | None = None
+    city_control_diagnostic: Mapping[str, Any] | None = None
     logical_actions: int = 0
     stop_reason: str | None = None
     errors: list[str] = field(default_factory=list)
@@ -141,6 +160,23 @@ class LocationBindingCaptureResult:
             or value["extraction_enabled"]
         ):
             raise LocationBindingCaptureError("capture_cannot_grant_commercial_authority")
+        diagnostic = value["city_control_diagnostic"]
+        if diagnostic is not None:
+            if not isinstance(diagnostic, dict):
+                raise LocationBindingCaptureError("city_control_diagnostic_invalid")
+            if not set(diagnostic).issubset(_ALLOWED_CITY_CONTROL_DIAGNOSTIC_KEYS):
+                raise LocationBindingCaptureError("city_control_diagnostic_invalid")
+            if diagnostic.get("stage") not in _ALLOWED_CITY_CONTROL_DIAGNOSTIC_STAGES:
+                raise LocationBindingCaptureError("city_control_diagnostic_invalid")
+            role = diagnostic.get("role")
+            if role is not None and role not in CITY_CONTROL_ROLES:
+                raise LocationBindingCaptureError("city_control_diagnostic_invalid")
+            for key in ("candidate_count", "effective_count"):
+                count = diagnostic.get(key)
+                if count is not None and (
+                    not isinstance(count, int) or isinstance(count, bool) or not 0 <= count <= 30
+                ):
+                    raise LocationBindingCaptureError("city_control_diagnostic_invalid")
         return value
 
 
@@ -290,7 +326,9 @@ def _open_location_selector(page: Any) -> str | None:
     try:
         resolved = open_location_selector(page)
     except LocationControlResolutionError as exc:
-        raise LocationBindingCaptureError(str(exc)) from exc
+        raise LocationBindingCaptureError(
+            str(exc), diagnostic=getattr(exc, "diagnostic", None)
+        ) from exc
     return resolved.visible_location
 
 
@@ -298,7 +336,9 @@ def _city_select_and_options(page: Any, city_name: str) -> tuple[Any, list[str]]
     try:
         resolved = resolve_exact_city_control(page, city_name)
     except LocationControlResolutionError as exc:
-        raise LocationBindingCaptureError(str(exc)) from exc
+        raise LocationBindingCaptureError(
+            str(exc), diagnostic=getattr(exc, "diagnostic", None)
+        ) from exc
     return resolved.locator, list(resolved.available_cities)
 
 
@@ -561,6 +601,9 @@ def run_capture(
         result.logical_actions = counter.count
         result.completed_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
         result.stop_reason = _stop_reason(exc)
+        diagnostic = getattr(exc, "diagnostic", None)
+        if diagnostic:
+            result.city_control_diagnostic = dict(diagnostic)
         result.errors.append(f"{exc.__class__.__name__}: {sanitize_error(exc)}")
         _persist(result, output_path)
         return result

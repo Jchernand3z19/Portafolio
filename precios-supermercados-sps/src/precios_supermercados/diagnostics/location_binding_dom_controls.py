@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 
 
 # La pantalla observada por el usuario presenta tarjetas de ciudad con indicador
@@ -20,7 +20,9 @@ from typing import Any
 # una ambigüedad artificial. La unicidad sigue siendo obligatoria dentro del rol
 # elegido: dos radios realmente presentados para la misma ciudad continúan fallando
 # cerrado. Un duplicado DOM fuera del viewport no representa una segunda opción que
-# el usuario tenga delante.
+# el usuario tenga delante. Tampoco se considera una segunda opción cuando Playwright
+# devuelve simultáneamente un ancestro y su descendiente para el mismo control o
+# prompt textual: se conserva únicamente el nodo más específico.
 CITY_CONTROL_ROLES: tuple[str, ...] = ("radio", "option", "menuitem", "button")
 CITY_CONTROL_READY_TIMEOUT_MS = 3_000
 CITY_CONTROL_READY_POLL_MS = 100
@@ -69,10 +71,31 @@ _VIEWPORT_INTERSECTION_JS = """
   );
 }
 """
+_DOM_PATH_JS = """
+(element) => {
+  const path = [];
+  let current = element;
+  while (current && current.parentElement) {
+    path.unshift(Array.prototype.indexOf.call(current.parentElement.children, current));
+    current = current.parentElement;
+  }
+  return path;
+}
+"""
 
 
 class LocationControlResolutionError(RuntimeError):
-    """Fallo determinista al resolver un control de ubicación."""
+    """Fallo determinista con diagnóstico sanitizado opcional."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        diagnostic: Mapping[str, str | int] | None = None,
+    ) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.diagnostic = dict(diagnostic or {})
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +167,53 @@ def _is_presented_in_viewport(locator: Any) -> bool:
         return bool(evaluator(_VIEWPORT_INTERSECTION_JS))
     except Exception:
         return False
+
+
+def _dom_path(locator: Any) -> tuple[int, ...] | None:
+    """Obtiene una identidad estructural efímera sin exponer HTML ni atributos."""
+
+    evaluator = getattr(locator, "evaluate", None)
+    if evaluator is None:
+        return None
+    try:
+        raw = evaluator(_DOM_PATH_JS)
+    except Exception:
+        return None
+    if not isinstance(raw, list):
+        return None
+    if any(not isinstance(index, int) or index < 0 for index in raw):
+        return None
+    return tuple(raw)
+
+
+def _collapse_nested_presented_items(items: list[Any]) -> list[Any]:
+    """Colapsa sólo coincidencias ancestro/descendiente del mismo gesto visual.
+
+    Dos nodos hermanos o ubicados en ramas DOM distintas siguen siendo ambiguos.
+    Cuando todos los locators son Playwright reales se compara únicamente su ruta
+    estructural numérica; esa ruta nunca sale del proceso ni se persiste.
+    """
+
+    if len(items) < 2:
+        return items
+    paths = [_dom_path(item) for item in items]
+    if any(path is None for path in paths):
+        return items
+
+    typed_paths = [path for path in paths if path is not None]
+    kept: list[Any] = []
+    seen: set[tuple[int, ...]] = set()
+    for index, path in enumerate(typed_paths):
+        if path in seen:
+            continue
+        seen.add(path)
+        is_ancestor_duplicate = any(
+            len(path) < len(other) and other[: len(path)] == path
+            for other in typed_paths
+        )
+        if not is_ancestor_duplicate:
+            kept.append(items[index])
+    return kept
 
 
 def _visible_items(collection: Any) -> list[Any]:
@@ -260,7 +330,7 @@ def _visible_role_matches(scope: Any, *, role: str, exact_name: re.Pattern[str])
                 visible.append(candidate)
         except Exception:
             continue
-    return visible
+    return _collapse_nested_presented_items(visible)
 
 
 def _city_modal_scope(page: Any, exact_name: re.Pattern[str]) -> Any:
@@ -269,19 +339,27 @@ def _city_modal_scope(page: Any, exact_name: re.Pattern[str]) -> Any:
     La captura aportada por el usuario muestra el prompt exacto
     ``¿Desde qué ciudad nos visita?``. Si ese prompt cruza el viewport, se toma el
     menor ancestro que además contiene una opción exacta presentada para la ciudad
-    objetivo. Un duplicado responsive que Playwright considera visible pero que está
-    fuera de pantalla no compite con el modal que el usuario tiene delante. Si el
-    prompt no existe se conserva el resolver histórico para selects/listboxes.
+    objetivo. Playwright puede devolver tanto un contenedor como su descendiente
+    para el mismo texto exacto; esos matches anidados se colapsan al nodo más
+    específico. Dos prompts en ramas DOM distintas continúan fallando cerrado.
     """
 
     try:
-        prompts = _presented_items(page.get_by_text(CITY_MODAL_PROMPT_PATTERN))
+        raw_prompts = _presented_items(page.get_by_text(CITY_MODAL_PROMPT_PATTERN))
     except Exception:
         return page
-    if not prompts:
+    if not raw_prompts:
         return page
+    prompts = _collapse_nested_presented_items(raw_prompts)
     if len(prompts) != 1:
-        raise LocationControlResolutionError("target_city_not_unique")
+        raise LocationControlResolutionError(
+            "target_city_not_unique",
+            diagnostic={
+                "stage": "prompt",
+                "candidate_count": len(raw_prompts),
+                "effective_count": len(prompts),
+            },
+        )
 
     scope = prompts[0]
     for _ in range(CITY_MODAL_SCOPE_MAX_ANCESTORS):
@@ -305,7 +383,10 @@ def _city_modal_scope(page: Any, exact_name: re.Pattern[str]) -> Any:
     # El modal ya está identificado físicamente pero todavía no presenta una opción
     # interactiva; el bucle exterior puede volver a sondear durante la ventana
     # acotada de readiness.
-    raise LocationControlResolutionError("target_city_not_found")
+    raise LocationControlResolutionError(
+        "target_city_not_found",
+        diagnostic={"stage": "prompt_scope", "candidate_count": len(prompts)},
+    )
 
 
 def _usable_labels(options: Any, *, require_visible: bool) -> tuple[str, ...]:
@@ -366,7 +447,15 @@ def _resolve_exact_city_control_once(page: Any, normalized: str) -> ResolvedCity
         if not candidates:
             continue
         if len(candidates) != 1:
-            raise LocationControlResolutionError("target_city_not_unique")
+            raise LocationControlResolutionError(
+                "target_city_not_unique",
+                diagnostic={
+                    "stage": "role",
+                    "role": role,
+                    "candidate_count": len(candidates),
+                    "effective_count": len(candidates),
+                },
+            )
 
         locator = candidates[0]
         if role == "option":
@@ -379,7 +468,10 @@ def _resolve_exact_city_control_once(page: Any, normalized: str) -> ResolvedCity
             labels = (normalized,)
         return ResolvedCityControl(locator=locator, role=role, available_cities=labels)
 
-    raise LocationControlResolutionError("target_city_not_found")
+    raise LocationControlResolutionError(
+        "target_city_not_found",
+        diagnostic={"stage": "role_scan", "candidate_count": 0},
+    )
 
 
 def _wait_for_next_city_probe(page: Any) -> None:
@@ -401,7 +493,8 @@ def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl
     usan roles por especificidad semántica: ``radio`` > ``option`` > ``menuitem`` >
     ``button``. Un radio único puede coexistir con una superficie button decorativa
     del mismo gesto visual sin generar un falso ``target_city_not_unique``; dos
-    candidatos del mismo rol realmente presentados siguen fallando cerrado.
+    candidatos del mismo rol realmente presentados siguen fallando cerrado salvo
+    que sean estrictamente ancestro/descendiente del mismo control accesible.
 
     El botón de encabezado ``btn-modal-selector`` se excluye siempre. En selects
     nativos sólo compiten options cuyo ``select`` ancestro está presentado en el
