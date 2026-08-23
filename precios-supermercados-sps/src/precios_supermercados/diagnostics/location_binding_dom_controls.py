@@ -164,6 +164,21 @@ def open_location_selector(page: Any) -> ResolvedLocationSelector:
     return resolved
 
 
+def _visible_native_select(parent_select: Any) -> bool:
+    """Acepta options nativos sólo cuando su ``select`` ancestro es visible.
+
+    Playwright puede considerar invisibles los elementos ``option`` de un select
+    nativo aun cuando el propio ``select`` sí sea interactivo. Por eso la
+    visibilidad se decide en el contenedor. Un select duplicado pero oculto no debe
+    competir con el control realmente presentado al usuario.
+    """
+
+    try:
+        return parent_select.count() == 1 and parent_select.is_visible()
+    except Exception:
+        return False
+
+
 def _visible_role_matches(page: Any, *, role: str, exact_name: re.Pattern[str]) -> list[Any]:
     matches = page.get_by_role(role, name=exact_name)
     visible: list[Any] = []
@@ -176,7 +191,9 @@ def _visible_role_matches(page: Any, *, role: str, exact_name: re.Pattern[str]) 
                 # realmente la ciudad.
                 continue
             parent_select = candidate.locator("xpath=ancestor::select[1]")
-            if candidate.is_visible() or (role == "option" and parent_select.count() == 1):
+            if candidate.is_visible() or (
+                role == "option" and _visible_native_select(parent_select)
+            ):
                 visible.append(candidate)
         except Exception:
             continue
@@ -257,8 +274,10 @@ def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl
     inspeccionan y el resultado sólo se acepta si existe exactamente un elemento
     candidato en el conjunto completo. El botón de encabezado
     ``btn-modal-selector`` se excluye explícitamente porque sólo refleja la ciudad
-    actual y no representa una opción de cambio. La ausencia temporal puede
-    reintentarse durante tres segundos; una ambigüedad falla de inmediato.
+    actual y no representa una opción de cambio. En selects nativos, sólo compiten
+    options cuyo ``select`` ancestro está visible; duplicados ocultos de layouts
+    alternativos se ignoran. La ausencia temporal puede reintentarse durante tres
+    segundos; una ambigüedad entre controles visibles falla de inmediato.
     """
 
     normalized = _clean_label(city_name)

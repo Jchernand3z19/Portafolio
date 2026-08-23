@@ -20,6 +20,13 @@ def _html() -> str:
       <button class="btn-modal-selector" onclick="openLocation()">San pedro sula</button>
     </div>
   </div>
+  <div aria-hidden="true" style="display:none">
+    <select aria-label="Ciudad">
+      <option>Selecciona tu ciudad</option>
+      <option aria-label="San Pedro Sula">San Pedro Sula</option>
+      <option aria-label="Tegucigalpa">Tegucigalpa</option>
+    </select>
+  </div>
   <div id="panel" hidden>
     <div id="city-slot"></div>
   </div>
@@ -66,7 +73,7 @@ def local_page_url():
 
 
 @pytest.mark.skipif(os.environ.get("CI") != "true", reason="browser loopback se valida en GitHub runner")
-def test_capture_waits_for_delayed_city_controls_after_user_observed_button(local_page_url) -> None:
+def test_capture_waits_for_visible_city_control_and_ignores_hidden_duplicate(local_page_url) -> None:
     result = capture.run_capture(
         authorization_id=AUTH,
         active_ids={AUTH},
@@ -80,6 +87,7 @@ def test_capture_waits_for_delayed_city_controls_after_user_observed_button(loca
     assert result.binding_report is not None
     assert result.binding_report["granularity_candidate"] == "city"
     assert result.binding_report["technical_binding_observed"] is True
+    assert result.logical_actions == 3
     assert result.production_authority is False
     assert result.catalog_accepted is False
     assert result.extraction_enabled is False

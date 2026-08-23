@@ -29,12 +29,16 @@ class FakeCollection:
 
 
 class FakeSelect:
-    def __init__(self, options):
+    def __init__(self, options, *, visible=True):
         self.options = list(options)
+        self.visible = visible
         self.selected = None
 
     def count(self):
         return 1
+
+    def is_visible(self):
+        return self.visible
 
     def locator(self, selector):
         assert selector == "option"
@@ -230,6 +234,38 @@ def test_native_select_preserves_real_city_labels_and_activates_exact_target() -
     activate_city_control(resolved, "San Pedro Sula")
     assert parent.selected == "San Pedro Sula"
     assert sps.clicked is False
+
+
+def test_hidden_native_select_duplicate_does_not_compete_with_visible_select() -> None:
+    visible_sps = FakeControl(label="San Pedro Sula", role="option", visible=False)
+    visible_tgu = FakeControl(label="Tegucigalpa", role="option", visible=False)
+    visible_parent = FakeSelect([visible_sps, visible_tgu], visible=True)
+    visible_sps.parent_select = visible_parent
+    visible_tgu.parent_select = visible_parent
+
+    hidden_sps = FakeControl(label="San Pedro Sula", role="option", visible=False)
+    hidden_tgu = FakeControl(label="Tegucigalpa", role="option", visible=False)
+    hidden_parent = FakeSelect([hidden_sps, hidden_tgu], visible=False)
+    hidden_sps.parent_select = hidden_parent
+    hidden_tgu.parent_select = hidden_parent
+
+    page = FakePage([hidden_sps, hidden_tgu, visible_sps, visible_tgu])
+    resolved = resolve_exact_city_control(page, "San Pedro Sula")
+
+    assert resolved.locator is visible_sps
+    assert resolved.available_cities == ("San Pedro Sula", "Tegucigalpa")
+
+
+def test_two_visible_native_selects_with_same_city_still_fail_closed() -> None:
+    first_sps = FakeControl(label="San Pedro Sula", role="option", visible=False)
+    second_sps = FakeControl(label="San Pedro Sula", role="option", visible=False)
+    first_parent = FakeSelect([first_sps], visible=True)
+    second_parent = FakeSelect([second_sps], visible=True)
+    first_sps.parent_select = first_parent
+    second_sps.parent_select = second_parent
+
+    with pytest.raises(LocationControlResolutionError, match="target_city_not_unique"):
+        resolve_exact_city_control(FakePage([first_sps, second_sps]), "San Pedro Sula")
 
 
 def test_custom_listbox_preserves_visible_city_siblings() -> None:
