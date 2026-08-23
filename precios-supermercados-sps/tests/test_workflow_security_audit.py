@@ -81,6 +81,9 @@ ALLOWED_JOB_PERMISSIONS = {
     PROBE_WORKFLOW: {
         "controlled-probe": {"contents": "read", "id-token": "write"},
     },
+    LOCATION_BINDING_WORKFLOW: {
+        "publish-status": {"contents": "read", "statuses": "write"},
+    },
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {
         "publish-status": {"statuses": "write"},
     },
@@ -261,15 +264,23 @@ def test_location_binding_is_the_only_bounded_public_read_only_entrypoint() -> N
     path = WORKFLOW_DIR / LOCATION_BINDING_WORKFLOW
     workflow = load_workflow(path)
     assert workflow["permissions"] == {"contents": "read"}
-    assert set(jobs(workflow)) == {"binding"}
-    job = jobs(workflow)["binding"]
-    assert job["if"] == (
+    assert set(jobs(workflow)) == {"binding", "publish-status"}
+    binding = jobs(workflow)["binding"]
+    publisher = jobs(workflow)["publish-status"]
+    assert binding["if"] == (
         "${{ github.repository == 'Jchernand3z19/Portafolio' && "
         "github.ref == 'refs/heads/main' }}"
     )
-    assert job["timeout-minutes"] == "10"
-    assert "environment" not in job
-    assert "permissions" not in job
+    assert binding["timeout-minutes"] == "10"
+    assert "environment" not in binding
+    assert "permissions" not in binding
+    assert publisher["needs"] == ["binding"]
+    assert publisher["permissions"] == {"contents": "read", "statuses": "write"}
+    assert "environment" not in publisher
+    assert all(
+        not str(step.get("uses", "")).startswith("actions/checkout@")
+        for step in job_steps(publisher)
+    )
     assert workflow["concurrency"] == {
         "group": "la-colonia-location-binding-read-only",
         "cancel-in-progress": "false",
@@ -287,6 +298,8 @@ def test_location_binding_is_the_only_bounded_public_read_only_entrypoint() -> N
     assert "https://www.lacolonia.com/" in raw
     assert "San Pedro Sula" in raw
     assert "authority" in raw
+    assert "createCommitStatus" in raw
+    assert "precios-sps/location-binding-readonly" in raw
     assert "secrets." not in raw
     assert "vars." not in raw
     assert "id-token" not in raw
