@@ -497,3 +497,14 @@ def test_job_level_reusable_workflow_reference_cannot_evade_pin_audit():
     assert not re.fullmatch(r"[0-9a-f]{40}", revision)
     assert action not in PINNED_ACTIONS
 
+
+def test_yaml_comments_cannot_satisfy_a_security_field(tmp_path: Path):
+    fake = tmp_path / "fake.yml"
+    fake.write_text(
+        "name: fake\non:\n  workflow_dispatch:\n# permissions:\n#   contents: read\n"
+        "jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n"
+        f"      # - uses: actions/checkout@{PINNED_ACTIONS['actions/checkout']}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError):
+        load_workflow(fake)
