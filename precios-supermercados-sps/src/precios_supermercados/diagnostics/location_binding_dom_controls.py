@@ -21,6 +21,8 @@ from typing import Any, Mapping
 CITY_CONTROL_ROLES: tuple[str, ...] = ("radio", "option", "menuitem", "button")
 CITY_CONTROL_READY_TIMEOUT_MS = 5_000
 CITY_CONTROL_READY_POLL_MS = 100
+LOCATION_SELECTOR_OPEN_TIMEOUT_MS = 5_000
+LOCATION_SELECTOR_OPEN_POLL_MS = 500
 CITY_MODAL_SCOPE_MAX_ANCESTORS = 8
 LOCATION_SELECTOR_CLASS = "btn-modal-selector"
 LOCATION_SELECTOR_CSS = f"button.{LOCATION_SELECTOR_CLASS}"
@@ -439,9 +441,65 @@ def resolve_location_selector(page: Any) -> ResolvedLocationSelector:
     )
 
 
+def _location_selector_modal_presented(page: Any) -> bool:
+    """Confirma que el click del opener produjo una superficie real del modal.
+
+    En storefronts hidratados el botón puede existir antes de que JavaScript haya
+    conectado su handler. Un click temprano puede ser un no-op silencioso. Se usa
+    como confirmación únicamente evidencia estructural ya observada en La Colonia:
+    el contenedor de botones de ciudad o el prompt visible del modal.
+    """
+
+    try:
+        if _presented_items(page.locator(CITY_BUTTON_CONTAINER_CSS)):
+            return True
+    except Exception:
+        pass
+    try:
+        if _presented_items(page.get_by_text(CITY_MODAL_PROMPT_PATTERN)):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _wait_for_next_location_selector_probe(page: Any) -> bool:
+    waiter = getattr(page, "wait_for_timeout", None)
+    if waiter is None:
+        return False
+    try:
+        waiter(LOCATION_SELECTOR_OPEN_POLL_MS)
+    except Exception:
+        return False
+    return True
+
+
 def open_location_selector(page: Any) -> ResolvedLocationSelector:
+    """Abre el modal y reintenta sólo mientras el click sea un no-op de hidratación.
+
+    La evidencia live mostró que ``btn-modal-selector`` puede renderizarse antes de
+    que su handler esté hidratado. Cada retry ocurre sólo después de comprobar que
+    todavía no existe una superficie presentada del modal. En cuanto aparece el
+    prompt o ``.cont-btn-ciudad`` se detienen los clicks, evitando alternar un modal
+    ya abierto. Los dobles offline sin reloj conservan el comportamiento histórico
+    de un solo click.
+    """
+
     resolved = resolve_location_selector(page)
     resolved.locator.click()
+    if _location_selector_modal_presented(page):
+        return resolved
+
+    wait_count = LOCATION_SELECTOR_OPEN_TIMEOUT_MS // LOCATION_SELECTOR_OPEN_POLL_MS
+    for _ in range(wait_count):
+        if not _wait_for_next_location_selector_probe(page):
+            return resolved
+        if _location_selector_modal_presented(page):
+            return resolved
+        resolved = resolve_location_selector(page)
+        resolved.locator.click()
+        if _location_selector_modal_presented(page):
+            return resolved
     return resolved
 
 
