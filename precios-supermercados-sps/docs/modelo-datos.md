@@ -37,7 +37,9 @@ GTIN válido     -> product_id = prod_gtin_<gtin14>
 GTIN no usable  -> product_id = prod_pending_<hash>
 ```
 
-Un producto provisional conserva `pending_product_mapping`. Un mapping revisado puede sustituir el `product_id` provisional.
+Un producto provisional conserva `pending_product_mapping`. Su `prod_pending_*` es determinista respecto a `source_product_id` y la frontera tabular lo recalcula antes de clasificar el mapping como pendiente. Un prefijo reservado que no reconcilia falla cerrado. Un mapping revisado puede sustituir el `product_id` provisional.
+
+Antes de incorporar otra cadena, productos sin GTIN compartido ni mapping explícitamente revisado permanecen pendientes; una semejanza de nombre no basta para crear equivalencia cross-supermercado.
 
 ## 3. Ubicación
 
@@ -144,7 +146,9 @@ Un runner nuevo debe poder reconstruir current/history y revalidar IDs, `state_h
 
 El adapter lee las tablas gestionadas, reconstruye el store, valida esquema/PK, aplica el batch localmente y materializa el snapshot mediante un único plan de workbook. Pestañas ajenas se preservan y el texto fuente se escribe como texto, no como fórmula.
 
-El workbook físico fue creado cuando el contrato tenía seis tablas. Tras integrar `dim_products` y `map_source_products`, debe migrarse por la ruta segura de storage y verificarse por read-back antes de declarar el esquema físico actualizado.
+El contrato físico y lógico usa las mismas ocho tablas gestionadas. La ruta de bootstrap reserva una fila visible adicional para tablas que sólo tienen encabezado, usa `spreadsheets.batchUpdate` para la materialización y se valida operativamente mediante `check -> apply-config -> check`. El resultado productivo concreto del workbook se documenta en `PROJECT_STATE.md`, no en este modelo estable.
+
+La existencia del workbook o de sus tablas no autoriza a escribir ofertas comerciales: la mutación de current/history sigue subordinada a ubicación, completitud y autoridad upstream.
 
 ## 12. Power BI y BigQuery
 
