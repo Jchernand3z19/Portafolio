@@ -718,6 +718,24 @@ def _wait_for_next_city_probe(page: Any) -> None:
         return
 
 
+def _retryable_city_resolution_error(exc: LocationControlResolutionError) -> bool:
+    """Reintenta sólo ausencia temporal o duplicación transitoria del prompt.
+
+    La captura live puede ver dos prompts del modal antes de que aparezcan los
+    botones estructurales de ciudad. Esa ambigüedad de scope no concede permiso para
+    elegir ninguno: sólo mantiene abierta la ventana de readiness. Una ambigüedad
+    real de controles (`stage=role`) sigue fallando inmediatamente y, si el prompt
+    permanece duplicado hasta agotar el deadline, también termina fail-closed.
+    """
+
+    if str(exc) == "target_city_not_found":
+        return True
+    return (
+        str(exc) == "target_city_not_unique"
+        and exc.diagnostic.get("stage") == "prompt"
+    )
+
+
 def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl:
     """Resuelve ciudad exacta con readiness acotada y deduplicación visual segura."""
 
@@ -729,7 +747,7 @@ def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl
         try:
             return _resolve_exact_city_control_once(page, normalized)
         except LocationControlResolutionError as exc:
-            if str(exc) != "target_city_not_found" or attempt == wait_count:
+            if not _retryable_city_resolution_error(exc) or attempt == wait_count:
                 raise
             _wait_for_next_city_probe(page)
     raise AssertionError("unreachable")
