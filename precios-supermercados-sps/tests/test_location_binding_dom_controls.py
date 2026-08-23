@@ -5,6 +5,7 @@ import re
 import pytest
 
 from precios_supermercados.diagnostics.location_binding_dom_controls import (
+    LOCATION_SELECTOR_CLASS,
     LOCATION_SELECTOR_CSS,
     LocationControlResolutionError,
     ResolvedCityControl,
@@ -69,12 +70,14 @@ class FakeControl:
         visible=True,
         parent_select=None,
         parent_listbox=None,
+        classes="",
     ):
         self.label = label
         self.role = role
         self.visible = visible
         self.parent_select = parent_select
         self.parent_listbox = parent_listbox
+        self.classes = classes
         self.clicked = False
 
     def is_visible(self):
@@ -88,8 +91,11 @@ class FakeControl:
         raise AssertionError(selector)
 
     def get_attribute(self, name):
-        assert name == "aria-label"
-        return self.label
+        if name == "aria-label":
+            return self.label
+        if name == "class":
+            return self.classes
+        raise AssertionError(name)
 
     def inner_text(self):
         return self.label
@@ -119,9 +125,13 @@ class FakePage:
 
 
 def test_structural_location_button_matches_user_supplied_html_and_exposes_city() -> None:
-    button = FakeControl(label="San pedro sula", role="button")
+    button = FakeControl(
+        label="San pedro sula",
+        role="button",
+        classes=LOCATION_SELECTOR_CLASS,
+    )
     legacy = FakeControl(label="Ubicación", role="button")
-    page = FakePage([legacy], structural=[button])
+    page = FakePage([button, legacy], structural=[button])
 
     resolved = resolve_location_selector(page)
 
@@ -140,8 +150,16 @@ def test_structural_location_button_ambiguity_fails_closed() -> None:
     page = FakePage(
         [],
         structural=[
-            FakeControl(label="San Pedro Sula", role="button"),
-            FakeControl(label="Tegucigalpa", role="button"),
+            FakeControl(
+                label="San Pedro Sula",
+                role="button",
+                classes=LOCATION_SELECTOR_CLASS,
+            ),
+            FakeControl(
+                label="Tegucigalpa",
+                role="button",
+                classes=LOCATION_SELECTOR_CLASS,
+            ),
         ],
     )
 
@@ -150,7 +168,12 @@ def test_structural_location_button_ambiguity_fails_closed() -> None:
 
 
 def test_structural_location_button_requires_readable_label() -> None:
-    page = FakePage([], structural=[FakeControl(label=None, role="button")])
+    page = FakePage(
+        [],
+        structural=[
+            FakeControl(label=None, role="button", classes=LOCATION_SELECTOR_CLASS)
+        ],
+    )
 
     with pytest.raises(LocationControlResolutionError, match="location_selector_label_missing"):
         resolve_location_selector(page)
@@ -168,6 +191,26 @@ def test_legacy_location_selector_remains_supported_without_false_city() -> None
 def test_location_selector_missing_fails_closed() -> None:
     with pytest.raises(LocationControlResolutionError, match="location_selector_not_found"):
         resolve_location_selector(FakePage([]))
+
+
+def test_header_current_city_button_is_not_a_modal_city_option() -> None:
+    header = FakeControl(
+        label="San Pedro Sula",
+        role="button",
+        classes=LOCATION_SELECTOR_CLASS,
+    )
+    city = FakeControl(label="San Pedro Sula", role="option", visible=False)
+    tgu = FakeControl(label="Tegucigalpa", role="option", visible=False)
+    parent = FakeSelect([city, tgu])
+    city.parent_select = parent
+    tgu.parent_select = parent
+    page = FakePage([header, city, tgu], structural=[header])
+
+    resolved = resolve_exact_city_control(page, "San Pedro Sula")
+
+    assert resolved.locator is city
+    assert resolved.role == "option"
+    assert resolved.available_cities == ("San Pedro Sula", "Tegucigalpa")
 
 
 def test_native_select_preserves_real_city_labels_and_activates_exact_target() -> None:
