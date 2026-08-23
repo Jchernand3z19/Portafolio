@@ -21,6 +21,8 @@ from typing import Any, Mapping
 CITY_CONTROL_ROLES: tuple[str, ...] = ("radio", "option", "menuitem", "button")
 CITY_CONTROL_READY_TIMEOUT_MS = 5_000
 CITY_CONTROL_READY_POLL_MS = 100
+LOCATION_SELECTOR_OPEN_TIMEOUT_MS = 5_000
+LOCATION_SELECTOR_OPEN_POLL_MS = 500
 CITY_MODAL_SCOPE_MAX_ANCESTORS = 8
 LOCATION_SELECTOR_CLASS = "btn-modal-selector"
 LOCATION_SELECTOR_CSS = f"button.{LOCATION_SELECTOR_CLASS}"
@@ -93,6 +95,21 @@ _TOPMOST_AT_CENTER_JS = """
   const y = Math.max(0, Math.min((window.innerHeight || 1) - 1, rect.top + rect.height / 2));
   const hit = document.elementFromPoint(x, y);
   return Boolean(hit && (hit === element || element.contains(hit)));
+}
+"""
+_LOCATION_SELECTOR_HANDLER_JS = """
+(element) => {
+  if (typeof element.onclick === 'function') return true;
+  for (const key of Object.keys(element)) {
+    if (
+      key.startsWith('__reactProps$') ||
+      key.startsWith('__reactEventHandlers$')
+    ) {
+      const props = element[key];
+      if (props && typeof props.onClick === 'function') return true;
+    }
+  }
+  return false;
 }
 """
 _VISUAL_RECT_TOLERANCE_PX = 1.5
@@ -439,9 +456,81 @@ def resolve_location_selector(page: Any) -> ResolvedLocationSelector:
     )
 
 
+def _location_selector_modal_presented(page: Any) -> bool:
+    """Confirma que el click del opener produjo una superficie real del modal."""
+
+    try:
+        if _presented_items(page.locator(CITY_BUTTON_CONTAINER_CSS)):
+            return True
+    except Exception:
+        pass
+    try:
+        if _presented_items(page.get_by_text(CITY_MODAL_PROMPT_PATTERN)):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _location_selector_has_attached_handler(locator: Any) -> bool:
+    """Detecta handlers observables sin depender del framework como identidad.
+
+    ``onclick`` cubre handlers DOM directos. React conserva las props del nodo bajo
+    claves privadas con prefijos estables por familia; sólo se usa esa señal para
+    saber que un click ya fue aceptado por la capa hidratada, nunca para seleccionar
+    el control ni para demostrar contexto comercial.
+    """
+
+    evaluator = getattr(locator, "evaluate", None)
+    if evaluator is None:
+        return False
+    try:
+        return bool(evaluator(_LOCATION_SELECTOR_HANDLER_JS))
+    except Exception:
+        return False
+
+
+def _wait_for_next_location_selector_probe(page: Any) -> bool:
+    waiter = getattr(page, "wait_for_timeout", None)
+    if waiter is None:
+        return False
+    try:
+        waiter(LOCATION_SELECTOR_OPEN_POLL_MS)
+    except Exception:
+        return False
+    return True
+
+
 def open_location_selector(page: Any) -> ResolvedLocationSelector:
+    """Abre el modal y reintenta sólo ante un click pre-hidratación verificable.
+
+    Si el opener ya expone un handler DOM/React, el click se emite una sola vez y la
+    readiness posterior del control de ciudad absorbe una apertura asíncrona. Si no
+    hay handler observable y tampoco aparece el modal, se reintenta bounded: esto
+    cubre el caso live donde el botón se renderiza antes de que el frontend conecte
+    su interacción. En cuanto aparece una superficie real o un handler observable,
+    no se vuelve a pulsar el opener.
+    """
+
     resolved = resolve_location_selector(page)
+    handler_was_ready = _location_selector_has_attached_handler(resolved.locator)
     resolved.locator.click()
+    if handler_was_ready or _location_selector_modal_presented(page):
+        return resolved
+
+    wait_count = LOCATION_SELECTOR_OPEN_TIMEOUT_MS // LOCATION_SELECTOR_OPEN_POLL_MS
+    for _ in range(wait_count):
+        if not _wait_for_next_location_selector_probe(page):
+            return resolved
+        if _location_selector_modal_presented(page):
+            return resolved
+        resolved = resolve_location_selector(page)
+        if _location_selector_has_attached_handler(resolved.locator):
+            resolved.locator.click()
+            return resolved
+        resolved.locator.click()
+        if _location_selector_modal_presented(page):
+            return resolved
     return resolved
 
 
