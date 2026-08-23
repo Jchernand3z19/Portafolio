@@ -1,36 +1,29 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-import yaml
-
 import precios_supermercados.diagnostics.la_colonia_location_binding_capture as capture
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW = REPO_ROOT / ".github/workflows/precios-supermercados-sps-la-colonia-location-binding.yml"
-AGENTS = REPO_ROOT / ".github/workflows/AGENTS.md"
-RECONCILE = REPO_ROOT / ".github/workflows/requests/la-colonia-location-binding-reconcile-request.json"
-AUTHORIZATION_IDS = frozenset(
+CONSUMED_AUTHORIZATION_IDS = frozenset(
     {
         "LC-location-binding-336",
         "LC-location-binding-331",
         "LC-location-binding-332",
     }
 )
+CURRENT_AUTHORIZATION_ID = "LC-location-binding-333"
 
 
-def test_consumed_location_binding_authorizations_are_permanently_fail_closed() -> None:
-    assert capture.LIVE_EXECUTION_ENABLED is False
-    assert capture.ACTIVE_AUTHORIZATION_IDS == frozenset()
-    assert capture.CONSUMED_AUTHORIZATION_IDS == AUTHORIZATION_IDS
+def test_consumed_location_binding_authorizations_remain_fail_closed_during_new_authorization() -> None:
+    assert capture.LIVE_EXECUTION_ENABLED is True
+    assert capture.ACTIVE_AUTHORIZATION_IDS == frozenset({CURRENT_AUTHORIZATION_ID})
+    assert capture.CONSUMED_AUTHORIZATION_IDS == CONSUMED_AUTHORIZATION_IDS
+    assert capture.ACTIVE_AUTHORIZATION_IDS.isdisjoint(CONSUMED_AUTHORIZATION_IDS)
 
-    workflow = yaml.load(WORKFLOW.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
-    assert set(workflow["on"]) == {"workflow_dispatch"}
-    assert workflow["jobs"]["radiography"]["if"] == "${{ false }}"
-    assert not RECONCILE.exists()
-
-    rules = AGENTS.read_text(encoding="utf-8")
-    for authorization_id in AUTHORIZATION_IDS:
-        assert authorization_id in rules
-    assert "no hay autorizaciones live activas" in rules
+    for authorization_id in CONSUMED_AUTHORIZATION_IDS:
+        result = capture.run_capture(authorization_id=authorization_id)
+        assert result.stop_reason == "authorization_id_consumed"
+        assert result.browser_started is False
+        assert result.target_navigation_started is False
+        assert result.production_authority is False
+        assert result.catalog_accepted is False
+        assert result.extraction_enabled is False
