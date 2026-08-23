@@ -3,8 +3,8 @@
 Este módulo no descubre ubicaciones en red ni concede autoridad live. Separa tres
 conceptos que no deben confundirse:
 
+- un contexto fuente raw que todavía no identifica ciudad/tienda comercial;
 - una ubicación que el supermercado declara disponible;
-- una ubicación que está dentro del alcance actual del proyecto;
 - una ubicación cuyo binding técnico ya está demostrado y puede habilitarse para
   extracción.
 
@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Iterable, Mapping
+
+from .enums import LocationStatus
 
 
 class LocationConfigError(ValueError):
@@ -55,6 +57,28 @@ def _optional_text(value: str | None) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+@dataclass(frozen=True, slots=True)
+class SourceLocationContext:
+    """Contexto raw explícito que deliberadamente no es una ciudad comercial."""
+
+    supermarket_id: str
+    location_id: str
+    evidence: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "supermarket_id",
+            _required_text(self.supermarket_id, "supermarket_id"),
+        )
+        object.__setattr__(
+            self,
+            "location_id",
+            _required_text(self.location_id, "location_id"),
+        )
+        object.__setattr__(self, "evidence", _required_text(self.evidence, "evidence"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,6 +302,53 @@ class LocationCatalog:
         if reason is not None:
             raise LocationConfigError(reason)
         return location
+
+
+LA_COLONIA_ONLINE_SOURCE_CONTEXT = SourceLocationContext(
+    supermarket_id="la_colonia",
+    location_id="la_colonia_online",
+    evidence="Catálogo público en línea sin selección obligatoria de ciudad o sucursal.",
+)
+
+SOURCE_LOCATION_CONTEXTS: Mapping[str, SourceLocationContext] = MappingProxyType(
+    {LA_COLONIA_ONLINE_SOURCE_CONTEXT.location_id: LA_COLONIA_ONLINE_SOURCE_CONTEXT}
+)
+
+
+def validate_source_location_context(
+    *,
+    supermarket_id: str,
+    location_id: str,
+    location_status: LocationStatus | str,
+    location_evidence: str | None,
+    location_confidence: object,
+) -> None:
+    """Impide promover un contexto raw conocido a ciudad/tienda por inferencia.
+
+    La validación sólo actúa sobre IDs registrados como contextos fuente. Esos IDs
+    no pertenecen al catálogo comercial y deben permanecer ``UNKNOWN`` hasta que
+    una frontera de binding separada produzca una ubicación comercial distinta.
+    """
+
+    context = SOURCE_LOCATION_CONTEXTS.get(location_id)
+    if context is None:
+        return
+    if supermarket_id != context.supermarket_id:
+        raise LocationConfigError("source_location_supermarket_mismatch")
+    try:
+        status = (
+            location_status
+            if isinstance(location_status, LocationStatus)
+            else LocationStatus(location_status)
+        )
+    except (TypeError, ValueError) as exc:
+        raise LocationConfigError("source_location_status_invalid") from exc
+    if status is not LocationStatus.UNKNOWN:
+        raise LocationConfigError("source_location_cannot_claim_commercial_binding")
+    if location_evidence != context.evidence:
+        raise LocationConfigError("source_location_evidence_mismatch")
+    if location_confidence is not None:
+        raise LocationConfigError("source_location_confidence_forbidden")
 
 
 LA_COLONIA_SUPERMARKET = SupermarketConfig(
