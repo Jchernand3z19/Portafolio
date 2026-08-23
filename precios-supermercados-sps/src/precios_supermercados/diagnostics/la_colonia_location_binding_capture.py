@@ -44,9 +44,13 @@ from precios_supermercados.diagnostics.la_colonia_sps_context_diagnostic import 
 )
 from precios_supermercados.diagnostics.location_binding_dom_controls import (
     CITY_CONTROL_ROLES,
+    CITY_STATE_SELECTED,
     LocationControlResolutionError,
+    ResolvedCityControl,
+    activate_city_control,
     open_location_selector,
     resolve_exact_city_control,
+    verify_structural_city_selection,
 )
 
 
@@ -62,6 +66,7 @@ CONSUMED_AUTHORIZATION_IDS: frozenset[str] = frozenset(
         "LC-location-binding-333",
         "LC-location-binding-334",
         "LC-location-binding-335",
+        "LC-location-binding-337",
     }
 )
 AUTHORIZATION_PATTERN = re.compile(r"^LC-location-binding-\d{3}$")
@@ -332,14 +337,26 @@ def _open_location_selector(page: Any) -> str | None:
     return resolved.visible_location
 
 
-def _city_select_and_options(page: Any, city_name: str) -> tuple[Any, list[str]]:
+def _city_select_and_options(
+    page: Any,
+    city_name: str,
+) -> tuple[ResolvedCityControl, list[str]]:
     try:
         resolved = resolve_exact_city_control(page, city_name)
     except LocationControlResolutionError as exc:
         raise LocationBindingCaptureError(
             str(exc), diagnostic=getattr(exc, "diagnostic", None)
         ) from exc
-    return resolved.locator, list(resolved.available_cities)
+    return resolved, list(resolved.available_cities)
+
+
+def _verify_structural_city_selection(page: Any, city_name: str) -> str | None:
+    try:
+        return verify_structural_city_selection(page, city_name)
+    except LocationControlResolutionError as exc:
+        raise LocationBindingCaptureError(
+            str(exc), diagnostic=getattr(exc, "diagnostic", None)
+        ) from exc
 
 
 def _activate_option(option: Any, label: str) -> None:
@@ -482,6 +499,10 @@ def _stop_reason(error: BaseException) -> str:
         "location_selector_label_missing",
         "target_city_not_found",
         "target_city_not_unique",
+        "target_city_state_invalid",
+        "target_city_not_selected",
+        "target_city_selection_unverified",
+        "visible_location_mismatch",
         "store_selector_present_but_options_unresolved",
         "store_option_count_unreasonable",
         "store_option_not_unique",
@@ -513,8 +534,8 @@ def run_capture(
 
     En modo live no se admiten overrides de autorización/fuse. La función no
     realiza replay GraphQL ni visita páginas de producto. El máximo son cuatro
-    acciones lógicas: abrir home, abrir selector, elegir ciudad y, únicamente si
-    aparece, elegir una tienda.
+    acciones lógicas: abrir home, abrir selector, elegir ciudad sólo si hace falta y,
+    únicamente si aparece, elegir una tienda.
     """
 
     budget = budget or DiagnosticBudget(max_logical_requests=4)
@@ -563,13 +584,26 @@ def run_capture(
             counter.reserve("open_location_selector")
             result.visible_location = _open_location_selector(page)
             page.wait_for_timeout(150)
-            city_option, cities = _city_select_and_options(page, city_name)
+            city_control, cities = _city_select_and_options(page, city_name)
             result.available_cities = cities
 
             collector.reset()
-            counter.reserve("select_city")
-            _activate_option(city_option, city_name)
-            page.wait_for_timeout(500)
+            city_action_performed = False
+            if city_control.state != CITY_STATE_SELECTED:
+                counter.reserve("select_city")
+                try:
+                    city_action_performed = activate_city_control(city_control, city_name)
+                except LocationControlResolutionError as exc:
+                    raise LocationBindingCaptureError(str(exc)) from exc
+
+            if city_action_performed:
+                page.wait_for_timeout(500)
+            elif city_control.state == CITY_STATE_SELECTED:
+                page.wait_for_timeout(100)
+
+            if city_control.state is not None:
+                result.visible_location = _verify_structural_city_selection(page, city_name)
+
             after_city = _stage(page, context, collector, "after_city")
 
             store_option, stores = _discover_store_options(page, cities)

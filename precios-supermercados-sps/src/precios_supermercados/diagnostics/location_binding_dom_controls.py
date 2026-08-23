@@ -43,6 +43,8 @@ CITY_BUTTON_CSS = (
     f"button.{CITY_BUTTON_SELECTED_CLASS}, "
     f"button.{CITY_BUTTON_UNSELECTED_CLASS}"
 )
+CITY_STATE_SELECTED = "selected"
+CITY_STATE_UNSELECTED = "unselected"
 CITY_MODAL_PROMPT_PATTERN = re.compile(
     r"^\s*¿?\s*desde\s+qu[eé]\s+ciudad\s+nos\s+visita\??\s*$",
     re.I,
@@ -128,6 +130,7 @@ class ResolvedCityControl:
     locator: Any
     role: str
     available_cities: tuple[str, ...]
+    state: str | None = None
 
 
 def _clean_label(value: str | None) -> str | None:
@@ -156,6 +159,16 @@ def _has_css_class(locator: Any, class_name: str) -> bool:
     except Exception:
         return False
     return class_name in str(raw).split()
+
+
+def _structural_city_state(locator: Any) -> str:
+    """Obtiene el estado explícito del botón estructural o falla cerrado."""
+
+    selected = _has_css_class(locator, CITY_BUTTON_SELECTED_CLASS)
+    unselected = _has_css_class(locator, CITY_BUTTON_UNSELECTED_CLASS)
+    if selected == unselected:
+        raise LocationControlResolutionError("target_city_state_invalid")
+    return CITY_STATE_SELECTED if selected else CITY_STATE_UNSELECTED
 
 
 def _is_presented_in_viewport(locator: Any) -> bool:
@@ -262,10 +275,9 @@ def _structural_city_button(page: Any, normalized: str) -> ResolvedCityControl |
         </div>
 
     Sólo se consideran contenedores y botones realmente presentados en el viewport.
-    La clase selected/no-selected sirve para identificar superficies válidas, no
-    para asumir cuál ciudad debe elegirse: el nombre visible exacto sigue siendo la
-    identidad. Más de una superficie presentada para la ciudad objetivo falla
-    cerrado.
+    La identidad sigue siendo el nombre visible exacto y el estado se deriva de una
+    sola clase explícita. Un botón con ambas clases, o sin una clase de estado válida,
+    falla cerrado en vez de adivinar qué acción corresponde.
     """
 
     try:
@@ -277,7 +289,7 @@ def _structural_city_button(page: Any, normalized: str) -> ResolvedCityControl |
     if not containers:
         return None
 
-    target_matches: list[tuple[Any, tuple[str, ...]]] = []
+    target_matches: list[tuple[Any, tuple[str, ...], str]] = []
     for container in containers:
         try:
             buttons = _presented_items(container.locator(CITY_BUTTON_CSS))
@@ -295,7 +307,9 @@ def _structural_city_button(page: Any, normalized: str) -> ResolvedCityControl |
 
         available = tuple(sorted(set(labels), key=str.casefold))
         for button in exact_matches:
-            target_matches.append((button, available or (normalized,)))
+            target_matches.append(
+                (button, available or (normalized,), _structural_city_state(button))
+            )
 
     if len(target_matches) > 1:
         raise LocationControlResolutionError(
@@ -308,8 +322,13 @@ def _structural_city_button(page: Any, normalized: str) -> ResolvedCityControl |
             },
         )
     if len(target_matches) == 1:
-        locator, labels = target_matches[0]
-        return ResolvedCityControl(locator=locator, role="button", available_cities=labels)
+        locator, labels, state = target_matches[0]
+        return ResolvedCityControl(
+            locator=locator,
+            role="button",
+            available_cities=labels,
+            state=state,
+        )
     return None
 
 
@@ -370,6 +389,41 @@ def open_location_selector(page: Any) -> ResolvedLocationSelector:
     resolved = resolve_location_selector(page)
     resolved.locator.click()
     return resolved
+
+
+def verify_structural_city_selection(page: Any, city_name: str) -> str | None:
+    """Verifica estado visual de ciudad sin reabrir el selector ni conceder autoridad.
+
+    Si el modal sigue presentado, el botón objetivo debe estar explícitamente en
+    ``selected``. Si el modal se cerró tras el click, un header estructural que
+    expone exactamente la ciudad objetivo basta para confirmar la transición visual.
+    Esta verificación no afirma que el backend o el catálogo hayan adoptado el
+    contexto; esa evidencia pertenece al análisis de cookies/storage/requests.
+    """
+
+    normalized = _clean_label(city_name)
+    if normalized is None:
+        raise LocationControlResolutionError("target_city_name_invalid")
+
+    try:
+        header = resolve_location_selector(page)
+    except LocationControlResolutionError:
+        header = None
+
+    visible_location = header.visible_location if header is not None else None
+    if visible_location is not None and visible_location.casefold() != normalized.casefold():
+        raise LocationControlResolutionError("visible_location_mismatch")
+
+    structural = _structural_city_button(page, normalized)
+    if structural is not None:
+        if structural.state != CITY_STATE_SELECTED:
+            raise LocationControlResolutionError("target_city_not_selected")
+        return visible_location or normalized
+
+    if visible_location is not None:
+        return visible_location
+
+    raise LocationControlResolutionError("target_city_selection_unverified")
 
 
 def _visible_native_select(parent_select: Any) -> bool:
@@ -570,10 +624,8 @@ def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl
 
     Primero se usa el contrato estructural confirmado para La Colonia:
     ``.cont-btn-ciudad`` con botones ``.btn-ciudad-selected`` y
-    ``.btn-ciudad-noselected``. El nombre visible exacto determina la ciudad, por lo
-    que funciona tanto si San Pedro Sula ya aparece selected como si aparece
-    no-selected. Esto evita depender de que el sitio publique correctamente el rol
-    accesible del botón.
+    ``.btn-ciudad-noselected``. El nombre visible exacto determina la ciudad y la
+    clase estructural determina si corresponde hacer click o un no-op seguro.
 
     Si esa estructura no está presentada, se conserva el fallback genérico. Si está
     presentado el prompt ``¿Desde qué ciudad nos visita?`` la búsqueda se acota al
@@ -606,8 +658,18 @@ def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl
     raise AssertionError("unreachable")
 
 
-def activate_city_control(control: ResolvedCityControl, city_name: str) -> None:
-    """Activa el control resuelto sin intentar heurísticas adicionales."""
+def activate_city_control(control: ResolvedCityControl, city_name: str) -> bool:
+    """Activa sólo cuando hace falta; devuelve si realizó una interacción.
+
+    El contrato estructural confirmado permite un no-op determinista cuando la ciudad
+    ya está seleccionada. Los fallbacks genéricos conservan el comportamiento previo
+    porque no exponen un estado estructural confiable.
+    """
+
+    if control.state == CITY_STATE_SELECTED:
+        return False
+    if control.state not in {None, CITY_STATE_UNSELECTED}:
+        raise LocationControlResolutionError("target_city_state_invalid")
 
     try:
         parent = control.locator.locator("xpath=ancestor::select[1]")
@@ -615,5 +677,6 @@ def activate_city_control(control: ResolvedCityControl, city_name: str) -> None:
         parent = None
     if parent is not None and parent.count() == 1:
         parent.select_option(label=city_name)
-        return
+        return True
     control.locator.click()
+    return True

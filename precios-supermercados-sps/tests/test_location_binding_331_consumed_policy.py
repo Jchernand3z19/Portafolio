@@ -11,6 +11,7 @@ CONSUMED_AUTHORIZATION_IDS = frozenset(
         "LC-location-binding-333",
         "LC-location-binding-334",
         "LC-location-binding-335",
+        "LC-location-binding-337",
     }
 )
 
