@@ -1,185 +1,37 @@
 # Estado actual — Precios de Supermercados SPS
 
-Este documento es la **fuente canónica del estado operativo mutable**. [`arquitectura.md`](arquitectura.md) describe la arquitectura estable; PRs, runs, ramas y artifacts son evidencia histórica y no conceden autoridad.
+Este documento es la **fuente canónica del estado operativo mutable**. La arquitectura estable vive en [`arquitectura.md`](arquitectura.md), el modelo en [`modelo-datos.md`](modelo-datos.md) y las decisiones técnicas en [`decisiones-tecnicas.md`](decisiones-tecnicas.md). PRs, runs y artifacts son evidencia histórica; por sí solos no conceden autoridad.
 
 ## Corte
 
 Estado verificado al **2026-08-23 (America/Tegucigalpa)**.
 
-El corte técnico inmediatamente anterior a este sync documental es:
+Corte técnico inmediatamente anterior a este sync documental:
 
 ```text
-main = 3240b4098e6077fcb9dea6b046079d54837e7807 (merge de PR #203)
-última suite completa observada = 1509/1509 PASS (PR #203, run 32645976223)
+main = f91ee72a0524c2f489b0838893efdee4fe280ccf (merge de PR #207)
+última suite completa observada = 1511/1511 PASS (PR #207, run 32652480368)
 python -m pip check = PASS
 compileall = PASS
-GitHub Actions Node-24-compatible pins = VERIFIED
-GATE-17 = PASS_PRODUCTIVE_EVIDENCE
 ACTIVE_AUTHORIZATION_IDS = []
-CONSUMED_LOCATION_BINDING_AUTHORIZATION_IDS = [LC-location-binding-336, LC-location-binding-331, LC-location-binding-332]
-LIVE_REQUESTS_CURRENT_RUN = 0
+CONSUMED_LOCATION_BINDING_AUTHORIZATION_IDS = [LC-location-binding-336, LC-location-binding-331, LC-location-binding-332, LC-location-binding-333]
 READY_FOR_LIVE = NO
 SPS_TECHNICAL_CONTEXT = UNCONFIRMED
 production_authority = false
 catalog_accepted = false
+extraction_enabled = false
 ```
 
-El SHA anterior identifica el corte auditado, no pretende ser un HEAD autorreferencial después del merge de este documento.
+El SHA anterior identifica el corte auditado previo al merge de este documento; no pretende ser autorreferencial.
 
-## Semántica de estado
+## Frontera crítica actual
 
-| Estado | Significado |
-|---|---|
-| `DONE` | Contrato/lógica integrada y estable. |
-| `DONE_OFFLINE` | Implementado y probado sin afirmar efecto productivo externo. |
-| `DONE_PRODUCTIVE` | Evidencia física/productiva observada para esa capacidad concreta. |
-| `PARTIAL_PRODUCTIVE` | Parte de la cadena se demostró físicamente, pero la frontera completa sigue abierta. |
-| `BLOCKED_LIVE` | Requiere una observación real de la fuente. |
-| `BLOCKED_HUMAN_DECISION` | Requiere autorización humana explícita. |
-| `BLOCKED_EXTERNAL` | La siguiente evidencia depende de un servicio externo o de datos que éste ya no expone. |
-| `BLOCKED_DEPENDENCIES` | Depende de cerrar una frontera anterior. |
+La primera dependencia real sigue siendo demostrar técnicamente el binding de **San Pedro Sula** antes de etiquetar precios como SPS.
 
-## Fase 0
-
-| Área | Estado | Evidencia / conclusión |
-|---|---|---|
-| 0A — suite completa | `DONE` | Suite Python + Node canónica. Último run observado: 1509/1509 PASS. |
-| 0B — hardening físico de catálogo | `DONE` | Rechazo temprano de reutilización conflictiva de `physical_evidence_id` / `fetch_span_id`. |
-| 0C — ramas históricas | `DONE` | Auditoría reproducible cerró el inventario sin `UNIQUE_UNMERGED`. |
-| 0E — Raw → Normalized → Validated | `DONE` | Transformación operacional conectada sin conceder autoridad. |
-| 0F — semántica de ubicación | `DONE_OFFLINE` | `la_colonia_online` sigue siendo contexto fuente raw `UNKNOWN`, no SPS/TGU/tienda. Las radiografías de un solo uso `LC-location-binding-336` y `LC-location-binding-331` terminaron en `target_city_not_found`; la tercera, `LC-location-binding-332`, alcanzó el modal con el resolver actualizado pero terminó en `target_city_not_unique`. PR #203 endurece offline el caso compatible de `<select>` duplicados ocultos sin relajar la unicidad entre controles visibles. No existe confirmación técnica live de SPS. |
-| 0G — identidad/dimensión de producto | `DONE_OFFLINE` | GTIN fuerte, mapping pendiente explícito, `dim_products` + `map_source_products`; PR #185 revalida también el `prod_pending_*` determinista antes de persistir. |
-| 0H — documentación canónica | `DONE` | README, arquitectura, modelo, decisiones y estado separan arquitectura estable de estado operativo mutable. |
-| 0I — workbook físico base | `DONE_PRODUCTIVE` | Workbook físico existe y fue auditado sin introducir ofertas. |
-| 0J — GitHub Actions → Google Sheets | `DONE_PRODUCTIVE` | Se demostró `check -> apply-config -> check` con service account, write controlado y read-back físico de ocho tablas. |
-| 0K — verifier Cloudflare/Observability | `BLOCKED_EXTERNAL` | Una única re-evaluación controlada del verifier actual terminó en `probe_discovery_trace_missing`; no se debilitó el contrato ni se repitió la sonda. |
-| 0L — CI/protección | `DONE` | Enforcement de `main` ya demostrado; `pip check`, compileall, suite completa y actions oficiales Node-24-compatible fijadas por SHA completo. |
-
-## Google Sheets — estado productivo de la infraestructura
-
-Google Sheets es el backend temporal estructurado de la primera fase. La ruta productiva de infraestructura quedó demostrada sin escribir ofertas comerciales:
+Estado de la ubicación candidata:
 
 ```text
-GitHub Actions
--> Environment precios-sps-storage
--> service account
--> workbook
--> lectura segura
--> apply-config controlado
--> read-back
--> check final sin escritura
-```
-
-Secuencia relevante:
-
-- PR #179: `check` de solo lectura → `ok-wrote-false`;
-- PR #180: primer `apply-config` → fallo real `workbook_batch_update_failed`;
-- PR #181: corrigió el planner porque Google Sheets rechaza `rowCount=1` junto con `frozenRowCount=1`;
-- PR #182: `apply-config` corregido → `ok-wrote-true`;
-- PR #183: `check` posterior → `ok-wrote-false`.
-
-Read-back físico final:
-
-```text
-cfg_supermarkets
-cfg_locations
-dim_products
-map_source_products
-fact_offers_current
-fact_offer_history
-fact_scrape_runs
-fact_quality_events
-```
-
-La pestaña ajena `Sheet1` se preservó. `dim_products`, `map_source_products` y las cuatro tablas `fact_*` permanecen sin filas comerciales. La configuración conserva La Colonia y sus ubicaciones candidatas sin activar extracción.
-
-La concurrencia del workflow de storage es single-writer (`cancel-in-progress: false`) y el trigger automático sólo acepta el marker controlado sobre `main`.
-
-## Cloudflare / Workers Observability
-
-Evidencia física de sonda ya existente:
-
-```text
-physical probe source run = 32551882793
-source run attempt        = 1
-source commit             = cc15edef22709911beb1d1b027ae4c9992da1944
-```
-
-La evidencia firmada conserva la demostración histórica de OIDC, Worker/Durable Object, fetch a origen controlado, bytes y receipt Ed25519.
-
-La re-evaluación controlada del verifier actual se ejecutó exactamente una vez mediante PR #176. El merge commit `5f6ea161e99c4ac3d740141035da74fa3c7ee6f4` publicó:
-
-```text
-precios-sps/cloudflare-evidence-verifier = failure
-precios-sps/cloudflare-verifier-result/probe_discovery_trace_missing = failure
-```
-
-Conclusión canónica:
-
-- el verifier actual no encontró el trace requerido en Workers Observability;
-- no hay evidencia suficiente para declarar PASS de esa reconciliación;
-- el estado permanece `BLOCKED_EXTERNAL`;
-- no se repetirá la sonda ni una segunda re-evaluación sólo para intentar obtener otro resultado;
-- no se debilita `traces -> events`, custom span, parent/child ni la reconciliación física;
-- esta frontera no concede ni revoca autoridad de catálogo.
-
-## CI y dependencias
-
-PR #184 migró las actions SPS a generaciones oficiales compatibles con Node 24 y mantuvo pins SHA completos verificados. El runner observado (`2.336.0`) ejecuta directamente esas generaciones sin la advertencia anterior de actions Node 20 forzadas a Node 24.
-
-CI actual ejecuta:
-
-```text
-Python 3.12
--> instalar requirements.txt
--> python -m pip check
--> python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
--> pytest precios-supermercados-sps/tests
-```
-
-En PR #203, run `32645976223`, `pip check` reportó `No broken requirements found`, compileall pasó y la suite completa terminó en **1509/1509 PASS**.
-
-Los seis requerimientos directos están fijados a versión exacta. No existe lockfile con hashes de todo el grafo transitivo; por tanto la instalación es reproducible a nivel de dependencias directas, pero no hermética.
-
-Lint, type checking, coverage y vulnerability scanning fueron evaluados. No se añadieron gates decorativos sin baseline/umbral y política de fallo definidos. Si una necesidad concreta aparece, debe añadirse como control exigible y probado, no como métrica ornamental.
-
-## Identidad de producto
-
-Se mantiene la separación:
-
-```text
-source_product_id = identidad dentro de la fuente
-product_id        = identidad comparable entre fuentes
-offer_id          = supermercado + ubicación comercial + producto fuente
-```
-
-Reglas vigentes:
-
-- `source_product_id` es determinista;
-- GTIN-8/12/13/14 válido por check digit se normaliza a GTIN-14 y puede producir `prod_gtin_*`;
-- sin GTIN fuerte, `prod_pending_*` debe coincidir exactamente con `generate_pending_product_id(source_product_id)` antes de clasificarse como pendiente;
-- un prefijo `prod_pending_` forjado falla cerrado;
-- mapping revisado explícito continúa permitido;
-- `dim_products` sólo materializa productos mapeados;
-- `map_source_products` conserva la relación fuente → producto y la cola pendiente.
-
-Antes de incorporar supermercado #2 debe existir una política operativa explícita para resolver equivalencias cuando no haya GTIN compartido ni mapping revisado; no se deben unir productos sólo por semejanza de nombre.
-
-## La Colonia — ubicación y autoridad live
-
-Contexto raw vigente:
-
-```text
-location_id = la_colonia_online
-location_status = unknown
-location_confidence = null
-```
-
-`la_colonia_online` representa el catálogo público en línea observado y no una ubicación comercial.
-
-Ubicación candidata `la_colonia_sps`:
-
-```text
+location_id = la_colonia_sps
 city = San Pedro Sula
 in_scope = true
 granularity = unknown
@@ -188,104 +40,27 @@ source_location_key = null
 extraction_enabled = false
 ```
 
-### Radiografía mínima `LC-location-binding-336`
+El contexto fuente `la_colonia_online` continúa siendo un contexto raw de catálogo público, no una ubicación comercial. No puede convertirse por inferencia en SPS, Tegucigalpa o una tienda.
 
-El usuario autorizó una única radiografía mínima de binding para San Pedro Sula. La autorización quedó versionada, se ejecutó una sola vez y después fue consumida y retirada de todos los entrypoints temporales.
+Hasta demostrar binding técnico no se habilitan extracción comercial, persistencia de ofertas ni aceptación de catálogo.
 
-Evidencia reconciliada de la ejecución única:
+## Radiografías live de ubicación consumidas
 
-```text
-source run = 32617926053
-source conclusion = failure
-stop_reason = target_city_not_found
-logical_actions = 2
-browser_started = true
-target_navigation_started = true
-target_navigation_completed = true
-available_cities = 0
-available_stores = 0
-granularity_candidate = none
-confidence = none
-technical_binding_observed = false
-store_selection_observed = false
-production_authority = false
-catalog_accepted = false
-extraction_enabled = false
-```
+Se ejecutaron cuatro radiografías mínimas, cada una bajo una autorización humana explícita, independiente y de un solo uso. Todas fueron consumidas y retiradas después de su única ejecución.
 
-No se ejecutó GraphQL replay, facets, smoke, crawl ni persistencia comercial y el ID no es reutilizable.
+| Authorization ID | Run | Resultado | Acciones lógicas | Conclusión |
+|---|---:|---|---:|---|
+| `LC-location-binding-336` | `32617926053` | `target_city_not_found` | 2 | no encontró control seleccionable de ciudad |
+| `LC-location-binding-331` | `32619994748` | `target_city_not_found` | 2 | no encontró control seleccionable de ciudad |
+| `LC-location-binding-332` | `32644498929` | `target_city_not_unique` | 2 | encontró más de un candidato exacto para SPS |
+| `LC-location-binding-333` | `32651129634` | `target_city_not_unique` | 2 | volvió a detectar ambigüedad antes de seleccionar ciudad |
 
-Cadena de cierre: PRs #187-#191.
+La ejecución única de `LC-location-binding-333` provino del merge `157458c8f169bcb1975fb998e07cd7043920c85e` de PR #205. Su preflight pasó y la radiografía llegó a la home exacta, abrió el selector y se detuvo fail-closed antes de seleccionar ciudad.
 
-### Radiografía mínima `LC-location-binding-331`
-
-Una segunda autorización explícita e independiente produjo otra única radiografía y fue consumida después de ejecutarse.
-
-Evidencia reconciliada:
+Evidencia sanitizada de LC-333:
 
 ```text
-source run = 32619994748
-source commit = b5b8aeb707ad66d570ed21aa5843b2943d7c2dbf
-source conclusion = failure
-stop_reason = target_city_not_found
-logical_actions = 2
-browser_started = true
-target_navigation_started = true
-target_navigation_completed = true
-available_cities = 0
-available_stores = 0
-granularity_candidate = none
-confidence = none
-technical_binding_observed = false
-store_selection_observed = false
-production_authority = false
-catalog_accepted = false
-extraction_enabled = false
-```
-
-La home cargó y se abrió el flujo de ubicación, pero el contrato entonces vigente no encontró un control de ciudad seleccionable para `San Pedro Sula`. No hubo smoke, facets, GraphQL replay, crawl ni persistencia comercial. Cadena de cierre: PRs #194-#196.
-
-### Evidencia humana de UI/DOM posterior
-
-El usuario aportó una captura visual actual de la home y el fragmento HTML exacto del control superior de ubicación:
-
-```html
-<div class="vtex-flex-layout-0-x-flexColChild vtex-flex-layout-0-x-flexColChild--notificationBarRight pb0" style="height: 100%;">
-  <div class="cont-btn-selector">
-    <button class="btn-modal-selector">San pedro sula</button>
-  </div>
-</div>
-```
-
-Esta evidencia permite afirmar únicamente que la UI aportada presenta **San Pedro Sula** como ubicación visible y que el elemento que abre el selector tiene la clase pública `btn-modal-selector`. No demuestra `source_location_key`, granularidad city/store, contexto VTEX ni autoridad de precios, por lo que no cambia `SPS_TECHNICAL_CONTEXT=UNCONFIRMED`.
-
-### Hardening offline anterior a LC-332
-
-- PR #192 amplió el resolver de ciudad para controles exactos `option`, `radio`, `menuitem` o `button`, conservando fallo cerrado ante ausencia, ocultamiento o ambigüedad.
-- PR #197 priorizó exactamente un `button.btn-modal-selector` visible, registró `visible_location`, conservó fallback accesible y excluyó el botón de header del conjunto de opciones de ciudad.
-- PR #199 eliminó la dependencia de una ventana fija de 150 ms: sólo `target_city_not_found` temporal puede reintentarse cada 100 ms durante un máximo de 3 s; una ambigüedad continúa fallando inmediatamente. La integración loopback retrasa 700 ms el render del control de ciudad.
-
-Todo ese trabajo fue offline y no concedió autorización live.
-
-### Radiografía mínima `LC-location-binding-332`
-
-El usuario concedió una tercera autorización explícita e independiente para **una sola** radiografía mínima de binding de ubicación en San Pedro Sula. El ID fue `LC-location-binding-332`; no reutilizó las autorizaciones anteriores.
-
-PR #200 activó únicamente ese ID con:
-
-```text
-targetCity = San Pedro Sula
-maxLogicalActions = 4
-authority = false
-```
-
-La ejecución única se originó desde el merge `76049b178fac5dbdcdad474ed9b21b179ce74e6a`. PR #201 cerró inmediatamente el fuse, vació la allow-list, marcó el ID como consumido y reconcilió únicamente el artefacto sanitizado mediante GitHub. PR #202 retiró el mecanismo temporal de reconciliación y dejó de nuevo el workflow live en `if: false`.
-
-Evidencia reconciliada:
-
-```text
-source run = 32644498929
-source commit = 76049b178fac5dbdcdad474ed9b21b179ce74e6a
+source run = 32651129634
 source conclusion = failure
 stop_reason = target_city_not_unique
 logical_actions = 2
@@ -301,88 +76,177 @@ store_selection_observed = false
 production_authority = false
 catalog_accepted = false
 extraction_enabled = false
+artifact id = 9496212175
+artifact sha256 = dee6dcd58bcccad41946c57c1368eb3bbdd423351a284e46bda8f577f9d45201
 ```
 
-Interpretación estricta:
+PR #206 consumió inmediatamente `LC-location-binding-333`, vació la allow-list, restauró `LIVE_EXECUTION_ENABLED=False`, bloqueó nuevamente el job live y reconcilió el artifact mediante GitHub sin repetir tráfico hacia La Colonia. PR #207 retiró después el reconciliador temporal y dejó nuevamente el workflow normal en `workflow_dispatch` con `radiography if:false`.
 
-- la home exacta volvió a cargar y el flujo de ubicación alcanzó la resolución de ciudad;
-- a diferencia de las dos observaciones anteriores, el error ya no fue ausencia temporal, sino **más de un control exacto candidato para `San Pedro Sula`**;
-- la ejecución se detuvo antes de seleccionar ciudad, por lo que no produjo evidencia de binding city/store ni contexto técnico SPS;
-- no hubo smoke, facets, GraphQL replay, crawl ni persistencia comercial;
-- `LC-location-binding-332` está consumida y no puede usarse para un retry.
+No hubo smoke, facets, GraphQL replay, crawl, extracción de productos ni persistencia comercial bajo ninguna de estas autorizaciones.
 
-### Hardening offline posterior a LC-332
+## Evidencia humana del modal de ciudad
 
-PR #203 atacó exclusivamente offline una causa compatible con `target_city_not_unique`: los `<option>` de un `<select>` nativo suelen ser reportados como invisibles por Playwright, y el resolver anterior aceptaba cualquier option que tuviera un `select` ancestro, incluso si ese select pertenecía a un layout duplicado oculto.
+Después de LC-333, el usuario aportó evidencia visual actual de lo que aparece al pulsar el control superior de ubicación.
 
-Contrato vigente después de PR #203:
+El control superior aportado es:
 
-- un `option` nativo sólo compite si su `<select>` ancestro está visible;
-- un select duplicado pero oculto no crea ambigüedad artificial;
-- dos selects visibles con la misma ciudad **siguen** fallando con `target_city_not_unique`;
-- roles custom visibles conservan la unicidad fail-closed existente;
-- el browser-loopback reproduce simultáneamente un select oculto duplicado y un select visible renderizado con demora, y el pipeline resuelve sólo el visible;
-- ninguna de estas pruebas abre red externa.
+```html
+<div class="vtex-flex-layout-0-x-flexColChild vtex-flex-layout-0-x-flexColChild--notificationBarRight pb0" style="height: 100%;">
+  <div class="cont-btn-selector">
+    <button class="btn-modal-selector">San pedro sula</button>
+  </div>
+</div>
+```
 
-La suite de PR #203 terminó en **1509/1509 PASS** (`run 32645976223`). Este hardening hace más específica una futura observación física, pero no convierte una hipótesis offline en evidencia de binding real.
-
-## Persistencia comercial
-
-La infraestructura de storage está lista, pero **persistencia comercial de La Colonia no está autorizada** porque ubicación y autoridad de catálogo continúan cerradas.
-
-Sólo una ejecución aceptada y autoritativa puede mutar current/history. Runs rechazados/fallidos/no autoritativos pueden registrarse según su contrato, pero no materializan dimensión/mapping/current/history comercial.
-
-## Regla comercial del precio
+Al pulsarlo, la captura aportada muestra un modal con:
 
 ```text
-current_price           = precio observado que paga el cliente
-reported_regular_price  = referencia declarada por la tienda
-previous_accepted_price = current_price del periodo aceptado inmediatamente anterior
+¿Desde qué ciudad nos visita?
+TEGUCIGALPA
+SAN PEDRO SULA
+*Los precios e inventario pueden variar dependiendo la ciudad
 ```
 
-Ahorro real:
+Las dos opciones aparecen como tarjetas visuales con indicador tipo radio. La captura muestra `SAN PEDRO SULA` resaltada en verde.
+
+Esta evidencia humana sí demuestra la estructura visual que debemos reproducir en el resolver, pero **no demuestra todavía**:
+
+- el atributo DOM exacto que cambia en producción al seleccionar SPS;
+- si la semántica accesible real es `radio`, `button` u otra combinación;
+- el `source_location_key`;
+- si el binding comercial final es por ciudad o por tienda;
+- qué cookie/storage/header/variable VTEX constituye la evidencia técnica;
+- que un catálogo o precio concreto ya esté autoritativamente ligado a SPS.
+
+Por eso `SPS_TECHNICAL_CONTEXT` permanece `UNCONFIRMED`.
+
+## Hardening offline posterior a LC-333
+
+PR #207 integró el hardening basado en la pantalla aportada sin ejecutar tráfico nuevo hacia La Colonia.
+
+El resolver vigente ahora:
+
+- sigue abriendo exactamente un `button.btn-modal-selector` visible;
+- reconoce el prompt exacto `¿Desde qué ciudad nos visita?`;
+- cuando ese prompt está visible, acota la búsqueda al menor ancestro del modal que contiene la opción objetivo;
+- evita que un control homónimo fuera del modal compita con la selección real;
+- prioriza semántica de ciudad `radio > option > menuitem > button`;
+- si una única tarjeta visual expone simultáneamente un `radio` y una superficie `button` con el mismo nombre, selecciona el `radio` semántico en lugar de declarar una falsa ambigüedad;
+- mantiene fallo cerrado si existen dos radios visibles o dos candidatos del mismo rol para `San Pedro Sula`;
+- conserva soporte para selects nativos, ignorando duplicados cuyo `<select>` ancestro esté oculto;
+- continúa excluyendo el botón de header `btn-modal-selector` como falsa opción de ciudad;
+- mantiene la espera acotada de readiness del modal;
+- no concede autoridad ni cambia configuración comercial.
+
+CI de PR #207:
 
 ```text
-max(previous_accepted_price - current_price, 0)
+run = 32652480368
+pip check = PASS
+compileall = PASS
+pytest = 1511/1511 PASS
 ```
 
-`reported_regular_price` e `is_promotion` no sustituyen el histórico propio.
+Esto prueba el comportamiento **offline** del resolver, no el resultado live actual de La Colonia.
+
+## Seguridad live vigente
+
+Estado confirmado en código después de PR #207:
+
+```text
+LIVE_EXECUTION_ENABLED = False
+ACTIVE_AUTHORIZATION_IDS = []
+CONSUMED_AUTHORIZATION_IDS = {
+  LC-location-binding-336,
+  LC-location-binding-331,
+  LC-location-binding-332,
+  LC-location-binding-333
+}
+```
+
+El workflow de radiografía está nuevamente bloqueado. Ningún ID consumido puede reutilizarse.
+
+Sin una autorización humana nueva y explícita están prohibidos nuevos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl hacia La Colonia.
+
+Una autorización futura de radiografía sólo autorizaría **una** observación mínima de binding dentro de sus límites. No autorizaría automáticamente catálogo, facets, GraphQL replay, crawl, persistencia comercial ni ejecución diaria.
+
+## Catálogo y autoridad
+
+La estructura offline de catálogo está avanzada, pero sigue separada de la autoridad productiva.
+
+Reglas vigentes:
+
+- `catalog_accepted` no puede venir de un boolean caller-controlled;
+- readiness técnica no equivale a autoridad;
+- la evidencia estructural/Cloudflare por sí sola no concede `production_authority`;
+- current/history sólo pueden mutar tras una decisión autoritativa aceptada;
+- runs rechazados, fallidos o no autoritativos no alteran estado comercial.
+
+La cadena correcta sigue siendo:
+
+```text
+binding SPS demostrado
+-> revalidación estructural/facets bajo contexto SPS
+-> recorrido de catálogo con evidencia física
+-> autoridad productiva
+-> decisión accept/reject
+-> current/history
+-> Google Sheets
+-> Power BI
+-> automatización diaria
+```
+
+## Persistencia inicial
+
+Google Sheets continúa como backend temporal estructurado de la primera fase. La infraestructura física fue demostrada previamente mediante `check -> apply-config -> check` y read-back de:
+
+```text
+cfg_supermarkets
+cfg_locations
+dim_products
+map_source_products
+fact_offers_current
+fact_offer_history
+fact_scrape_runs
+fact_quality_events
+```
+
+No se introdujeron ofertas comerciales para demostrar esa infraestructura. La persistencia comercial de La Colonia permanece bloqueada por ubicación no confirmada y falta de autoridad de catálogo.
+
+BigQuery y Cloud Run siguen fuera de esta fase salvo justificación posterior.
+
+## Identidad y semántica comercial
+
+Se mantiene la separación:
+
+```text
+source_product_id = identidad dentro de la fuente
+product_id        = identidad comparable entre fuentes
+offer_id          = supermercado + ubicación comercial + producto fuente
+```
+
+GTIN válido puede producir identidad fuerte cross-supermercado. Sin GTIN fuerte se mantiene `prod_pending_*` determinista hasta mapping revisado. No se unen productos sólo por semejanza de nombre.
+
+`reported_regular_price` es un precio de referencia declarado por el supermercado; no demuestra ahorro real. La reducción real se calcula contra el `current_price` del periodo histórico aceptado inmediatamente anterior cuando existe baseline confiable.
+
+## Cloudflare / Observability
+
+La sonda física histórica de Cloudflare sigue existiendo, pero la única re-evaluación controlada del verifier actual terminó en:
+
+```text
+probe_discovery_trace_missing
+```
+
+Ese frente permanece `BLOCKED_EXTERNAL`. No se debilita el verifier ni se repite la sonda sólo para intentar obtener otro resultado. Esta frontera tampoco concede ni revoca autoridad de catálogo.
 
 ## Power BI
 
-`power_bi_projection.py` permanece read-only/offline respecto a producción. Dataset y refresh productivo sólo pueden consumir datos comerciales aceptados y durables; Power BI no concede autoridad ni redefine la semántica de precio.
+Power BI sigue siendo el dashboard final. La proyección semántica común ya está definida, pero el dataset/refresh productivo debe esperar datos comerciales aceptados y persistidos. No se construye un dashboard productivo con datos cuya ubicación o autoridad aún no están demostradas.
 
-## Frontera actual
+## Próxima dependencia real
 
-Las tres autorizaciones live de ubicación están consumidas. El último fallo físico, `target_city_not_unique`, produjo un hardening offline específico en PR #203 que ignora duplicados de `<select>` ocultos sin aceptar ambigüedad entre controles visibles.
+Todo el trabajo offline que podía realizarse con la evidencia actual quedó cerrado en PR #207.
 
-Eso no demuestra que la causa real en La Colonia sea un layout duplicado oculto y no cambia la ubicación comercial. El siguiente paso capaz de cambiar `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` requiere una **nueva autorización humana explícita** para una única radiografía mínima sobre La Colonia con el código de PR #203 o posterior. Hasta entonces no se enviará otra request a la fuente.
+El siguiente paso capaz de cambiar `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` requiere una **nueva autorización humana explícita y de un solo uso** para una única radiografía mínima de ubicación usando el resolver de PR #207 o posterior.
 
-Una autorización futura para esta radiografía no autoriza automáticamente smoke, facets, GraphQL replay, crawl, persistencia comercial ni ejecución diaria.
-
-## Tráfico live
-
-En esta frontera se realizaron exactamente tres radiografías mínimas autorizadas de ubicación, cada una con un ID distinto y de un solo uso:
-
-```text
-LC-location-binding-336 -> consumed -> target_city_not_found
-LC-location-binding-331 -> consumed -> target_city_not_found
-LC-location-binding-332 -> consumed -> target_city_not_unique
-```
-
-Después de cada ejecución se cerró el fuse y se retiró la autorización. El trabajo posterior a LC-332, incluido PR #203, fue offline.
-
-Estado vigente:
-
-```text
-ACTIVE_AUTHORIZATION_IDS = []
-CONSUMED_LOCATION_BINDING_AUTHORIZATION_IDS = [LC-location-binding-336, LC-location-binding-331, LC-location-binding-332]
-LIVE_REQUESTS_CURRENT_RUN = 0
-READY_FOR_LIVE = NO
-SPS_TECHNICAL_CONTEXT = UNCONFIRMED
-production_authority = false
-catalog_accepted = false
-extraction_enabled = false
-```
-
-No se realizaron retries con IDs consumidos, smoke, facets, GraphQL replay, crawl ni escrituras comerciales bajo estas autorizaciones.
+El usuario debe elegir un authorization ID nuevo. No se inventa ni reutiliza uno desde el código o desde la automatización.
