@@ -134,39 +134,67 @@ Todo periodo cerrado debe registrar `closed_by_scrape_run_id`; un periodo abiert
 
 GATE-17 no se considera cerrado sólo porque exista un ruleset configurado. La evidencia productiva exige observar a GitHub bloquear merges reales.
 
-En PR #29, con `main` reportado como `protected: true`, GitHub rechazó un intento de merge mientras `tests` estaba en progreso (`Required status check "tests" is in progress.`). Después de que el check terminó en `success`, un segundo intento fue rechazado por una conversación de review sin resolver (`A conversation must be resolved before this pull request can be merged.`). Tras resolver el hilo y volver a validar el head final, el merge fue permitido.
+En PR #29, con `main` reportado como `protected: true`, GitHub rechazó un intento de merge mientras `tests` estaba en progreso. Después de que el check terminó en `success`, un segundo intento fue rechazado por una conversación de review sin resolver. Tras resolver el hilo y volver a validar el head final, el merge fue permitido.
 
-Por esa evidencia, `GATE-17 = PASS_PRODUCTIVE_EVIDENCE`. Esto protege la gobernanza de `main`, pero no concede autoridad live ni sustituye el trusted collector o el enforcement físico de egress/claim/fencing.
+Por esa evidencia, `GATE-17 = PASS_PRODUCTIVE_EVIDENCE`. Esto protege la gobernanza de `main`, pero no concede autoridad live ni sustituye provenance físico.
 
 ## DT-031 — Diseño Google Cloud evaluado y supersedido
 
-La arquitectura con Cloud Run, Direct VPC egress, Secure Web Proxy, Cloud Logging y Cloud KMS fue diseñada como una posible frontera física independiente. No llegó a convertirse en infraestructura productiva y dejó de ser la ruta seleccionada cuando la implementación Cloudflare alcanzó las mismas fronteras necesarias con menor dependencia operativa.
+La arquitectura con Cloud Run, Direct VPC egress, Secure Web Proxy, Cloud Logging y Cloud KMS fue diseñada como una posible frontera física independiente. No llegó a convertirse en infraestructura productiva y dejó de ser la ruta seleccionada cuando la implementación Cloudflare alcanzó las fronteras necesarias con menor dependencia operativa.
 
-Se conserva esta decisión únicamente como historial arquitectónico. No debe interpretarse como requisito actual, fallback obligatorio ni condición para retirar `trusted_collector_provenance_unavailable`.
+Se conserva esta decisión únicamente como historial arquitectónico.
 
 ## DT-032 — Cloudflare es la frontera física seleccionada
 
 La ruta seleccionada usa **Cloudflare Workers + Durable Objects SQLite + GitHub OIDC + Ed25519 + Workers Observability**.
 
-La implementación productiva preparada fija repo, repository ID, `main`, workflow, environment, event, audience, host/path/método GraphQL y límites. El caller no puede elegir un destino arbitrario. El Durable Object controla presupuesto, pacing, single-flight, replay y fencing. El Worker liga receipts Ed25519 a request, run, commit, release y respuesta cruda; la capa Python verifica firma/body y reconcilia evidencia contra Workers Observability.
+La implementación fija repo, repository ID, `main`, workflow, environment, event, audience, host/path/método y límites. El caller no puede elegir un destino arbitrario. El Durable Object controla presupuesto, pacing, single-flight, replay y fencing. El Worker liga receipts Ed25519 a request, run, commit, release y respuesta cruda; la capa Python verifica firma/body y reconcilia evidencia contra Workers Observability.
 
-Esta decisión describe la arquitectura elegida, no un despliegue existente. Mientras los componentes sólo hayan sido ejercitados offline:
-
-```text
-production_authority = false
-trusted_collector_provenance_unavailable = presente
-```
+Esta decisión describe la arquitectura elegida. La autoridad productiva sigue separada de la mera existencia de infraestructura.
 
 ## DT-033 — Completitud técnica no equivale a aceptación productiva
 
-La cadena integrada puede cerrar offline structural discovery autenticado, derivar el plan canónico de catálogo, recolectar páginas a través del contrato edge, verificar receipts, reconciliar observability y construir un manifest completo del run.
-
-`CatalogAcceptanceReadiness` separa explícitamente ese hecho técnico de la autoridad productiva. Puede indicar que toda la evidencia técnicamente demostrable está completa, pero no produce `catalog_accepted=true` ni `production_authority=true`. La persistencia productiva deberá consumir una futura decisión de autoridad verificable; no un booleano caller-controlled.
+La cadena puede cerrar structural discovery autenticado, derivar el plan canónico, verificar receipts, reconciliar observability y construir un manifest completo. `CatalogAcceptanceReadiness` separa explícitamente completitud técnica de autoridad productiva y no produce por sí mismo `catalog_accepted=true` ni `production_authority=true`.
 
 ## DT-034 — Cloudflare se prueba primero contra un origen controlado no-La-Colonia
 
-Antes de cualquier validación física del collector contra La Colonia, la infraestructura Cloudflare debe probarse contra un origen controlado propio. La sonda se diseña con Worker de origen, gateway, Durable Object, OIDC audience/environment, claves, signing key ID, schema y dominio criptográfico **separados** de la ruta productiva.
+Antes de cualquier validación física del collector contra La Colonia, la infraestructura Cloudflare se prueba contra un origen controlado propio. La sonda usa Worker de origen, gateway, Durable Object, OIDC audience/environment, claves, signing key ID, schema y dominio criptográfico separados de la ruta productiva.
 
-El caller no puede suministrar la URL física. La sonda sólo admite HTTPS `*.workers.dev` con path exacto y rechaza La Colonia antes de cualquier fetch. Un receipt de sonda no puede convertirse en evidencia de catálogo ni conceder autoridad productiva.
+El caller no suministra la URL física. La sonda rechaza La Colonia antes de cualquier fetch. Un receipt de sonda no puede convertirse en evidencia de catálogo ni conceder autoridad productiva.
 
-A la fecha de esta decisión, PR #84 contiene la implementación preparada y CI verde, pero continúa fuera de `main` mientras permanezca sin integrar. Integrar o desplegar la sonda tampoco autoriza tráfico live a La Colonia; esa autorización sigue siendo humana, explícita y separada.
+## DT-035 — `la_colonia_online` es contexto fuente, no ubicación comercial
+
+El extractor de La Colonia conserva `location_id=la_colonia_online` únicamente como identidad del contexto raw del catálogo público en línea. Este ID no representa SPS, Tegucigalpa ni una tienda y debe permanecer `location_status=unknown`, sin `location_confidence`.
+
+La normalización falla cerrada si un `RawProduct` registrado bajo ese contexto intenta declararse `confirmed` o `inferred`. El binding de ubicación debe producir una ubicación comercial distinta (`la_colonia_sps`, una tienda futura, etc.) sólo después de evidencia técnica suficiente. Así se impide que el nombre de un contexto fuente se convierta accidentalmente en autoridad geográfica.
+
+## DT-036 — GTIN válido es identidad fuerte; lo demás queda pendiente
+
+Un barcode sólo puede crear automáticamente un `product_id` cross-supermercado cuando es GTIN-8/12/13/14 numérico y supera el check digit. Su representación canónica es GTIN-14 y el ID derivado es `prod_gtin_<gtin14>`.
+
+Si el barcode falta o no es GTIN válido, la observación no se descarta: conserva un `prod_pending_*` ligado al `source_product_id` y `pending_product_mapping`. Un resolver explícito/revisado puede asignar posteriormente otro `product_id` sin cambiar `source_product_id` ni `offer_id`.
+
+## DT-037 — Producto normalizado y mapping fuente son tablas distintas
+
+El contrato tabular común incorpora:
+
+```text
+dim_products
+map_source_products
+```
+
+`dim_products` contiene sólo atributos normalizados/canónicos por `product_id`; no incluye supermercado, ubicación, precio, promoción, disponibilidad, URL fuente ni run. `map_source_products` conserva la relación por `source_product_id`, descriptores fuente, `product_id`, método/estado de mapping y razón de revisión.
+
+Con estas dos tablas el contrato gestionado pasa de seis a ocho tablas. Un run no aceptado no materializa dimensión/mapping/current/history.
+
+## DT-038 — Observability se valida con el verifier actual, no con la limitación histórica
+
+La conclusión histórica de que la superficie pública de Workers Observability no podía exponer el detalle necesario no se usa como una propiedad arquitectónica permanente. El código actual descubre candidatos y consulta detalle con `view: events`, exigiendo custom span único, relación padre-hijo y fetch físico reconciliado con el receipt.
+
+La frontera sigue abierta hasta observar una ejecución exitosa del verifier actual contra la evidencia física de la sonda existente. Esa comprobación no requiere una nueva request a La Colonia ni concede autoridad de catálogo.
+
+## DT-039 — Ramas históricas se clasifican con evidencia y decisión versionada
+
+La auditoría de ramas `precios-sps` usa ancestry, igualdad de tree y patch-equivalence antes de recurrir a inspección manual. Las decisiones `CLOSED_SUPERSEDED` quedan versionadas y ligadas al SHA exacto de `main` auditado.
+
+El inventario falla cerrado si cambia el snapshot sin renovar la inspección, aparece una rama no resuelta o queda un `UNIQUE_UNMERGED`. El cierre de una rama histórica nunca sustituye la recuperación focalizada de hardening útil; ese patrón se aplicó al hardening de evidencia física recuperado antes del cierre del inventario.
