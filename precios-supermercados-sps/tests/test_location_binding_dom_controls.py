@@ -129,6 +129,42 @@ class FakePage:
         )
 
 
+class FakeScope(FakePage):
+    def __init__(self, controls):
+        super().__init__(controls)
+
+    def count(self):
+        return 1
+
+    def locator(self, selector):
+        if selector == "xpath=..":
+            return MissingContainer()
+        return super().locator(selector)
+
+
+class FakePrompt:
+    def __init__(self, parent):
+        self.parent = parent
+
+    def is_visible(self):
+        return True
+
+    def locator(self, selector):
+        assert selector == "xpath=.."
+        return self.parent
+
+
+class FakePageWithPrompt(FakePage):
+    def __init__(self, controls, *, prompt, structural=()):
+        super().__init__(controls, structural=structural)
+        self.prompt = prompt
+
+    def get_by_text(self, pattern):
+        assert isinstance(pattern, re.Pattern)
+        assert pattern.fullmatch("¿Desde qué ciudad nos visita?")
+        return FakeCollection([self.prompt])
+
+
 def test_structural_location_button_matches_user_supplied_html_and_exposes_city() -> None:
     button = FakeControl(
         label="San pedro sula",
@@ -314,6 +350,25 @@ def test_radio_is_preferred_over_duplicate_button_surface_for_same_city() -> Non
     activate_city_control(resolved, "San Pedro Sula")
     assert sps_radio.clicked is True
     assert button.clicked is False
+
+
+def test_visual_prompt_scopes_choice_and_ignores_same_city_control_outside_modal() -> None:
+    outside_radio = FakeControl(label="San Pedro Sula", role="radio")
+    modal_sps = FakeControl(label="San Pedro Sula", role="radio")
+    modal_tgu = FakeControl(label="Tegucigalpa", role="radio")
+    modal_button = FakeControl(label="San Pedro Sula", role="button")
+    modal = FakeScope([modal_sps, modal_tgu, modal_button])
+    prompt = FakePrompt(modal)
+    page = FakePageWithPrompt(
+        [outside_radio, modal_sps, modal_tgu, modal_button],
+        prompt=prompt,
+    )
+
+    resolved = resolve_exact_city_control(page, "San Pedro Sula")
+
+    assert resolved.locator is modal_sps
+    assert resolved.role == "radio"
+    assert resolved.available_cities == ("San Pedro Sula", "Tegucigalpa")
 
 
 def test_two_visible_radios_with_same_city_still_fail_closed() -> None:
