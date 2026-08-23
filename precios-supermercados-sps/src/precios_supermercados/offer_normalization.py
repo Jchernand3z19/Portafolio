@@ -17,12 +17,15 @@ from typing import Any
 
 from .enums import AvailabilityStatus, LocationStatus
 from .identifiers import (
+    canonicalize_gtin,
     canonicalize_text,
+    generate_gtin_product_id,
     generate_offer_id,
     generate_pending_product_id,
     generate_source_product_id,
     generate_state_hash,
 )
+from .locations import LocationConfigError, validate_source_location_context
 from .models import NormalizedOffer, RawProduct, ValidatedOffer
 
 
@@ -217,6 +220,13 @@ def _promotion(values: Mapping[str, Any]) -> bool:
     return value
 
 
+def _default_product_id(raw: RawProduct, source_product_id: str) -> str:
+    gtin = canonicalize_gtin(_text(raw.raw_values.get("ean")))
+    if gtin is not None:
+        return generate_gtin_product_id(gtin)
+    return generate_pending_product_id(source_product_id)
+
+
 def normalize_raw_product(
     raw: RawProduct,
     *,
@@ -227,19 +237,28 @@ def normalize_raw_product(
 
     if not isinstance(raw, RawProduct):
         raise OfferNormalizationError("raw_product_invalid")
+    try:
+        validate_source_location_context(
+            supermarket_id=raw.supermarket_id,
+            location_id=raw.location_id,
+            location_status=raw.location_status,
+            location_evidence=raw.location_evidence,
+            location_confidence=raw.location_confidence,
+        )
+    except LocationConfigError as exc:
+        raise OfferNormalizationError(str(exc)) from exc
 
     source_product_id = generate_source_product_id(
         raw.supermarket_id,
         raw.source_key_type,
         raw.source_key,
     )
-    product_id = (
-        product_id_resolver(raw, source_product_id)
-        if product_id_resolver is not None
-        else None
-    )
-    if product_id is None:
-        product_id = generate_pending_product_id(source_product_id)
+    if product_id_resolver is None:
+        product_id = _default_product_id(raw, source_product_id)
+    else:
+        product_id = product_id_resolver(raw, source_product_id)
+        if product_id is None:
+            product_id = generate_pending_product_id(source_product_id)
     if not isinstance(product_id, str) or not product_id.strip():
         raise OfferNormalizationError("product_id_invalid")
 
