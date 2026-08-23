@@ -11,7 +11,6 @@ import precios_supermercados.diagnostics.la_colonia_location_binding_capture as 
 
 
 SYNTHETIC_AUTH = "LC-location-binding-777"
-AUTHORIZED_LIVE_AUTH = "LC-location-binding-335"
 CONSUMED_AUTHS = frozenset(
     {
         "LC-location-binding-336",
@@ -89,14 +88,10 @@ def local_site():
         server.server_close()
 
 
-def test_live_has_only_lc_335_active_and_keeps_prior_authorizations_consumed() -> None:
-    assert capture.LIVE_EXECUTION_ENABLED is True
-    assert capture.ACTIVE_AUTHORIZATION_IDS == frozenset({AUTHORIZED_LIVE_AUTH})
+def test_live_is_closed_and_all_location_binding_authorizations_are_consumed() -> None:
+    assert capture.LIVE_EXECUTION_ENABLED is False
+    assert capture.ACTIVE_AUTHORIZATION_IDS == frozenset()
     assert capture.CONSUMED_AUTHORIZATION_IDS == CONSUMED_AUTHS
-    capture.validate_capture_authorization(
-        authorization_id=AUTHORIZED_LIVE_AUTH,
-        network_policy="live",
-    )
 
     for authorization_id in CONSUMED_AUTHS:
         consumed = capture.run_capture(authorization_id=authorization_id)
