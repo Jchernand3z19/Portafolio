@@ -1,9 +1,9 @@
 """Resolución DOM fail-closed para controles de ubicación.
 
 Este módulo no abre red, no conoce targets live ni concede autoridad. Sólo recibe
-una página Playwright ya existente y resuelve, de forma exacta y única, controles
-interactivos de ciudad. Se mantiene separado de la autorización live para poder
-probar el contrato completamente offline.
+una página Playwright ya existente y resuelve, de forma exacta y única, el selector
+visible de ubicación y los controles interactivos de ciudad. Se mantiene separado
+de la autorización live para poder probar el contrato completamente offline.
 """
 
 from __future__ import annotations
@@ -14,6 +14,11 @@ from typing import Any
 
 
 CITY_CONTROL_ROLES: tuple[str, ...] = ("option", "radio", "menuitem", "button")
+LOCATION_SELECTOR_CSS = "button.btn-modal-selector"
+_LOCATION_SELECTOR_ACCESSIBLE_PATTERN = re.compile(
+    r"selecciona\s+tu\s+tienda|selecciona\s+una\s+tienda|ubicaci[oó]n",
+    re.I,
+)
 _IGNORED_CITY_LABELS = frozenset(
     {
         "selecciona tu ciudad",
@@ -21,10 +26,31 @@ _IGNORED_CITY_LABELS = frozenset(
         "ciudad",
     }
 )
+_IGNORED_VISIBLE_LOCATION_LABELS = frozenset(
+    {
+        "selecciona tu tienda",
+        "selecciona una tienda",
+        "selecciona tu ciudad",
+        "selecciona una ciudad",
+        "ubicacion",
+        "ubicación",
+        "ciudad",
+        "tienda",
+    }
+)
 
 
 class LocationControlResolutionError(RuntimeError):
     """Fallo determinista al resolver un control de ubicación."""
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedLocationSelector:
+    """Botón único que abre el selector y ubicación visible, si la expone."""
+
+    locator: Any
+    source: str
+    visible_location: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +80,77 @@ def _label(locator: Any) -> str | None:
         return _clean_label(locator.inner_text())
     except Exception:
         return None
+
+
+def _visible_items(collection: Any) -> list[Any]:
+    visible: list[Any] = []
+    for index in range(collection.count()):
+        candidate = collection.nth(index)
+        try:
+            if candidate.is_visible():
+                visible.append(candidate)
+        except Exception:
+            continue
+    return visible
+
+
+def _visible_location(label: str | None) -> str | None:
+    normalized = _clean_label(label)
+    if normalized is None:
+        return None
+    if normalized.casefold() in _IGNORED_VISIBLE_LOCATION_LABELS:
+        return None
+    return normalized
+
+
+def resolve_location_selector(page: Any) -> ResolvedLocationSelector:
+    """Resuelve primero el botón estructural observado y luego el fallback legado.
+
+    La evidencia HTML actual de La Colonia expone la ubicación seleccionada como
+    ``<button class="btn-modal-selector">San pedro sula</button>``. Ese selector
+    estructural se usa sólo si existe exactamente un botón visible. Si no existe,
+    se conserva el fallback accesible histórico. Cualquier ambigüedad falla cerrado.
+    """
+
+    try:
+        structural = _visible_items(page.locator(LOCATION_SELECTOR_CSS))
+    except Exception:
+        structural = []
+    if len(structural) > 1:
+        raise LocationControlResolutionError("location_selector_not_unique")
+    if len(structural) == 1:
+        label = _label(structural[0])
+        if label is None:
+            raise LocationControlResolutionError("location_selector_label_missing")
+        return ResolvedLocationSelector(
+            locator=structural[0],
+            source="btn-modal-selector",
+            visible_location=_visible_location(label),
+        )
+
+    try:
+        accessible = _visible_items(
+            page.get_by_role("button", name=_LOCATION_SELECTOR_ACCESSIBLE_PATTERN)
+        )
+    except Exception:
+        accessible = []
+    if not accessible:
+        raise LocationControlResolutionError("location_selector_not_found")
+    if len(accessible) != 1:
+        raise LocationControlResolutionError("location_selector_not_unique")
+    return ResolvedLocationSelector(
+        locator=accessible[0],
+        source="accessible-fallback",
+        visible_location=_visible_location(_label(accessible[0])),
+    )
+
+
+def open_location_selector(page: Any) -> ResolvedLocationSelector:
+    """Abre exactamente el selector resuelto y devuelve la ubicación visible previa."""
+
+    resolved = resolve_location_selector(page)
+    resolved.locator.click()
+    return resolved
 
 
 def _visible_role_matches(page: Any, *, role: str, exact_name: re.Pattern[str]) -> list[Any]:
