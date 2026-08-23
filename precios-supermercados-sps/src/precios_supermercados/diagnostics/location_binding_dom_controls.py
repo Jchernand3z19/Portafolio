@@ -13,20 +13,18 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 
-# La pantalla observada por el usuario presenta tarjetas de ciudad con indicador
-# tipo radio. Cuando un mismo gesto visual expone simultáneamente un radio y una
-# superficie button con el mismo nombre accesible, el radio es el control semántico
-# específico y la superficie genérica no debe convertir esa única opción visual en
-# una ambigüedad artificial. La unicidad sigue siendo obligatoria dentro del rol
-# elegido: dos radios realmente presentados para la misma ciudad continúan fallando
-# cerrado. Un duplicado DOM fuera del viewport no representa una segunda opción que
-# el usuario tenga delante. Tampoco se considera una segunda opción cuando Playwright
-# devuelve simultáneamente un ancestro y su descendiente para el mismo control o
-# prompt textual: se conserva únicamente el nodo más específico.
+# La pantalla observada por el usuario presenta dos tarjetas de ciudad. El resolver
+# prioriza semántica accesible real cuando existe. La evidencia LC-337 demostró que
+# la superficie live puede no exponer ninguno de esos roles; por eso existe un
+# fallback visual estrictamente acotado por el prompt del modal o, si el prompt no
+# es localizable, por la pareja única San Pedro Sula + Tegucigalpa dentro de un
+# ancestro común cercano. Nunca se promueve texto global aislado a control.
 CITY_CONTROL_ROLES: tuple[str, ...] = ("radio", "option", "menuitem", "button")
 CITY_CONTROL_READY_TIMEOUT_MS = 3_000
 CITY_CONTROL_READY_POLL_MS = 100
 CITY_MODAL_SCOPE_MAX_ANCESTORS = 8
+CITY_PAIR_SCOPE_MAX_ANCESTORS = 8
+CITY_PAIR_PEER = "Tegucigalpa"
 LOCATION_SELECTOR_CLASS = "btn-modal-selector"
 LOCATION_SELECTOR_CSS = f"button.{LOCATION_SELECTOR_CLASS}"
 CITY_MODAL_PROMPT_PATTERN = re.compile(
@@ -145,14 +143,7 @@ def _has_css_class(locator: Any, class_name: str) -> bool:
 
 
 def _is_presented_in_viewport(locator: Any) -> bool:
-    """Exige visibilidad y cruce real con el viewport en un browser Playwright.
-
-    ``Locator.is_visible()`` considera visibles elementos con caja fuera de la
-    pantalla. Eso es útil para Playwright pero no para decidir qué control está
-    realmente presentado al usuario en un modal responsive. Los dobles offline que
-    no implementan ``evaluate`` conservan la semántica histórica basada en
-    ``is_visible``; un locator real que no pueda evaluarse falla cerrado.
-    """
+    """Exige visibilidad y cruce real con el viewport en un browser Playwright."""
 
     try:
         if not locator.is_visible():
@@ -187,12 +178,7 @@ def _dom_path(locator: Any) -> tuple[int, ...] | None:
 
 
 def _collapse_nested_presented_items(items: list[Any]) -> list[Any]:
-    """Colapsa sólo coincidencias ancestro/descendiente del mismo gesto visual.
-
-    Dos nodos hermanos o ubicados en ramas DOM distintas siguen siendo ambiguos.
-    Cuando todos los locators son Playwright reales se compara únicamente su ruta
-    estructural numérica; esa ruta nunca sale del proceso ni se persiste.
-    """
+    """Colapsa sólo coincidencias ancestro/descendiente del mismo gesto visual."""
 
     if len(items) < 2:
         return items
@@ -237,6 +223,31 @@ def _presented_items(collection: Any) -> list[Any]:
     return presented
 
 
+def _presented_text_matches(
+    scope: Any,
+    exact_name: re.Pattern[str],
+    *,
+    exclude_location_header: bool = False,
+) -> tuple[list[Any], list[Any]]:
+    """Devuelve matches textuales presentados antes/después del colapso anidado."""
+
+    try:
+        matches = scope.get_by_text(exact_name)
+    except Exception:
+        return [], []
+    raw: list[Any] = []
+    for index in range(matches.count()):
+        candidate = matches.nth(index)
+        try:
+            if exclude_location_header and _has_css_class(candidate, LOCATION_SELECTOR_CLASS):
+                continue
+            if _is_presented_in_viewport(candidate):
+                raw.append(candidate)
+        except Exception:
+            continue
+    return raw, _collapse_nested_presented_items(raw)
+
+
 def _visible_location(label: str | None) -> str | None:
     normalized = _clean_label(label)
     if normalized is None:
@@ -247,13 +258,7 @@ def _visible_location(label: str | None) -> str | None:
 
 
 def resolve_location_selector(page: Any) -> ResolvedLocationSelector:
-    """Resuelve primero el botón estructural observado y luego el fallback legado.
-
-    La evidencia HTML aportada por el usuario expone la ubicación seleccionada como
-    ``<button class="btn-modal-selector">San pedro sula</button>``. Ese selector
-    estructural se usa sólo si existe exactamente un botón visible. Si no existe,
-    se conserva el fallback accesible histórico. Cualquier ambigüedad falla cerrado.
-    """
+    """Resuelve primero el botón estructural observado y luego el fallback legado."""
 
     try:
         structural = _visible_items(page.locator(LOCATION_SELECTOR_CSS))
@@ -297,13 +302,7 @@ def open_location_selector(page: Any) -> ResolvedLocationSelector:
 
 
 def _visible_native_select(parent_select: Any) -> bool:
-    """Acepta options nativos sólo cuando su ``select`` está presentado.
-
-    Playwright puede considerar invisibles los elementos ``option`` de un select
-    nativo aun cuando el propio ``select`` sí sea interactivo. Por eso la
-    visibilidad se decide en el contenedor. Un select duplicado oculto o fuera del
-    viewport no debe competir con el control realmente presentado al usuario.
-    """
+    """Acepta options nativos sólo cuando su ``select`` está presentado."""
 
     try:
         return parent_select.count() == 1 and _is_presented_in_viewport(parent_select)
@@ -318,9 +317,6 @@ def _visible_role_matches(scope: Any, *, role: str, exact_name: re.Pattern[str])
         candidate = matches.nth(index)
         try:
             if role == "button" and _has_css_class(candidate, LOCATION_SELECTOR_CLASS):
-                # El botón del encabezado muestra la ciudad actual pero no es una
-                # opción del modal. Nunca debe competir con el control que cambia
-                # realmente la ciudad.
                 continue
             parent_select = candidate.locator("xpath=ancestor::select[1]")
             if role == "option":
@@ -333,23 +329,29 @@ def _visible_role_matches(scope: Any, *, role: str, exact_name: re.Pattern[str])
     return _collapse_nested_presented_items(visible)
 
 
-def _city_modal_scope(page: Any, exact_name: re.Pattern[str]) -> Any:
-    """Acota la búsqueda al modal visual realmente presentado.
+def _scope_has_target_surface(parent: Any, exact_name: re.Pattern[str]) -> bool:
+    for role in CITY_CONTROL_ROLES:
+        try:
+            if _visible_role_matches(parent, role=role, exact_name=exact_name):
+                return True
+        except Exception:
+            continue
+    _raw, text = _presented_text_matches(parent, exact_name)
+    return bool(text)
 
-    La captura aportada por el usuario muestra el prompt exacto
-    ``¿Desde qué ciudad nos visita?``. Si ese prompt cruza el viewport, se toma el
-    menor ancestro que además contiene una opción exacta presentada para la ciudad
-    objetivo. Playwright puede devolver tanto un contenedor como su descendiente
-    para el mismo texto exacto; esos matches anidados se colapsan al nodo más
-    específico. Dos prompts en ramas DOM distintas continúan fallando cerrado.
-    """
+
+def _city_modal_scope(
+    page: Any,
+    exact_name: re.Pattern[str],
+) -> tuple[Any, bool, tuple[str, ...] | None]:
+    """Acota al modal por prompt; permite texto exacto sólo dentro de ese scope."""
 
     try:
         raw_prompts = _presented_items(page.get_by_text(CITY_MODAL_PROMPT_PATTERN))
     except Exception:
-        return page
+        return page, False, None
     if not raw_prompts:
-        return page
+        return page, False, None
     prompts = _collapse_nested_presented_items(raw_prompts)
     if len(prompts) != 1:
         raise LocationControlResolutionError(
@@ -362,6 +364,7 @@ def _city_modal_scope(page: Any, exact_name: re.Pattern[str]) -> Any:
         )
 
     scope = prompts[0]
+    peer_exact = re.compile(rf"^{re.escape(CITY_PAIR_PEER)}$", re.I)
     for _ in range(CITY_MODAL_SCOPE_MAX_ANCESTORS):
         try:
             parent = scope.locator("xpath=..")
@@ -372,21 +375,75 @@ def _city_modal_scope(page: Any, exact_name: re.Pattern[str]) -> Any:
                 break
         except Exception:
             break
-        for role in CITY_CONTROL_ROLES:
-            try:
-                if _visible_role_matches(parent, role=role, exact_name=exact_name):
-                    return parent
-            except Exception:
-                continue
+        if _scope_has_target_surface(parent, exact_name):
+            _peer_raw, peer_matches = _presented_text_matches(parent, peer_exact)
+            labels = (CITY_PAIR_PEER,) if peer_matches else None
+            return parent, True, labels
         scope = parent
 
-    # El modal ya está identificado físicamente pero todavía no presenta una opción
-    # interactiva; el bucle exterior puede volver a sondear durante la ventana
-    # acotada de readiness.
     raise LocationControlResolutionError(
         "target_city_not_found",
         diagnostic={"stage": "prompt_scope", "candidate_count": len(prompts)},
     )
+
+
+def _paired_city_text_scope(
+    page: Any,
+    exact_name: re.Pattern[str],
+) -> tuple[Any, bool, tuple[str, ...] | None]:
+    """Fallback sin prompt: exige las dos ciudades visibles, únicas y cercanas.
+
+    La cabecera ``btn-modal-selector`` nunca cuenta como la opción SPS. El texto
+    objetivo aislado no basta: debe coexistir con la segunda ciudad observada por el
+    usuario dentro de un ancestro común alcanzable en un máximo acotado.
+    """
+
+    raw_target, target_matches = _presented_text_matches(
+        page,
+        exact_name,
+        exclude_location_header=True,
+    )
+    peer_exact = re.compile(rf"^{re.escape(CITY_PAIR_PEER)}$", re.I)
+    _raw_peer, peer_matches = _presented_text_matches(page, peer_exact)
+
+    if len(target_matches) > 1:
+        raise LocationControlResolutionError(
+            "target_city_not_unique",
+            diagnostic={
+                "stage": "text",
+                "candidate_count": len(raw_target),
+                "effective_count": len(target_matches),
+            },
+        )
+    if len(target_matches) != 1 or len(peer_matches) != 1:
+        return page, False, None
+
+    scope = target_matches[0]
+    for _ in range(CITY_PAIR_SCOPE_MAX_ANCESTORS):
+        try:
+            parent = scope.locator("xpath=..")
+        except Exception:
+            break
+        try:
+            if parent.count() != 1:
+                break
+        except Exception:
+            break
+        _peer_raw, peers_in_parent = _presented_text_matches(parent, peer_exact)
+        if len(peers_in_parent) == 1:
+            return parent, True, (CITY_PAIR_PEER,)
+        if len(peers_in_parent) > 1:
+            raise LocationControlResolutionError(
+                "target_city_not_unique",
+                diagnostic={
+                    "stage": "text",
+                    "candidate_count": len(peer_matches),
+                    "effective_count": len(peers_in_parent),
+                },
+            )
+        scope = parent
+
+    return page, False, None
 
 
 def _usable_labels(options: Any, *, require_visible: bool) -> tuple[str, ...]:
@@ -440,7 +497,9 @@ def _radio_scope_labels(scope: Any) -> tuple[str, ...] | None:
 
 def _resolve_exact_city_control_once(page: Any, normalized: str) -> ResolvedCityControl:
     exact = re.compile(rf"^{re.escape(normalized)}$", re.I)
-    scope = _city_modal_scope(page, exact)
+    scope, text_allowed, text_peer_labels = _city_modal_scope(page, exact)
+    if not text_allowed:
+        scope, text_allowed, text_peer_labels = _paired_city_text_scope(page, exact)
 
     for role in CITY_CONTROL_ROLES:
         candidates = _visible_role_matches(scope, role=role, exact_name=exact)
@@ -468,9 +527,46 @@ def _resolve_exact_city_control_once(page: Any, normalized: str) -> ResolvedCity
             labels = (normalized,)
         return ResolvedCityControl(locator=locator, role=role, available_cities=labels)
 
+    if text_allowed:
+        raw_text, text_matches = _presented_text_matches(
+            scope,
+            exact,
+            exclude_location_header=True,
+        )
+        if len(text_matches) > 1:
+            raise LocationControlResolutionError(
+                "target_city_not_unique",
+                diagnostic={
+                    "stage": "text",
+                    "candidate_count": len(raw_text),
+                    "effective_count": len(text_matches),
+                },
+            )
+        if len(text_matches) == 1:
+            labels = tuple(
+                sorted(
+                    {normalized, *(text_peer_labels or ())},
+                    key=str.casefold,
+                )
+            )
+            return ResolvedCityControl(
+                locator=text_matches[0],
+                role="text",
+                available_cities=labels,
+            )
+
+    raw_text, text_matches = _presented_text_matches(
+        page,
+        exact,
+        exclude_location_header=True,
+    )
     raise LocationControlResolutionError(
         "target_city_not_found",
-        diagnostic={"stage": "role_scan", "candidate_count": 0},
+        diagnostic={
+            "stage": "text_scan" if raw_text else "role_scan",
+            "candidate_count": len(raw_text),
+            "effective_count": len(text_matches),
+        },
     )
 
 
@@ -480,26 +576,17 @@ def _wait_for_next_city_probe(page: Any) -> None:
     try:
         page.wait_for_timeout(CITY_CONTROL_READY_POLL_MS)
     except Exception:
-        # Dobles de prueba sin reloj Playwright siguen pudiendo ejercitar el
-        # contrato de resolución; en browser real la espera sí consume el intervalo.
         return
 
 
 def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl:
     """Resuelve la opción visual exacta de ciudad tras abrir el modal.
 
-    Si está presentado el prompt ``¿Desde qué ciudad nos visita?`` la búsqueda se
-    acota al menor ancestro que contiene la opción objetivo. Dentro de ese scope se
-    usan roles por especificidad semántica: ``radio`` > ``option`` > ``menuitem`` >
-    ``button``. Un radio único puede coexistir con una superficie button decorativa
-    del mismo gesto visual sin generar un falso ``target_city_not_unique``; dos
-    candidatos del mismo rol realmente presentados siguen fallando cerrado salvo
-    que sean estrictamente ancestro/descendiente del mismo control accesible.
-
-    El botón de encabezado ``btn-modal-selector`` se excluye siempre. En selects
-    nativos sólo compiten options cuyo ``select`` ancestro está presentado en el
-    viewport. La ausencia temporal puede reintentarse durante tres segundos; una
-    ambigüedad real falla de inmediato.
+    Se priorizan roles accesibles ``radio > option > menuitem > button``. Cuando el
+    frontend no expone esos roles, un texto exacto sólo puede activarse si está
+    acotado por el prompt visual del modal o por la pareja única y cercana
+    ``San Pedro Sula`` + ``Tegucigalpa`` observada en la pantalla aportada. El texto
+    aislado nunca se convierte en autoridad de selección.
     """
 
     normalized = _clean_label(city_name)
@@ -519,7 +606,7 @@ def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl
 
 
 def activate_city_control(control: ResolvedCityControl, city_name: str) -> None:
-    """Activa el control resuelto sin intentar heurísticas adicionales."""
+    """Activa el control resuelto sin intentar una segunda heurística."""
 
     try:
         parent = control.locator.locator("xpath=ancestor::select[1]")
