@@ -9,14 +9,14 @@ Estado verificado al **2026-08-22 (America/Tegucigalpa)**.
 El corte técnico inmediatamente anterior a este sync documental es:
 
 ```text
-main = 6c935178e15f17a2b912d6764188e8c604089b5e (merge de PR #192)
-última suite completa observada = 1499/1499 PASS (PR #192, run 32619224093)
+main = 3cb97255427a939a63bce1e49614cca0e066835e (merge de PR #197)
+última suite completa observada = 1507/1507 PASS (PR #197, run 32621469076)
 python -m pip check = PASS
 compileall = PASS
 GitHub Actions Node-24-compatible pins = VERIFIED
 GATE-17 = PASS_PRODUCTIVE_EVIDENCE
 ACTIVE_AUTHORIZATION_IDS = []
-CONSUMED_LOCATION_BINDING_AUTHORIZATION_IDS = [LC-location-binding-336]
+CONSUMED_LOCATION_BINDING_AUTHORIZATION_IDS = [LC-location-binding-336, LC-location-binding-331]
 LIVE_REQUESTS_CURRENT_RUN = 0
 READY_FOR_LIVE = NO
 SPS_TECHNICAL_CONTEXT = UNCONFIRMED
@@ -43,11 +43,11 @@ El SHA anterior identifica el corte auditado, no pretende ser un HEAD autorrefer
 
 | Área | Estado | Evidencia / conclusión |
 |---|---|---|
-| 0A — suite completa | `DONE` | Suite Python + Node canónica. Último run observado: 1499/1499 PASS. |
+| 0A — suite completa | `DONE` | Suite Python + Node canónica. Último run observado: 1507/1507 PASS. |
 | 0B — hardening físico de catálogo | `DONE` | Rechazo temprano de reutilización conflictiva de `physical_evidence_id` / `fetch_span_id`. |
 | 0C — ramas históricas | `DONE` | Auditoría reproducible cerró el inventario sin `UNIQUE_UNMERGED`. |
 | 0E — Raw → Normalized → Validated | `DONE` | Transformación operacional conectada sin conceder autoridad. |
-| 0F — semántica de ubicación | `DONE_OFFLINE` | `la_colonia_online` es contexto fuente raw `UNKNOWN`; no puede convertirse bajo ese ID en SPS/TGU/tienda. La radiografía live `LC-location-binding-336` no resolvió el binding. PR #192 endureció offline la detección del control de ciudad, pero no altera la evidencia física ni confirma SPS. |
+| 0F — semántica de ubicación | `DONE_OFFLINE` | `la_colonia_online` es contexto fuente raw `UNKNOWN`; no puede convertirse bajo ese ID en SPS/TGU/tienda. Las radiografías live únicas `LC-location-binding-336` y `LC-location-binding-331` terminaron en `target_city_not_found`. PR #197 incorpora offline el botón estructural observado `button.btn-modal-selector`, pero la evidencia humana de UI/DOM y el fixture loopback no sustituyen una confirmación técnica live. |
 | 0G — identidad/dimensión de producto | `DONE_OFFLINE` | GTIN fuerte, mapping pendiente explícito, `dim_products` + `map_source_products`; PR #185 revalida también el `prod_pending_*` determinista antes de persistir. |
 | 0H — documentación canónica | `DONE` | README, arquitectura, modelo, decisiones y estado separan arquitectura estable de estado operativo mutable. |
 | 0I — workbook físico base | `DONE_PRODUCTIVE` | Workbook físico existe y fue auditado sin introducir ofertas. |
@@ -229,27 +229,83 @@ Cadena de cierre:
 - PR #190 retiró los markers y el trigger temporal de reconciliación, dejando nuevamente el workflow manual globalmente bloqueado;
 - PR #191 sincronizó este resultado en la fuente canónica de estado.
 
-La UI conocida históricamente expone SPS y Tegucigalpa, pero la ejecución `LC-location-binding-336` no consiguió identificar el control de ciudad en el DOM observado. Por tanto `SPS_TECHNICAL_CONTEXT` continúa `UNCONFIRMED`.
+### Radiografía mínima `LC-location-binding-331`
 
-### Hardening offline posterior a `target_city_not_found`
+Tras el primer hardening offline, el usuario concedió una segunda autorización explícita e independiente para una sola radiografía mínima. `LC-location-binding-331` no reutilizó la autoridad de `LC-location-binding-336` y fue consumida después de su única ejecución.
 
-PR #192 corrigió la limitación conocida del capturador sin volver a tocar La Colonia.
+Evidencia reconciliada:
 
-El resolver de ciudad ahora:
+```text
+source run = 32619994748
+source commit = b5b8aeb707ad66d570ed21aa5843b2943d7c2dbf
+source conclusion = failure
+stop_reason = target_city_not_found
+logical_actions = 2
+browser_started = true
+target_navigation_started = true
+target_navigation_completed = true
+available_cities = 0
+available_stores = 0
+granularity_candidate = none
+confidence = none
+technical_binding_observed = false
+store_selection_observed = false
+production_authority = false
+catalog_accepted = false
+extraction_enabled = false
+```
 
-- acepta únicamente controles interactivos con nombre **exacto** y roles `option`, `radio`, `menuitem` o `button`;
-- exige exactamente un candidato en el conjunto completo de roles permitidos;
-- rechaza controles custom ocultos;
-- rechaza ambigüedad incluso cuando los duplicados aparecen con roles distintos;
-- no convierte texto no interactivo en control seleccionable;
-- conserva las ciudades hermanas de un `<select>` nativo y de un `role=listbox` inequívoco, filtrando placeholders;
-- mantiene toda la lógica separada de target, autorización y autoridad productiva.
+La reconciliación GitHub-only del merge de PR #195 confirmó que el artefacto sanitizado era válido y publicó de forma separada identidad de run, outcome y evidencia. El resultado físico siguió siendo negativo: la home cargó, se abrió el flujo de ubicación, pero el contrato entonces vigente no encontró un control de ciudad seleccionable para `San Pedro Sula`.
 
-Pruebas de browser loopback demuestran offline que un botón custom exacto para `San Pedro Sula` puede producir binding de ciudad fuerte en el fixture sintético y que un duplicado falla antes de seleccionar. La suite completa de PR #192 cerró en **1499/1499 PASS**.
+Cadena de cierre:
 
-Este hardening sólo mejora la capacidad de observación de una eventual radiografía futura. **No demuestra que el DOM real actual de La Colonia use ninguno de esos controles, no confirma SPS y no concede autoridad.**
+- PR #194 activó exclusivamente `LC-location-binding-331` para una única ejecución;
+- PR #195 consumió inmediatamente el ID, cerró el fuse live y reconcilió offline el único run `32619994748`;
+- PR #196 retiró el mecanismo temporal de reconciliación y dejó nuevamente el workflow live en `if: false`, con allow-list vacía;
+- `LC-location-binding-331` y `LC-location-binding-336` permanecen consumidas y no son reutilizables.
 
-Cualquier nueva radiografía requiere una **nueva autorización humana explícita y limitada**. Esa autorización no puede reutilizar `LC-location-binding-336` y tampoco autoriza smoke, facets, GraphQL replay, crawl, persistencia comercial ni ejecución diaria.
+No hubo smoke, facets, GraphQL replay, crawl ni persistencia comercial bajo `LC-location-binding-331`.
+
+### Evidencia humana de UI/DOM posterior a las radiografías
+
+Después de las dos ejecuciones, el usuario aportó una captura visual actual de la home y el fragmento HTML exacto del control superior de ubicación:
+
+```html
+<div class="vtex-flex-layout-0-x-flexColChild vtex-flex-layout-0-x-flexColChild--notificationBarRight pb0" style="height: 100%;">
+  <div class="cont-btn-selector">
+    <button class="btn-modal-selector">San pedro sula</button>
+  </div>
+</div>
+```
+
+Esta evidencia permite afirmar únicamente que la UI mostrada por el usuario presenta **San Pedro Sula** como ubicación visible y que el elemento que abre el selector tiene la clase pública `btn-modal-selector` en ese DOM aportado.
+
+No permite afirmar por sí sola:
+
+- cuál es el `source_location_key` técnico;
+- si el binding real es por ciudad o por tienda;
+- qué cookie, storage key, request header/variable o contexto VTEX cambia al seleccionar ubicación;
+- que los precios observados sean autoritativamente SPS;
+- que `la_colonia_online` pueda etiquetarse como `la_colonia_sps`.
+
+Por tanto esta evidencia humana **no cambia** `SPS_TECHNICAL_CONTEXT=UNCONFIRMED`.
+
+### Hardening offline del selector de ubicación
+
+PR #192 amplió el resolver de ciudad para controles exactos `option`, `radio`, `menuitem` o `button`, conservando fallo cerrado ante ausencia, ocultamiento o ambigüedad.
+
+PR #197 incorporó la evidencia HTML posterior sin volver a tocar La Colonia:
+
+- prioriza exactamente un `button.btn-modal-selector` visible como control estructural de ubicación;
+- conserva el fallback accesible histórico para `Selecciona tu tienda`, `Selecciona una tienda` o `Ubicación`;
+- lee la ubicación pública visible antes de abrir el selector y la guarda como `visible_location` en el artefacto sanitizado;
+- falla cerrado si el selector estructural es ambiguo o carece de etiqueta legible;
+- excluye explícitamente el botón `btn-modal-selector` del conjunto de opciones de ciudad, evitando confundir el texto del header `San Pedro Sula` con una opción real del modal;
+- mantiene separado el resolver DOM de cualquier autorización, target live o autoridad comercial.
+
+Una integración browser-loopback reproduce la estructura aportada por el usuario, abre el botón `btn-modal-selector`, localiza una opción sintética de `San Pedro Sula` y demuestra el pipeline sin tráfico externo. La suite completa de PR #197 cerró en **1507/1507 PASS** (`run 32621469076`), con `pip check` y `compileall` también en PASS.
+
+Este hardening mejora la siguiente observación física, pero **no convierte el fixture sintético ni el HTML aportado por el usuario en evidencia técnica de binding**.
 
 ## Persistencia comercial
 
@@ -279,23 +335,34 @@ max(previous_accepted_price - current_price, 0)
 
 ## Frontera actual
 
-Las tareas técnicas que podían resolver **offline** la causa observada en `LC-location-binding-336` están cerradas: el selector de ciudad ya soporta controles exactos `option`/`radio`/`menuitem`/`button`, preserva select/listbox y falla cerrado ante ocultamiento, ausencia o ambigüedad.
+La causa observable de los dos `target_city_not_found` ya tiene un hardening offline más específico: además del resolver de opciones de ciudad, la radiografía reconoce el botón de header `button.btn-modal-selector`, conserva su texto visible y evita usar ese mismo botón como falsa opción de ciudad.
 
-Eso no convierte la hipótesis en evidencia física. El siguiente paso capaz de cambiar `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` requiere una **nueva autorización humana explícita** para una única radiografía mínima sobre La Colonia. Hasta entonces no se enviará otra request a la fuente.
+Eso no convierte la hipótesis en evidencia física. El siguiente paso capaz de cambiar `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` requiere una **nueva autorización humana explícita** para una única radiografía mínima sobre La Colonia con el código de PR #197 o posterior. Hasta entonces no se enviará otra request a la fuente.
+
+Una autorización futura para esta radiografía no autoriza automáticamente smoke, facets, GraphQL replay, crawl, persistencia comercial ni ejecución diaria.
 
 ## Tráfico live
 
-La única nueva interacción live de este bloque fue la radiografía mínima autorizada como `LC-location-binding-336`. Se limitó a la home y al selector de ubicación y terminó antes de seleccionar ciudad.
+En esta frontera se realizaron exactamente dos radiografías mínimas autorizadas de ubicación, cada una con un ID distinto y de un solo uso:
 
-Después del cierre de PR #190 y del hardening exclusivamente offline de PR #192, el estado sigue siendo:
+```text
+LC-location-binding-336 -> consumed -> target_city_not_found
+LC-location-binding-331 -> consumed -> target_city_not_found
+```
+
+Después de cada ejecución se cerró el fuse y se retiró la autorización. El trabajo posterior —incluido PR #197 y su browser-loopback— fue offline.
+
+Estado vigente:
 
 ```text
 ACTIVE_AUTHORIZATION_IDS = []
-CONSUMED_LOCATION_BINDING_AUTHORIZATION_IDS = [LC-location-binding-336]
+CONSUMED_LOCATION_BINDING_AUTHORIZATION_IDS = [LC-location-binding-336, LC-location-binding-331]
 LIVE_REQUESTS_CURRENT_RUN = 0
 READY_FOR_LIVE = NO
+SPS_TECHNICAL_CONTEXT = UNCONFIRMED
 production_authority = false
 catalog_accepted = false
+extraction_enabled = false
 ```
 
-No se realizaron retries, smoke, facets, GraphQL replay, crawl ni escrituras comerciales con esa autorización.
+No se realizaron retries con IDs consumidos, smoke, facets, GraphQL replay, crawl ni escrituras comerciales bajo estas autorizaciones.
