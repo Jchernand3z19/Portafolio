@@ -22,6 +22,7 @@ _TRACKING_KEYS = {
 }
 _TRACKING_PREFIXES = ("utm_",)
 _WHITESPACE = re.compile(r"\s+")
+_GTIN_LENGTHS = frozenset({8, 12, 13, 14})
 
 
 def canonicalize_text(value: str | None) -> str | None:
@@ -64,6 +65,43 @@ def canonicalize_url(value: str) -> str:
             "",
         )
     )
+
+
+def canonicalize_gtin(value: str | None) -> str | None:
+    """Valida GTIN-8/12/13/14 y devuelve su representación GTIN-14.
+
+    Un barcode fuente sólo se convierte en identidad canónica cuando supera el
+    check digit GS1. UPC-A/EAN-13 válidos se rellenan a la izquierda hasta 14
+    dígitos para que representaciones equivalentes compartan ``product_id``.
+    Valores vacíos, no numéricos, de longitud no estándar o con check digit
+    inválido no se fuerzan: devuelven ``None`` y permanecen en revisión.
+    """
+
+    if value is None:
+        return None
+    candidate = str(value).strip()
+    if not candidate or not candidate.isdigit() or len(candidate) not in _GTIN_LENGTHS:
+        return None
+
+    digits = tuple(int(character) for character in candidate)
+    check_digit = digits[-1]
+    weighted_sum = sum(
+        digit * (3 if position % 2 == 1 else 1)
+        for position, digit in enumerate(reversed(digits[:-1]), start=1)
+    )
+    expected = (10 - (weighted_sum % 10)) % 10
+    if check_digit != expected:
+        return None
+    return candidate.zfill(14)
+
+
+def generate_gtin_product_id(gtin: str) -> str:
+    """Genera un ``product_id`` cross-supermercado sólo desde un GTIN válido."""
+
+    canonical = canonicalize_gtin(gtin)
+    if canonical is None:
+        raise ValueError("gtin no es válido")
+    return f"prod_gtin_{canonical}"
 
 
 def select_source_key(
