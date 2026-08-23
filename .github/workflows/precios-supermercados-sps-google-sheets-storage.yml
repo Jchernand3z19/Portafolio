@@ -11,6 +11,11 @@ on:
         options:
           - check
           - apply-config
+  push:
+    branches:
+      - main
+    paths:
+      - "precios-supermercados-sps/.automation/google-sheets-storage-request.json"
 
 permissions:
   contents: read
@@ -20,8 +25,112 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.request.outputs.allowed }}
+      mode: ${{ steps.request.outputs.mode }}
+      request_sequence: ${{ steps.request.outputs.request_sequence }}
+
+    steps:
+      - name: Validar superficie del trigger antes de checkout
+        env:
+          STORAGE_REQUEST_PATH: precios-supermercados-sps/.automation/google-sheets-storage-request.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+          if os.environ.get("GITHUB_REF") != "refs/heads/main":
+              raise SystemExit("storage_trigger_ref_invalid")
+          if event_name == "workflow_dispatch":
+              raise SystemExit(0)
+          if event_name != "push":
+              raise SystemExit("storage_trigger_event_invalid")
+
+          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+          commits = event.get("commits")
+          if not isinstance(commits, list) or not commits:
+              raise SystemExit("storage_trigger_commits_missing")
+
+          expected = os.environ["STORAGE_REQUEST_PATH"]
+          changed: set[str] = set()
+          removed: set[str] = set()
+          for commit in commits:
+              if not isinstance(commit, dict):
+                  raise SystemExit("storage_trigger_commit_invalid")
+              for field in ("added", "modified", "removed"):
+                  values = commit.get(field)
+                  if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+                      raise SystemExit("storage_trigger_file_list_invalid")
+                  changed.update(values)
+                  if field == "removed":
+                      removed.update(values)
+
+          if changed != {expected} or expected in removed:
+              raise SystemExit("storage_trigger_not_marker_only")
+          PY
+
+      - name: Descargar revisión inmutable sin credenciales
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validar solicitud y resolver modo
+        id: request
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+          STORAGE_REQUEST_PATH: precios-supermercados-sps/.automation/google-sheets-storage-request.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+          mode = ""
+          sequence = "manual"
+          if event_name == "workflow_dispatch":
+              mode = os.environ.get("DISPATCH_MODE", "")
+          elif event_name == "push":
+              path = Path(os.environ["STORAGE_REQUEST_PATH"])
+              payload = json.loads(path.read_text(encoding="utf-8"))
+              expected_keys = {"schemaVersion", "operation", "requestSequence", "authority"}
+              if not isinstance(payload, dict) or set(payload) != expected_keys:
+                  raise SystemExit("storage_request_schema_invalid")
+              if payload.get("schemaVersion") != "precios-sps-google-sheets-storage-request/v1":
+                  raise SystemExit("storage_request_version_invalid")
+              if payload.get("authority") is not False:
+                  raise SystemExit("storage_request_authority_must_be_false")
+              request_sequence = payload.get("requestSequence")
+              if type(request_sequence) is not int or not 1 <= request_sequence <= 999999:
+                  raise SystemExit("storage_request_sequence_invalid")
+              sequence = str(request_sequence)
+              mode = payload.get("operation", "")
+          else:
+              raise SystemExit("storage_request_event_invalid")
+
+          if mode not in {"check", "apply-config"}:
+              raise SystemExit("storage_request_operation_invalid")
+
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          with output.open("a", encoding="utf-8") as handle:
+              handle.write("allowed=true\n")
+              handle.write(f"mode={mode}\n")
+              handle.write(f"request_sequence={sequence}\n")
+          PY
+
   storage:
-    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' && (inputs.mode == 'check' || inputs.mode == 'apply-config') }}
+    needs: preflight
+    if: ${{ needs.preflight.outputs.allowed == 'true' && (needs.preflight.outputs.mode == 'check' || needs.preflight.outputs.mode == 'apply-config') }}
     runs-on: ubuntu-latest
     environment: precios-sps-storage
 
@@ -49,5 +158,38 @@ jobs:
         env:
           PRECIOS_SPS_GOOGLE_SPREADSHEET_ID: ${{ vars.PRECIOS_SPS_GOOGLE_SPREADSHEET_ID }}
           PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON }}
-          STORAGE_MODE: ${{ inputs.mode }}
+          STORAGE_MODE: ${{ needs.preflight.outputs.mode }}
         run: python precios-supermercados-sps/scripts/inicializar_google_sheets.py --mode "$STORAGE_MODE"
+
+  publish-status:
+    needs:
+      - preflight
+      - storage
+    if: ${{ always() && needs.preflight.outputs.allowed == 'true' }}
+    permissions:
+      statuses: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Publicar resultado sanitizado
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          STORAGE_MODE: ${{ needs.preflight.outputs.mode }}
+          STORAGE_RESULT: ${{ needs.storage.result }}
+        with:
+          script: |
+            const mode = process.env.STORAGE_MODE;
+            const jobResult = process.env.STORAGE_RESULT;
+            if (!['check', 'apply-config'].includes(mode)) {
+              core.setFailed('storage status mode invalid');
+              return;
+            }
+            const state = jobResult === 'success' ? 'success' : 'failure';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state,
+              context: 'precios-sps/google-sheets-storage',
+              description: `storage ${mode}: ${state}`,
+            });
