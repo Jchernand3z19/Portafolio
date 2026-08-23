@@ -39,8 +39,13 @@ jobs:
               'precios-supermercados-sps/tests/test_workflow_security_audit.py',
             ].sort();
             const expectedAuthorizationId = 'LC-location-binding-331';
+            const consumedAuthorizationIds = new Set(['LC-location-binding-336']);
 
             core.setOutput('allowed', 'false');
+            if (consumedAuthorizationIds.has(expectedAuthorizationId)) {
+              core.setFailed('location_binding_authorization_id_consumed');
+              return;
+            }
 
             const { data: commit } = await github.rest.repos.getCommit({
               owner: context.repo.owner,
