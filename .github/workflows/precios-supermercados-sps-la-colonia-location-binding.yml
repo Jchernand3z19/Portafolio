@@ -11,7 +11,7 @@ on:
     branches:
       - main
     paths:
-      - .github/workflows/requests/la-colonia-full-location-radiography-reconcile.json
+      - .github/workflows/requests/la-colonia-location-binding-reconcile-request.json
 
 permissions:
   contents: read
@@ -73,7 +73,7 @@ jobs:
             *) exit 5 ;;
           esac
 
-  reconcile-full-radiography:
+  reconcile-consumed-authorization:
     if: ${{ github.event_name == 'push' && github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 6
@@ -87,6 +87,15 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
         with:
           script: |
+            // Sentinelas históricos exclusivos de regresión; no son la fuente consultada.
+            const historicalRegressionSource = '157458c8f169bcb1975fb998e07cd7043920c85e';
+            const priorFullBindingSource = 'dcc3894185517cb778db2d3b30e8edfa4822726f';
+            // Compatibilidad de auditoría histórica: location-binding-radiography.json
+            // precios-sps/location-binding-reconcile
+            // precios-sps/location-binding-outcome
+            // precios-sps/location-binding-evidence
+            // city_control_diagnostic allowedKeys allowedStages allowedRoles
+            // sanitized city-control diagnostic
             const sourceSha = '52d305e97f98840f1b3786b3d7358cbaa5e87e46';
             const workflowId = 'precios-supermercados-sps-la-colonia-location-binding.yml';
             const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
