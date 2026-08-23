@@ -13,24 +13,13 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 
-# La pantalla observada por el usuario presenta tarjetas de ciudad con indicador
-# tipo radio. La evidencia HTML más específica confirma que las opciones reales son
-# botones dentro de ``.cont-btn-ciudad`` y que su estado se expresa mediante
-# ``.btn-ciudad-selected`` / ``.btn-ciudad-noselected``. Esa estructura se resuelve
-# antes que cualquier heurística ARIA. Los roles accesibles permanecen como fallback
-# para no acoplar todo el contrato a una sola implementación visual.
-#
-# Cuando un mismo gesto visual expone simultáneamente un radio y una superficie
-# button con el mismo nombre accesible, el radio es el control semántico específico
-# y la superficie genérica no debe convertir esa única opción visual en una
-# ambigüedad artificial. La unicidad sigue siendo obligatoria dentro del rol
-# elegido: dos radios realmente presentados para la misma ciudad continúan fallando
-# cerrado. Un duplicado DOM fuera del viewport no representa una segunda opción que
-# el usuario tenga delante. Tampoco se considera una segunda opción cuando Playwright
-# devuelve simultáneamente un ancestro y su descendiente para el mismo control o
-# prompt textual: se conserva únicamente el nodo más específico.
+# La evidencia HTML de La Colonia confirma botones de ciudad dentro de
+# ``.cont-btn-ciudad`` con estado ``selected`` / ``noselected``. Esa estructura se
+# resuelve antes que heurísticas ARIA. La página real además puede montar dos copias
+# DOM perfectamente superpuestas del mismo modal; sólo se colapsan cuando ocupan la
+# misma superficie física y el hit-test demuestra una única copia superior.
 CITY_CONTROL_ROLES: tuple[str, ...] = ("radio", "option", "menuitem", "button")
-CITY_CONTROL_READY_TIMEOUT_MS = 3_000
+CITY_CONTROL_READY_TIMEOUT_MS = 5_000
 CITY_CONTROL_READY_POLL_MS = 100
 CITY_MODAL_SCOPE_MAX_ANCESTORS = 8
 LOCATION_SELECTOR_CLASS = "btn-modal-selector"
@@ -54,11 +43,7 @@ _LOCATION_SELECTOR_ACCESSIBLE_PATTERN = re.compile(
     re.I,
 )
 _IGNORED_CITY_LABELS = frozenset(
-    {
-        "selecciona tu ciudad",
-        "selecciona una ciudad",
-        "ciudad",
-    }
+    {"selecciona tu ciudad", "selecciona una ciudad", "ciudad"}
 )
 _IGNORED_VISIBLE_LOCATION_LABELS = frozenset(
     {
@@ -78,12 +63,8 @@ _VIEWPORT_INTERSECTION_JS = """
   const width = window.innerWidth || document.documentElement.clientWidth || 0;
   const height = window.innerHeight || document.documentElement.clientHeight || 0;
   return (
-    rect.width > 0 &&
-    rect.height > 0 &&
-    rect.right > 0 &&
-    rect.bottom > 0 &&
-    rect.left < width &&
-    rect.top < height
+    rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 &&
+    rect.left < width && rect.top < height
   );
 }
 """
@@ -98,6 +79,23 @@ _DOM_PATH_JS = """
   return path;
 }
 """
+_VISUAL_RECT_JS = """
+(element) => {
+  const rect = element.getBoundingClientRect();
+  return {x: rect.x, y: rect.y, width: rect.width, height: rect.height};
+}
+"""
+_TOPMOST_AT_CENTER_JS = """
+(element) => {
+  const rect = element.getBoundingClientRect();
+  if (!(rect.width > 0 && rect.height > 0)) return false;
+  const x = Math.max(0, Math.min((window.innerWidth || 1) - 1, rect.left + rect.width / 2));
+  const y = Math.max(0, Math.min((window.innerHeight || 1) - 1, rect.top + rect.height / 2));
+  const hit = document.elementFromPoint(x, y);
+  return Boolean(hit && (hit === element || element.contains(hit)));
+}
+"""
+_VISUAL_RECT_TOLERANCE_PX = 1.5
 
 
 class LocationControlResolutionError(RuntimeError):
@@ -162,8 +160,6 @@ def _has_css_class(locator: Any, class_name: str) -> bool:
 
 
 def _structural_city_state(locator: Any) -> str:
-    """Obtiene el estado explícito del botón estructural o falla cerrado."""
-
     selected = _has_css_class(locator, CITY_BUTTON_SELECTED_CLASS)
     unselected = _has_css_class(locator, CITY_BUTTON_UNSELECTED_CLASS)
     if selected == unselected:
@@ -172,21 +168,11 @@ def _structural_city_state(locator: Any) -> str:
 
 
 def _is_presented_in_viewport(locator: Any) -> bool:
-    """Exige visibilidad y cruce real con el viewport en un browser Playwright.
-
-    ``Locator.is_visible()`` considera visibles elementos con caja fuera de la
-    pantalla. Eso es útil para Playwright pero no para decidir qué control está
-    realmente presentado al usuario en un modal responsive. Los dobles offline que
-    no implementan ``evaluate`` conservan la semántica histórica basada en
-    ``is_visible``; un locator real que no pueda evaluarse falla cerrado.
-    """
-
     try:
         if not locator.is_visible():
             return False
     except Exception:
         return False
-
     evaluator = getattr(locator, "evaluate", None)
     if evaluator is None:
         return True
@@ -197,8 +183,6 @@ def _is_presented_in_viewport(locator: Any) -> bool:
 
 
 def _dom_path(locator: Any) -> tuple[int, ...] | None:
-    """Obtiene una identidad estructural efímera sin exponer HTML ni atributos."""
-
     evaluator = getattr(locator, "evaluate", None)
     if evaluator is None:
         return None
@@ -206,27 +190,63 @@ def _dom_path(locator: Any) -> tuple[int, ...] | None:
         raw = evaluator(_DOM_PATH_JS)
     except Exception:
         return None
-    if not isinstance(raw, list):
-        return None
-    if any(not isinstance(index, int) or index < 0 for index in raw):
+    if not isinstance(raw, list) or any(
+        not isinstance(index, int) or index < 0 for index in raw
+    ):
         return None
     return tuple(raw)
 
 
-def _collapse_nested_presented_items(items: list[Any]) -> list[Any]:
-    """Colapsa sólo coincidencias ancestro/descendiente del mismo gesto visual.
+def _visual_rect(locator: Any) -> tuple[float, float, float, float] | None:
+    """Obtiene geometría efímera del control; nunca se persiste en evidencia."""
 
-    Dos nodos hermanos o ubicados en ramas DOM distintas siguen siendo ambiguos.
-    Cuando todos los locators son Playwright reales se compara únicamente su ruta
-    estructural numérica; esa ruta nunca sale del proceso ni se persiste.
-    """
+    evaluator = getattr(locator, "evaluate", None)
+    if evaluator is None:
+        return None
+    try:
+        raw = evaluator(_VISUAL_RECT_JS)
+    except Exception:
+        return None
+    if not isinstance(raw, Mapping):
+        return None
+    values: list[float] = []
+    for key in ("x", "y", "width", "height"):
+        value = raw.get(key)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return None
+        values.append(float(value))
+    if values[2] <= 0 or values[3] <= 0:
+        return None
+    return values[0], values[1], values[2], values[3]
+
+
+def _same_visual_rect(
+    left: tuple[float, float, float, float],
+    right: tuple[float, float, float, float],
+) -> bool:
+    return all(
+        abs(a - b) <= _VISUAL_RECT_TOLERANCE_PX for a, b in zip(left, right)
+    )
+
+
+def _is_topmost_at_center(locator: Any) -> bool:
+    evaluator = getattr(locator, "evaluate", None)
+    if evaluator is None:
+        return False
+    try:
+        return bool(evaluator(_TOPMOST_AT_CENTER_JS))
+    except Exception:
+        return False
+
+
+def _collapse_nested_presented_items(items: list[Any]) -> list[Any]:
+    """Colapsa sólo coincidencias ancestro/descendiente del mismo gesto visual."""
 
     if len(items) < 2:
         return items
     paths = [_dom_path(item) for item in items]
     if any(path is None for path in paths):
         return items
-
     typed_paths = [path for path in paths if path is not None]
     kept: list[Any] = []
     seen: set[tuple[int, ...]] = set()
@@ -240,6 +260,51 @@ def _collapse_nested_presented_items(items: list[Any]) -> list[Any]:
         )
         if not is_ancestor_duplicate:
             kept.append(items[index])
+    return kept
+
+
+def _collapse_overlapping_presented_items(items: list[Any]) -> list[Any]:
+    """Colapsa copias DOM físicamente idénticas sólo con hit-test inequívoco.
+
+    La página live observada monta dos árboles de modal superpuestos píxel a píxel.
+    Dos controles en posiciones distintas continúan siendo ambiguos. Para un grupo
+    con la misma geometría sólo se conserva un control si ``elementFromPoint``
+    demuestra exactamente una copia superior/interactuable; ante cualquier duda se
+    mantienen todas y la resolución posterior falla cerrada.
+    """
+
+    if len(items) < 2:
+        return items
+    rects = [_visual_rect(item) for item in items]
+    groups: list[list[int]] = []
+    assigned: set[int] = set()
+    for index, rect in enumerate(rects):
+        if index in assigned:
+            continue
+        group = [index]
+        assigned.add(index)
+        if rect is not None:
+            for other_index in range(index + 1, len(items)):
+                other = rects[other_index]
+                if (
+                    other_index not in assigned
+                    and other is not None
+                    and _same_visual_rect(rect, other)
+                ):
+                    group.append(other_index)
+                    assigned.add(other_index)
+        groups.append(group)
+
+    kept: list[Any] = []
+    for group in groups:
+        if len(group) == 1 or rects[group[0]] is None:
+            kept.extend(items[index] for index in group)
+            continue
+        topmost = [index for index in group if _is_topmost_at_center(items[index])]
+        if len(topmost) == 1:
+            kept.append(items[topmost[0]])
+        else:
+            kept.extend(items[index] for index in group)
     return kept
 
 
@@ -265,24 +330,13 @@ def _presented_items(collection: Any) -> list[Any]:
 
 
 def _structural_city_button(page: Any, normalized: str) -> ResolvedCityControl | None:
-    """Resuelve la estructura exacta confirmada para el selector de La Colonia.
-
-    Evidencia aportada por el usuario::
-
-        <div class="cont-btn-ciudad">
-          <button class="btn-ciudad-noselected">Tegucigalpa</button>
-          <button class="btn-ciudad-selected">San pedro sula</button>
-        </div>
-
-    Sólo se consideran contenedores y botones realmente presentados en el viewport.
-    La identidad sigue siendo el nombre visible exacto y el estado se deriva de una
-    sola clase explícita. Un botón con ambas clases, o sin una clase de estado válida,
-    falla cerrado en vez de adivinar qué acción corresponde.
-    """
+    """Resuelve la estructura exacta confirmada para el selector de La Colonia."""
 
     try:
-        containers = _collapse_nested_presented_items(
-            _presented_items(page.locator(CITY_BUTTON_CONTAINER_CSS))
+        containers = _collapse_overlapping_presented_items(
+            _collapse_nested_presented_items(
+                _presented_items(page.locator(CITY_BUTTON_CONTAINER_CSS))
+            )
         )
     except Exception:
         return None
@@ -304,20 +358,28 @@ def _structural_city_button(page: Any, normalized: str) -> ResolvedCityControl |
             labels.append(label)
             if label.casefold() == normalized.casefold():
                 exact_matches.append(button)
-
         available = tuple(sorted(set(labels), key=str.casefold))
         for button in exact_matches:
             target_matches.append(
                 (button, available or (normalized,), _structural_city_state(button))
             )
 
+    candidate_count = len(target_matches)
+    if candidate_count > 1:
+        collapsed_locators = _collapse_overlapping_presented_items(
+            [match[0] for match in target_matches]
+        )
+        collapsed_ids = {id(locator) for locator in collapsed_locators}
+        target_matches = [
+            match for match in target_matches if id(match[0]) in collapsed_ids
+        ]
     if len(target_matches) > 1:
         raise LocationControlResolutionError(
             "target_city_not_unique",
             diagnostic={
                 "stage": "role",
                 "role": "button",
-                "candidate_count": len(target_matches),
+                "candidate_count": candidate_count,
                 "effective_count": len(target_matches),
             },
         )
@@ -334,24 +396,16 @@ def _structural_city_button(page: Any, normalized: str) -> ResolvedCityControl |
 
 def _visible_location(label: str | None) -> str | None:
     normalized = _clean_label(label)
-    if normalized is None:
-        return None
-    if normalized.casefold() in _IGNORED_VISIBLE_LOCATION_LABELS:
+    if normalized is None or normalized.casefold() in _IGNORED_VISIBLE_LOCATION_LABELS:
         return None
     return normalized
 
 
 def resolve_location_selector(page: Any) -> ResolvedLocationSelector:
-    """Resuelve primero el botón estructural observado y luego el fallback legado.
-
-    La evidencia HTML aportada por el usuario expone la ubicación seleccionada como
-    ``<button class="btn-modal-selector">San pedro sula</button>``. Ese selector
-    estructural se usa sólo si existe exactamente un botón visible. Si no existe,
-    se conserva el fallback accesible histórico. Cualquier ambigüedad falla cerrado.
-    """
-
     try:
-        structural = _visible_items(page.locator(LOCATION_SELECTOR_CSS))
+        structural = _collapse_overlapping_presented_items(
+            _visible_items(page.locator(LOCATION_SELECTOR_CSS))
+        )
     except Exception:
         structural = []
     if len(structural) > 1:
@@ -367,8 +421,10 @@ def resolve_location_selector(page: Any) -> ResolvedLocationSelector:
         )
 
     try:
-        accessible = _visible_items(
-            page.get_by_role("button", name=_LOCATION_SELECTOR_ACCESSIBLE_PATTERN)
+        accessible = _collapse_overlapping_presented_items(
+            _visible_items(
+                page.get_by_role("button", name=_LOCATION_SELECTOR_ACCESSIBLE_PATTERN)
+            )
         )
     except Exception:
         accessible = []
@@ -384,73 +440,48 @@ def resolve_location_selector(page: Any) -> ResolvedLocationSelector:
 
 
 def open_location_selector(page: Any) -> ResolvedLocationSelector:
-    """Abre exactamente el selector resuelto y devuelve la ubicación visible previa."""
-
     resolved = resolve_location_selector(page)
     resolved.locator.click()
     return resolved
 
 
 def verify_structural_city_selection(page: Any, city_name: str) -> str | None:
-    """Verifica estado visual de ciudad sin reabrir el selector ni conceder autoridad.
-
-    Si el modal sigue presentado, el botón objetivo debe estar explícitamente en
-    ``selected``. Si el modal se cerró tras el click, un header estructural que
-    expone exactamente la ciudad objetivo basta para confirmar la transición visual.
-    Esta verificación no afirma que el backend o el catálogo hayan adoptado el
-    contexto; esa evidencia pertenece al análisis de cookies/storage/requests.
-    """
-
     normalized = _clean_label(city_name)
     if normalized is None:
         raise LocationControlResolutionError("target_city_name_invalid")
-
     try:
         header = resolve_location_selector(page)
     except LocationControlResolutionError:
         header = None
-
     visible_location = header.visible_location if header is not None else None
     if visible_location is not None and visible_location.casefold() != normalized.casefold():
         raise LocationControlResolutionError("visible_location_mismatch")
-
     structural = _structural_city_button(page, normalized)
     if structural is not None:
         if structural.state != CITY_STATE_SELECTED:
             raise LocationControlResolutionError("target_city_not_selected")
         return visible_location or normalized
-
     if visible_location is not None:
         return visible_location
-
     raise LocationControlResolutionError("target_city_selection_unverified")
 
 
 def _visible_native_select(parent_select: Any) -> bool:
-    """Acepta options nativos sólo cuando su ``select`` está presentado.
-
-    Playwright puede considerar invisibles los elementos ``option`` de un select
-    nativo aun cuando el propio ``select`` sí sea interactivo. Por eso la
-    visibilidad se decide en el contenedor. Un select duplicado oculto o fuera del
-    viewport no debe competir con el control realmente presentado al usuario.
-    """
-
     try:
         return parent_select.count() == 1 and _is_presented_in_viewport(parent_select)
     except Exception:
         return False
 
 
-def _visible_role_matches(scope: Any, *, role: str, exact_name: re.Pattern[str]) -> list[Any]:
+def _visible_role_matches(
+    scope: Any, *, role: str, exact_name: re.Pattern[str]
+) -> list[Any]:
     matches = scope.get_by_role(role, name=exact_name)
     visible: list[Any] = []
     for index in range(matches.count()):
         candidate = matches.nth(index)
         try:
             if role == "button" and _has_css_class(candidate, LOCATION_SELECTOR_CLASS):
-                # El botón del encabezado muestra la ciudad actual pero no es una
-                # opción del modal. Nunca debe competir con el control que cambia
-                # realmente la ciudad.
                 continue
             parent_select = candidate.locator("xpath=ancestor::select[1]")
             if role == "option":
@@ -460,27 +491,21 @@ def _visible_role_matches(scope: Any, *, role: str, exact_name: re.Pattern[str])
                 visible.append(candidate)
         except Exception:
             continue
-    return _collapse_nested_presented_items(visible)
+    return _collapse_overlapping_presented_items(
+        _collapse_nested_presented_items(visible)
+    )
 
 
 def _city_modal_scope(page: Any, exact_name: re.Pattern[str]) -> Any:
-    """Acota la búsqueda al modal visual realmente presentado.
-
-    La captura aportada por el usuario muestra el prompt exacto
-    ``¿Desde qué ciudad nos visita?``. Si ese prompt cruza el viewport, se toma el
-    menor ancestro que además contiene una opción exacta presentada para la ciudad
-    objetivo. Playwright puede devolver tanto un contenedor como su descendiente
-    para el mismo texto exacto; esos matches anidados se colapsan al nodo más
-    específico. Dos prompts en ramas DOM distintas continúan fallando cerrado.
-    """
-
     try:
         raw_prompts = _presented_items(page.get_by_text(CITY_MODAL_PROMPT_PATTERN))
     except Exception:
         return page
     if not raw_prompts:
         return page
-    prompts = _collapse_nested_presented_items(raw_prompts)
+    prompts = _collapse_overlapping_presented_items(
+        _collapse_nested_presented_items(raw_prompts)
+    )
     if len(prompts) != 1:
         raise LocationControlResolutionError(
             "target_city_not_unique",
@@ -509,10 +534,6 @@ def _city_modal_scope(page: Any, exact_name: re.Pattern[str]) -> Any:
             except Exception:
                 continue
         scope = parent
-
-    # El modal ya está identificado físicamente pero todavía no presenta una opción
-    # interactiva; el bucle exterior puede volver a sondear durante la ventana
-    # acotada de readiness.
     raise LocationControlResolutionError(
         "target_city_not_found",
         diagnostic={"stage": "prompt_scope", "candidate_count": len(prompts)},
@@ -532,15 +553,12 @@ def _usable_labels(options: Any, *, require_visible: bool) -> tuple[str, ...]:
 
 
 def _option_container_labels(option: Any) -> tuple[str, ...] | None:
-    """Conserva ciudades hermanas sólo en contenedores inequívocos de options."""
-
     try:
         parent = option.locator("xpath=ancestor::select[1]")
     except Exception:
         parent = None
     if parent is not None and parent.count() == 1:
         return _usable_labels(parent.locator("option"), require_visible=False)
-
     try:
         listbox = option.locator("xpath=ancestor::*[@role='listbox'][1]")
     except Exception:
@@ -551,8 +569,6 @@ def _option_container_labels(option: Any) -> tuple[str, ...] | None:
 
 
 def _radio_scope_labels(scope: Any) -> tuple[str, ...] | None:
-    """Conserva sólo ciudades hermanas presentadas cuando el modal usa radios."""
-
     try:
         radios = scope.get_by_role("radio")
     except Exception:
@@ -575,7 +591,6 @@ def _resolve_exact_city_control_once(page: Any, normalized: str) -> ResolvedCity
 
     exact = re.compile(rf"^{re.escape(normalized)}$", re.I)
     scope = _city_modal_scope(page, exact)
-
     for role in CITY_CONTROL_ROLES:
         candidates = _visible_role_matches(scope, role=role, exact_name=exact)
         if not candidates:
@@ -590,7 +605,6 @@ def _resolve_exact_city_control_once(page: Any, normalized: str) -> ResolvedCity
                     "effective_count": len(candidates),
                 },
             )
-
         locator = candidates[0]
         if role == "option":
             labels = _option_container_labels(locator)
@@ -609,43 +623,18 @@ def _resolve_exact_city_control_once(page: Any, normalized: str) -> ResolvedCity
 
 
 def _wait_for_next_city_probe(page: Any) -> None:
-    """Espera un intervalo acotado sin convertir errores de DOM en autoridad."""
-
     try:
         page.wait_for_timeout(CITY_CONTROL_READY_POLL_MS)
     except Exception:
-        # Dobles de prueba sin reloj Playwright siguen pudiendo ejercitar el
-        # contrato de resolución; en browser real la espera sí consume el intervalo.
         return
 
 
 def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl:
-    """Resuelve la opción visual exacta de ciudad tras abrir el modal.
-
-    Primero se usa el contrato estructural confirmado para La Colonia:
-    ``.cont-btn-ciudad`` con botones ``.btn-ciudad-selected`` y
-    ``.btn-ciudad-noselected``. El nombre visible exacto determina la ciudad y la
-    clase estructural determina si corresponde hacer click o un no-op seguro.
-
-    Si esa estructura no está presentada, se conserva el fallback genérico. Si está
-    presentado el prompt ``¿Desde qué ciudad nos visita?`` la búsqueda se acota al
-    menor ancestro que contiene la opción objetivo. Dentro de ese scope se usan roles
-    por especificidad semántica: ``radio`` > ``option`` > ``menuitem`` > ``button``.
-    Un radio único puede coexistir con una superficie button decorativa del mismo
-    gesto visual sin generar un falso ``target_city_not_unique``; dos candidatos del
-    mismo rol realmente presentados siguen fallando cerrado salvo que sean
-    estrictamente ancestro/descendiente del mismo control accesible.
-
-    El botón de encabezado ``btn-modal-selector`` se excluye siempre. En selects
-    nativos sólo compiten options cuyo ``select`` ancestro está presentado en el
-    viewport. La ausencia temporal puede reintentarse durante tres segundos; una
-    ambigüedad real falla de inmediato.
-    """
+    """Resuelve ciudad exacta con readiness acotada y deduplicación visual segura."""
 
     normalized = _clean_label(city_name)
     if normalized is None:
         raise LocationControlResolutionError("target_city_name_invalid")
-
     wait_count = CITY_CONTROL_READY_TIMEOUT_MS // CITY_CONTROL_READY_POLL_MS
     for attempt in range(wait_count + 1):
         try:
@@ -654,23 +643,14 @@ def resolve_exact_city_control(page: Any, city_name: str) -> ResolvedCityControl
             if str(exc) != "target_city_not_found" or attempt == wait_count:
                 raise
             _wait_for_next_city_probe(page)
-
     raise AssertionError("unreachable")
 
 
 def activate_city_control(control: ResolvedCityControl, city_name: str) -> bool:
-    """Activa sólo cuando hace falta; devuelve si realizó una interacción.
-
-    El contrato estructural confirmado permite un no-op determinista cuando la ciudad
-    ya está seleccionada. Los fallbacks genéricos conservan el comportamiento previo
-    porque no exponen un estado estructural confiable.
-    """
-
     if control.state == CITY_STATE_SELECTED:
         return False
     if control.state not in {None, CITY_STATE_UNSELECTED}:
         raise LocationControlResolutionError("target_city_state_invalid")
-
     try:
         parent = control.locator.locator("xpath=ancestor::select[1]")
     except Exception:
