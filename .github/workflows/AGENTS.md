@@ -7,8 +7,8 @@ Estas reglas adicionales aplican únicamente al trabajar con workflows identific
 - No modifiques mecanismos trusted/privileged sin revisión de seguridad. Nunca ejecutes código no confiable del PR head con credenciales o permisos privilegiados.
 - PR #17 y PR #7 están integrados en `main`; cualquier texto histórico que diga que siguen abiertos, draft o congelados es estado obsoleto y no gobierna el repositorio actual.
 - `precios-supermercados-sps/.automation/la-colonia-live-command.json` y cualquier solicitud histórica que contenga no equivalen a autorización.
-- `SPS-context-and-root-facets-001`, `LC-location-binding-336`, `LC-location-binding-331` y `LC-location-binding-332` están consumidas; `SPS-context-and-root-facets-002` no está autorizada; no hay autorizaciones live activas.
-- Los markers históricos de `LC-location-binding-336`, `LC-location-binding-331` y `LC-location-binding-332` no conceden permiso para repetir radiografías ni para otra operación.
+- `SPS-context-and-root-facets-001`, `LC-location-binding-336`, `LC-location-binding-331`, `LC-location-binding-332` y `LC-location-binding-333` están consumidas; `SPS-context-and-root-facets-002` no está autorizada; no hay autorizaciones live activas.
+- Los markers históricos de `LC-location-binding-336`, `LC-location-binding-331`, `LC-location-binding-332` y `LC-location-binding-333` no conceden permiso para repetir radiografías ni para otra operación.
 - Sin autorización explícita están prohibidos full crawl, `baseline500-003`, `validation500`, facet discovery live y cualquier otro tráfico nuevo hacia La Colonia.
 - Todos los jobs capaces de producir tráfico live deben permanecer fail-closed hasta que exista autorización humana nueva y se cierre la frontera productiva correspondiente.
 - Todo cambio de workflow requiere revisión explícita de seguridad y validación estática/CI offline cuando corresponda.

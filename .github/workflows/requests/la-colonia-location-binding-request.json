@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "precios-sps-la-colonia-location-binding-request/v1",
-  "authorizationId": "LC-location-binding-333",
-  "requestSequence": 1,
-  "targetCity": "San Pedro Sula",
-  "maxLogicalActions": 4,
-  "authority": false
-}
