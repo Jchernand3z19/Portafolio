@@ -1,6 +1,6 @@
 {
   "schemaVersion": "precios-sps-standing-public-readonly-location-binding/v1",
-  "requestSequence": 3,
+  "requestSequence": 4,
   "standingAuthorizationAt": "2026-08-23T21:02:02Z",
   "targetUrl": "https://www.lacolonia.com/",
   "targetCity": "San Pedro Sula",
