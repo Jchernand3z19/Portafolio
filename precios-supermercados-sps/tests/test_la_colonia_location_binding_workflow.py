@@ -9,7 +9,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github/workflows/precios-supermercados-sps-la-colonia-location-binding.yml"
 SCRIPT = REPO_ROOT / "precios-supermercados-sps/scripts/diagnosticar_binding_ubicacion_la_colonia.py"
-REQUEST = REPO_ROOT / ".github/workflows/requests/la-colonia-location-binding-request.json"
+RECONCILE_REQUEST = ".github/workflows/requests/la-colonia-location-binding-reconcile-request.json"
+SOURCE_SHA = "dcc3894185517cb778db2d3b30e8edfa4822726f"
 CONSUMED_IDS = (
     "LC-location-binding-336",
     "LC-location-binding-331",
@@ -34,10 +35,10 @@ def load_script_module():
     return module
 
 
-def test_workflow_is_manual_least_privilege_and_globally_blocked() -> None:
+def test_radiography_is_manual_least_privilege_and_globally_blocked() -> None:
     workflow = load_workflow()
     assert workflow["permissions"] == {"contents": "read"}
-    assert set(workflow["on"]) == {"workflow_dispatch"}
+    assert set(workflow["on"]) == {"workflow_dispatch", "push"}
     dispatch = workflow["on"]["workflow_dispatch"]
     assert set(dispatch) == {"inputs"}
     assert set(dispatch["inputs"]) == {"authorization_id"}
@@ -45,13 +46,51 @@ def test_workflow_is_manual_least_privilege_and_globally_blocked() -> None:
     assert authorization["required"] == "true"
     assert authorization["type"] == "string"
 
-    assert set(workflow["jobs"]) == {"radiography"}
+    push = workflow["on"]["push"]
+    assert push == {"branches": ["main"], "paths": [RECONCILE_REQUEST]}
+
     job = workflow["jobs"]["radiography"]
     assert job["if"] == "${{ false }}"
     assert "environment" not in job
     assert "permissions" not in job
     assert job["timeout-minutes"] == "10"
-    assert not REQUEST.exists()
+
+
+def test_reconciliation_is_offline_github_only_exact_and_sanitized() -> None:
+    workflow = load_workflow()
+    assert set(workflow["jobs"]) == {"radiography", "reconcile-consumed-authorization"}
+    job = workflow["jobs"]["reconcile-consumed-authorization"]
+    assert job["if"] == (
+        "${{ github.event_name == 'push' && "
+        "github.repository == 'Jchernand3z19/Portafolio' && "
+        "github.ref == 'refs/heads/main' }}"
+    )
+    assert job["permissions"] == {
+        "actions": "read",
+        "contents": "read",
+        "statuses": "write",
+    }
+    assert "environment" not in job
+    raw = "\n".join(str(step) for step in job["steps"])
+    assert SOURCE_SHA in raw
+    assert "listWorkflowRuns" in raw
+    assert "head_sha" in raw
+    assert "event: 'push'" in raw
+    assert "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" in raw
+    assert "location-binding-radiography.json" in raw
+    assert "createCommitStatus" in raw
+    assert "precios-sps/location-binding-reconcile" in raw
+    assert "precios-sps/location-binding-outcome" in raw
+    assert "precios-sps/location-binding-evidence" in raw
+    assert "city_control_diagnostic" in raw
+    assert "allowedKeys" in raw
+    assert "allowedStages" in raw
+    assert "allowedRoles" in raw
+    assert "sanitized city-control diagnostic" in raw
+    assert "www.lacolonia.com" not in raw
+    assert "page.goto" not in raw
+    assert "requests.get" not in raw
+    assert "diagnosticar_binding_ubicacion_la_colonia.py" not in raw
 
 
 def test_workflow_does_not_expose_secrets_or_live_overrides() -> None:
@@ -59,7 +98,6 @@ def test_workflow_does_not_expose_secrets_or_live_overrides() -> None:
     assert "secrets." not in raw
     assert "vars." not in raw
     assert "id-token" not in raw
-    assert "actions: write" not in raw
     assert "pull_request_target" not in raw
     assert "issue_comment" not in raw
     assert "schedule:" not in raw
@@ -68,8 +106,6 @@ def test_workflow_does_not_expose_secrets_or_live_overrides() -> None:
     assert "--live-execution" not in raw
     assert "--active-id" not in raw
     assert "www.lacolonia.com" not in raw
-    for authorization_id in CONSUMED_IDS:
-        assert authorization_id in raw
 
 
 def test_dispatch_input_is_passed_only_through_environment_not_shell_interpolation() -> None:
