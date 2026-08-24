@@ -26,6 +26,8 @@ Los PRs `#270`–`#271` materializaron una autorización humana transitoria para
 
 El PR `#274` preparó un runbook productivo de Cloudflare, eliminó estado mutable obsoleto del README del edge y dejó explícito que el despliegue de infraestructura es una frontera separada de cualquier autorización live. Durante esa revisión se detectaron dos deudas offline adicionales: el preflight Cloudflare todavía conserva el blocker histórico `sps_context_unconfirmed` aunque este documento y la evidencia canónica ya tienen `SPS_TECHNICAL_CONTEXT=CONFIRMED`; además, `CloudflareDeploymentEvidence` continúa documentada en código como evidencia caller-controlled mientras no exista un adapter autenticado que haga read-back de la API real de Cloudflare. La declaración anterior `OFFLINE APPLICATION CODE = none known` queda por tanto invalidada y se corrige en este corte antes de modificar código.
 
+Durante la revisión de dirección del proyecto se detectó además que el proceso estaba optimizando seguridad/arquitectura como si cada prueba fuera ya una operación productiva. `AGENTS.md` ahora incorpora una política explícita **MVP primero**: ninguna nueva capa, adapter, verifier, preflight, workflow, tabla, documento o runbook puede crearse por previsión; debe desbloquear directamente extracción, binding SPS, validación, persistencia segura o una obligación de seguridad que no tenga una solución más simple. El objetivo inmediato vuelve a ser producir el primer catálogo real/verificable de La Colonia para SPS. PRs, conteo de tests y cantidad de capas dejan de tratarse como métricas de progreso.
+
 La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** para el alcance exacto solicitado.
 
 ## Binding técnico de San Pedro Sula
@@ -273,16 +275,17 @@ El observador confirmó sobre SHA `7a0df3c3971a4021862855166e527827035a3ea2`:
 ## Fronteras pendientes
 
 ```text
-OFFLINE APPLICATION CODE = stale sps_context_unconfirmed blocker + authenticated Cloudflare deployment/read-back adapter
-EXTERNAL PLATFORM CONFIGURATION = Cloudflare product worker + la-colonia-live vars
+MVP PRIORITY = first real/verifiable La Colonia SPS catalog
+OFFLINE APPLICATION CODE = stale sps_context_unconfirmed blocker + authenticated Cloudflare deployment/read-back adapter only if they truly block the chosen MVP path
+EXTERNAL PLATFORM CONFIGURATION = Cloudflare product worker + la-colonia-live vars only if required by the chosen MVP path
 LIVE EVIDENCE = actual regionId placement still unobserved
 ```
 
-La deuda offline del preflight debe corregirse antes de usar ese assessment como criterio de readiness: `SPS_TECHNICAL_CONTEXT=CONFIRMED` y `technical_binding_confirmed=true` no son compatibles con conservar `sps_context_unconfirmed` como blocker obligatorio. La corrección no debe eliminar `human_live_authorization_required` ni `production_authority_not_established`, ni convertir readiness técnica en autorización comercial.
+La deuda offline del preflight debe corregirse si ese assessment sigue formando parte del camino mínimo elegido: `SPS_TECHNICAL_CONTEXT=CONFIRMED` y `technical_binding_confirmed=true` no son compatibles con conservar `sps_context_unconfirmed` como blocker obligatorio. La corrección no debe eliminar `human_live_authorization_required` ni `production_authority_not_established`, ni convertir readiness técnica en autorización comercial.
 
-La atestación de infraestructura también debe dejar de depender de un `CloudflareDeploymentEvidence` caller-controlled antes de declararse productiva. Esa capa puede implementarse y probarse offline; las credenciales reales sólo serán necesarias para ejecutar su read-back contra la cuenta de Cloudflare.
+La atestación productiva de infraestructura debe dejar de depender de un `CloudflareDeploymentEvidence` caller-controlled **antes de declarar una ruta productiva**, pero no debe convertirse automáticamente en blocker de una prueba read-only/no autoritativa si el primer catálogo puede obtenerse de manera más simple conservando SPS verificable, límites de tráfico y separación explícita entre evidencia de prueba y datos aceptados.
 
-No se debe pedir ni ejecutar una nueva autorización live hasta que las deudas offline anteriores estén cerradas y la infraestructura Cloudflare productiva y las variables del Environment hayan sido configuradas y verificadas sin tráfico a La Colonia.
+El siguiente trabajo técnico debe escoger y ejecutar el camino mínimo hacia el primer catálogo real, no continuar profundizando Cloudflare por inercia. Cualquier pieza productiva no indispensable para esa prueba se difiere.
 
 Mientras tanto deben permanecer:
 
