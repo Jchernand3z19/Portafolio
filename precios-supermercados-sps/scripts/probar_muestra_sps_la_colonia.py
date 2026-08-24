@@ -16,7 +16,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -45,6 +45,7 @@ MVP_LOCATION_ID = "la_colonia_sps"
 ALLOWED_SAMPLE_SIZES = (5, 10)
 CAPTURE_TIMEOUT_SECONDS = 15.0
 CITY_VERIFY_TIMEOUT_SECONDS = 5.0
+MINIMUM_ACTION_DELAY_MS = 1_500
 
 _FORBIDDEN_ARTIFACT_KEYS = frozenset(
     {
@@ -93,6 +94,56 @@ def _product_search_payload(value: Any) -> bool:
         isinstance(products, Sequence)
         and not isinstance(products, (str, bytes))
         and any(isinstance(product, Mapping) for product in products)
+    )
+
+
+def _request_variables(request: Any) -> Mapping[str, Any]:
+    """Lee variables sólo en memoria para distinguir el catálogo de otros widgets."""
+
+    try:
+        payload = request.post_data_json
+    except Exception:
+        payload = None
+    if isinstance(payload, Mapping):
+        variables = payload.get("variables")
+        if isinstance(variables, Mapping):
+            return variables
+        if isinstance(variables, str):
+            try:
+                decoded = json.loads(variables)
+            except json.JSONDecodeError:
+                decoded = None
+            if isinstance(decoded, Mapping):
+                return decoded
+    try:
+        raw = parse_qs(urlsplit(str(request.url)).query).get("variables", [None])[0]
+        decoded = json.loads(raw) if raw else None
+    except (TypeError, ValueError, json.JSONDecodeError):
+        decoded = None
+    return decoded if isinstance(decoded, Mapping) else {}
+
+
+def _is_catalog_product_search_response(response: Any) -> bool:
+    try:
+        parts = urlsplit(str(response.url))
+        if (
+            (parts.hostname or "").casefold() != TARGET_HOST
+            or parts.path != "/_v/segment/graphql/v1"
+        ):
+            return False
+        variables = _request_variables(response.request)
+    except Exception:
+        return False
+    if str(variables.get("query") or "").casefold() == "supermercado":
+        return True
+    facets = variables.get("selectedFacets")
+    if not isinstance(facets, Sequence) or isinstance(facets, (str, bytes)):
+        return False
+    return any(
+        isinstance(facet, Mapping)
+        and str(facet.get("key") or "").casefold() == "category-1"
+        and str(facet.get("value") or "").casefold() == "supermercado"
+        for facet in facets
     )
 
 
@@ -241,6 +292,7 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
             control = resolve_exact_city_control(page, TARGET_CITY)
             activate_city_control(control, TARGET_CITY)
             _wait_for_city(page)
+            page.wait_for_timeout(MINIMUM_ACTION_DELAY_MS)
 
             def observe(response: Any) -> None:
                 if captured:
@@ -252,7 +304,7 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
                     if int(response.status) in {403, 429}:
                         blocked_statuses.append(int(response.status))
                         return
-                    if parts.path != "/_v/segment/graphql/v1":
+                    if not _is_catalog_product_search_response(response):
                         return
                     payload = response.json()
                     if _product_search_payload(payload):
@@ -277,7 +329,7 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
                     raise MvpSampleError("blocked_or_login_surface")
                 page.wait_for_timeout(250)
             if not captured:
-                raise MvpSampleError("product_search_response_not_observed")
+                raise MvpSampleError("catalog_product_search_response_not_observed")
 
             _wait_for_city(page)
             source_url, payload = captured[0]
