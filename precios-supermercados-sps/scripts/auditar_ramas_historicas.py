@@ -15,6 +15,10 @@ El script no borra, fusiona ni modifica ramas. Usa sólo git local y, cuando se
 proporciona GITHUB_TOKEN, la API de GitHub para consultar PRs del head exacto.
 Las decisiones manuales se cargan desde un archivo versionado y sólo pueden
 reclasificar candidatos UNIQUE_UNMERGED del snapshot exacto de main auditado.
+
+``--inspect-only`` conserva la clasificación automática antes de aplicar
+excepciones manuales. Sirve para producir evidencia revisable sobre un snapshot
+nuevo de ``main`` sin rebajar el cierre fail-closed del modo normal.
 """
 
 from __future__ import annotations
@@ -389,12 +393,29 @@ def _markdown(rows: list[BranchAudit], *, main_sha: str) -> str:
     return "\n".join(lines)
 
 
+def _write_outputs(
+    rows: list[BranchAudit],
+    *,
+    main_sha: str,
+    json_output: Path,
+    markdown_output: Path,
+) -> None:
+    json_output.write_text(
+        json.dumps([asdict(row) for row in rows], indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    markdown = _markdown(rows, main_sha=main_sha)
+    markdown_output.write_text(markdown, encoding="utf-8")
+    print(markdown)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--main-ref", default="origin/main")
     parser.add_argument("--remote-prefix", default="origin")
     parser.add_argument("--pattern", default="precios-sps")
     parser.add_argument("--overrides", type=Path, default=DEFAULT_OVERRIDES)
+    parser.add_argument("--inspect-only", action="store_true")
     parser.add_argument("--json-output", type=Path, default=Path("branch-audit.json"))
     parser.add_argument("--markdown-output", type=Path, default=Path("branch-audit.md"))
     args = parser.parse_args()
@@ -406,6 +427,15 @@ def main() -> int:
         raise AuditError(f"no remote branches matched {args.pattern!r}")
 
     rows = [_classify(args.main_ref, args.remote_prefix, branch) for branch in branches]
+    if args.inspect_only:
+        _write_outputs(
+            rows,
+            main_sha=main_sha,
+            json_output=args.json_output,
+            markdown_output=args.markdown_output,
+        )
+        return 0
+
     overrides = _load_overrides(args.overrides, expected_main_sha=main_sha)
     rows = _apply_overrides(rows, overrides)
     unresolved = [row.branch for row in rows if row.category == "UNIQUE_UNMERGED"]
@@ -415,13 +445,12 @@ def main() -> int:
             + ", ".join(unresolved)
         )
 
-    args.json_output.write_text(
-        json.dumps([asdict(row) for row in rows], indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    _write_outputs(
+        rows,
+        main_sha=main_sha,
+        json_output=args.json_output,
+        markdown_output=args.markdown_output,
     )
-    markdown = _markdown(rows, main_sha=main_sha)
-    args.markdown_output.write_text(markdown, encoding="utf-8")
-    print(markdown)
     return 0
 
 
