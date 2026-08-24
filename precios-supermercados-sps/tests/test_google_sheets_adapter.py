@@ -13,6 +13,7 @@ from precios_supermercados.google_sheets_adapter import (
     snapshot_row_counts,
 )
 from precios_supermercados.google_sheets_plan import parse_spreadsheet_metadata
+from precios_supermercados.storage_contract import ACTIVE_STORAGE_TABLE_SPECS
 from precios_supermercados.tabular_persistence import (
     CFG_SUPERMARKETS,
     FACT_SCRAPE_RUNS,
@@ -95,9 +96,15 @@ class FakeTransport:
         return {"spreadsheetId": self._spreadsheet_id, "replies": []}
 
 
-def test_managed_ranges_only_include_existing_project_tabs():
+def test_managed_ranges_only_include_existing_active_project_tabs():
     metadata = parse_spreadsheet_metadata(
-        metadata_payload("Sheet1", "cfg_supermarkets", "fact_scrape_runs")
+        metadata_payload(
+            "Sheet1",
+            "cfg_supermarkets",
+            "dim_products",
+            "map_source_products",
+            "fact_scrape_runs",
+        )
     )
 
     result = managed_existing_ranges(metadata)
@@ -123,6 +130,18 @@ def test_parse_empty_managed_tab_is_valid_uninitialized_table():
     )
 
     assert parsed["cfg_supermarkets"] == ()
+
+
+def test_deferred_table_is_not_accepted_as_managed_physical_input():
+    payload = {
+        "spreadsheetId": SPREADSHEET_ID,
+        "valueRanges": [
+            {"range": "dim_products!A1:L100"},
+        ],
+    }
+
+    with pytest.raises(GoogleSheetsAdapterError, match="managed_table_unknown"):
+        parse_managed_values_payload(("dim_products",), payload)
 
 
 def test_parse_exact_header_and_integral_google_number():
@@ -274,7 +293,7 @@ def test_spreadsheet_id_mismatch_is_rejected():
         )
 
 
-def test_hydration_restores_managed_rows_and_empty_tables():
+def test_hydration_restores_active_rows_and_reports_only_physical_counts():
     row = row_for(
         "cfg_supermarkets",
         supermarket_id="demo",
@@ -290,7 +309,9 @@ def test_hydration_restores_managed_rows_and_empty_tables():
     assert store.row("cfg_supermarkets", "demo")["supermarket_name"] == "Demo"
     assert counts["cfg_supermarkets"] == 1
     assert counts["fact_offers_current"] == 0
-    assert set(counts) == set(TABLE_SPECS)
+    assert set(counts) == set(ACTIVE_STORAGE_TABLE_SPECS)
+    assert store.count("dim_products") == 0
+    assert store.count("map_source_products") == 0
 
 
 def test_adapter_initializes_new_workbook_without_reading_missing_tabs():
@@ -314,7 +335,7 @@ def test_adapter_initializes_new_workbook_without_reading_missing_tabs():
     assert result.updated == 0
     assert result.initial_row_counts["cfg_supermarkets"] == 0
     assert result.final_row_counts["cfg_supermarkets"] == 1
-    assert result.managed_sheet_count == len(TABLE_SPECS)
+    assert result.managed_sheet_count == len(ACTIVE_STORAGE_TABLE_SPECS)
 
     requests = transport.batch_update_calls[0]["requests"]
     added_titles = {
@@ -322,7 +343,22 @@ def test_adapter_initializes_new_workbook_without_reading_missing_tabs():
         for request in requests
         if "addSheet" in request
     }
-    assert added_titles == set(TABLE_SPECS)
+    assert added_titles == set(ACTIVE_STORAGE_TABLE_SPECS)
+
+
+def test_adapter_rejects_batch_for_deferred_logical_table_before_remote_read():
+    transport = FakeTransport(metadata=metadata_payload("Sheet1"))
+    adapter = GoogleSheetsWorkbookAdapter(transport)
+
+    with pytest.raises(
+        GoogleSheetsAdapterError,
+        match="tabular_batch_contains_deferred_table",
+    ):
+        adapter.apply(TabularBatch(rows={"dim_products": ()}))
+
+    assert transport.metadata_calls == 0
+    assert transport.batch_get_calls == []
+    assert transport.batch_update_calls == []
 
 
 def test_adapter_reads_existing_snapshot_then_upserts_without_losing_other_row():
@@ -426,7 +462,7 @@ def test_immutable_run_conflict_aborts_before_remote_write():
     assert transport.batch_update_calls == []
 
 
-def test_existing_managed_tab_with_bad_header_aborts_before_remote_write():
+def test_existing_active_tab_with_bad_header_aborts_before_remote_write():
     bad_values = [list(CFG_SUPERMARKETS.columns)]
     bad_values[0][0] = "id"
     transport = FakeTransport(
