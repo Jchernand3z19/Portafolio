@@ -5,6 +5,7 @@ import {
   sha256Hex,
   validateLaColoniaGetUrl,
 } from "./core.mjs";
+import { canonicalEdgeTimestamp } from "./canonical-time.mjs";
 import { MAX_REPLAY_BODY_BYTES } from "./durable-store.mjs";
 import { validateAndApplyCatalogLocationContext } from "./catalog-location-context.mjs";
 import { buildContextBoundCatalogReceiptPayload } from "./catalog-context-provenance.mjs";
@@ -292,8 +293,8 @@ export async function executeContextBoundCatalogRequest(input, dependencies) {
       ...collector,
       execution: exactText(dependencies.executionId(), "collector_execution_invalid", 256),
     },
-    physicalStartedAt: physicalStartedAt.toISOString().replace(".000Z", "Z"),
-    responseCompletedAt: responseCompletedAt.toISOString().replace(".000Z", "Z"),
+    physicalStartedAt: canonicalEdgeTimestamp(physicalStartedAt),
+    responseCompletedAt: canonicalEdgeTimestamp(responseCompletedAt),
     rawResponseSha256,
     responseBodyBytes: rawBody.byteLength,
   });
