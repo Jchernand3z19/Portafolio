@@ -7,8 +7,10 @@ on:
       - main
     paths:
       - "precios-supermercados-sps/scripts/auditar_ramas_historicas.py"
-      - "precios-supermercados-sps/scripts/resumir_delta_auditoria_ramas.py"
+      - "precios-supermercados-sps/scripts/auditar_ramas_historicas_v2.py"
+      - "precios-supermercados-sps/scripts/resumir_delta_auditoria_ramas_v2.py"
       - "precios-supermercados-sps/docs/audits/precios-sps-historical-branch-overrides.json"
+      - "precios-supermercados-sps/docs/audits/precios-sps-historical-branch-decisions-v2.json"
       - ".github/workflows/precios-supermercados-sps-historical-branch-audit.yml"
 
 permissions:
@@ -40,7 +42,7 @@ jobs:
       - name: Refrescar inventario remoto de ramas
         run: git fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'
 
-      - name: Generar snapshot automático antes de overrides
+      - name: Generar snapshot automático antes de decisiones v2
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
@@ -49,22 +51,25 @@ jobs:
           --json-output branch-audit-auto.json
           --markdown-output branch-audit-auto.md
 
-      - name: Resumir delta contra decisiones previas
+      - name: Resumir delta contra decisiones v2
         run: |
           CURRENT_MAIN="$(git rev-parse origin/main)"
-          python precios-supermercados-sps/scripts/resumir_delta_auditoria_ramas.py \
+          python precios-supermercados-sps/scripts/resumir_delta_auditoria_ramas_v2.py \
             --automatic-audit branch-audit-auto.json \
-            --overrides precios-supermercados-sps/docs/audits/precios-sps-historical-branch-overrides.json \
+            --decisions precios-supermercados-sps/docs/audits/precios-sps-historical-branch-decisions-v2.json \
+            --legacy-overrides precios-supermercados-sps/docs/audits/precios-sps-historical-branch-overrides.json \
             --current-main "$CURRENT_MAIN" \
-            --output branch-audit-delta.md
+            --output branch-audit-delta-v2.md
 
-      - name: Exigir cierre versionado del snapshot
+      - name: Exigir cierre versionado del snapshot v2
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
-          python precios-supermercados-sps/scripts/auditar_ramas_historicas.py
-          --json-output branch-audit-strict.json
-          --markdown-output branch-audit-strict.md
+          python precios-supermercados-sps/scripts/auditar_ramas_historicas_v2.py
+          --decisions precios-supermercados-sps/docs/audits/precios-sps-historical-branch-decisions-v2.json
+          --legacy-overrides precios-supermercados-sps/docs/audits/precios-sps-historical-branch-overrides.json
+          --json-output branch-audit-strict-v2.json
+          --markdown-output branch-audit-strict-v2.md
 
       - name: Conservar evidencia sanitizada
         if: ${{ always() }}
@@ -74,8 +79,8 @@ jobs:
           path: |
             branch-audit-auto.json
             branch-audit-auto.md
-            branch-audit-delta.md
-            branch-audit-strict.json
-            branch-audit-strict.md
+            branch-audit-delta-v2.md
+            branch-audit-strict-v2.json
+            branch-audit-strict-v2.md
           if-no-files-found: error
           retention-days: 30

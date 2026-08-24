@@ -1,0 +1,365 @@
+{
+  "decisions": {
+    "chore/precios-sps-canonical-state-ci": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "chore/precios-sps-canonical-state-ci",
+      "tip_sha": "f9ec249d54fd46949f8efa1b843f628fc336c636",
+      "unique_patch_count": 17
+    },
+    "chore/precios-sps-gate17-verification": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "chore/precios-sps-gate17-verification",
+      "tip_sha": "e258a7b9e8fc71de7452792244c7eaf82cdc25f7",
+      "unique_patch_count": 2
+    },
+    "diag/precios-sps-observability-request-001": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "diag/precios-sps-observability-request-001",
+      "tip_sha": "2a33e721e70e62313de0acdce37615a7a5b5f423",
+      "unique_patch_count": 3
+    },
+    "diag/precios-sps-observability-request-007": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "diag/precios-sps-observability-request-007",
+      "tip_sha": "5f731ba19717505653174cf606377d8419d157e0",
+      "unique_patch_count": 5
+    },
+    "docs/precios-sps-gate17-closed": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "docs/precios-sps-gate17-closed",
+      "tip_sha": "e5c2ca5c4c834496efd69c1d2ab5a7ea893749fb",
+      "unique_patch_count": 3
+    },
+    "docs/precios-sps-productive-collector-boundary": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "docs/precios-sps-productive-collector-boundary",
+      "tip_sha": "c444d07591c0dffe792aac65f5a5fd5b2abf56b0",
+      "unique_patch_count": 2
+    },
+    "docs/precios-sps-project-state": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "docs/precios-sps-project-state",
+      "tip_sha": "d4a41af3924a82e622f7043c12bac35becf64683",
+      "unique_patch_count": 1
+    },
+    "docs/precios-sps-sync-commercial-pricing": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "docs/precios-sps-sync-commercial-pricing",
+      "tip_sha": "735cdc21f977c12032addd25f3bf37d30021ae86",
+      "unique_patch_count": 4
+    },
+    "docs/precios-sps-sync-main-6703fbc": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "docs/precios-sps-sync-main-6703fbc",
+      "tip_sha": "38347a6979e53b7b2ea484b7d3bdc0bf59708f01",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-authenticated-live-preflight": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-authenticated-live-preflight",
+      "tip_sha": "48d11120f270485004b92b3e8ab17ec2d09012e0",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-authenticated-provenance-plan": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-authenticated-provenance-plan",
+      "tip_sha": "204ccb9765d2361722902cf98af0ac09646161ad",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-authenticated-run-manifest": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-authenticated-run-manifest",
+      "tip_sha": "fe080a97660e3e910c07cad362cd495170591d4a",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-authenticated-settings-preflight": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-authenticated-settings-preflight",
+      "tip_sha": "85f0a28cb52d18f13cac72d378414c348c8cb7db",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-catalog-acceptance-readiness": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-catalog-acceptance-readiness",
+      "tip_sha": "df492647bf58ce9c93cfbd88c5d57419d88273ad",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-catalog-edge-runtime": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-catalog-edge-runtime",
+      "tip_sha": "4478d01a287b8a8dd03196dc87e4ea9ae43eba1a",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-catalog-physical-finalizer": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-catalog-physical-finalizer",
+      "tip_sha": "e84217ff292402b298fa6ba4cbf79a289d7b3d66",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-cloudflare-core-offline": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-cloudflare-core-offline",
+      "tip_sha": "e2e521f35a43b3f56bec38cfae0f3f10542c3fcf",
+      "unique_patch_count": 7
+    },
+    "feat/precios-sps-cloudflare-worker-adapter": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-cloudflare-worker-adapter",
+      "tip_sha": "420a7bc5f89624b806b1c104137133689681bf81",
+      "unique_patch_count": 25
+    },
+    "feat/precios-sps-derived-provenance-plan": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-derived-provenance-plan",
+      "tip_sha": "bdde5f6b7714ef6ccbfa53fcb2b46280247c63bf",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-edge-authorization-ledger": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-edge-authorization-ledger",
+      "tip_sha": "f96665d413d972c4f677149d0cb59146b33b23b4",
+      "unique_patch_count": 9
+    },
+    "feat/precios-sps-edge-client-independent-digest": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-edge-client-independent-digest",
+      "tip_sha": "07f28cb905dc5cc937b5fdd4b8785c270899f45f",
+      "unique_patch_count": 3
+    },
+    "feat/precios-sps-edge-python-client": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-edge-python-client",
+      "tip_sha": "87ee37f4cd120e2f6b26063c9cbaa9afab08ec78",
+      "unique_patch_count": 9
+    },
+    "feat/precios-sps-edge-runtime-offline": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-edge-runtime-offline",
+      "tip_sha": "1e0f592c4aaaadadb282aff4bc60fccad60a0d27",
+      "unique_patch_count": 10
+    },
+    "feat/precios-sps-edge-structural-requests": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-edge-structural-requests",
+      "tip_sha": "041655bec1b2c50b39458d207a3d4b1ebccecd20",
+      "unique_patch_count": 4
+    },
+    "feat/precios-sps-finalize-verified-facet-discovery": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-finalize-verified-facet-discovery",
+      "tip_sha": "e17ecb9324a74170091c3432287e6d2c6d0d75c1",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-live-readiness-evidence": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-live-readiness-evidence",
+      "tip_sha": "4fe776daee22705059dd7f43fd53891bbd4d61ec",
+      "unique_patch_count": 4
+    },
+    "feat/precios-sps-observability-controlled-trigger": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "PR #171 fue cerrado explícitamente como supersedido por una rama limpia; PR #172 integró el reemplazo controlado y read-only en main. No recuperar la variante divergente.",
+      "tip_sha": "a15457b92f6b34761685b3ca726c0b574fb094eb",
+      "unique_patch_count": 5
+    },
+    "feat/precios-sps-physical-provenance-contract": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-physical-provenance-contract",
+      "tip_sha": "4a8ecd2d1614a4ea203e176abd8a3c6ac3517995",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-provenance-attestation": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-provenance-attestation",
+      "tip_sha": "1ba1e5a59eac9fc03cf496e91823e1f24d94862e",
+      "unique_patch_count": 5
+    },
+    "feat/precios-sps-provenance-run-manifest": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-provenance-run-manifest",
+      "tip_sha": "68452f1c6d6981b56eab879af73f47b37caa5914",
+      "unique_patch_count": 4
+    },
+    "feat/precios-sps-provider-neutral-provenance": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-provider-neutral-provenance",
+      "tip_sha": "c6f0c87ac9c7193c4ed057a518395c5051f306c8",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-python-canonical-request": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-python-canonical-request",
+      "tip_sha": "ce88de799e7169e1e2ff0ad4767198d670865398",
+      "unique_patch_count": 5
+    },
+    "feat/precios-sps-real-price-reduction": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-real-price-reduction",
+      "tip_sha": "5e33fd63bada26e5efbc103b143547a03bf544b4",
+      "unique_patch_count": 11
+    },
+    "feat/precios-sps-structural-body-validation": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-structural-body-validation",
+      "tip_sha": "f80eac2880ce579c132a69b5a53d4f21ed6ca4c3",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-structural-discovery-coordinator": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-structural-discovery-coordinator",
+      "tip_sha": "464bdfed12e6be5ab2e666ba2fe42f1ff1a2fc3e",
+      "unique_patch_count": 1
+    },
+    "feat/precios-sps-structural-gateway-client": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-structural-gateway-client",
+      "tip_sha": "d54bf6bd678477aa0a971440f1da05e87c695c69",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-structural-observability-adapter": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-structural-observability-adapter",
+      "tip_sha": "cfcd0fce1725035e206a5436897fb85d48835e84",
+      "unique_patch_count": 4
+    },
+    "feat/precios-sps-structural-provenance": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-structural-provenance",
+      "tip_sha": "80d824ea73c3ace9b7be1c8b4277ef8198679af8",
+      "unique_patch_count": 5
+    },
+    "feat/precios-sps-structural-run-manifest": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-structural-run-manifest",
+      "tip_sha": "978a0f3c5b78658730b932792d3363334159b478",
+      "unique_patch_count": 3
+    },
+    "feat/precios-sps-structural-trace-context": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-structural-trace-context",
+      "tip_sha": "a5c8025facc455b00e8cc7ad831661d298b201a3",
+      "unique_patch_count": 3
+    },
+    "feat/precios-sps-structural-trace-evidence": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-structural-trace-evidence",
+      "tip_sha": "a6ba4ca5cc8ba5344736d1c57c3520bf3666e05d",
+      "unique_patch_count": 4
+    },
+    "feat/precios-sps-structural-worker-runtime": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-structural-worker-runtime",
+      "tip_sha": "c5e6d67300737e103ee6d8e4872bfee92ad294bd",
+      "unique_patch_count": 8
+    },
+    "feat/precios-sps-verified-catalog-transport": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-verified-catalog-transport",
+      "tip_sha": "388a4ea1a50e00543b4fef1a2ab2c1d369d695a8",
+      "unique_patch_count": 2
+    },
+    "feat/precios-sps-verified-facet-runtime-transport": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-verified-facet-runtime-transport",
+      "tip_sha": "2782c69f22862d3a1ca4168c5a9b88861d669629",
+      "unique_patch_count": 3
+    },
+    "feat/precios-sps-verified-structural-observation": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "feat/precios-sps-verified-structural-observation",
+      "tip_sha": "54b81e062206fd18271706991d832b22ffe0d4f7",
+      "unique_patch_count": 2
+    },
+    "feature/precios-sps-session-context-fence": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "La rama elevaba fingerprints débiles históricos de vtexsegment/vtexsession a un fence canónico. Main adoptó una frontera más segura: reutilizar el mismo BrowserContext que estableció SPS, preservando sesión sin canonizar valores débiles históricos. No revivir el overfit.",
+      "tip_sha": "9a8c378f802d07226b357466217733ca287dfefd",
+      "unique_patch_count": 12
+    },
+    "fix/precios-sps-audit-snapshot": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "fix/precios-sps-audit-snapshot",
+      "tip_sha": "5d6c0a748261454dd3100cd343afc427a6edb1a1",
+      "unique_patch_count": 2
+    },
+    "fix/precios-sps-current-latest-evidence": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "fix/precios-sps-current-latest-evidence",
+      "tip_sha": "b687bb9b370c96ad738f54d7106a46f021caadf0",
+      "unique_patch_count": 4
+    },
+    "fix/precios-sps-deterministic-ids": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "fix/precios-sps-deterministic-ids",
+      "tip_sha": "2c901001381208120ba2adf13d57f1d1a5a238ed",
+      "unique_patch_count": 6
+    },
+    "fix/precios-sps-edge-canonical-time": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "fix/precios-sps-edge-canonical-time",
+      "tip_sha": "eeac5fadadf133a024e3c1d0d4c8b06acef0ebfc",
+      "unique_patch_count": 7
+    },
+    "fix/precios-sps-edge-http-method-contract": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "fix/precios-sps-edge-http-method-contract",
+      "tip_sha": "caa77f7632122cbd63e1409fb274493b686091b3",
+      "unique_patch_count": 3
+    },
+    "fix/precios-sps-location-city-text-surface": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Fallback textual intermedio para tarjetas de ciudad sin rol accesible. Main lo sustituyó por el contrato DOM concreto observado (.cont-btn-ciudad y estados selected/noselected) con manejo de solapamiento/hit-test; la heurística textual no debe recuperarse.",
+      "tip_sha": "045da5c826c5195ef6ed23f8b4ce406d22b0fa73",
+      "unique_patch_count": 1
+    },
+    "fix/precios-sps-observability-ci-route": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "fix/precios-sps-observability-ci-route",
+      "tip_sha": "27a886d281aac824a89b7e71d54a86718e36efbb",
+      "unique_patch_count": 8
+    },
+    "fix/precios-sps-offer-identity": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "fix/precios-sps-offer-identity",
+      "tip_sha": "bcba610522576d9be64478ba3e3f9f4273b7991c",
+      "unique_patch_count": 4
+    },
+    "fix/precios-sps-pricing-history-audit": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "fix/precios-sps-pricing-history-audit",
+      "tip_sha": "36815f26fb89c472fce7527dc8f6682ec544f92f",
+      "unique_patch_count": 4
+    },
+    "fix/precios-sps-prt-raw-heartbeat": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "fix/precios-sps-prt-raw-heartbeat",
+      "tip_sha": "196b7a06465e67f33e81d3104579a1aec19b705b",
+      "unique_patch_count": 1
+    },
+    "fix/precios-sps-replay-evidence": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "fix/precios-sps-replay-evidence",
+      "tip_sha": "c0ab16786d25edc2b8c8abcfaf90772c66da935b",
+      "unique_patch_count": 7
+    },
+    "hardening/precios-sps-catalog-physical-finalizer": {
+      "category": "CLOSED_SUPERSEDED",
+      "legacy_reason_key": "hardening/precios-sps-catalog-physical-finalizer",
+      "tip_sha": "548b841ecb4613fecfc9dbc0668dce546f3a28cf",
+      "unique_patch_count": 2
+    },
+    "ops/precios-sps-cloudflare-verify-001": {
+      "category": "CLOSED_SUPERSEDED",
+      "reason": "Marker operativo del PR #174, cerrado sin merge y explícitamente supersedido porque .automation quedaba fuera de los filtros CI. La ruta controlada se movió a una ubicación cubierta por CI; el marker antiguo no aporta capacidad pendiente.",
+      "tip_sha": "1c4248ccb2e4111b52794a983fa7633ca1f9bbcf",
+      "unique_patch_count": 1
+    }
+  },
+  "legacy_reason_source": {
+    "as_of_main": "94bf90671d92046515e0820894d083826d676358",
+    "path": "precios-supermercados-sps/docs/audits/precios-sps-historical-branch-overrides.json",
+    "schema": "precios-sps-historical-branch-overrides-1"
+  },
+  "reviewed_main": "d584622a50ecb9ed6090cb1b098a5bc13e2b34d1",
+  "schema": "precios-sps-historical-branch-decisions-2"
+}
