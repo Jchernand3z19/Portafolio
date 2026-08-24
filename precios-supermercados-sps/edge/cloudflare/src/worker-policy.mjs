@@ -24,6 +24,7 @@ export const WORKER_POLICY = Object.freeze({
 export const WORKER_ROUTES = Object.freeze({
   initialize: "/v1/initialize",
   execute: "/v1/execute",
+  catalogExecute: "/v1/catalog-execute",
   structuralExecute: "/v1/structural-execute",
 });
 

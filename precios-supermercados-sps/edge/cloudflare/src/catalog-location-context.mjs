@@ -46,35 +46,35 @@ function rfc3986QueryComponent(value) {
 
 function appendQueryParameterPreservingOrigin(originUrl, wireKey, rawValue) {
   const parsed = new URL(originUrl);
-  if (parsed.hash) fail("structural_context_query_fragment_forbidden");
+  if (parsed.hash) fail("catalog_wire_fragment_forbidden");
   for (const key of parsed.searchParams.keys()) {
-    if (key.toLowerCase() === wireKey.toLowerCase()) fail("structural_context_query_key_already_present");
+    if (key.toLowerCase() === wireKey.toLowerCase()) fail("catalog_context_query_key_already_present");
   }
   const separator = parsed.search.length > 0 ? "&" : "?";
   return `${originUrl}${separator}${rfc3986QueryComponent(wireKey)}=${rfc3986QueryComponent(rawValue)}`;
 }
 
-export async function validateAndApplyStructuralLocationContext(originUrl, input) {
-  const source = exactObject(input, EXACT_KEYS, "structural_location_context_shape_invalid");
-  if (source.locationId !== "la_colonia_sps") fail("structural_location_id_invalid");
-  const bindingSourceKey = text(source.bindingSourceKey, "structural_binding_source_key_invalid", 512);
+export async function validateAndApplyCatalogLocationContext(originUrl, input) {
+  const source = exactObject(input, EXACT_KEYS, "catalog_location_context_shape_invalid");
+  if (source.locationId !== "la_colonia_sps") fail("catalog_location_id_invalid");
+  const bindingSourceKey = text(source.bindingSourceKey, "catalog_binding_source_key_invalid", 512);
   const sourceMatch = SOURCE_RE.exec(bindingSourceKey);
-  if (!sourceMatch) fail("structural_binding_source_key_invalid");
-  const bindingEvidence = text(source.bindingEvidence, "structural_binding_evidence_invalid", 512);
-  if (!EVIDENCE_RE.test(bindingEvidence)) fail("structural_binding_evidence_invalid");
-  const contextFingerprint = text(source.contextFingerprint, "structural_context_fingerprint_invalid", 64);
-  if (!SHA256_RE.test(contextFingerprint)) fail("structural_context_fingerprint_invalid");
-  if (sourceMatch[1] !== contextFingerprint) fail("structural_binding_context_fingerprint_mismatch");
-  const placement = text(source.placement, "structural_context_placement_invalid", 16);
-  if (!PLACEMENTS.has(placement)) fail("structural_context_placement_invalid");
-  const wireKey = text(source.wireKey, "structural_context_wire_key_invalid", 160);
-  if (!REGION_KEYS.has(canonicalRegionKey(wireKey))) fail("structural_context_wire_key_not_region");
-  if (!Array.isArray(source.valuePath) || source.valuePath.length !== 0) fail("structural_context_value_path_invalid");
-  const wireRequestFingerprint = text(source.wireRequestFingerprint, "structural_wire_request_fingerprint_invalid", 64);
-  if (!SHA256_RE.test(wireRequestFingerprint)) fail("structural_wire_request_fingerprint_invalid");
-  const rawValue = text(source.rawValue, "structural_context_raw_value_invalid", 4096);
+  if (!sourceMatch) fail("catalog_binding_source_key_invalid");
+  const bindingEvidence = text(source.bindingEvidence, "catalog_binding_evidence_invalid", 512);
+  if (!EVIDENCE_RE.test(bindingEvidence)) fail("catalog_binding_evidence_invalid");
+  const contextFingerprint = text(source.contextFingerprint, "catalog_context_fingerprint_invalid", 64);
+  if (!SHA256_RE.test(contextFingerprint)) fail("catalog_context_fingerprint_invalid");
+  if (sourceMatch[1] !== contextFingerprint) fail("catalog_binding_context_fingerprint_mismatch");
+  const placement = text(source.placement, "catalog_context_placement_invalid", 16);
+  if (!PLACEMENTS.has(placement)) fail("catalog_context_placement_invalid");
+  const wireKey = text(source.wireKey, "catalog_context_wire_key_invalid", 160);
+  if (!REGION_KEYS.has(canonicalRegionKey(wireKey))) fail("catalog_context_wire_key_not_region");
+  if (!Array.isArray(source.valuePath) || source.valuePath.length !== 0) fail("catalog_context_value_path_invalid");
+  const wireRequestFingerprint = text(source.wireRequestFingerprint, "catalog_wire_request_fingerprint_invalid", 64);
+  if (!SHA256_RE.test(wireRequestFingerprint)) fail("catalog_wire_request_fingerprint_invalid");
+  const rawValue = text(source.rawValue, "catalog_context_raw_value_invalid", 4096);
   const observedFingerprint = await sha256Hex(canonicalBytes(rawValue));
-  if (observedFingerprint !== contextFingerprint) fail("structural_context_raw_fingerprint_mismatch");
+  if (observedFingerprint !== contextFingerprint) fail("catalog_context_raw_fingerprint_mismatch");
 
   let url = originUrl;
   const headers = {};
@@ -89,7 +89,7 @@ export async function validateAndApplyStructuralLocationContext(originUrl, input
     url,
     headers,
   }));
-  if (computedWireFingerprint !== wireRequestFingerprint) fail("structural_wire_request_fingerprint_mismatch");
+  if (computedWireFingerprint !== wireRequestFingerprint) fail("catalog_wire_request_fingerprint_mismatch");
 
   return Object.freeze({
     fetchUrl: url,

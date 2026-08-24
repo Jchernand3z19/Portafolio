@@ -1,5 +1,9 @@
 import { DurableObject, tracing } from "cloudflare:workers";
 
+import {
+  createCatalogContextPublicWorkerHandler,
+} from "./catalog-context-worker-adapter.mjs";
+import { runCatalogContextExecuteOperation } from "./catalog-context-operation.mjs";
 import { EdgePolicyError } from "./core.mjs";
 import { DurableAuthorizationStore } from "./durable-store.mjs";
 import { assertPublicFrontDoor } from "./front-door.mjs";
@@ -88,6 +92,28 @@ export class AuthorizationGateway extends DurableObject {
     }
   }
 
+  async catalogExecute(input) {
+    try {
+      this.assertNamedAuthorization(input?.execution?.requestContext?.authorizationId);
+      assertGitHubRunFence(input?.claims, input?.execution?.requestContext?.runId);
+      await this.ensureKeyPairReady();
+      return await tracing.enterSpan(ORIGIN_EXECUTION_SPAN_NAME, async (span) => {
+        // La traza común sólo serializa requestContext seguro; nunca locationContext/rawValue.
+        annotateExecutionSpan(span, input.execution);
+        return runSupervisedExecuteOperation(
+          this.store,
+          input.execution,
+          input.claims,
+          this.env,
+          { fetchOrigin: (...args) => fetch(...args) },
+          runCatalogContextExecuteOperation,
+        );
+      });
+    } catch (error) {
+      return durableErrorEnvelope(error);
+    }
+  }
+
   async structuralExecute(input) {
     try {
       this.assertNamedAuthorization(input?.execution?.requestContext?.authorizationId);
@@ -118,6 +144,13 @@ export default {
       return publicErrorResponse(error);
     }
     const path = new URL(request.url).pathname;
+    if (path === WORKER_ROUTES.catalogExecute) {
+      const handler = createCatalogContextPublicWorkerHandler({
+        namespace: env.AUTHORIZATION_GATEWAY,
+        authenticate: authenticateGitHub,
+      });
+      return handler(request);
+    }
     if (path === WORKER_ROUTES.structuralExecute) {
       const handler = createStructuralPublicWorkerHandler({
         namespace: env.AUTHORIZATION_GATEWAY,
