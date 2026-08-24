@@ -24,6 +24,8 @@ Los PRs `#254`–`#268` cerraron las fronteras offline conocidas de la fase: con
 
 La siguiente dependencia real ya no es una tarea offline: requiere una **autorización humana nueva y explícita** para una observación mínima de facets bajo SPS. Esa autorización todavía no existe.
 
+La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** para el alcance exacto autorizado.
+
 ## Binding técnico de San Pedro Sula
 
 La ejecución pública read-only histórica `32677568208`, sobre el merge `01804bedf7302678f096d8cef632ca3f3c407b4f`, confirmó:
