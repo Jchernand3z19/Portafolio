@@ -2,8 +2,13 @@
 
 Esta frontera toma una decisión final + ofertas ya validadas, aplica la máquina de
 estado en memoria y produce un ``TabularBatch`` atómico con configuración,
-dimensión/mapping de producto, current, histórico, registro del run y eventos de
-calidad. No hace I/O externo.
+current, histórico, registro del run y eventos de calidad. No hace I/O externo.
+
+La identidad canónica cross-source sigue disponible en el modelo lógico, pero sus
+tablas físicas se difieren hasta que exista una segunda fuente o un consumidor
+que requiera equivalencias reales. La identidad fuente y ``product_id`` siguen
+persistidas dentro de current/history, por lo que esta decisión no pierde
+trazabilidad ni bloquea una materialización futura.
 
 La validación que puede fallar por ubicación/metadata se ejecuta antes de mutar el
 estado en memoria. Un replay ya conocido se rechaza de forma explícita en esta
@@ -31,18 +36,14 @@ from .models import ValidatedOffer
 from .tabular_persistence import (
     CFG_LOCATIONS,
     CFG_SUPERMARKETS,
-    DIM_PRODUCTS,
     FACT_OFFER_HISTORY,
     FACT_OFFERS_CURRENT,
     FACT_QUALITY_EVENTS,
     FACT_SCRAPE_RUNS,
-    MAP_SOURCE_PRODUCTS,
     TabularPersistenceError,
     current_offer_row,
     history_offer_row,
     location_config_rows,
-    product_dimension_row,
-    source_product_mapping_row,
     supermarket_config_rows,
     validate_offer_location_for_persistence,
 )
@@ -273,16 +274,9 @@ def prepare_new_run_persistence(
         affected_offer_ids = tuple(
             sorted({item.offer.offer_id for item in offer_values})
         )
-        product_rows: list[Mapping[str, object]] = []
-        mapping_rows: list[Mapping[str, object]] = []
         current_rows: list[Mapping[str, object]] = []
         history_rows: list[Mapping[str, object]] = []
         if decision.commercial_update_allowed:
-            for item in offer_values:
-                mapping_rows.append(source_product_mapping_row(item))
-                dimension = product_dimension_row(item)
-                if dimension is not None:
-                    product_rows.append(dimension)
             for offer_id in affected_offer_ids:
                 current = state.current(offer_id)
                 if current is None:
@@ -298,8 +292,6 @@ def prepare_new_run_persistence(
         rows = {
             CFG_SUPERMARKETS.name: supermarket_config_rows(catalog),
             CFG_LOCATIONS.name: location_config_rows(catalog),
-            DIM_PRODUCTS.name: tuple(product_rows),
-            MAP_SOURCE_PRODUCTS.name: tuple(mapping_rows),
             FACT_OFFERS_CURRENT.name: tuple(current_rows),
             FACT_OFFER_HISTORY.name: tuple(history_rows),
             FACT_SCRAPE_RUNS.name: (scrape_run_row(run_record, catalog),),
