@@ -7,8 +7,8 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)** contra:
 
 ```text
-main_observed = cdc031dc140fb0250521e7b5b99fa412c5d7e5e4
-last_technical_pr = #271
+main_observed = 56f210d04928c197c2b20a38e29269eed66bc4ca
+last_technical_pr = #272
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -22,7 +22,7 @@ ACTIVE_AUTHORIZATION_IDS = []
 
 Los PRs `#254`–`#269` cerraron las fronteras offline conocidas de Fase 0: contexto SPS estructural, catálogo context-bound, materialización raw evidence-bound, storage físico simplificado, entrypoint de facets fail-closed, provenance segura para los placements soportados y reauditoría histórica reproducible.
 
-Los PRs `#270`–`#271` materializaron una autorización humana transitoria para la observación mínima de facets y añadieron observabilidad GitHub temporal para identificar su run. La ventana terminó **sin realizar tráfico a La Colonia** porque el preflight de configuración Cloudflare falló antes de OIDC, navegador o red. La autorización `SPS-context-and-root-facets-003` queda cerrada y no se reutiliza.
+Los PRs `#270`–`#271` materializaron una autorización humana transitoria para la observación mínima de facets y añadieron observabilidad GitHub temporal para identificar su run. La ventana terminó **sin realizar tráfico a La Colonia** porque el preflight de configuración Cloudflare falló antes de OIDC, navegador o red. El PR `#272` retiró el marker, wrapper y observador transitorios, restauró el workflow live manual fail-closed y dejó `SPS-context-and-root-facets-003` cerrada y no reutilizable.
 
 La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** para el alcance exacto solicitado.
 
@@ -232,6 +232,16 @@ Observador GitHub temporal, PR `#271`:
 run = 32777793715
 result = success
 pytest = 1711 passed
+pip check = clean
+compileall SyntaxWarning = none
+```
+
+Cierre fail-closed y limpieza de la ventana, PR `#272`:
+
+```text
+run = 32780298454
+result = success
+pytest = 1705 passed
 pip check = clean
 compileall SyntaxWarning = none
 ```
