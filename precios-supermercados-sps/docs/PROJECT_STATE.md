@@ -4,10 +4,10 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)**, después de fusionar los PRs `#254`–`#259` y de verificar el workbook físico de Google Sheets tras la simplificación del storage.
+Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)**, después de fusionar los PRs `#254`–`#261`, verificar el workbook físico de Google Sheets y cerrar offline la frontera `RawProduct -> la_colonia_sps`.
 
 ```text
-main_observed = 4e3d4944a2c4a175842374c6704aa47fef499c97
+main_observed = 7f875df4f4e8d3954a4b569baaa9b3dd2c9b4c18
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
 granularity = city
@@ -18,9 +18,9 @@ catalog_accepted = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-La ubicación SPS, el plan estructural y la ruta offline de catálogo permanecen ligados criptográficamente al mismo contexto técnico. El PR `#259` dejó además separado el **modelo lógico** del **modelo físico temporal**: Google Sheets materializa únicamente seis tablas activas y las estructuras de identidad canónica cross-source quedan diferidas hasta que exista una segunda fuente o un consumidor real que las necesite.
+La ubicación SPS, el plan estructural, las páginas de catálogo y la nueva frontera de materialización raw permanecen ligados al mismo contexto técnico. El almacenamiento temporal separa modelo lógico de materialización física y mantiene sólo seis tablas activas en Google Sheets.
 
-La suite completa del PR `#259` terminó verde en el run `32758969849`: **1642 passed**. Ese run ejecutó `pip check` y `compileall` con `SyntaxWarning` tratado como error; ambos terminaron limpios.
+La suite completa del PR `#261` terminó verde en el run `32762339938`: **1647 passed**. Ese run ejecutó `pip check` y `compileall` con `SyntaxWarning` tratado como error; ambos terminaron limpios.
 
 ## Binding técnico de San Pedro Sula
 
@@ -82,7 +82,41 @@ extraction_enabled = false
 
 ### `la_colonia_online`
 
-Continúa siendo un **contexto fuente raw**, no una ubicación comercial. Permanece `location_status=unknown`; no puede convertirse silenciosamente a SPS/TGU/tienda.
+Continúa siendo un **contexto fuente raw**, no una ubicación comercial. El extractor histórico sigue produciendo `location_id=la_colonia_online`, `location_status=unknown`, evidencia fuente explícita y confianza nula. Ese comportamiento no se modificó ni se reinterpreta retrospectivamente.
+
+## Frontera RawProduct -> SPS — cerrada offline
+
+El PR `#261` añadió una frontera separada para atribuir un SKU a `la_colonia_sps` sin cambiar la semántica raw histórica.
+
+Cadena permitida:
+
+```text
+ContextBoundVerifiedCatalogPageObservation
+-> receipt de catálogo v3 firmado
+-> binding source/evidence SPS canónicos
+-> mismo run + traversal + partition
+-> mismos context/wire fingerprints
+-> parse offline de la misma página verificada
+-> reconciliación exacta de itemId contra RawPageEvidence
+-> la_colonia_sps / CONFIRMED
+```
+
+Invariantes:
+
+- sólo se acepta una `ContextBoundVerifiedCatalogPageObservation` real;
+- el receipt debe ser `schema_version=3`, estar firmado y declarar `location_context_bound=true`;
+- `binding_source_key` y `binding_evidence` deben coincidir exactamente con `LA_COLONIA_SPS`;
+- run, traversal role, partición, contexto y wire fingerprint deben ser los mismos de la página;
+- la respuesta se vuelve a parsear **offline**, sin una nueva solicitud;
+- la secuencia completa de `itemId` debe coincidir exactamente con la evidencia de cobertura de esa misma página;
+- SKU duplicados, páginas incompletas, parser rechazado o identidad divergente fallan cerrado;
+- antes de promover cada producto se exige que aún sea `la_colonia_online / UNKNOWN` con la evidencia fuente canónica y sin confianza inventada;
+- el resultado promovido usa `la_colonia_sps / CONFIRMED`, confianza `1` y evidencia compuesta sólo por hashes/fingerprints sanitizados;
+- la materialización de catálogo usa únicamente el traversal `primary`; reconciliation no duplica productos comerciales;
+- una identidad fuente repetida entre páginas primary se rechaza;
+- la salida mantiene `production_authority=false`, `catalog_accepted=false` y `extraction_enabled=false`.
+
+Normalizar un `RawProduct` promovido por esta frontera ya no genera `pending_location_binding`; normalizar directamente un raw histórico continúa preservando el contexto online desconocido.
 
 ## Autorización live
 
@@ -105,6 +139,14 @@ La ruta estructural exige el binding SPS confirmado y mantiene el valor raw sól
 ```text
 root_total
 category_tree
+```
+
+El contrato base ya fija:
+
+```text
+max_requests = 2
+concurrency = 1
+max_retries = 0
 ```
 
 La cadena valida y liga:
@@ -182,7 +224,7 @@ Por diseño, esta capa no puede devolver `catalog_accepted=true` ni `production_
 
 El PR `#259` aplicó el criterio de `production-data-engineering`: una entidad lógica sólo se materializa cuando existe una diferencia real de grain, lifecycle, ownership/seguridad, acceso o consumidor.
 
-El workbook físico fue verificado después del merge y contiene exactamente seis tabs gestionados:
+El workbook físico contiene exactamente seis tabs gestionados:
 
 ```text
 cfg_supermarkets
@@ -215,23 +257,22 @@ La reauditoría reproducible de ramas históricas se incorporó mediante PR `#25
 
 ```text
 workflow = Precios Supermercados SPS - Pruebas base
-run = 32758969849
+run = 32762339938
 result = success
-pytest = 1642 passed
+pytest = 1647 passed
 pip check = clean
 compileall SyntaxWarning = none
 ```
 
 ## Fronteras offline restantes
 
-Antes de pedir autorización live para facets todavía se debe cerrar, como mínimo:
+Antes de pedir autorización live para facets quedan únicamente las fronteras que todavía pueden cerrarse sin contactar al supermercado:
 
-1. **RawProduct -> ubicación comercial evidence-bound**: impedir que `la_colonia_online` se convierta a `la_colonia_sps` sólo por configuración/alcance y exigir evidencia ligada al mismo catálogo/run.
-2. **Placement-safe provenance**: decidir sólo con evidencia si el contexto real es header/query. Si resulta query, implementar una ruta de trace/provenance redactada que pruebe el fetch físico sin persistir el valor raw.
-3. **Composición del entrypoint futuro de facets**: mantener exactamente `root_total` + `category_tree`, `max_requests=2`, `concurrency=1`, OIDC/environment/collector y todos los gates de autorización fail-closed.
-4. **Reauditoría/sincronización final de Fase 0**: volver a verificar ramas históricas, CI, documentación y ausencia de deuda offline conocida justo antes de la frontera humana.
+1. **Composición del entrypoint futuro de facets**: preparar la ruta fail-closed con el plan contextual SPS, exactamente `root_total` + `category_tree`, `max_requests=2`, `concurrency=1`, `max_retries=0`, OIDC/environment/collector, receipts firmados y artefacto sanitizado. Debe permanecer bloqueada hasta una autorización humana nueva.
+2. **Placement-safe provenance**: no se elige header/query por inferencia. La ruta header actual ya es segura; para query debe existir un contrato de trace/provenance redactado antes de aceptar una observación con ese placement. El código genérico seguro puede prepararse offline, pero la selección del camino real depende de evidencia live futura.
+3. **Reauditoría/sincronización final de Fase 0**: volver a verificar ramas históricas, workflows, CI, documentación y ausencia de deuda offline conocida justo antes de la frontera humana.
 
-La simplificación del storage y la sincronización de README/arquitectura/modelo/decisiones/agentes ya están cerradas.
+La simplificación del storage, la sincronización de documentación estable y la frontera `RawProduct -> ubicación comercial evidence-bound` ya están cerradas.
 
 ## Próxima dependencia humana real
 
