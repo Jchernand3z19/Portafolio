@@ -45,6 +45,7 @@ PINNED_ACTIONS = {
 
 PROBE_WORKFLOW = "precios-supermercados-sps-cloudflare-probe.yml"
 TEST_WORKFLOW = "precios-supermercados-sps-tests.yml"
+AUDIT_WORKFLOW = "precios-supermercados-sps-historical-branch-audit.yml"
 COMMAND_WORKFLOW = "precios-supermercados-sps-la-colonia-command.yml"
 RECOVERY_WORKFLOW = "precios-supermercados-sps-la-colonia-dispatch-recovery.yml"
 LA_DIAGNOSTIC_WORKFLOW = "precios-supermercados-sps-la-colonia-diagnostic.yml"
@@ -64,6 +65,7 @@ GOOGLE_SHEETS_SPREADSHEET_VAR = "PRECIOS_SPS_GOOGLE_SPREADSHEET_ID"
 
 EXPECTED_PERMISSIONS = {
     PROBE_WORKFLOW: {"contents": "read"},
+    AUDIT_WORKFLOW: {"contents": "read", "pull-requests": "read"},
     COMMAND_WORKFLOW: {"contents": "read", "pull-requests": "read"},
     RECOVERY_WORKFLOW: {"actions": "read", "contents": "read"},
     LA_DIAGNOSTIC_WORKFLOW: {"contents": "read"},
@@ -85,6 +87,7 @@ ALLOWED_JOB_PERMISSIONS = {
 
 EXPECTED_TRIGGERS = {
     PROBE_WORKFLOW: {"workflow_dispatch"},
+    AUDIT_WORKFLOW: {"workflow_dispatch", "push"},
     COMMAND_WORKFLOW: {"pull_request_target"},
     LA_DIAGNOSTIC_WORKFLOW: {"workflow_dispatch"},
     RECOVERY_WORKFLOW: {"workflow_run"},
@@ -229,6 +232,14 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
             assert all_jobs_blocked(workflow)
             assert checkout_steps == []
             continue
+        if path.name == AUDIT_WORKFLOW:
+            assert len(checkout_steps) == 1
+            assert checkout_steps[0]["with"] == {
+                "ref": "${{ github.sha }}",
+                "persist-credentials": "false",
+                "fetch-depth": "0",
+            }
+            continue
 
         expected_ref = (
             "${{ github.workflow_sha }}"
@@ -290,6 +301,42 @@ def test_location_binding_entrypoint_is_manual_and_fail_closed() -> None:
     assert "pull_request_target" not in raw
     assert "issue_comment" not in raw
     assert "schedule:" not in raw
+
+
+def test_historical_branch_audit_is_read_only_reproducible_and_not_live() -> None:
+    path = WORKFLOW_DIR / AUDIT_WORKFLOW
+    workflow = load_workflow(path)
+    assert workflow["permissions"] == {"contents": "read", "pull-requests": "read"}
+    assert workflow["concurrency"] == {
+        "group": "precios-sps-historical-branch-audit",
+        "cancel-in-progress": "false",
+    }
+    triggers = workflow["on"]
+    assert set(triggers) == {"workflow_dispatch", "push"}
+    assert triggers["push"]["branches"] == ["main"]
+    assert set(jobs(workflow)) == {"audit"}
+    audit = jobs(workflow)["audit"]
+    assert audit["timeout-minutes"] == "20"
+    assert "environment" not in audit
+    assert "permissions" not in audit
+
+    raw = path.read_text(encoding="utf-8")
+    assert "git fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'" in raw
+    assert "--inspect-only" in raw
+    assert "GITHUB_TOKEN: ${{ github.token }}" in raw
+    assert "actions/upload-artifact@" in raw
+    assert "pull_request:" not in raw
+    assert "pull_request_target:" not in raw
+    assert "issue_comment:" not in raw
+    assert "schedule:" not in raw
+    assert "id-token" not in raw
+    assert "secrets." not in raw
+    assert "vars." not in raw
+    assert "scripts/probar_la_colonia.py" not in raw
+    assert "scripts/diagnosticar_ventanas_la_colonia.py" not in raw
+    assert "scripts/descubrir_facets_la_colonia.py" not in raw
+    assert "scripts/diagnosticar_binding_ubicacion_la_colonia.py" not in raw
+    assert ".workers.dev" not in raw
 
 
 def test_controlled_probe_is_manual_isolated_and_verified_outside_oidc_job():
