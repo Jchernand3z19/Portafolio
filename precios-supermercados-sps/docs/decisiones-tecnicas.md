@@ -210,3 +210,22 @@ La selección no acopla la lógica comercial al proveedor. `TabularBatch`, curre
 El prefijo reservado `prod_pending_` no basta para clasificar un producto como pendiente legítimo. Antes de materializar `dim_products` o `map_source_products`, la frontera tabular recalcula `generate_pending_product_id(source_product_id)` y exige coincidencia exacta.
 
 Un ID pendiente forjado o inconsistente falla cerrado. Esto preserva la cola de revisión sin permitir que un caller fabrique una identidad provisional arbitraria. Un mapping explícito/revisado sigue pudiendo reemplazar posteriormente el `product_id` provisional sin alterar `source_product_id` ni `offer_id`.
+
+## DT-042 — El modelo lógico no obliga a materializar MDM antes de necesitarlo
+
+DT-037 y DT-041 se conservan como contratos de identidad y mapping cross-source, pero queda **supersedida la decisión de materializar esas dos estructuras durante la fase de una sola fuente**.
+
+Google Sheets mantiene activas únicamente:
+
+```text
+cfg_supermarkets
+cfg_locations
+fact_offers_current
+fact_offer_history
+fact_scrape_runs
+fact_quality_events
+```
+
+`dim_products` y `map_source_products` permanecen como contratos lógicos diferidos. Sus validaciones y funciones pueden seguir probándose, pero no se leen ni escriben como tabs físicos activos hasta que exista una segunda fuente o un consumidor real que requiera equivalencias canónicas.
+
+La decisión se basa en grain/lifecycle/consumo, no en reducir tablas por estética: `source_product_id` y `product_id` ya permanecen en current/history, por lo que no se pierde trazabilidad ni capacidad de backfill. El adapter de Sheets rechaza explícitamente batches que intenten persistir una tabla diferida. La activación futura de MDM requerirá reglas de equivalencia/revisión, backfill y reconciliación demostrables.
