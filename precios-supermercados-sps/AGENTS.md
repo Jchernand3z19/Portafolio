@@ -41,35 +41,32 @@ offer_id          = supermercado + ubicación comercial + producto fuente
 
 `dim_products` es canónica/normalizada y no debe adquirir columnas específicas de supermercado, ubicación, precio o run. `map_source_products` conserva la relación fuente -> producto y la cola de revisión.
 
-## Autonomía y tráfico público read-only
+## Autonomía técnica y tráfico live
 
-Desde la instrucción humana explícita del **2026-08-23T21:02:02Z**, el proyecto tiene autorización permanente para realizar, sin pedir aprobación por ejecución, observaciones **read-only** sobre páginas y APIs públicas de supermercados cuando sean necesarias para desarrollar, diagnosticar, validar o ejecutar el producto.
+La instrucción de autonomía del usuario autoriza continuar el desarrollo técnico del proyecto sin pedir aprobación para trabajo local/GitHub/offline: auditoría, diseño, código, tests, documentación, PRs, CI, merge y preparación de mecanismos fail-closed.
 
-Esta autorización permanente incluye, con límites técnicos razonables:
+**Esa autonomía no se convierte por inferencia en una autorización permanente de tráfico live.** Antes de una observación nueva contra un supermercado verifica la autorización humana vigente y su alcance concreto.
 
-- HTTP/HTTPS público;
-- Playwright/browser automation sobre superficies públicas;
-- radiografía/reconocimiento de páginas;
-- diagnóstico de ubicación y contexto técnico;
-- smoke tests;
-- descubrimiento de facets, paginación y fuentes de datos;
-- extracción/crawl público necesario para validar y operar el catálogo;
-- reintentos posteriores justificados por cambios reales de código o de la fuente.
+Reglas:
 
-No se requiere un Authorization ID humano por cada run. Los IDs históricos de un solo uso permanecen registrados únicamente como evidencia histórica y **no deben reutilizarse ni convertirse en requisito operativo nuevo**.
+- una autorización histórica consumida/cerrada no se reutiliza;
+- no inventes Authorization IDs ni amplíes un marker a una fase distinta;
+- binding, facet discovery, smoke de catálogo y full crawl son observaciones distintas salvo que la instrucción humana las cubra expresamente;
+- la evidencia live ya obtenida puede reutilizarse offline sin repetir tráfico;
+- si el alcance live requerido no está autorizado, continúa todo lo posible offline y detente únicamente en esa frontera real.
 
-La autorización permanente **no** cubre acciones con efectos externos distintos de lectura. Sigue siendo necesaria intervención humana cuando haga falta cualquiera de estas cosas:
+Cuando exista autorización explícita para tráfico público read-only, conserva `concurrency=1` cuando aplique, pacing razonable, presupuesto/deadline acotados y stop ante 403 persistente, 429, CAPTCHA, login obligatorio, datos personales obligatorios o riesgo de carga excesiva. No evadas controles anti-bot ni aumentes carga para forzar un resultado.
+
+Una autorización read-only nunca cubre automáticamente:
 
 - credenciales, secretos, cuentas o permisos que el agente no posee;
 - billing, compras o gasto nuevo;
 - login obligatorio con una cuenta del usuario;
 - modificar datos o configuración en sistemas externos ajenos a GitHub del proyecto;
 - checkout, pedidos, reservas, formularios que creen estado del lado servidor o cualquier transacción;
-- despliegues productivos nuevos que creen coste o cambien infraestructura externa fuera de la ruta ya autorizada;
+- despliegues productivos nuevos que creen coste o cambien infraestructura externa fuera de la ruta expresamente autorizada;
 - decisiones manuales reales de mapping de producto cuando no puedan resolverse determinísticamente;
 - trabajo puramente manual dentro de Power BI.
-
-Para tráfico público read-only conserva `concurrency=1` cuando aplique, pacing razonable, presupuesto/deadline acotados y stop ante 403 persistente, 429, CAPTCHA, login obligatorio, datos personales obligatorios o riesgo de carga excesiva. No evadas controles anti-bot ni aumentes carga para forzar un resultado.
 
 Los runs read-only no conceden por sí solos `production_authority`, `catalog_accepted` ni autoridad para persistir estado comercial. Esas fronteras siguen gobernadas por evidencia y contratos del producto.
 
@@ -86,7 +83,7 @@ Una ubicación comercial requiere:
 3. evidencia coherente con la oferta;
 4. `extraction_enabled=true` sólo después de cerrar las fronteras anteriores.
 
-Para `la_colonia_sps`, mientras `granularity=unknown` o `technical_binding_confirmed=false`, la persistencia comercial debe fallar cerrada.
+`la_colonia_sps` ya posee binding técnico de ciudad confirmado por evidencia persistida, pero `extraction_enabled` sigue `false` hasta cerrar la aceptación del catálogo.
 
 La radiografía puede proponer una transición. Si evidencia granularidad `store`, no colapses múltiples tiendas bajo una sola ciudad.
 
@@ -101,7 +98,7 @@ La ruta edge está en `edge/cloudflare/`. No flexibilices por conveniencia:
 - presupuesto/pacing/single-flight/replay/fencing;
 - requisitos de tracing/Observability.
 
-La sonda controlada ya produjo evidencia física contra origen propio. No la repitas sin una hipótesis nueva justificada.
+La sonda controlada ya produjo evidencia física contra origen propio. No la repitas sin una hipótesis nueva justificada y, cuando implique tráfico externo nuevo, sin la autorización live que corresponda.
 
 El verifier actual de Observability usa discovery de traces y detalle `view: events`; el estado productivo de esa reconciliación se determina por una ejecución real, no por diagnósticos históricos ni por rebajar el contrato.
 
@@ -152,7 +149,7 @@ Antes de modificar workflows, lee `.github/workflows/AGENTS.md`.
 - `persist-credentials: false`;
 - todo workflow SPS nuevo entra en `test_workflow_security_audit.py`;
 - no debilites el auditor para hacer pasar una configuración;
-- entrypoints públicos read-only pueden ejecutarse bajo la autorización permanente si están acotados y auditados;
+- entrypoints live quedan fail-closed cuando no existe autorización vigente para ese alcance;
 - entrypoints con secretos, mutación externa, costes o autoridad comercial siguen fail-closed hasta cerrar su frontera correspondiente.
 
 ## Seguridad de datos
