@@ -1,0 +1,63 @@
+name: Repository run observer
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/repo-run-observer-request.json
+
+permissions:
+  actions: read
+  contents: read
+  statuses: write
+
+jobs:
+  observe:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Publicar runs ligados al SHA objetivo
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const targetSha = '7a0df3c3971a4021862855166e527827035a3ea2';
+            const response = await github.rest.actions.listWorkflowRunsForRepo({
+              owner,
+              repo,
+              head_sha: targetSha,
+              event: 'push',
+              per_page: 100,
+            });
+            const runs = response.data.workflow_runs || [];
+            if (runs.length === 0) {
+              await github.rest.repos.createCommitStatus({
+                owner,
+                repo,
+                sha: context.sha,
+                state: 'error',
+                context: 'repo-observer/none',
+                description: 'No push workflow runs found for target SHA',
+              });
+              core.setFailed('No push workflow runs found for target SHA');
+              return;
+            }
+            for (const run of runs) {
+              let state = 'pending';
+              if (run.status === 'completed') {
+                state = run.conclusion === 'success' ? 'success' : 'error';
+              }
+              const description = `${run.name} ${run.status}/${run.conclusion || 'pending'}`.slice(0, 140);
+              await github.rest.repos.createCommitStatus({
+                owner,
+                repo,
+                sha: context.sha,
+                state,
+                context: `repo-observer/${run.id}`,
+                description,
+                target_url: run.html_url,
+              });
+            }
