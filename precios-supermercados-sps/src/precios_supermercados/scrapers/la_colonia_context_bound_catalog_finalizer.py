@@ -6,11 +6,11 @@ hasta el manifest run-level. Las páginas reconciliadas de Observability se usan
 únicamente de forma transitoria: el resultado público retiene el manifest
 sanitizado y nunca conserva ``fetch_url`` ni el valor raw de ubicación.
 
-El placement ``header`` puede reconciliarse con el contrato de tracing actual
-porque el URL físico coincide con el request base y el header sensible ya queda
-atestiguado por el receipt v3. ``query`` falla antes de consultar Cloudflare: el
-contrato legacy de tracing serializa el URL físico y no existe todavía una forma
-redactada que preserve esa evidencia sin exponer el valor raw.
+``header`` conserva la reconciliación legacy porque el URL físico coincide con el
+request base. ``query`` usa una ruta separada que verifica el URL físico raw en
+memoria, lo compromete mediante hashes y construye el mismo manifest run-level sin
+serializar ese URL. El placement real nunca se infiere aquí: viene exclusivamente
+del ``VerifiedSpsStructuralContext`` ya atestiguado.
 """
 
 from __future__ import annotations
@@ -32,6 +32,15 @@ from precios_supermercados.cloudflare_observability_verifier import (
     CloudflareObservabilityVerifierError,
 )
 from precios_supermercados.cloudflare_trace_evidence import PlatformReconciledEdgePage
+from precios_supermercados.context_bound_query_provenance_run import (
+    ContextBoundQueryProvenanceRunError,
+    build_context_bound_query_provenance_run_manifest,
+)
+from precios_supermercados.context_bound_query_trace_evidence import (
+    ContextBoundQueryTraceError,
+    RedactedContextBoundQueryPage,
+    reconcile_context_bound_query_trace,
+)
 from precios_supermercados.edge_provenance_run import EdgeProvenanceRunManifest
 from precios_supermercados.scrapers.la_colonia_context_bound_catalog_transport import (
     ContextBoundVerifiedCatalogCollection,
@@ -199,29 +208,9 @@ class ContextBoundCatalogProvenanceFinalizer:
             _fail("catalog_context_collection_fingerprint_mismatch")
         return collection, observations
 
-    def finalize(
-        self,
-        collector: ContextBoundVerifiedCatalogEdgeCollector,
-    ) -> ContextBoundCatalogProvenanceRun:
-        """Reconcilia físicamente el catálogo sin persistir la traza raw.
-
-        El tracing actual sólo es seguro para ``header``. Si el contexto SPS
-        probado fuese ``query`` se corta antes de obtener el bearer token y antes
-        de consultar Observability.
-        """
-
-        collector_id = id(collector)
-        if self._result is not None:
-            if self._finalized_collector_id != collector_id:
-                _fail("finalizer_already_bound_to_other_collector")
-            return self._result
-
-        collection, observations = self._snapshot(collector)
-        if collector.sps_context.context_placement is not RequestContextPlacement.HEADER:
-            _fail("catalog_context_query_observability_redaction_required")
-
+    def _token(self) -> str:
         try:
-            token = _bearer(self._bearer_token_provider())
+            return _bearer(self._bearer_token_provider())
         except ContextBoundCatalogFinalizationError:
             raise
         except Exception as exc:
@@ -229,6 +218,13 @@ class ContextBoundCatalogProvenanceFinalizer:
                 "observability_bearer_token_provider_failed"
             ) from exc
 
+    def _header_manifest(
+        self,
+        collector: ContextBoundVerifiedCatalogEdgeCollector,
+        observations: tuple[ContextBoundVerifiedCatalogPageObservation, ...],
+        *,
+        token: str,
+    ) -> EdgeProvenanceRunManifest:
         reconciled: list[PlatformReconciledEdgePage] = []
         physical_evidence_ids: set[str] = set()
         fetch_span_ids: set[str] = set()
@@ -250,9 +246,6 @@ class ContextBoundCatalogProvenanceFinalizer:
                 _fail("catalog_context_observability_result_unreconciled")
             if page.production_authority is not False:
                 _fail("catalog_context_observability_authority_forbidden")
-            # Con placement header, el URL trazado debe seguir siendo exactamente
-            # el request base; así ningún valor raw de ubicación entra al objeto
-            # que alimenta el manifest.
             if page.trace_evidence.fetch_url != observation.page.source_url:
                 _fail("catalog_context_observability_fetch_url_mismatch")
 
@@ -267,7 +260,7 @@ class ContextBoundCatalogProvenanceFinalizer:
             reconciled.append(page)
 
         try:
-            manifest = build_authenticated_edge_provenance_run_manifest(
+            return build_authenticated_edge_provenance_run_manifest(
                 authenticated_plan=collector.authenticated_plan,
                 reconciled_pages=tuple(reconciled),
             )
@@ -275,6 +268,69 @@ class ContextBoundCatalogProvenanceFinalizer:
             raise ContextBoundCatalogFinalizationError(
                 f"catalog_context_run_manifest_{exc.code}"
             ) from exc
+
+    def _query_manifest(
+        self,
+        collector: ContextBoundVerifiedCatalogEdgeCollector,
+        observations: tuple[ContextBoundVerifiedCatalogPageObservation, ...],
+        *,
+        token: str,
+    ) -> EdgeProvenanceRunManifest:
+        redacted: list[RedactedContextBoundQueryPage] = []
+        for ordinal, observation in enumerate(observations):
+            try:
+                candidates = self._verifier_client.trace_candidates(
+                    observation.page,
+                    bearer_token=token,
+                )
+            except CloudflareObservabilityVerifierError as exc:
+                raise ContextBoundCatalogFinalizationError(
+                    f"catalog_context_page_{ordinal}_observability_{exc.code}"
+                ) from exc
+            try:
+                page = reconcile_context_bound_query_trace(observation, candidates)
+            except ContextBoundQueryTraceError as exc:
+                raise ContextBoundCatalogFinalizationError(
+                    f"catalog_context_page_{ordinal}_query_trace_{exc.code}"
+                ) from exc
+            if page.page is not observation.page:
+                _fail("catalog_context_query_page_identity_mismatch")
+            if page.production_authority is not False or page.platform_evidence_reconciled is not True:
+                _fail("catalog_context_query_page_unreconciled")
+            redacted.append(page)
+
+        try:
+            return build_context_bound_query_provenance_run_manifest(
+                authenticated_plan=collector.authenticated_plan,
+                reconciled_pages=tuple(redacted),
+            )
+        except ContextBoundQueryProvenanceRunError as exc:
+            raise ContextBoundCatalogFinalizationError(
+                f"catalog_context_query_run_manifest_{exc.code}"
+            ) from exc
+
+    def finalize(
+        self,
+        collector: ContextBoundVerifiedCatalogEdgeCollector,
+    ) -> ContextBoundCatalogProvenanceRun:
+        """Reconcilia físicamente el catálogo sin persistir la traza raw."""
+
+        collector_id = id(collector)
+        if self._result is not None:
+            if self._finalized_collector_id != collector_id:
+                _fail("finalizer_already_bound_to_other_collector")
+            return self._result
+
+        collection, observations = self._snapshot(collector)
+        placement = collector.sps_context.context_placement
+        if placement not in {RequestContextPlacement.HEADER, RequestContextPlacement.QUERY}:
+            _fail("catalog_context_observability_placement_unsupported")
+
+        token = self._token()
+        if placement is RequestContextPlacement.HEADER:
+            manifest = self._header_manifest(collector, observations, token=token)
+        else:
+            manifest = self._query_manifest(collector, observations, token=token)
 
         result = ContextBoundCatalogProvenanceRun(
             collection=collection,
