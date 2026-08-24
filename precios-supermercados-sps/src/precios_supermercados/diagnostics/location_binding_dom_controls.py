@@ -23,6 +23,7 @@ CITY_CONTROL_READY_TIMEOUT_MS = 5_000
 CITY_CONTROL_READY_POLL_MS = 100
 LOCATION_SELECTOR_OPEN_TIMEOUT_MS = 5_000
 LOCATION_SELECTOR_OPEN_POLL_MS = 500
+LOCATION_SELECTOR_EFFECTIVE_RETRY_DELAY_MS = 3_000
 CITY_MODAL_SCOPE_MAX_ANCESTORS = 8
 LOCATION_SELECTOR_CLASS = "btn-modal-selector"
 LOCATION_SELECTOR_CSS = f"button.{LOCATION_SELECTOR_CLASS}"
@@ -476,9 +477,9 @@ def _location_selector_has_attached_handler(locator: Any) -> bool:
     """Detecta handlers observables sin depender del framework como identidad.
 
     ``onclick`` cubre handlers DOM directos. React conserva las props del nodo bajo
-    claves privadas con prefijos estables por familia; sólo se usa esa señal para
-    saber que un click ya fue aceptado por la capa hidratada, nunca para seleccionar
-    el control ni para demostrar contexto comercial.
+    claves privadas con prefijos estables por familia; esta señal es sólo
+    diagnóstica: un handler presente no demuestra que el gesto haya producido un
+    modal ni que el estado de la aplicación esté listo para aceptar el click.
     """
 
     evaluator = getattr(locator, "evaluate", None)
@@ -502,35 +503,36 @@ def _wait_for_next_location_selector_probe(page: Any) -> bool:
 
 
 def open_location_selector(page: Any) -> ResolvedLocationSelector:
-    """Abre el modal y reintenta sólo ante un click pre-hidratación verificable.
+    """Abre el modal y exige evidencia del efecto, no sólo un handler conectado.
 
-    Si el opener ya expone un handler DOM/React, el click se emite una sola vez y la
-    readiness posterior del control de ciudad absorbe una apertura asíncrona. Si no
-    hay handler observable y tampoco aparece el modal, se reintenta bounded: esto
-    cubre el caso live donde el botón se renderiza antes de que el frontend conecte
-    su interacción. En cuanto aparece una superficie real o un handler observable,
-    no se vuelve a pulsar el opener.
+    La página puede renderizar ``btn-modal-selector`` y hasta exponer un handler
+    React antes de que el estado hidratado acepte el gesto. Por eso el primer click
+    sólo se considera efectivo cuando aparece una superficie real del modal. Si no
+    ocurre, se espera el mismo intervalo de asentamiento que demostró la radiografía
+    live y se emite un único segundo click. No se repite indefinidamente ni se usa la
+    presencia del handler como prueba de éxito.
     """
 
     resolved = resolve_location_selector(page)
-    handler_was_ready = _location_selector_has_attached_handler(resolved.locator)
     resolved.locator.click()
-    if handler_was_ready or _location_selector_modal_presented(page):
+    if _location_selector_modal_presented(page):
         return resolved
 
     wait_count = LOCATION_SELECTOR_OPEN_TIMEOUT_MS // LOCATION_SELECTOR_OPEN_POLL_MS
+    elapsed_ms = 0
+    retried = False
     for _ in range(wait_count):
         if not _wait_for_next_location_selector_probe(page):
             return resolved
+        elapsed_ms += LOCATION_SELECTOR_OPEN_POLL_MS
         if _location_selector_modal_presented(page):
             return resolved
-        resolved = resolve_location_selector(page)
-        if _location_selector_has_attached_handler(resolved.locator):
+        if not retried and elapsed_ms >= LOCATION_SELECTOR_EFFECTIVE_RETRY_DELAY_MS:
+            resolved = resolve_location_selector(page)
             resolved.locator.click()
-            return resolved
-        resolved.locator.click()
-        if _location_selector_modal_presented(page):
-            return resolved
+            retried = True
+            if _location_selector_modal_presented(page):
+                return resolved
     return resolved
 
 
