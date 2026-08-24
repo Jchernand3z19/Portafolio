@@ -108,13 +108,24 @@ No se promueve Tegucigalpa por inferencia ni por aparecer en el selector.
 
 Continúa siendo un **contexto fuente raw** y no una ubicación comercial. Permanece `location_status=unknown` y no puede reutilizarse como SPS/TGU/tienda.
 
-## Autonomía pública read-only
+## Autorización live vigente
 
-Desde la instrucción humana explícita del `2026-08-23T21:02:02Z`, las observaciones públicas read-only necesarias para desarrollar y operar el producto están autorizadas de forma permanente, con pacing, presupuesto y stop conditions razonables. No se requiere un Authorization ID humano por ejecución.
+La ejecución `32677568208` es evidencia histórica ya producida por una observación pública read-only y puede usarse para cerrar el binding técnico de SPS. Esa evidencia **no se interpreta como autorización abierta para nuevas fases live**.
 
-Esto cubre Playwright público, radiografías, binding, facets, smoke tests y recorridos públicos acotados. No cubre secretos, cuentas, billing, compras, checkout, mutaciones externas, infraestructura nueva con coste ni decisiones manuales de mapping.
+El marker versionado actualmente existente:
 
-Los IDs históricos `LC-location-binding-331` a `337` relevantes siguen consumidos y no se reutilizan; se conservan sólo como evidencia histórica, no como mecanismo operativo vigente.
+```text
+.github/workflows/requests/la-colonia-location-binding-standing-request.json
+purpose = verify-location-binding
+```
+
+está acotado a la verificación de binding de ubicación. No concede por sí mismo autorización para `facet_discovery`, smoke de catálogo, recorrido por categorías ni full crawl, y no debe incrementarse o reutilizarse para ampliar alcance sin una instrucción humana explícita que cubra esa nueva observación.
+
+El workflow histórico de facet discovery continúa cerrado mediante `if: ${{ false }}`. Su request histórico `la-colonia-facet-discovery-001` no se reutiliza como permiso para una nueva ejecución.
+
+Los IDs históricos `LC-location-binding-331` a `337` relevantes siguen consumidos y no se reutilizan.
+
+Siguen fuera de cualquier autorización implícita: secretos, cuentas, billing, compras, checkout, mutaciones externas, infraestructura nueva con coste, persistencia comercial y decisiones manuales de mapping.
 
 ## Cómo se cerró el problema del selector
 
@@ -200,4 +211,6 @@ GTIN válido puede producir identidad fuerte cross-supermercado. Sin identidad f
 
 ## Próxima dependencia real
 
-No hace falta más trabajo de radiografía para demostrar San Pedro Sula. La siguiente tarea autónoma es usar el contexto SPS confirmado para **revalidar facets y estructura del catálogo**, después recorrerlo con evidencia de completitud y llevar el resultado a la frontera autoritativa de aceptación. Ninguna de esas observaciones públicas read-only requiere una aprobación humana adicional.
+No hace falta más trabajo de radiografía para demostrar San Pedro Sula. El trabajo offline puede continuar preparando y endureciendo la revalidación de facets/catálogo para que use exclusivamente el contexto SPS confirmado y permanezca fail-closed.
+
+La **próxima ejecución live** que consulte facets o catálogo bajo SPS es una observación distinta de la verificación de binding y requiere autorización humana explícita vigente para ese alcance antes de emitir tráfico nuevo a La Colonia.
