@@ -71,10 +71,15 @@ on:
         default: false
         type: boolean
       facet_authorization_id:
-        description: Autorización humana explícita para facets SPS; hoy no existe ninguna activa
+        description: Reservado para futuras autorizaciones manuales explícitas
         required: false
         default: ""
         type: string
+  push:
+    branches:
+      - main
+    paths:
+      - precios-supermercados-sps/.automation/la-colonia-context-bound-facets-authorization.json
 
 permissions:
   contents: read
@@ -200,10 +205,10 @@ jobs:
           exit "$exit_code"
 
   context-bound-facet-entrypoint:
-    # Preparado offline, pero globalmente cerrado. La allow-list humana en código
-    # también está vacía, por lo que una habilitación accidental seguiría fallando
-    # antes de OIDC, navegador o tráfico externo.
-    if: ${{ false }}
+    # Autorización humana explícita y transitoria recibida el 2026-08-24T20:46:11Z.
+    # Sólo un push a main que incluya el marker exacto puede abrir este job. El
+    # marker se valida antes de OIDC/browser/red y será retirado después del run.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: la-colonia-live
@@ -232,13 +237,13 @@ jobs:
       - name: Instalar dependencias verificadas
         run: python -m pip install -r precios-supermercados-sps/requirements.txt
 
-      - name: Ejecutar entrypoint context-bound de facets
+      - name: Ejecutar observación context-bound autorizada de facets
         id: facets
         shell: bash
         run: |
           set +e
-          python precios-supermercados-sps/scripts/ejecutar_facets_context_bound_la_colonia.py \
-            --authorization-id "${{ inputs.facet_authorization_id }}" \
+          python precios-supermercados-sps/scripts/ejecutar_facets_context_bound_la_colonia_autorizado.py \
+            --authorization-file precios-supermercados-sps/.automation/la-colonia-context-bound-facets-authorization.json \
             --output-dir precios-supermercados-sps/facet-entrypoint-artifacts
           exit_code=$?
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"

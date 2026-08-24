@@ -1,0 +1,14 @@
+{
+  "schema_version": "precios-sps-context-bound-facets-authorization/v1",
+  "authorization_id": "SPS-context-and-root-facets-003",
+  "authorized_at": "2026-08-24T20:46:11Z",
+  "scope": "context_bound_facets_sps",
+  "max_requests": 2,
+  "concurrency": 1,
+  "max_retries": 0,
+  "catalog_crawl": false,
+  "commercial_persistence": false,
+  "production_authority": false,
+  "catalog_accepted": false,
+  "extraction_enabled": false
+}
