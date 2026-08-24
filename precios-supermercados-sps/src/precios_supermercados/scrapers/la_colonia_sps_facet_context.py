@@ -8,17 +8,18 @@ llenar ese hueco con una suposición.
 La capa:
 
 - valida que ``la_colonia_sps`` tenga binding técnico de ciudad confirmado;
-- observa un ``regionId`` sólo en memoria durante una futura sesión autorizada;
-- exige que su fingerprint coincida con la evidencia canónica;
-- exige una única ubicación de transporte (query/header/body);
+- observa un ``regionId`` sólo en memoria y sólo en el endpoint GraphQL estructural;
+- conserva el nombre público exacto del parámetro/header y su placement;
+- exige que el fingerprint coincida con la evidencia canónica;
+- exige un único placement y un único wire key observados;
 - prepara únicamente las dos requests estructurales cerradas de facets;
 - nunca abre red, no acepta catálogo y no habilita extracción.
 
 El valor raw queda deliberadamente fuera de ``repr`` y de cualquier representación
 pública. Sólo una capa de transporte futura, explícitamente auditada, podrá pedirlo
-mediante ``reveal_for_transport`` y deberá aplicar exactamente el placement
-observado. Mientras ese placement no se observe, no existe una ejecución live
-válida de facets bajo SPS.
+mediante ``reveal_for_transport`` y deberá aplicar exactamente el placement y wire
+key observados en una request relevante. Mientras esa relación no se observe, no
+existe una ejecución live válida de facets bajo SPS.
 """
 
 from __future__ import annotations
@@ -67,6 +68,8 @@ _REGION_ALIASES = frozenset(
         "xvtexregion",
     }
 )
+FACET_CONTEXT_HOST = "www.lacolonia.com"
+FACET_CONTEXT_PATH = "/_v/segment/graphql/v1"
 
 
 def _canonical_key(value: str) -> str:
@@ -93,6 +96,23 @@ def fingerprint_context_value(value: Any) -> str:
     """Replica el fingerprint usado por ``location_binding_radiography``."""
 
     return hashlib.sha256(_stable_json(value).encode("utf-8")).hexdigest()
+
+
+def _eligible_graphql_request(request: Any) -> bool:
+    try:
+        parsed = urlsplit(str(request.url))
+    except Exception:
+        return False
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme.casefold() == "https"
+        and (parsed.hostname or "").casefold() == FACET_CONTEXT_HOST
+        and port in {None, 443}
+        and parsed.path == FACET_CONTEXT_PATH
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,6 +193,7 @@ class EphemeralSpsRequestContext:
     __slots__ = (
         "placement",
         "context_key",
+        "wire_key",
         "fingerprint",
         "_raw_value",
         "_binding_source_key",
@@ -183,12 +204,18 @@ class EphemeralSpsRequestContext:
         *,
         placement: RequestContextPlacement,
         context_key: str,
+        wire_key: str,
         fingerprint: str,
         raw_value: Any,
         binding_source_key: str,
     ) -> None:
+        if not isinstance(wire_key, str) or not wire_key.strip() or wire_key != wire_key.strip():
+            raise SpsFacetContextError("sps_region_wire_key_invalid")
+        if not _is_region_key(wire_key):
+            raise SpsFacetContextError("sps_region_wire_key_invalid")
         self.placement = placement
         self.context_key = context_key
+        self.wire_key = wire_key
         self.fingerprint = fingerprint
         self._raw_value = raw_value
         self._binding_source_key = binding_source_key
@@ -197,14 +224,18 @@ class EphemeralSpsRequestContext:
         return (
             "EphemeralSpsRequestContext("
             f"placement={self.placement.value!r}, context_key={self.context_key!r}, "
-            f"fingerprint={self.fingerprint!r}, raw_value='<redacted>')"
+            f"wire_key={self.wire_key!r}, fingerprint={self.fingerprint!r}, "
+            "raw_value='<redacted>')"
         )
 
     def public_dict(self) -> dict[str, object]:
         return {
             "placement": self.placement.value,
             "context_key": self.context_key,
+            "wire_key": self.wire_key,
             "fingerprint": self.fingerprint,
+            "target_host": FACET_CONTEXT_HOST,
+            "target_path": FACET_CONTEXT_PATH,
             "raw_values_exposed": False,
         }
 
@@ -223,12 +254,12 @@ class EphemeralSpsRequestContext:
 @dataclass(frozen=True, slots=True)
 class _Occurrence:
     placement: RequestContextPlacement
-    key: str
+    wire_key: str
     value: Any
 
 
 class EphemeralSpsRequestContextCollector:
-    """Observa ``regionId`` con placement sin persistir requests completos."""
+    """Observa ``regionId`` sólo en requests del endpoint estructural esperado."""
 
     def __init__(self) -> None:
         self._occurrences: list[_Occurrence] = []
@@ -239,10 +270,20 @@ class EphemeralSpsRequestContextCollector:
     def _add(self, placement: RequestContextPlacement, key: str, value: Any) -> None:
         if not _is_region_key(key):
             return
-        occurrence = _Occurrence(placement=placement, key="regionid", value=value)
-        marker = (placement.value, _stable_json(value))
+        wire_key = str(key).strip()
+        occurrence = _Occurrence(
+            placement=placement,
+            wire_key=wire_key,
+            value=value,
+        )
+        marker = (placement.value, wire_key.casefold(), _stable_json(value))
         if all(
-            (item.placement.value, _stable_json(item.value)) != marker
+            (
+                item.placement.value,
+                item.wire_key.casefold(),
+                _stable_json(item.value),
+            )
+            != marker
             for item in self._occurrences
         ):
             self._occurrences.append(occurrence)
@@ -258,6 +299,8 @@ class EphemeralSpsRequestContextCollector:
                 self._walk_body(nested)
 
     def observe_request(self, request: Any) -> None:
+        if not _eligible_graphql_request(request):
+            return
         try:
             for key, value in request.headers.items():
                 self._add(RequestContextPlacement.HEADER, str(key), value)
@@ -307,6 +350,9 @@ class EphemeralSpsRequestContextCollector:
         placements = {item.placement for item in matches}
         if len(placements) != 1:
             raise SpsFacetContextError("sps_region_context_placement_ambiguous")
+        wire_keys = {item.wire_key.casefold() for item in matches}
+        if len(wire_keys) != 1:
+            raise SpsFacetContextError("sps_region_context_wire_key_ambiguous")
         raw_markers = {_stable_json(item.value) for item in matches}
         if len(raw_markers) != 1:
             raise SpsFacetContextError("sps_region_context_value_ambiguous")
@@ -315,6 +361,7 @@ class EphemeralSpsRequestContextCollector:
         return EphemeralSpsRequestContext(
             placement=selected.placement,
             context_key=binding.context_key,
+            wire_key=selected.wire_key,
             fingerprint=binding.expected_fingerprint,
             raw_value=selected.value,
             binding_source_key=binding.source_key,
