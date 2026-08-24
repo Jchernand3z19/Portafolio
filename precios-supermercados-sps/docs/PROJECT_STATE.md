@@ -275,6 +275,7 @@ El observador confirmó sobre SHA `7a0df3c3971a4021862855166e527827035a3ea2`:
 ## Fronteras pendientes
 
 ```text
+NEXT VISIBLE MILESTONE = obtain a real, read-only, non-authoritative La Colonia SPS catalog sample
 MVP PRIORITY = first real/verifiable La Colonia SPS catalog
 OFFLINE APPLICATION CODE = choose/prepare the shortest safe trial path
 PRODUCTIVE EDGE DEBT = stale sps_context_unconfirmed blocker + authenticated Cloudflare deployment/read-back adapter
@@ -285,6 +286,8 @@ LIVE EVIDENCE = actual regionId placement still unobserved
 El siguiente trabajo técnico debe escoger y ejecutar el camino mínimo hacia el primer catálogo real, no continuar profundizando Cloudflare por inercia. Para una prueba read-only/no autoritativa, sólo deben bloquear seguridad básica, binding SPS verificable, límites de tráfico y una salida sanitizada; la infraestructura productiva se difiere si no es indispensable para esas propiedades.
 
 La deuda del preflight `sps_context_unconfirmed` y la atestación autenticada de Cloudflare deben corregirse antes de declarar la ruta edge como productiva. No deben convertirse automáticamente en blockers del primer catálogo de prueba.
+
+El próximo resultado que cuenta como avance visible es un sample real del catálogo SPS obtenido read-only y validado como **evidencia de prueba**, todavía sin convertirlo en estado comercial aceptado. Hasta ese hito no se abrirán capas nuevas salvo un bloqueo directo y demostrado.
 
 Mientras tanto deben permanecer:
 
