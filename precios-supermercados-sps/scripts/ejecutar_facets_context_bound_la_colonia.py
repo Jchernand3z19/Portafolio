@@ -181,20 +181,19 @@ def _request_oidc_token() -> str:
     request_url = _validate_oidc_url(_required_env("ACTIONS_ID_TOKEN_REQUEST_URL"))
     request_token = _required_env("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
     session = requests.Session()
+    response: requests.Response | None = None
     try:
-        response = session.get(
-            request_url,
-            headers={"Authorization": f"bearer {request_token}", "Accept": "application/json"},
-            timeout=(5.0, 15.0),
-            allow_redirects=False,
-            stream=True,
-        )
-    except requests.RequestException as exc:
-        raise FacetLiveEntrypointSafetyError("oidc_transport_failed") from exc
-    finally:
-        # La sesión no se reutiliza para Cloudflare ni La Colonia.
-        session.close()
-    try:
+        try:
+            response = session.get(
+                request_url,
+                headers={"Authorization": f"bearer {request_token}", "Accept": "application/json"},
+                timeout=(5.0, 15.0),
+                allow_redirects=False,
+                stream=True,
+            )
+        except requests.RequestException as exc:
+            raise FacetLiveEntrypointSafetyError("oidc_transport_failed") from exc
+
         if 300 <= int(response.status_code) <= 399 or response.headers.get("Location"):
             _fail("oidc_redirect_forbidden")
         if int(response.status_code) != 200:
@@ -220,10 +219,14 @@ def _request_oidc_token() -> str:
             _fail("oidc_token_invalid")
         return token
     finally:
-        try:
-            response.close()
-        except Exception:
-            pass
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
+        # La sesión no se reutiliza para Cloudflare ni La Colonia y se cierra
+        # sólo después de consumir/cerrar la respuesta streamed.
+        session.close()
 
 
 def _preflight_edge_configuration() -> tuple[CloudflareEdgeHttpTransport, str]:
