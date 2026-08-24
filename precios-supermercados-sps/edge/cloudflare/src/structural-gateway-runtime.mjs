@@ -1,5 +1,6 @@
 import { EdgePolicyError, sha256Hex } from "./core.mjs";
 import { MAX_REPLAY_BODY_BYTES } from "./durable-store.mjs";
+import { validateAndApplyStructuralLocationContext } from "./structural-location-context.mjs";
 import {
   buildStructuralReceiptPayload,
   structuralReceiptDigest,
@@ -18,20 +19,12 @@ function fail(code, message = code) {
 }
 
 function exactText(value, code, max = 1024) {
-  if (
-    typeof value !== "string"
-    || value.length === 0
-    || value.trim() !== value
-    || value.length > max
-    || /\s/u.test(value)
-  ) fail(code);
+  if (typeof value !== "string" || value.length === 0 || value.trim() !== value || value.length > max || /\s/u.test(value)) fail(code);
   return value;
 }
 
 function exactContext(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    fail("structural_gateway_context_invalid");
-  }
+  if (!input || typeof input !== "object" || Array.isArray(input)) fail("structural_gateway_context_invalid");
   const requestKind = exactText(input.requestKind, "structural_request_kind_invalid", 64);
   if (!REQUEST_KINDS.has(requestKind)) fail("structural_request_kind_invalid");
   const context = {
@@ -50,8 +43,6 @@ function exactContext(input) {
 }
 
 function ledgerContext(context) {
-  // El ledger existente comparte presupuesto/single-flight/pacing con catálogo.
-  // Estos tres campos son etiquetas internas de reserva, no semántica de traversal.
   return Object.freeze({
     authorizationId: context.authorizationId,
     runId: context.runId,
@@ -67,9 +58,7 @@ function ledgerContext(context) {
 }
 
 function validateCollector(collector) {
-  if (!collector || typeof collector !== "object" || Array.isArray(collector)) {
-    fail("collector_config_invalid");
-  }
+  if (!collector || typeof collector !== "object" || Array.isArray(collector)) fail("collector_config_invalid");
   const normalized = {
     principal: exactText(collector.principal, "collector_principal_invalid", 256),
     releaseId: exactText(collector.releaseId, "collector_release_id_invalid", 256),
@@ -83,22 +72,11 @@ function validateCollector(collector) {
 function validateClaims(claims, context) {
   if (!claims || typeof claims !== "object" || Array.isArray(claims)) fail("oidc_claims_missing");
   if (claims.sha !== context.approvedCommitSha) fail("oidc_commit_context_mismatch");
-  for (const key of [
-    "repository",
-    "repository_id",
-    "ref",
-    "workflow_ref",
-    "environment",
-    "run_id",
-    "sub",
-    "jti",
-  ]) {
+  for (const key of ["repository", "repository_id", "ref", "workflow_ref", "environment", "run_id", "sub", "jti"]) {
     exactText(claims[key], `oidc_${key}_missing`, key === "sub" ? 1024 : 512);
   }
   const attempt = Number(claims.run_attempt);
-  if (!Number.isSafeInteger(attempt) || attempt < 1 || attempt > 100) {
-    fail("oidc_run_attempt_invalid");
-  }
+  if (!Number.isSafeInteger(attempt) || attempt < 1 || attempt > 100) fail("oidc_run_attempt_invalid");
   if (`${claims.run_id}:${attempt}` !== context.runId) fail("oidc_run_context_mismatch");
   return Object.freeze({ ...claims, run_attempt: attempt });
 }
@@ -127,11 +105,7 @@ async function readBodyLimited(response, maxBytes) {
       if (!(value instanceof Uint8Array)) fail("origin_body_chunk_invalid");
       total += value.byteLength;
       if (total > maxBytes) {
-        try {
-          await reader.cancel("body_above_limit");
-        } catch {
-          // best effort
-        }
+        try { await reader.cancel("body_above_limit"); } catch { /* best effort */ }
         fail("origin_body_above_limit");
       }
       chunks.push(value);
@@ -143,31 +117,15 @@ async function readBodyLimited(response, maxBytes) {
   if (total === 0) fail("origin_body_empty");
   const body = new Uint8Array(total);
   let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
+  for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
   return body;
 }
 
 function noFetchResult(reservation) {
-  if (reservation.decision === "WAIT") {
-    return Object.freeze({
-      decision: "WAIT",
-      reason: reservation.reason,
-      notBeforeMs: reservation.notBeforeMs ?? null,
-      inFlightReservationId: reservation.inFlightReservationId ?? null,
-    });
-  }
-  if (reservation.decision === "DENY") {
-    return Object.freeze({ decision: "DENY", reason: reservation.reason });
-  }
-  if (reservation.decision === "REPLAY_IN_FLIGHT") {
-    return Object.freeze({ decision: "WAIT", reason: "reservation_in_flight" });
-  }
-  if (reservation.decision === "REPLAY_FAILED") {
-    return Object.freeze({ decision: "DENY", reason: "reservation_failed" });
-  }
+  if (reservation.decision === "WAIT") return Object.freeze({ decision: "WAIT", reason: reservation.reason, notBeforeMs: reservation.notBeforeMs ?? null, inFlightReservationId: reservation.inFlightReservationId ?? null });
+  if (reservation.decision === "DENY") return Object.freeze({ decision: "DENY", reason: reservation.reason });
+  if (reservation.decision === "REPLAY_IN_FLIGHT") return Object.freeze({ decision: "WAIT", reason: "reservation_in_flight" });
+  if (reservation.decision === "REPLAY_FAILED") return Object.freeze({ decision: "DENY", reason: "reservation_failed" });
   fail("reservation_decision_unexpected");
 }
 
@@ -184,12 +142,30 @@ function replayResult(envelope) {
   });
 }
 
-async function verifyReplayEnvelope(envelope, context, verifyReceipt) {
+function assertReceiptLocation(payload, expectedLocation) {
+  if (!expectedLocation) {
+    if (payload.schema_version !== "1") fail("replay_unrequested_location_context");
+    return;
+  }
+  if (payload.schema_version !== "2") fail("replay_location_context_missing");
+  const expected = expectedLocation.receiptContext;
+  const pairs = [
+    ["location_id", expected.locationId],
+    ["binding_source_key", expected.bindingSourceKey],
+    ["binding_evidence", expected.bindingEvidence],
+    ["context_fingerprint", expected.contextFingerprint],
+    ["context_placement", expected.contextPlacement],
+    ["context_wire_key", expected.contextWireKey],
+    ["wire_request_fingerprint", expected.wireRequestFingerprint],
+  ];
+  for (const [key, value] of pairs) if (payload[key] !== value) fail(`replay_${key}_mismatch`);
+  if (!Array.isArray(payload.context_value_path) || payload.context_value_path.length !== 0) fail("replay_context_value_path_mismatch");
+}
+
+async function verifyReplayEnvelope(envelope, context, expectedLocation, verifyReceipt) {
   if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) fail("replay_envelope_invalid");
   if (!(envelope.rawBody instanceof Uint8Array)) fail("replay_raw_body_invalid");
-  if (envelope.rawBody.byteLength === 0 || envelope.rawBody.byteLength > MAX_REPLAY_BODY_BYTES) {
-    fail("replay_raw_body_invalid");
-  }
+  if (envelope.rawBody.byteLength === 0 || envelope.rawBody.byteLength > MAX_REPLAY_BODY_BYTES) fail("replay_raw_body_invalid");
   const bodyHash = await sha256Hex(envelope.rawBody);
   const payload = envelope.receiptPayload;
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) fail("replay_receipt_invalid");
@@ -198,16 +174,11 @@ async function verifyReplayEnvelope(envelope, context, verifyReceipt) {
   if (payload.reservation_id !== context.reservationId) fail("replay_receipt_reservation_mismatch");
   if (payload.raw_response_sha256 !== bodyHash) fail("replay_receipt_hash_mismatch");
   if (payload.response_body_bytes !== envelope.rawBody.byteLength) fail("replay_receipt_size_mismatch");
-  if (payload.response_status !== envelope.responseStatus || envelope.responseStatus !== 200) {
-    fail("replay_receipt_status_mismatch");
-  }
+  if (payload.response_status !== envelope.responseStatus || envelope.responseStatus !== 200) fail("replay_receipt_status_mismatch");
   if (payload.signing_key_id !== envelope.signingKeyId) fail("replay_signing_key_mismatch");
+  assertReceiptLocation(payload, expectedLocation);
   let valid = false;
-  try {
-    valid = await verifyReceipt(payload, envelope.signatureB64Url, envelope.signingKeyId);
-  } catch {
-    fail("replay_signature_verification_failed");
-  }
+  try { valid = await verifyReceipt(payload, envelope.signatureB64Url, envelope.signingKeyId); } catch { fail("replay_signature_verification_failed"); }
   if (valid !== true) fail("replay_signature_invalid");
   const evidenceId = await structuralReceiptDigest(payload, envelope.signatureB64Url);
   if (evidenceId !== envelope.evidenceId) fail("replay_evidence_id_mismatch");
@@ -217,19 +188,12 @@ async function verifyReplayEnvelope(envelope, context, verifyReceipt) {
 export async function executeStructuralGatewayRequest(input, dependencies) {
   if (!dependencies || typeof dependencies !== "object") fail("structural_gateway_dependencies_missing");
   const store = dependencies.store;
-  if (!store || typeof store.reserve !== "function" || typeof store.complete !== "function" || typeof store.fail !== "function") {
-    fail("gateway_store_invalid");
-  }
+  if (!store || typeof store.reserve !== "function" || typeof store.complete !== "function" || typeof store.fail !== "function") fail("gateway_store_invalid");
   for (const [name, code] of [
-    ["authenticate", "gateway_authenticator_missing"],
-    ["fetchOrigin", "gateway_fetch_missing"],
-    ["signReceipt", "gateway_signer_missing"],
-    ["verifyReceipt", "gateway_verifier_missing"],
-    ["clock", "gateway_clock_missing"],
-    ["executionId", "gateway_execution_id_missing"],
-  ]) {
-    if (typeof dependencies[name] !== "function") fail(code);
-  }
+    ["authenticate", "gateway_authenticator_missing"], ["fetchOrigin", "gateway_fetch_missing"],
+    ["signReceipt", "gateway_signer_missing"], ["verifyReceipt", "gateway_verifier_missing"],
+    ["clock", "gateway_clock_missing"], ["executionId", "gateway_execution_id_missing"],
+  ]) if (typeof dependencies[name] !== "function") fail(code);
 
   const context = exactContext(input?.requestContext);
   const collector = validateCollector(input?.collector);
@@ -239,39 +203,30 @@ export async function executeStructuralGatewayRequest(input, dependencies) {
   if (origin.requestKind !== context.requestKind) fail("structural_request_kind_origin_mismatch");
   if (origin.canonicalRequestSha256 !== context.requestDigest) fail("request_digest_origin_mismatch");
 
+  const appliedLocation = input?.locationContext
+    ? await validateAndApplyStructuralLocationContext(origin.url, input.locationContext)
+    : null;
   const identity = await dependencies.authenticate(input?.authorizationToken);
   const claims = validateClaims(identity?.claims, context);
   const reservationContext = ledgerContext(context);
   const beforeReserve = clockDate(dependencies.clock);
   const reserved = store.reserve(reservationContext, beforeReserve.getTime());
-  if (reserved.decision === "REPLAY_COMPLETED") {
-    return verifyReplayEnvelope(reserved.replayEnvelope, context, dependencies.verifyReceipt);
-  }
+  if (reserved.decision === "REPLAY_COMPLETED") return verifyReplayEnvelope(reserved.replayEnvelope, context, appliedLocation, dependencies.verifyReceipt);
   if (reserved.decision !== "RESERVED") return noFetchResult(reserved);
 
   const physicalStartedAt = clockDate(dependencies.clock);
   if (physicalStartedAt.getTime() < reserved.reservation.physicalStartMs) {
-    try {
-      store.fail(context.reservationId, "physical_clock_precedes_reservation", physicalStartedAt.getTime());
-    } catch {
-      // preserve primary error
-    }
+    try { store.fail(context.reservationId, "physical_clock_precedes_reservation", physicalStartedAt.getTime()); } catch { /* preserve primary error */ }
     fail("physical_clock_precedes_reservation");
   }
 
+  const fetchUrl = appliedLocation?.fetchUrl ?? origin.url;
+  const fetchHeaders = { accept: "application/json", ...(appliedLocation?.fetchHeaders ?? {}) };
   let response;
   try {
-    response = await dependencies.fetchOrigin(origin.url, {
-      method: "GET",
-      redirect: "manual",
-      headers: Object.freeze({ accept: "application/json" }),
-    });
+    response = await dependencies.fetchOrigin(fetchUrl, { method: "GET", redirect: "manual", headers: Object.freeze(fetchHeaders) });
   } catch {
-    store.fail(
-      context.reservationId,
-      "origin_transport_error",
-      Math.max(clockDate(dependencies.clock).getTime(), physicalStartedAt.getTime()),
-    );
+    store.fail(context.reservationId, "origin_transport_error", Math.max(clockDate(dependencies.clock).getTime(), physicalStartedAt.getTime()));
     fail("origin_transport_error");
   }
   if (!(response instanceof Response)) {
@@ -294,9 +249,7 @@ export async function executeStructuralGatewayRequest(input, dependencies) {
   }
 
   let rawBody;
-  try {
-    rawBody = await readBodyLimited(response, MAX_REPLAY_BODY_BYTES);
-  } catch (error) {
+  try { rawBody = await readBodyLimited(response, MAX_REPLAY_BODY_BYTES); } catch (error) {
     const reason = error instanceof EdgePolicyError ? error.code : "origin_body_read_failed";
     store.fail(context.reservationId, reason, Math.max(clockDate(dependencies.clock).getTime(), physicalStartedAt.getTime()));
     throw error;
@@ -344,12 +297,11 @@ export async function executeStructuralGatewayRequest(input, dependencies) {
     signingAlgorithm: "Ed25519",
     signingKeyId: collector.signingKeyId,
     nonce: context.nonce,
+    locationContext: appliedLocation?.receiptContext ?? null,
   });
 
   let signatureB64Url;
-  try {
-    signatureB64Url = await dependencies.signReceipt(receiptPayload);
-  } catch {
+  try { signatureB64Url = await dependencies.signReceipt(receiptPayload); } catch {
     store.fail(context.reservationId, "receipt_signature_failed", responseCompletedAt.getTime());
     fail("receipt_signature_failed");
   }
@@ -358,13 +310,7 @@ export async function executeStructuralGatewayRequest(input, dependencies) {
     fail("receipt_signature_invalid");
   }
   let signatureValid = false;
-  try {
-    signatureValid = await dependencies.verifyReceipt(
-      receiptPayload,
-      signatureB64Url,
-      collector.signingKeyId,
-    );
-  } catch {
+  try { signatureValid = await dependencies.verifyReceipt(receiptPayload, signatureB64Url, collector.signingKeyId); } catch {
     store.fail(context.reservationId, "receipt_signature_verification_failed", responseCompletedAt.getTime());
     fail("receipt_signature_verification_failed");
   }

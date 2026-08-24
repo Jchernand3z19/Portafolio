@@ -1,10 +1,10 @@
 """Cliente Python fail-closed para ``/v1/structural-execute``.
 
-El módulo no implementa HTTP ni conoce una URL desplegada. El transporte se
-inyecta explícitamente. Valida el request canónico, el envelope del Worker, los
-bytes exactos y el receipt estructural antes de entregarlos a la capa
-criptográfica independiente. Una respuesta bien formada no concede autoridad
-productiva por sí sola.
+El contrato v1 continúa disponible para evidencia estructural histórica. Cuando
+se adjunta ``StructuralEdgeLocationContext``, el request exige un receipt v2 cuyo
+material firmado coincide exactamente con el binding/contexto SPS solicitado.
+El raw ``regionId`` sólo viaja al collector autenticado y nunca se devuelve como
+evidencia pública.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from precios_supermercados.la_colonia_edge_structural_request import (
     ValidatedLaColoniaStructuralRequest,
     validate_la_colonia_structural_request,
 )
+from precios_supermercados.structural_location_context import StructuralEdgeLocationContext
 from precios_supermercados.structural_provenance import (
     SignedStructuralReceipt,
     StructuralProvenanceError,
@@ -39,11 +40,19 @@ _RUN_ID = re.compile(r"[0-9]+:[1-9][0-9]*\Z")
 _B64URL = re.compile(r"[A-Za-z0-9_-]+\Z")
 _REQUEST_KINDS = {"root_total", "category_tree"}
 _COMPLETED_DECISIONS = {"ORIGIN_COMPLETED", "REPLAY_COMPLETED"}
+_LOCATION_FIELDS = {
+    "location_id",
+    "binding_source_key",
+    "binding_evidence",
+    "context_fingerprint",
+    "context_placement",
+    "context_wire_key",
+    "context_value_path",
+    "wire_request_fingerprint",
+}
 
 
 class StructuralEdgeGatewayClientError(ValueError):
-    """El request o la respuesta del gateway estructural no cumple el contrato."""
-
     def __init__(self, code: str, message: str | None = None) -> None:
         super().__init__(message or code)
         self.code = code
@@ -60,12 +69,7 @@ def _exact_keys(value: object, expected: set[str], code: str) -> Mapping[str, ob
 
 
 def _text(value: object, code: str, *, maximum: int = 512) -> str:
-    if (
-        not isinstance(value, str)
-        or not value
-        or value.strip() != value
-        or len(value) > maximum
-    ):
+    if not isinstance(value, str) or not value or value.strip() != value or len(value) > maximum:
         _fail(code)
     return value
 
@@ -142,17 +146,26 @@ def _validated_origin(value: object) -> ValidatedLaColoniaStructuralRequest:
 
 
 def _parse_receipt_payload(value: object) -> StructuralReceiptPayload:
-    expected = {item.name for item in fields(StructuralReceiptPayload)}
-    source = _exact_keys(value, expected, "structural_receipt_payload_shape_invalid")
-    payload = dict(source)
+    if not isinstance(value, Mapping):
+        _fail("structural_receipt_payload_shape_invalid")
+    all_names = {item.name for item in fields(StructuralReceiptPayload)}
+    v1_names = all_names - _LOCATION_FIELDS
+    schema = value.get("schema_version")
+    expected = all_names if schema == "2" else v1_names if schema == "1" else set()
+    if not expected or set(value) != expected:
+        _fail("structural_receipt_payload_shape_invalid")
+    payload = dict(value)
     payload["physical_started_at_utc"] = _timestamp(
-        payload.get("physical_started_at_utc"),
-        "structural_receipt_physical_started_at_invalid",
+        payload.get("physical_started_at_utc"), "structural_receipt_physical_started_at_invalid"
     )
     payload["response_completed_at_utc"] = _timestamp(
-        payload.get("response_completed_at_utc"),
-        "structural_receipt_response_completed_at_invalid",
+        payload.get("response_completed_at_utc"), "structural_receipt_response_completed_at_invalid"
     )
+    if schema == "2":
+        path = payload.get("context_value_path")
+        if not isinstance(path, list) or any(not isinstance(item, str) for item in path):
+            _fail("structural_receipt_context_value_path_invalid")
+        payload["context_value_path"] = tuple(path)
     try:
         return StructuralReceiptPayload(**payload)  # type: ignore[arg-type]
     except StructuralProvenanceError as exc:
@@ -160,8 +173,6 @@ def _parse_receipt_payload(value: object) -> StructuralReceiptPayload:
 
 
 class StructuralEdgeGatewayTransport(Protocol):
-    """Frontera de I/O inyectada. Este módulo no abre red solo."""
-
     def post_json(
         self,
         path: str,
@@ -189,16 +200,8 @@ class StructuralEdgeRequestContext:
         if not _RUN_ID.fullmatch(run_id):
             _fail("run_id_invalid")
         object.__setattr__(self, "run_id", run_id)
-        object.__setattr__(
-            self,
-            "approved_commit_sha",
-            _sha1(self.approved_commit_sha, "approved_commit_sha_invalid"),
-        )
-        object.__setattr__(
-            self,
-            "request_digest",
-            _sha256(self.request_digest, "request_digest_invalid"),
-        )
+        object.__setattr__(self, "approved_commit_sha", _sha1(self.approved_commit_sha, "approved_commit_sha_invalid"))
+        object.__setattr__(self, "request_digest", _sha256(self.request_digest, "request_digest_invalid"))
         if self.request_kind not in _REQUEST_KINDS:
             _fail("request_kind_invalid")
 
@@ -219,10 +222,13 @@ class StructuralEdgeRequestContext:
 class StructuralEdgeExecutionRequest:
     origin_url: str
     context: StructuralEdgeRequestContext
+    location_context: StructuralEdgeLocationContext | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.context, StructuralEdgeRequestContext):
             _fail("request_context_invalid")
+        if self.location_context is not None and not isinstance(self.location_context, StructuralEdgeLocationContext):
+            _fail("location_context_invalid")
         origin = _validated_origin(self.origin_url)
         if origin.request_kind != self.context.request_kind:
             _fail("request_kind_origin_mismatch")
@@ -231,10 +237,13 @@ class StructuralEdgeExecutionRequest:
         object.__setattr__(self, "origin_url", origin.source_url)
 
     def wire_payload(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "originUrl": self.origin_url,
             "requestContext": self.context.wire_dict(),
         }
+        if self.location_context is not None:
+            payload["locationContext"] = self.location_context.wire_dict()
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,14 +271,10 @@ class StructuralEdgeGatewayEvidence:
     production_authority: bool = False
 
 
-StructuralEdgeExecutionResult: TypeAlias = (
-    StructuralEdgeGatewayEvidence | StructuralEdgeGatewayWait | StructuralEdgeGatewayDenied
-)
+StructuralEdgeExecutionResult: TypeAlias = StructuralEdgeGatewayEvidence | StructuralEdgeGatewayWait | StructuralEdgeGatewayDenied
 
 
 class StructuralEdgeGatewayClient:
-    """Valida envelopes de la ruta estructural sin conceder confianza criptográfica."""
-
     def __init__(self, transport: StructuralEdgeGatewayTransport) -> None:
         if transport is None or not callable(getattr(transport, "post_json", None)):
             _fail("transport_invalid")
@@ -293,12 +298,7 @@ class StructuralEdgeGatewayClient:
             _fail("worker_error_response_invalid")
         return response
 
-    def execute(
-        self,
-        request: StructuralEdgeExecutionRequest,
-        *,
-        bearer_token: str,
-    ) -> StructuralEdgeExecutionResult:
+    def execute(self, request: StructuralEdgeExecutionRequest, *, bearer_token: str) -> StructuralEdgeExecutionResult:
         if not isinstance(request, StructuralEdgeExecutionRequest):
             _fail("execution_request_invalid")
         try:
@@ -323,11 +323,7 @@ class StructuralEdgeGatewayClient:
 
     @staticmethod
     def _wait(root: Mapping[str, object]) -> StructuralEdgeGatewayWait:
-        source = _exact_keys(
-            root,
-            {"ok", "decision", "reason", "notBeforeMs", "inFlightReservationId"},
-            "wait_response_shape_invalid",
-        )
+        source = _exact_keys(root, {"ok", "decision", "reason", "notBeforeMs", "inFlightReservationId"}, "wait_response_shape_invalid")
         reason = _opaque(source.get("reason"), "wait_reason_invalid")
         in_flight = source.get("inFlightReservationId")
         if in_flight is not None:
@@ -341,28 +337,13 @@ class StructuralEdgeGatewayClient:
     @staticmethod
     def _denied(root: Mapping[str, object]) -> StructuralEdgeGatewayDenied:
         source = _exact_keys(root, {"ok", "decision", "reason"}, "deny_response_shape_invalid")
-        return StructuralEdgeGatewayDenied(
-            reason=_opaque(source.get("reason"), "deny_reason_invalid")
-        )
+        return StructuralEdgeGatewayDenied(reason=_opaque(source.get("reason"), "deny_reason_invalid"))
 
     @staticmethod
-    def _completed(
-        root: Mapping[str, object],
-        request: StructuralEdgeExecutionRequest,
-    ) -> StructuralEdgeGatewayEvidence:
+    def _completed(root: Mapping[str, object], request: StructuralEdgeExecutionRequest) -> StructuralEdgeGatewayEvidence:
         source = _exact_keys(
             root,
-            {
-                "ok",
-                "decision",
-                "replayed",
-                "responseStatus",
-                "rawBodyB64Url",
-                "receiptPayload",
-                "signatureB64Url",
-                "signingKeyId",
-                "evidenceId",
-            },
+            {"ok", "decision", "replayed", "responseStatus", "rawBodyB64Url", "receiptPayload", "signatureB64Url", "signingKeyId", "evidenceId"},
             "completed_response_shape_invalid",
         )
         decision = source.get("decision")
@@ -405,11 +386,32 @@ class StructuralEdgeGatewayClient:
             _fail("completed_graphql_query_mismatch")
         if payload.response_status != status:
             _fail("completed_receipt_status_mismatch")
-        raw_hash = hashlib.sha256(raw_body).hexdigest()
-        if payload.raw_response_sha256 != raw_hash:
+        if payload.raw_response_sha256 != hashlib.sha256(raw_body).hexdigest():
             _fail("completed_body_hash_mismatch")
         if payload.response_body_bytes != len(raw_body):
             _fail("completed_body_size_mismatch")
+
+        requested_location = request.location_context
+        if requested_location is None:
+            if payload.location_context_bound:
+                _fail("completed_unrequested_location_context")
+        else:
+            if not payload.location_context_bound:
+                _fail("completed_location_context_missing")
+            expected_location = requested_location.public_dict()
+            for attr, expected in (
+                ("location_id", expected_location["location_id"]),
+                ("binding_source_key", expected_location["binding_source_key"]),
+                ("binding_evidence", expected_location["binding_evidence"]),
+                ("context_fingerprint", expected_location["context_fingerprint"]),
+                ("context_placement", expected_location["placement"]),
+                ("context_wire_key", expected_location["wire_key"]),
+                ("context_value_path", tuple(expected_location["value_path"])),
+                ("wire_request_fingerprint", expected_location["wire_request_fingerprint"]),
+            ):
+                if getattr(payload, attr) != expected:
+                    _fail(f"completed_{attr}_mismatch")
+
         try:
             receipt = SignedStructuralReceipt(payload=payload, signature_b64url=signature)
         except StructuralProvenanceError as exc:
