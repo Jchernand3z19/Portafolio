@@ -153,7 +153,7 @@ def _redacted(expected: ExpectedProvenancePage, index: int) -> RedactedContextBo
         context_fingerprint=CONTEXT_FP,
         wire_request_fingerprint=payload.wire_request_fingerprint,
         base_fetch_url_sha256=f"{index + 12:x}" * 64,
-        raw_fetch_url_sha256=f"{index + 14:x}" * 64,
+        raw_fetch_url_sha256=format((index + 14) % 16, "x") * 64,
         raw_trace_evidence_sha256=f"{index + 1:x}" * 64,
         fetch_status=200,
         fetch_response_body_size=payload.response_body_bytes,
