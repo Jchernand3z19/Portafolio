@@ -4,10 +4,10 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)**, después de fusionar los PRs `#254`–`#261`, verificar el workbook físico de Google Sheets y cerrar offline la frontera `RawProduct -> la_colonia_sps`.
+Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)**, después de fusionar los PRs `#254`–`#266`, simplificar el storage temporal, cerrar offline la frontera `RawProduct -> la_colonia_sps`, componer el futuro entrypoint de facets y preparar provenance seguro para placements `header` y `query`.
 
 ```text
-main_observed = 7f875df4f4e8d3954a4b569baaa9b3dd2c9b4c18
+main_observed = 0474e34a6ed371f330d4745d202d3cffc043945f
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
 granularity = city
@@ -18,9 +18,9 @@ catalog_accepted = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-La ubicación SPS, el plan estructural, las páginas de catálogo y la nueva frontera de materialización raw permanecen ligados al mismo contexto técnico. El almacenamiento temporal separa modelo lógico de materialización física y mantiene sólo seis tablas activas en Google Sheets.
+La ubicación SPS, el plan estructural, las páginas de catálogo y la frontera de materialización raw permanecen ligados al mismo contexto técnico. El almacenamiento temporal separa modelo lógico de materialización física y mantiene sólo seis tablas activas en Google Sheets.
 
-La suite completa del PR `#261` terminó verde en el run `32762339938`: **1647 passed**. Ese run ejecutó `pip check` y `compileall` con `SyntaxWarning` tratado como error; ambos terminaron limpios.
+La suite completa del PR `#266` terminó verde en el run `32769032672`: **1701 passed**. Ese run ejecutó `pip check` y `compileall` con `SyntaxWarning` tratado como error; ambos terminaron limpios.
 
 ## Binding técnico de San Pedro Sula
 
@@ -54,7 +54,7 @@ artifact_json = reports/discovery/la-colonia-location-binding-2026-08-24.json
 artifact_canonical_sha256 = 80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95
 ```
 
-La captura histórica deliberadamente **no conserva el placement** de `regionId` dentro del request. Por tanto el repositorio no puede afirmar todavía si el contexto real observado para el endpoint GraphQL relevante fue `header`, `query` o una forma anidada. Esa ausencia no se completa por inferencia.
+La captura histórica deliberadamente **no conserva el placement** de `regionId` dentro del request. Por tanto el repositorio no puede afirmar todavía si el contexto real observado para el endpoint GraphQL relevante fue `header`, `query` o alguna forma distinta/anidada. Esa ausencia no se completa por inferencia. Las rutas preparadas para `header` y `query` no convierten una tercera forma hipotética en soportada: cualquier placement no contratado debe fallar cerrado hasta disponer de evidencia concreta.
 
 ## Ubicaciones
 
@@ -130,18 +130,20 @@ ACTIVE_AUTHORIZATION_IDS = []
 
 La ejecución histórica de binding puede reutilizarse como evidencia offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** y limitada al propósito autorizado. Los IDs históricos consumidos no se reutilizan. La autonomía técnica del agente cubre GitHub/offline, pero no crea por inferencia autorización de tráfico contra el supermercado.
 
-La próxima observación live prevista es mínima y exclusivamente de **facets bajo SPS**, después de agotar el trabajo offline. Requiere autorización humana explícita nueva y acotada. No concede por sí sola `production_authority`, `catalog_accepted`, persistencia comercial ni autorización para un crawl de catálogo.
+La próxima observación live prevista es mínima y exclusivamente de **facets bajo SPS**. No concede por sí sola `production_authority`, `catalog_accepted`, persistencia comercial ni autorización para un crawl de catálogo.
 
-## Facets estructurales context-bound
+## Facets estructurales context-bound — preparación offline cerrada
 
-La ruta estructural exige el binding SPS confirmado y mantiene el valor raw sólo en memoria. El plan cerrado contiene exactamente:
+Los PRs `#263`–`#265` cerraron la preparación del futuro entrypoint sin habilitar tráfico live.
+
+El plan cerrado contiene exactamente:
 
 ```text
 root_total
 category_tree
 ```
 
-El contrato base ya fija:
+Y fija:
 
 ```text
 max_requests = 2
@@ -149,18 +151,35 @@ concurrency = 1
 max_retries = 0
 ```
 
-La cadena valida y liga:
+La cadena preparada incluye:
 
-- `location_id`;
-- binding source/evidence;
-- fingerprint de contexto;
-- placement y wire key/path observados en memoria;
-- fingerprint del request wire;
-- request digest y run context;
-- receipt contextual firmado;
-- misma identidad criptográfica en root/tree.
+```text
+GitHub workflow fail-closed
+-> environment controlado
+-> OIDC de audience fija
+-> transporte HTTP Cloudflare allowlisted
+-> observación efímera de regionId
+-> SpsStructuralFacetPlan
+-> root_total
+-> category_tree
+-> receipts contextuales firmados
+-> artefacto sanitizado
+```
 
-Un receipt legacy, cambio de contexto, mismatch de fingerprint o material caller-controlled falla cerrado. La ejecución de red no está autorizada actualmente.
+Invariantes principales:
+
+- el gate humano ocurre antes de OIDC, browser y red;
+- el workflow mantiene el job bloqueado y no puede ejecutar tráfico en el estado actual;
+- sólo se permiten endpoints `https://*.workers.dev` y las rutas edge explícitamente contratadas;
+- redirects y retries implícitos están desactivados;
+- el mismo bearer OIDC se reutiliza dentro del presupuesto cerrado;
+- el contexto deriva del plan SPS, no de overrides caller-controlled;
+- el valor raw de `regionId` sólo puede existir de forma transitoria en memoria;
+- los artefactos públicos conservan fingerprints/evidencia sanitizada, no el valor raw;
+- receipt legacy, contexto divergente, secuencia distinta de `root_total -> category_tree` o request adicional fallan cerrado;
+- `production_authority`, `catalog_accepted` y `extraction_enabled` permanecen en `false`.
+
+La ejecución de red no está autorizada actualmente.
 
 ## Catálogo context-bound — cerrado offline
 
@@ -191,14 +210,17 @@ Invariantes principales:
 - `WAIT`/`DENY` no producen retries ocultos;
 - el resultado continúa con `production_authority=false` y `catalog_accepted=false`.
 
-### Observability y placement
+### Observability y placement — rutas seguras preparadas
 
-El finalizador context-bound conserva una restricción explícita:
+El PR `#266` eliminó la deuda offline de provenance para el caso `query` sin seleccionar ni inferir el placement real.
 
-- `header`: puede reconciliarse con el contrato de tracing actual porque el URL físico continúa igual al request base y el valor sensible no entra en la traza pública;
-- `query`: falla antes de solicitar token de Observability con `catalog_context_query_observability_redaction_required`, porque el contrato legacy serializa el URL físico y podría exponer el contexto raw.
+- `header`: continúa usando la reconciliación legacy, donde el URL físico coincide con el request base y el contexto sensible viaja fuera del URL;
+- `query`: el verifier obtiene candidatos raw de Workers Observability sólo de forma transitoria, exige que el URL físico sea exactamente el request base más un único parámetro directo de región, reconcilia identidad/status/body/script/timestamps y devuelve evidencia redactada basada en hashes;
+- la evidencia durable de `query` no conserva `url.full`, `fetch_url` ni el valor raw de ubicación;
+- el builder run-level produce el mismo `EdgeProvenanceRunManifest` sin reintroducir el URL físico;
+- ambos caminos continúan con `production_authority=false`.
 
-Como la evidencia histórica de binding no guardó placement, **todavía no se sabe cuál de estas rutas corresponde al sitio real**. No se debe elegir `header` por comodidad ni usar `query` sin crear primero un contrato de provenance redactado seguro.
+El finalizador usa el placement ya atestiguado por el contexto SPS y sólo admite los placements explícitamente soportados `header`/`query`; cualquier otro placement falla cerrado. Como la evidencia histórica no preservó ese dato, todavía no se sabe qué forma corresponde al sitio real. Esa selección depende de una observación live futura autorizada; no se inventa una tercera ruta sin evidencia de su forma exacta.
 
 ## Readiness de catálogo
 
@@ -257,26 +279,33 @@ La reauditoría reproducible de ramas históricas se incorporó mediante PR `#25
 
 ```text
 workflow = Precios Supermercados SPS - Pruebas base
-run = 32762339938
+run = 32769032672
 result = success
-pytest = 1647 passed
+pytest = 1701 passed
 pip check = clean
 compileall SyntaxWarning = none
 ```
 
 ## Fronteras offline restantes
 
-Antes de pedir autorización live para facets quedan únicamente las fronteras que todavía pueden cerrarse sin contactar al supermercado:
+Las fronteras genéricas que podían prepararse sin observar de nuevo el request real ya están cubiertas para el contrato soportado:
 
-1. **Composición del entrypoint futuro de facets**: preparar la ruta fail-closed con el plan contextual SPS, exactamente `root_total` + `category_tree`, `max_requests=2`, `concurrency=1`, `max_retries=0`, OIDC/environment/collector, receipts firmados y artefacto sanitizado. Debe permanecer bloqueada hasta una autorización humana nueva.
-2. **Placement-safe provenance**: no se elige header/query por inferencia. La ruta header actual ya es segura; para query debe existir un contrato de trace/provenance redactado antes de aceptar una observación con ese placement. El código genérico seguro puede prepararse offline, pero la selección del camino real depende de evidencia live futura.
-3. **Reauditoría/sincronización final de Fase 0**: volver a verificar ramas históricas, workflows, CI, documentación y ausencia de deuda offline conocida justo antes de la frontera humana.
+- storage físico simplificado y read-back verificado;
+- `RawProduct -> la_colonia_sps` evidence-bound;
+- entrypoint futuro de facets compuesto y fail-closed;
+- transporte OIDC/Cloudflare acotado;
+- provenance segura para los placements explícitamente soportados `header` y `query`;
+- CI base verde y compileall estricto.
 
-La simplificación del storage, la sincronización de documentación estable y la frontera `RawProduct -> ubicación comercial evidence-bound` ya están cerradas.
+Queda una única actividad de cierre de Fase 0 que no requiere tráfico al supermercado:
+
+1. **Reauditoría y sincronización final**: volver a verificar ramas históricas, workflows, CI, documentación estable/mutable y ausencia de deuda offline conocida contra el `main` actual. Si el snapshot histórico requiere nuevos overrides explícitos, deben versionarse y quedar reproducibles antes de declarar cerrada la fase.
+
+La selección del placement real **no es una frontera offline**: depende de evidencia live nueva y no se resuelve por inferencia. Si esa observación revela un placement no soportado, se abrirá una frontera nueva ligada a esa evidencia en lugar de adivinar su contrato ahora.
 
 ## Próxima dependencia humana real
 
-Todavía **no** corresponde ejecutar tráfico live ni pedir autorización para catálogo. Cuando las fronteras offline anteriores estén cerradas, la primera dependencia humana real será una autorización nueva, mínima y explícita para observar **facets bajo SPS** y capturar de forma sanitizada el placement real de `regionId` en los requests GraphQL pertinentes.
+Después de completar la reauditoría/sincronización final, la primera dependencia humana real será una autorización nueva, mínima y explícita para observar **facets bajo SPS** y capturar de forma sanitizada el placement real de `regionId` en los requests GraphQL pertinentes.
 
 Hasta entonces deben permanecer:
 
