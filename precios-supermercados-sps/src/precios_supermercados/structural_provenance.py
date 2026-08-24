@@ -1,9 +1,10 @@
 """Receipt criptográfico dedicado al descubrimiento estructural de La Colonia.
 
-Las observaciones ``root_total`` y ``category_tree`` preceden al plan de páginas
-del catálogo, por lo que no deben disfrazarse como páginas primary/reconciliation.
-Este contrato separado liga cada respuesta estructural a su request canónico,
-GitHub OIDC y ejecución del collector sin conceder autoridad productiva.
+El schema v1 preserva el contrato estructural histórico. El schema v2 añade una
+frontera explícita de ubicación: el receipt firmado liga la respuesta física al
+binding confirmado de San Pedro Sula, al fingerprint del ``regionId`` y al
+fingerprint del request wire que el collector ejecutó. El valor raw de región
+nunca forma parte del receipt.
 """
 
 from __future__ import annotations
@@ -18,13 +19,19 @@ from datetime import datetime, timezone
 from typing import Literal, NoReturn
 
 STRUCTURAL_PROVENANCE_SCHEMA_VERSION = "1"
+STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION = "2"
 STRUCTURAL_SIGNATURE_DOMAIN = b"precios-sps/structural-receipt-signature/v1\0"
 STRUCTURAL_DIGEST_DOMAIN = b"precios-sps/structural-receipt/v1\0"
+STRUCTURAL_CONTEXT_SIGNATURE_DOMAIN = b"precios-sps/structural-receipt-signature/v2\0"
+STRUCTURAL_CONTEXT_DIGEST_DOMAIN = b"precios-sps/structural-receipt/v2\0"
 _ALLOWED_KINDS = {"root_total", "category_tree"}
+_CONTEXT_PLACEMENTS = {"query", "header"}
 _SHA1 = re.compile(r"[0-9a-f]{40}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _B64URL = re.compile(r"[A-Za-z0-9_-]+\Z")
 _OPAQUE = re.compile(r"[^\s]{1,512}\Z")
+_BINDING_SOURCE = re.compile(r"request:regionid:sha256:(?P<digest>[0-9a-f]{64})\Z")
+_BINDING_EVIDENCE = re.compile(r"location_binding_radiography:sha256:[0-9a-f]{64}\Z")
 
 
 class StructuralProvenanceError(ValueError):
@@ -151,9 +158,20 @@ class StructuralReceiptPayload:
     signing_key_id: str
     nonce: str
     schema_version: str = STRUCTURAL_PROVENANCE_SCHEMA_VERSION
+    location_id: str | None = None
+    binding_source_key: str | None = None
+    binding_evidence: str | None = None
+    context_fingerprint: str | None = None
+    context_placement: str | None = None
+    context_wire_key: str | None = None
+    context_value_path: tuple[str, ...] | None = None
+    wire_request_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
-        if self.schema_version != STRUCTURAL_PROVENANCE_SCHEMA_VERSION:
+        if self.schema_version not in {
+            STRUCTURAL_PROVENANCE_SCHEMA_VERSION,
+            STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION,
+        }:
             _fail("structural_receipt_schema_version_invalid")
         if self.request_kind not in _ALLOWED_KINDS:
             _fail("structural_receipt_request_kind_invalid")
@@ -214,9 +232,56 @@ class StructuralReceiptPayload:
             _fail("structural_receipt_time_order_invalid")
         object.__setattr__(self, "physical_started_at_utc", started)
         object.__setattr__(self, "response_completed_at_utc", completed)
+        self._validate_location_context()
+
+    def _validate_location_context(self) -> None:
+        fields = (
+            self.location_id,
+            self.binding_source_key,
+            self.binding_evidence,
+            self.context_fingerprint,
+            self.context_placement,
+            self.context_wire_key,
+            self.context_value_path,
+            self.wire_request_fingerprint,
+        )
+        if self.schema_version == STRUCTURAL_PROVENANCE_SCHEMA_VERSION:
+            if any(value is not None for value in fields):
+                _fail("structural_receipt_v1_location_context_forbidden")
+            return
+        if any(value is None for value in fields):
+            _fail("structural_receipt_location_context_incomplete")
+        if self.location_id != "la_colonia_sps":
+            _fail("structural_receipt_location_id_invalid")
+        source = _text(self.binding_source_key, "structural_receipt_binding_source_key_invalid")
+        match = _BINDING_SOURCE.fullmatch(source)
+        if match is None:
+            _fail("structural_receipt_binding_source_key_invalid")
+        evidence = _text(self.binding_evidence, "structural_receipt_binding_evidence_invalid")
+        if _BINDING_EVIDENCE.fullmatch(evidence) is None:
+            _fail("structural_receipt_binding_evidence_invalid")
+        fingerprint = _sha256(
+            self.context_fingerprint,
+            "structural_receipt_context_fingerprint_invalid",
+        )
+        if match.group("digest") != fingerprint:
+            _fail("structural_receipt_binding_context_fingerprint_mismatch")
+        if self.context_placement not in _CONTEXT_PLACEMENTS:
+            _fail("structural_receipt_context_placement_invalid")
+        _text(self.context_wire_key, "structural_receipt_context_wire_key_invalid", maximum=160)
+        if self.context_value_path != ():
+            _fail("structural_receipt_context_value_path_invalid")
+        _sha256(
+            self.wire_request_fingerprint,
+            "structural_receipt_wire_request_fingerprint_invalid",
+        )
+
+    @property
+    def location_context_bound(self) -> bool:
+        return self.schema_version == STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION
 
     def canonical_dict(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "approved_commit_sha": self.approved_commit_sha,
             "authorization_id": self.authorization_id,
             "canonical_request_sha256": self.canonical_request_sha256,
@@ -254,6 +319,20 @@ class StructuralReceiptPayload:
             "target_path": self.target_path,
             "target_scheme": self.target_scheme,
         }
+        if self.location_context_bound:
+            result.update(
+                {
+                    "binding_evidence": self.binding_evidence,
+                    "binding_source_key": self.binding_source_key,
+                    "context_fingerprint": self.context_fingerprint,
+                    "context_placement": self.context_placement,
+                    "context_value_path": list(self.context_value_path or ()),
+                    "context_wire_key": self.context_wire_key,
+                    "location_id": self.location_id,
+                    "wire_request_fingerprint": self.wire_request_fingerprint,
+                }
+            )
+        return result
 
     def canonical_bytes(self) -> bytes:
         return structural_canonical_json_bytes(self.canonical_dict())
@@ -277,7 +356,12 @@ class SignedStructuralReceipt:
         object.__setattr__(self, "signature_b64url", text)
 
     def signing_bytes(self) -> bytes:
-        return STRUCTURAL_SIGNATURE_DOMAIN + self.payload.canonical_bytes()
+        domain = (
+            STRUCTURAL_CONTEXT_SIGNATURE_DOMAIN
+            if self.payload.location_context_bound
+            else STRUCTURAL_SIGNATURE_DOMAIN
+        )
+        return domain + self.payload.canonical_bytes()
 
     @property
     def digest(self) -> str:
@@ -286,5 +370,10 @@ class SignedStructuralReceipt:
             "structural_receipt_signature_invalid",
             maximum=1024,
         )
-        material = STRUCTURAL_DIGEST_DOMAIN + self.payload.canonical_bytes() + b"\0" + signature
+        domain = (
+            STRUCTURAL_CONTEXT_DIGEST_DOMAIN
+            if self.payload.location_context_bound
+            else STRUCTURAL_DIGEST_DOMAIN
+        )
+        material = domain + self.payload.canonical_bytes() + b"\0" + signature
         return hashlib.sha256(material).hexdigest()
