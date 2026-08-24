@@ -4,10 +4,10 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)**, después de fusionar los PRs `#254`, `#255`, `#256` y `#257`.
+Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)**, después de fusionar los PRs `#254`–`#259` y de verificar el workbook físico de Google Sheets tras la simplificación del storage.
 
 ```text
-main_observed = d4fcd3c8fe30986a9e1e73109e3c99d0c92a888e
+main_observed = 4e3d4944a2c4a175842374c6704aa47fef499c97
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
 granularity = city
@@ -18,7 +18,9 @@ catalog_accepted = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-La ubicación SPS, el plan estructural y la ruta offline de catálogo quedaron ligados criptográficamente al mismo contexto técnico. La suite completa del PR `#257` terminó verde en el run `32751267460`: **1640 passed**. Ese run también ejecutó `compileall` con `SyntaxWarning` tratado como error y terminó limpio.
+La ubicación SPS, el plan estructural y la ruta offline de catálogo permanecen ligados criptográficamente al mismo contexto técnico. El PR `#259` dejó además separado el **modelo lógico** del **modelo físico temporal**: Google Sheets materializa únicamente seis tablas activas y las estructuras de identidad canónica cross-source quedan diferidas hasta que exista una segunda fuente o un consumidor real que las necesite.
+
+La suite completa del PR `#259` terminó verde en el run `32758969849`: **1642 passed**. Ese run ejecutó `pip check` y `compileall` con `SyntaxWarning` tratado como error; ambos terminaron limpios.
 
 ## Binding técnico de San Pedro Sula
 
@@ -98,7 +100,7 @@ La próxima observación live prevista es mínima y exclusivamente de **facets b
 
 ## Facets estructurales context-bound
 
-La ruta estructural ya exige el binding SPS confirmado y mantiene el valor raw sólo en memoria. El plan cerrado contiene exactamente:
+La ruta estructural exige el binding SPS confirmado y mantiene el valor raw sólo en memoria. El plan cerrado contiene exactamente:
 
 ```text
 root_total
@@ -120,9 +122,7 @@ Un receipt legacy, cambio de contexto, mismatch de fingerprint o material caller
 
 ## Catálogo context-bound — cerrado offline
 
-Los PRs `#254`–`#257` cerraron la frontera que antes faltaba.
-
-Cadena vigente:
+Los PRs `#254`–`#257` cerraron la cadena de catálogo context-bound:
 
 ```text
 VerifiedStructuralDiscovery
@@ -140,12 +140,12 @@ VerifiedStructuralDiscovery
 
 Invariantes principales:
 
-- cada página de catálogo exige `CatalogEdgeLocationContext` derivado del proof SPS, no del caller;
+- cada página exige `CatalogEdgeLocationContext` derivado del proof SPS, no del caller;
 - `/v1/catalog-execute` aplica el contexto justo antes del fetch y firma receipt `schema_version=3`;
 - el receipt v3 conserva sólo binding/evidencia/fingerprints y nunca el `regionId` raw;
 - downgrade a v2/legacy se rechaza;
 - primary y reconciliation derivan del mismo discovery y plan;
-- request IDs, reservation IDs, nonces, receipts, evidence IDs y wire fingerprints no se pueden reutilizar entre páginas;
+- request IDs, reservation IDs, nonces, receipts, evidence IDs y wire fingerprints no se reutilizan entre páginas;
 - `WAIT`/`DENY` no producen retries ocultos;
 - el resultado continúa con `production_authority=false` y `catalog_accepted=false`.
 
@@ -160,7 +160,7 @@ Como la evidencia histórica de binding no guardó placement, **todavía no se s
 
 ## Readiness de catálogo
 
-La evaluación nueva exige simultáneamente:
+La evaluación exige simultáneamente:
 
 - `VerifiedSpsStructuralContext`;
 - collection context-bound;
@@ -178,27 +178,47 @@ production_authority_not_established
 
 Por diseño, esta capa no puede devolver `catalog_accepted=true` ni `production_authority=true`.
 
-## Google Sheets y persistencia
+## Google Sheets y persistencia — contrato físico sincronizado
 
-El storage físico ya refleja el binding SPS confirmado, pero continúa con:
+El PR `#259` aplicó el criterio de `production-data-engineering`: una entidad lógica sólo se materializa cuando existe una diferencia real de grain, lifecycle, ownership/seguridad, acceso o consumidor.
+
+El workbook físico fue verificado después del merge y contiene exactamente seis tabs gestionados:
 
 ```text
-extraction_enabled = false
+cfg_supermarkets
+cfg_locations
+fact_offers_current
+fact_offer_history
+fact_scrape_runs
+fact_quality_events
 ```
+
+Se retiraron, después de preflight y read-back, los tabs vacíos `Sheet1`, `dim_products` y `map_source_products`. Los dos últimos permanecen como **contratos lógicos diferidos** en el código; no son estado durable activo durante la fase de una sola fuente. `source_product_id` y `product_id` continúan dentro de current/history, por lo que la futura materialización cross-source puede reconstruirse/backfillearse sin inventar observaciones.
+
+Read-back del workbook confirmó:
+
+- `cfg_supermarkets`: configuración de La Colonia preservada;
+- `cfg_locations`: SPS/TGU preservadas;
+- `la_colonia_sps.extraction_enabled = false`;
+- `fact_offers_current`, `fact_offer_history`, `fact_scrape_runs` y `fact_quality_events`: sólo headers, sin filas comerciales reales todavía;
+- no quedan tabs físicos diferidos ni pestaña vacía por defecto.
+
+El adapter de Sheets gestiona sólo las seis tablas activas y rechaza antes de I/O un batch que intente persistir una tabla diferida. Pestañas ajenas se preservan; cualquier migración destructiva futura requiere preflight y read-back explícitos.
 
 No se escriben ofertas SPS en `current/history` antes de cerrar aceptación autoritativa. Runs fallidos, rechazados o no autoritativos no alteran estado comercial. Hashes y fingerprints prueban igualdad, no autoridad.
 
 ## Auditoría y CI de Fase 0
 
-La reauditoría reproducible de ramas históricas se incorporó mediante PR `#253`. El warning conocido de `compileall` fue corregido en PR `#252` y el run `32751267460` confirma que `compileall` fail-closed continúa limpio.
+La reauditoría reproducible de ramas históricas se incorporó mediante PR `#253`. El warning conocido de `compileall` fue corregido en PR `#252`.
 
 Último conteo observado:
 
 ```text
 workflow = Precios Supermercados SPS - Pruebas base
-run = 32751267460
+run = 32758969849
 result = success
-pytest = 1640 passed
+pytest = 1642 passed
+pip check = clean
 compileall SyntaxWarning = none
 ```
 
@@ -209,7 +229,9 @@ Antes de pedir autorización live para facets todavía se debe cerrar, como mín
 1. **RawProduct -> ubicación comercial evidence-bound**: impedir que `la_colonia_online` se convierta a `la_colonia_sps` sólo por configuración/alcance y exigir evidencia ligada al mismo catálogo/run.
 2. **Placement-safe provenance**: decidir sólo con evidencia si el contexto real es header/query. Si resulta query, implementar una ruta de trace/provenance redactada que pruebe el fetch físico sin persistir el valor raw.
 3. **Composición del entrypoint futuro de facets**: mantener exactamente `root_total` + `category_tree`, `max_requests=2`, `concurrency=1`, OIDC/environment/collector y todos los gates de autorización fail-closed.
-4. **Sincronización documental final de Fase 0**: README, arquitectura, modelo, decisiones técnicas y agentes deben reflejar la cadena context-bound ya fusionada.
+4. **Reauditoría/sincronización final de Fase 0**: volver a verificar ramas históricas, CI, documentación y ausencia de deuda offline conocida justo antes de la frontera humana.
+
+La simplificación del storage y la sincronización de README/arquitectura/modelo/decisiones/agentes ya están cerradas.
 
 ## Próxima dependencia humana real
 
