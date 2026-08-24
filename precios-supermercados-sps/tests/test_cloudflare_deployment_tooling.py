@@ -80,7 +80,7 @@ def test_productive_runbook_is_manual_pinned_and_keeps_live_closed() -> None:
     assert "deploy:production" in raw
     assert "no expone un script automático `deploy:production`" in raw
     assert "ACTIVE_AUTHORIZATION_IDS = []" in raw
-    assert "no autoriza ninguna solicitud a La Colonia" in raw
+    assert "no autoriza ninguna solicitud a la colonia" in raw.casefold()
     assert "fuera del repositorio" in raw
     assert WRANGLER_VERSION in raw
 
