@@ -24,7 +24,7 @@ Los PRs `#254`–`#269` cerraron las fronteras offline conocidas de Fase 0: cont
 
 Los PRs `#270`–`#271` materializaron una autorización humana transitoria para la observación mínima de facets y añadieron observabilidad GitHub temporal para identificar su run. La ventana terminó **sin realizar tráfico a La Colonia** porque el preflight de configuración Cloudflare falló antes de OIDC, navegador o red. La autorización `SPS-context-and-root-facets-003` queda cerrada y no se reutiliza.
 
-La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo requiere una autorización humana explícita vigente para el alcance exacto solicitado.
+La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** para el alcance exacto solicitado.
 
 ## Binding técnico de San Pedro Sula
 
