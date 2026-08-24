@@ -24,9 +24,9 @@ Los PRs `#254`–`#269` cerraron las fronteras offline conocidas de Fase 0: cont
 
 Los PRs `#270`–`#271` materializaron una autorización humana transitoria para la observación mínima de facets y añadieron observabilidad GitHub temporal para identificar su run. La ventana terminó **sin realizar tráfico a La Colonia** porque el preflight de configuración Cloudflare falló antes de OIDC, navegador o red. El PR `#272` retiró el marker, wrapper y observador transitorios, restauró el workflow live manual fail-closed y dejó `SPS-context-and-root-facets-003` cerrada y no reutilizable.
 
-El PR `#274` preparó un runbook productivo de Cloudflare, eliminó estado mutable obsoleto del README del edge y dejó explícito que el despliegue de infraestructura es una frontera separada de cualquier autorización live. Durante esa revisión se detectaron dos deudas offline adicionales: el preflight Cloudflare todavía conserva el blocker histórico `sps_context_unconfirmed` aunque este documento y la evidencia canónica ya tienen `SPS_TECHNICAL_CONTEXT=CONFIRMED`; además, `CloudflareDeploymentEvidence` continúa documentada en código como evidencia caller-controlled mientras no exista un adapter autenticado que haga read-back de la API real de Cloudflare. Esas deudas pertenecen a la futura ruta edge productiva; ya no se consideran bloqueadores automáticos del primer catálogo de prueba.
+El PR `#274` preparó un runbook productivo de Cloudflare y dejó explícito que el despliegue de infraestructura es una frontera separada de cualquier autorización live. Las deudas restantes del preflight/read-back Cloudflare pertenecen a la futura ruta edge productiva; **no bloquean automáticamente el primer catálogo de prueba**.
 
-Durante la revisión de dirección del proyecto se detectó además que el proceso estaba optimizando seguridad/arquitectura como si cada prueba fuera ya una operación productiva. `AGENTS.md` ahora incorpora una política explícita **MVP primero**: ninguna nueva capa, adapter, verifier, preflight, workflow, tabla, documento o runbook puede crearse por previsión; debe desbloquear directamente extracción, binding SPS, validación, persistencia segura o una obligación de seguridad que no tenga una solución más simple. El objetivo inmediato vuelve a ser producir el primer catálogo real/verificable de La Colonia para SPS. PRs, conteo de tests y cantidad de capas dejan de tratarse como métricas de progreso.
+Durante la revisión de dirección del proyecto se detectó que el proceso estaba optimizando seguridad/arquitectura como si cada prueba fuera ya una operación productiva. `AGENTS.md` ahora incorpora una política explícita **MVP primero**: ninguna nueva capa, adapter, verifier, preflight, workflow, tabla, documento o runbook puede crearse por previsión; debe desbloquear directamente extracción, binding SPS, validación, persistencia segura o una obligación de seguridad que no tenga una solución más simple. El objetivo inmediato vuelve a ser producir el primer catálogo real/verificable de La Colonia para SPS. PRs, conteo de tests y cantidad de capas no son métricas de progreso.
 
 La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** para el alcance exacto solicitado.
 
@@ -119,7 +119,7 @@ El valor raw de `regionId` sólo puede existir transitoriamente en memoria. `hea
 
 ### Catálogo context-bound
 
-La cadena técnica exige contexto SPS derivado por página, receipts v3, verificación criptográfica, primary + reconciliation canónicos, provenance física reconciliable y readiness del mismo plan/discovery. Readiness técnica no concede autoridad comercial.
+La cadena técnica productiva exige contexto SPS derivado por página, receipts v3, verificación criptográfica, primary + reconciliation canónicos, provenance física reconciliable y readiness del mismo plan/discovery. Esas garantías continúan disponibles para producción, pero no todas son requisito del primer sample de prueba.
 
 ## Intento live autorizado de facets — cerrado sin tráfico
 
@@ -158,35 +158,23 @@ CLOUDFLARE_EDGE_GATEWAY_URL
 CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
 ```
 
-El runner emitió `env_cloudflare_edge_gateway_url_invalid` y terminó antes de solicitar OIDC, iniciar navegador, inicializar el gateway edge o contactar La Colonia. El job `live-crawl` quedó `skipped`. El artifact sanitizado contiene únicamente el status de fallo y `raw_values_exposed=false`.
+El runner emitió `env_cloudflare_edge_gateway_url_invalid` y terminó antes de solicitar OIDC, iniciar navegador, inicializar el gateway edge o contactar La Colonia. La autorización quedó cerrada y no se reutiliza.
 
-La autorización `SPS-context-and-root-facets-003` queda cerrada después de ese intento operacional y no se reutiliza. Una ejecución futura requiere una autorización humana nueva para tráfico live. El despliegue productivo de Cloudflare sólo es prerequisito si se elige la ruta productiva edge; ya no se asume automáticamente como prerequisito de una prueba read-only/no autoritativa.
+Una ejecución futura requiere una autorización humana nueva para tráfico live. Cloudflare sólo es prerequisito si se elige la ruta productiva edge; ya no se asume automáticamente como prerequisito de una prueba read-only/no autoritativa.
 
-## Cloudflare — ruta productiva, no bloqueo universal del MVP
+## Cloudflare — diferido para ruta productiva salvo necesidad demostrada
 
-La sonda controlada no-La-Colonia ya produjo evidencia física histórica. Eso no equivale a un despliegue productivo.
+El repositorio contiene el Worker productivo preparado en `edge/cloudflare/`, pero no existe evidencia vigente de despliegue/conexión productiva. El PR `#274` dejó el runbook correspondiente.
 
-El repositorio contiene el Worker productivo preparado en `edge/cloudflare/`, pero **no existe evidencia vigente de que `precios-sps-provenance` esté desplegado y conectado al Environment `la-colonia-live`**. El intento `32777363742` confirmó además que las dos variables necesarias para ese entrypoint estaban ausentes.
-
-El PR `#274` añadió [`cloudflare-production-deploy-runbook.md`](cloudflare-production-deploy-runbook.md) para que el despliegue, read-back y configuración posterior del Environment se realicen de forma manual, versionada y fail-closed. Ese runbook no autoriza tráfico a La Colonia.
-
-El modelo actual `CloudflareDeploymentEvidence` valida forma, hashes, flags y coherencia contra el manifest, pero su propio módulo declara que el snapshot sigue siendo caller-controlled mientras no exista un adapter que lo obtenga y autentique contra la API real de Cloudflare. Esa deuda debe cerrarse **antes de declarar la ruta edge como productiva**, no necesariamente antes de obtener evidencia de prueba por una ruta read-only más simple.
-
-Si se decide usar la ruta productiva edge, antes del siguiente intento deben existir, con provenance verificable:
+Las deudas conocidas son:
 
 ```text
-1. Worker productivo Cloudflare desplegado con su Durable Object.
-2. EDGE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL alojada únicamente en Cloudflare.
-3. EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL correspondiente.
-4. EDGE_COLLECTOR_CODE_SHA256 coherente con el código desplegado.
-5. GitHub Environment la-colonia-live con:
-   - CLOUDFLARE_EDGE_GATEWAY_URL
-   - CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
-6. Read-back autenticado del deployment/version/código/Script Settings.
-7. Preflight de identidad/release/clave en verde y semánticamente alineado con SPS ya confirmado.
+stale sps_context_unconfirmed blocker
+authenticated deployment/read-back adapter pendiente
+Worker productivo + variables la-colonia-live no configurados/demostrados
 ```
 
-La configuración/deploy real de Cloudflare requiere credenciales de la cuenta y puede crear o modificar infraestructura externa; no se deriva de una autorización read-only del supermercado.
+Estas deudas deben resolverse antes de declarar la ruta edge como productiva. No se seguirá profundizando esa ruta durante el MVP salvo que el camino mínimo hacia el sample real demuestre que una de ellas es indispensable.
 
 ## Google Sheets y persistencia
 
@@ -203,7 +191,7 @@ fact_quality_events
 
 `dim_products` y `map_source_products` permanecen como contratos lógicos diferidos. No existen ofertas comerciales reales persistidas todavía. `la_colonia_sps.extraction_enabled=false` permanece.
 
-No se escriben ofertas SPS en current/history antes de aceptación y autoridad reales. Runs fallidos, rechazados o no autoritativos no alteran estado comercial. Hashes/fingerprints prueban igualdad, no autoridad.
+No se escriben ofertas SPS en current/history antes de aceptación y autoridad reales. Un sample de prueba puede conservarse como artifact/evidencia no autoritativa sin mutar current/history.
 
 ## Reauditoría histórica de Fase 0
 
@@ -225,27 +213,7 @@ artifact_digest = sha256:a058ed4c039ed3d22fe0bff452ed18dadcbd36ce2c8104d982d89bc
 
 ## CI observado
 
-Ventana transitoria de autorización, PR `#270`:
-
-```text
-run = 32776963711
-result = success
-pytest = 1709 passed
-pip check = clean
-compileall SyntaxWarning = none
-```
-
-Observador GitHub temporal, PR `#271`:
-
-```text
-run = 32777793715
-result = success
-pytest = 1711 passed
-pip check = clean
-compileall SyntaxWarning = none
-```
-
-Cierre fail-closed y limpieza de la ventana, PR `#272`:
+Cierre fail-closed, PR `#272`:
 
 ```text
 run = 32780298454
@@ -265,31 +233,28 @@ pip check = clean
 compileall SyntaxWarning = none
 ```
 
-El observador confirmó sobre SHA `7a0df3c3971a4021862855166e527827035a3ea2`:
-
-```text
-32777363736 = Precios Supermercados SPS - Pruebas base = success
-32777363742 = La Colonia - Recorrido live manual = failure
-```
-
 ## Fronteras pendientes
 
 ```text
-NEXT VISIBLE MILESTONE = obtain a real, read-only, non-authoritative La Colonia SPS catalog sample
-MVP PRIORITY = first real/verifiable La Colonia SPS catalog
-OFFLINE APPLICATION CODE = choose/prepare the shortest safe trial path
-PRODUCTIVE EDGE DEBT = stale sps_context_unconfirmed blocker + authenticated Cloudflare deployment/read-back adapter
-EXTERNAL PLATFORM CONFIGURATION = Cloudflare product worker + la-colonia-live vars only for edge production
+NEXT VISIBLE MILESTONE = real, read-only, non-authoritative La Colonia SPS catalog sample
+MVP PATH = source -> SPS context -> bounded extraction -> validation -> test artifact
+PRODUCTIVE EDGE DEBT = deferred unless MVP demonstrates necessity
 LIVE EVIDENCE = actual regionId placement still unobserved
 ```
 
-El siguiente trabajo técnico debe escoger y ejecutar el camino mínimo hacia el primer catálogo real, no continuar profundizando Cloudflare por inercia. Para una prueba read-only/no autoritativa, sólo deben bloquear seguridad básica, binding SPS verificable, límites de tráfico y una salida sanitizada; la infraestructura productiva se difiere si no es indispensable para esas propiedades.
+Para el sample MVP sólo bloquean:
 
-La deuda del preflight `sps_context_unconfirmed` y la atestación autenticada de Cloudflare deben corregirse antes de declarar la ruta edge como productiva. No deben convertirse automáticamente en blockers del primer catálogo de prueba.
+```text
+1. autorización humana explícita vigente para esa observación live;
+2. demostrar SPS en la misma ejecución sin inventar ubicación;
+3. tráfico read-only acotado, concurrency/pacing seguros y stop conditions;
+4. validar que el payload contiene productos/precios coherentes;
+5. conservar salida como evidencia de prueba, no como estado comercial aceptado.
+```
 
-El próximo resultado que cuenta como avance visible es un sample real del catálogo SPS obtenido read-only y validado como **evidencia de prueba**, todavía sin convertirlo en estado comercial aceptado. Hasta ese hito no se abrirán capas nuevas salvo un bloqueo directo y demostrado.
+El próximo resultado que cuenta como avance visible es ese sample real. Hasta alcanzarlo no se abrirán capas nuevas salvo un bloqueo directo y demostrado.
 
-Mientras tanto deben permanecer:
+Mientras tanto permanecen:
 
 ```text
 production_authority = false
