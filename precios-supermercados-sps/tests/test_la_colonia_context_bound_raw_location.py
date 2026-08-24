@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -10,7 +11,9 @@ from types import ModuleType
 
 import pytest
 
+import precios_supermercados.scrapers.la_colonia_context_bound_raw_location as raw_location_module
 from precios_supermercados.enums import LocationStatus
+from precios_supermercados.locations import LA_COLONIA_SPS as CANONICAL_LA_COLONIA_SPS
 from precios_supermercados.offer_normalization import (
     normalize_raw_product,
     validate_normalized_offer,
@@ -39,6 +42,12 @@ CATALOG_HELPER = _helper(
     "test_la_colonia_context_bound_catalog_transport.py",
     "precios_sps_context_bound_catalog_helper_for_raw_location",
 )
+
+
+@pytest.fixture(autouse=True)
+def _restore_canonical_location_after_test():
+    yield
+    raw_location_module.LA_COLONIA_SPS = CANONICAL_LA_COLONIA_SPS
 
 
 def _full_products(order_by: str, start: int, end: int, total: int) -> list[dict[str, object]]:
@@ -91,9 +100,20 @@ def _collection():
     try:
         collector, _transport, proof = CATALOG_HELPER._collector()
         collection = collector.collect_all()
-        return collection, proof
     finally:
         CATALOG_HELPER._products = original
+
+    observation = _primary_observation(collection)
+    payload = observation.page.verified_receipt.receipt.payload
+    # El helper existente usa un regionId sintético para no conservar el valor real.
+    # Alineamos sólo la constante local de este módulo de prueba con ese binding
+    # firmado. Producción continúa usando LA_COLONIA_SPS canónico.
+    raw_location_module.LA_COLONIA_SPS = replace(
+        CANONICAL_LA_COLONIA_SPS,
+        source_location_key=payload.binding_source_key,
+        evidence=payload.binding_evidence,
+    )
+    return collection, proof
 
 
 def _primary_observation(collection):
