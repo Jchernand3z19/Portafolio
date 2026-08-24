@@ -260,18 +260,18 @@ No quedaron ramas históricas con patches únicos sin decisión versionada ni ra
 
 ## CI
 
-Último conteo de suite completa observado antes del cierre final:
+Última validación completa observada:
 
 ```text
 workflow = Precios Supermercados SPS - Pruebas base
-run = 32772181099
+run = 32773357812
 result = success
 pytest = 1705 passed
 pip check = clean
 compileall SyntaxWarning = none
 ```
 
-El run `32773357812` vuelve a ejecutar la misma suite y además contiene la evidencia final de reauditoría histórica; su job de auditoría ya terminó `success`. El conteo exacto de pytest sólo se actualiza aquí cuando se observa su finalización real.
+Ese mismo run contiene el job `phase0-final-historical-reaudit` aprobado y constituye la evidencia conjunta de suite base + cierre histórico contra el `main` observado.
 
 ## Fronteras offline restantes
 
