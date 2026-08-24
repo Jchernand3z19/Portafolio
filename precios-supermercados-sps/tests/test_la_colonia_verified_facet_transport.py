@@ -18,6 +18,7 @@ from precios_supermercados.la_colonia_edge_structural_request import (
     ValidatedLaColoniaStructuralRequest,
     validate_la_colonia_structural_request,
 )
+from precios_supermercados.locations import LocationConfig, LocationGranularity
 from precios_supermercados.scrapers.la_colonia_facet_discovery import (
     FACET_DISCOVERY_REQUEST_ID,
     FacetDiscoveryRequest,
@@ -27,6 +28,14 @@ from precios_supermercados.scrapers.la_colonia_facet_discovery_runtime import (
     OUTCOME_INCONCLUSIVE,
     OUTCOME_WITHIN_BUDGET,
     FacetDiscoveryRuntime,
+)
+from precios_supermercados.scrapers.la_colonia_sps_facet_context import (
+    EphemeralSpsRequestContextCollector,
+    confirmed_sps_facet_binding,
+    fingerprint_context_value,
+)
+from precios_supermercados.scrapers.la_colonia_sps_structural_plan import (
+    build_sps_structural_facet_plan,
 )
 from precios_supermercados.scrapers.la_colonia_verified_facet_transport import (
     VerifiedFacetDiscoveryEdgeTransport,
@@ -39,6 +48,8 @@ from precios_supermercados.structural_provenance import (
 from precios_supermercados.structural_receipt_crypto import Ed25519StructuralReceiptVerifier
 
 FIXED_TIME = datetime(2026, 8, 21, 22, 30, tzinfo=timezone.utc)
+GRAPHQL_URL = "https://www.lacolonia.com/_v/segment/graphql/v1"
+RAW_REGION = "opaque-region-for-verified-facet-transport-test"
 
 
 def _b64url(value: bytes) -> str:
@@ -95,6 +106,34 @@ def _command():
     }
 
 
+class _ObservedRequest:
+    url = GRAPHQL_URL
+    headers = {"X-VTEX-Region": RAW_REGION}
+    post_data_json = None
+
+
+def _sps_plan():
+    binding = confirmed_sps_facet_binding(
+        LocationConfig(
+            location_id="la_colonia_sps",
+            supermarket_id="la_colonia",
+            city_id="sps",
+            city_name="San Pedro Sula",
+            granularity=LocationGranularity.CITY,
+            is_available=True,
+            in_scope=True,
+            extraction_enabled=False,
+            technical_binding_confirmed=True,
+            source_location_key="request:regionid:sha256:" + fingerprint_context_value(RAW_REGION),
+            evidence="location_binding_radiography:sha256:" + "c" * 64,
+        )
+    )
+    collector = EphemeralSpsRequestContextCollector()
+    collector.observe_request(_ObservedRequest())
+    context = collector.resolve(binding)
+    return binding, build_sps_structural_facet_plan(context, binding=binding)
+
+
 class _SigningTransport:
     def __init__(self, private_key: Ed25519PrivateKey) -> None:
         self.private_key = private_key
@@ -105,8 +144,10 @@ class _SigningTransport:
         origin_url = payload["originUrl"]
         request = validate_la_colonia_structural_request(origin_url)
         context = payload["requestContext"]
+        location = payload["locationContext"]
         raw_body = _body(request.request_kind)
         receipt_payload = StructuralReceiptPayload(
+            schema_version="2",
             run_id=context["runId"],
             request_kind=request.request_kind,  # type: ignore[arg-type]
             request_id=context["requestId"],
@@ -149,6 +190,14 @@ class _SigningTransport:
             signing_algorithm="Ed25519",
             signing_key_id="cloudflare-ed25519-v1",
             nonce=context["nonce"],
+            location_id=location["locationId"],
+            binding_source_key=location["bindingSourceKey"],
+            binding_evidence=location["bindingEvidence"],
+            context_fingerprint=location["contextFingerprint"],
+            context_placement=location["placement"],
+            context_wire_key=location["wireKey"],
+            context_value_path=tuple(location["valuePath"]),
+            wire_request_fingerprint=location["wireRequestFingerprint"],
         )
         placeholder = SignedStructuralReceipt(
             payload=receipt_payload,
@@ -209,20 +258,26 @@ def _context_provider(
     )
 
 
-def _adapter(private_key: Ed25519PrivateKey | None = None):
+def _adapter(monkeypatch, private_key: Ed25519PrivateKey | None = None, transport=None):
+    binding, plan = _sps_plan()
+    monkeypatch.setattr(
+        "precios_supermercados.scrapers.la_colonia_verified_facet_transport.confirmed_sps_facet_binding",
+        lambda: binding,
+    )
     key = private_key or Ed25519PrivateKey.generate()
-    transport = _SigningTransport(key)
+    wire_transport = transport or _SigningTransport(key)
     adapter = VerifiedFacetDiscoveryEdgeTransport(
-        StructuralEdgeGatewayClient(transport),
+        StructuralEdgeGatewayClient(wire_transport),
         _verifier(key),
+        sps_plan=plan,
         context_provider=_context_provider,
         bearer_token_provider=lambda: "oidc-token",
     )
-    return adapter, transport, key
+    return adapter, wire_transport, key
 
 
-def test_runtime_completo_solo_recibe_payloads_despues_de_ed25519() -> None:
-    adapter, transport, _key = _adapter()
+def test_runtime_completo_solo_recibe_payloads_despues_de_ed25519_y_contexto_sps(monkeypatch) -> None:
+    adapter, transport, _key = _adapter(monkeypatch)
     sleeps: list[float] = []
     runtime = FacetDiscoveryRuntime(
         adapter,
@@ -239,16 +294,24 @@ def test_runtime_completo_solo_recibe_payloads_despues_de_ed25519() -> None:
     assert adapter.requests_completed == 2
     assert adapter.complete is True
     assert set(adapter.observations) == {"root_total", "category_tree"}
+    assert all(call[2]["locationContext"]["locationId"] == "la_colonia_sps" for call in transport.calls)
+    assert all(call[2]["locationContext"]["rawValue"] == RAW_REGION for call in transport.calls)
     assert all(
         observation.cryptographic_signature_verified is True
         and observation.structural_body_validated is True
         and observation.production_authority is False
+        and observation.verified_receipt.receipt.payload.location_context_bound is True
         for observation in adapter.observations.values()
     )
+    rendered_receipts = json.dumps(
+        [item.verified_receipt.receipt.payload.canonical_dict() for item in adapter.observations.values()],
+        sort_keys=True,
+    )
+    assert RAW_REGION not in rendered_receipts
 
 
-def test_adapter_exige_secuencia_root_luego_tree_y_no_admite_tercer_request() -> None:
-    adapter, _transport, _key = _adapter()
+def test_adapter_exige_secuencia_root_luego_tree_y_no_admite_tercer_request(monkeypatch) -> None:
+    adapter, _transport, _key = _adapter(monkeypatch)
     plan = get_facet_discovery_plan("catalog_categories_v1")
     with pytest.raises(VerifiedFacetDiscoveryTransportError) as first:
         adapter(plan.requests[1])
@@ -261,7 +324,7 @@ def test_adapter_exige_secuencia_root_luego_tree_y_no_admite_tercer_request() ->
     assert third.value.code == "facet_request_count_exceeded"
 
 
-def test_wait_y_deny_detienen_runtime_sin_retry_oculto() -> None:
+def test_wait_y_deny_detienen_runtime_sin_retry_oculto(monkeypatch) -> None:
     for response, expected_code in (
         (
             {
@@ -280,20 +343,14 @@ def test_wait_y_deny_detienen_runtime_sin_retry_oculto() -> None:
     ):
         key = Ed25519PrivateKey.generate()
         transport = _StaticTransport(response)
-        adapter = VerifiedFacetDiscoveryEdgeTransport(
-            StructuralEdgeGatewayClient(transport),
-            _verifier(key),
-            context_provider=_context_provider,
-            bearer_token_provider=lambda: "oidc-token",
-        )
+        adapter, _wire, _key = _adapter(monkeypatch, key, transport)
         with pytest.raises(VerifiedFacetDiscoveryTransportError) as captured:
             adapter(get_facet_discovery_plan("catalog_categories_v1").requests[0])
         assert captured.value.code == expected_code
         assert transport.calls == 1
 
 
-def test_runtime_convierte_wait_en_transport_failure_sin_segunda_llamada() -> None:
-    key = Ed25519PrivateKey.generate()
+def test_runtime_convierte_wait_en_transport_failure_sin_segunda_llamada(monkeypatch) -> None:
     transport = _StaticTransport(
         {
             "ok": True,
@@ -303,12 +360,7 @@ def test_runtime_convierte_wait_en_transport_failure_sin_segunda_llamada() -> No
             "inFlightReservationId": None,
         }
     )
-    adapter = VerifiedFacetDiscoveryEdgeTransport(
-        StructuralEdgeGatewayClient(transport),
-        _verifier(key),
-        context_provider=_context_provider,
-        bearer_token_provider=lambda: "oidc-token",
-    )
+    adapter, _wire, _key = _adapter(monkeypatch, Ed25519PrivateKey.generate(), transport)
     runtime = FacetDiscoveryRuntime(adapter, sleeper=lambda _: None, clock=lambda: FIXED_TIME)
     result = runtime.run(_command())
     assert result.summary["discovery_outcome"] == OUTCOME_INCONCLUSIVE
@@ -317,13 +369,19 @@ def test_runtime_convierte_wait_en_transport_failure_sin_segunda_llamada() -> No
     assert transport.calls == 1
 
 
-def test_firma_de_otra_clave_falla_antes_de_exponer_payload() -> None:
+def test_firma_de_otra_clave_falla_antes_de_exponer_payload(monkeypatch) -> None:
     signer = Ed25519PrivateKey.generate()
     trusted = Ed25519PrivateKey.generate()
+    binding, plan = _sps_plan()
+    monkeypatch.setattr(
+        "precios_supermercados.scrapers.la_colonia_verified_facet_transport.confirmed_sps_facet_binding",
+        lambda: binding,
+    )
     transport = _SigningTransport(signer)
     adapter = VerifiedFacetDiscoveryEdgeTransport(
         StructuralEdgeGatewayClient(transport),
         _verifier(trusted),
+        sps_plan=plan,
         context_provider=_context_provider,
         bearer_token_provider=lambda: "oidc-token",
     )
@@ -333,8 +391,8 @@ def test_firma_de_otra_clave_falla_antes_de_exponer_payload() -> None:
     assert adapter.requests_completed == 0
 
 
-def test_contexto_de_ejecucion_no_puede_cambiar_entre_root_y_tree() -> None:
-    adapter, _transport, _key = _adapter()
+def test_contexto_de_ejecucion_no_puede_cambiar_entre_root_y_tree(monkeypatch) -> None:
+    adapter, _transport, _key = _adapter(monkeypatch)
     plan = get_facet_discovery_plan("catalog_categories_v1")
     adapter(plan.requests[0])
 
@@ -356,3 +414,35 @@ def test_contexto_de_ejecucion_no_puede_cambiar_entre_root_y_tree() -> None:
         adapter(plan.requests[1])
     assert captured.value.code == "structural_execution_context_changed"
     assert adapter.requests_completed == 1
+
+
+def test_plan_con_binding_distinto_al_confirmado_se_rechaza_antes_de_red(monkeypatch) -> None:
+    _binding, plan = _sps_plan()
+    other_binding = confirmed_sps_facet_binding(
+        LocationConfig(
+            location_id="la_colonia_sps",
+            supermarket_id="la_colonia",
+            city_id="sps",
+            city_name="San Pedro Sula",
+            granularity=LocationGranularity.CITY,
+            is_available=True,
+            in_scope=True,
+            extraction_enabled=False,
+            technical_binding_confirmed=True,
+            source_location_key="request:regionid:sha256:" + fingerprint_context_value("other"),
+            evidence="location_binding_radiography:sha256:" + "d" * 64,
+        )
+    )
+    monkeypatch.setattr(
+        "precios_supermercados.scrapers.la_colonia_verified_facet_transport.confirmed_sps_facet_binding",
+        lambda: other_binding,
+    )
+    with pytest.raises(VerifiedFacetDiscoveryTransportError) as captured:
+        VerifiedFacetDiscoveryEdgeTransport(
+            StructuralEdgeGatewayClient(_StaticTransport({})),
+            _verifier(Ed25519PrivateKey.generate()),
+            sps_plan=plan,
+            context_provider=_context_provider,
+            bearer_token_provider=lambda: "oidc-token",
+        )
+    assert captured.value.code == "sps_structural_plan_binding_mismatch"
