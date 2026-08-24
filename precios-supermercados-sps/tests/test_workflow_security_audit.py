@@ -51,6 +51,7 @@ RECOVERY_WORKFLOW = "precios-supermercados-sps-la-colonia-dispatch-recovery.yml"
 LA_DIAGNOSTIC_WORKFLOW = "precios-supermercados-sps-la-colonia-diagnostic.yml"
 FACET_WORKFLOW = "precios-supermercados-sps-la-colonia-facet-discovery.yml"
 LIVE_WORKFLOW = "precios-supermercados-sps-la-colonia-live.yml"
+LIVE_FACET_JOB = "context-bound-facet-entrypoint"
 LOCATION_BINDING_WORKFLOW = "precios-supermercados-sps-la-colonia-location-binding.yml"
 GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storage.yml"
 GOOGLE_SHEETS_STORAGE_REQUEST = (
@@ -60,6 +61,8 @@ PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
 PROBE_OBSERVABILITY_SECRET = "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN"
 PROBE_PUBLIC_KEY_VAR = "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL"
 CLOUDFLARE_ACCOUNT_VAR = "CLOUDFLARE_ACCOUNT_ID"
+EDGE_GATEWAY_VAR = "CLOUDFLARE_EDGE_GATEWAY_URL"
+EDGE_PUBLIC_KEY_VAR = "CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL"
 GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET = "PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON"
 GOOGLE_SHEETS_SPREADSHEET_VAR = "PRECIOS_SPS_GOOGLE_SPREADSHEET_ID"
 
@@ -79,6 +82,9 @@ EXPECTED_PERMISSIONS = {
 ALLOWED_JOB_PERMISSIONS = {
     PROBE_WORKFLOW: {
         "controlled-probe": {"contents": "read", "id-token": "write"},
+    },
+    LIVE_WORKFLOW: {
+        LIVE_FACET_JOB: {"contents": "read", "id-token": "write"},
     },
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {
         "publish-status": {"statuses": "write"},
@@ -113,6 +119,7 @@ ALLOWED_SECRET_REFERENCES = {
 }
 ALLOWED_VAR_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
+    LIVE_WORKFLOW: {EDGE_GATEWAY_VAR, EDGE_PUBLIC_KEY_VAR},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {GOOGLE_SHEETS_SPREADSHEET_VAR},
 }
 
@@ -210,7 +217,7 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
                 for step in job_steps(probe_jobs["controlled-probe"])
                 if str(step.get("uses", "")).startswith("actions/checkout@")
             ]
-            assert privileged_checkout == [], "El job con OIDC no debe ejecutar código del repositorio"
+            assert privileged_checkout == [], "El job con OIDC de sonda no debe ejecutar código del repositorio"
             verifier_checkout = [
                 step
                 for step in job_steps(probe_jobs["verify-evidence"])
@@ -384,15 +391,48 @@ def test_controlled_probe_is_manual_isolated_and_verified_outside_oidc_job():
     assert "${PROBE_GATEWAY_URL%/}/v1/probe" in raw
 
 
-def test_only_controlled_probe_job_can_request_oidc_write_permission():
+def test_only_explicit_oidc_jobs_can_request_write_permission():
+    allowed = {
+        (PROBE_WORKFLOW, "controlled-probe"),
+        (LIVE_WORKFLOW, LIVE_FACET_JOB),
+    }
+    observed: set[tuple[str, str]] = set()
     for path, workflow in workflows():
         assert "id-token" not in workflow["permissions"]
         for name, job in jobs(workflow).items():
             permissions = job.get("permissions", {})
-            if path.name == PROBE_WORKFLOW and name == "controlled-probe":
-                assert permissions.get("id-token") == "write"
+            if permissions.get("id-token") == "write":
+                observed.add((path.name, name))
+                assert (path.name, name) in allowed
             else:
                 assert "id-token" not in permissions
+    assert observed == allowed
+
+
+def test_context_bound_facet_job_has_exact_privilege_and_stays_inert() -> None:
+    path = WORKFLOW_DIR / LIVE_WORKFLOW
+    workflow = load_workflow(path)
+    live_jobs = jobs(workflow)
+    assert set(live_jobs) == {"live-crawl", LIVE_FACET_JOB}
+    facet = live_jobs[LIVE_FACET_JOB]
+    assert facet["if"] == "${{ false }}"
+    assert facet["environment"] == "la-colonia-live"
+    assert facet["permissions"] == {"contents": "read", "id-token": "write"}
+    assert facet["timeout-minutes"] == "15"
+    assert facet["env"] == {
+        "PYTHONPATH": "${{ github.workspace }}/precios-supermercados-sps/src",
+        EDGE_GATEWAY_VAR: "${{ vars.CLOUDFLARE_EDGE_GATEWAY_URL }}",
+        EDGE_PUBLIC_KEY_VAR: "${{ vars.CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL }}",
+    }
+    raw = path.read_text(encoding="utf-8")
+    assert "facet_authorization_id:" in raw
+    assert "ejecutar_facets_context_bound_la_colonia.py" in raw
+    assert "--authorization-id \"${{ inputs.facet_authorization_id }}\"" in raw
+    assert "secrets." not in raw
+    assert "schedule:" not in raw
+    assert "pull_request:" not in raw
+    assert "pull_request_target:" not in raw
+    assert "issue_comment:" not in raw
 
 
 def test_trigger_sets_are_closed_without_issue_comment_authority():
@@ -428,6 +468,7 @@ def test_network_capable_scripts_are_blocked_without_current_live_authority() ->
         "scripts/diagnosticar_ventanas_la_colonia.py",
         "scripts/descubrir_facets_la_colonia.py",
         "scripts/diagnosticar_binding_ubicacion_la_colonia.py",
+        "scripts/ejecutar_facets_context_bound_la_colonia.py",
     }
     for path, workflow in workflows():
         commands = "\n".join(str(step.get("run", "")) for step in steps(workflow))
