@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 
@@ -79,6 +79,8 @@ def test_query_placement_is_applied_only_after_verified_context():
     assert params["regionId"] == [RAW_REGION]
     assert revealed_headers == {}
     assert public["placement"] == "query"
+    assert public["value_path"] == []
+    assert public["requires_same_browser_context"] is True
     assert public["network_executed"] is False
     assert public["production_authority"] is False
     assert public["catalog_accepted"] is False
@@ -100,7 +102,25 @@ def test_header_placement_is_applied_to_exact_observed_wire_key():
     assert dict(revealed_headers) == {"X-VTEX-Region": RAW_REGION}
     assert wire.public_dict()["placement"] == "header"
     assert wire.public_dict()["wire_key"] == "X-VTEX-Region"
+    assert wire.public_dict()["value_path"] == []
+    assert wire.public_dict()["requires_same_browser_context"] is True
     assert RAW_REGION not in repr(wire)
+
+
+def test_nested_query_context_does_not_guess_how_to_mutate_graphql_variables():
+    variables = json.dumps(
+        {"context": {"regionId": RAW_REGION}},
+        separators=(",", ":"),
+    )
+    execution = execution_from(
+        FakeRequest(url=GRAPHQL_URL + "?" + urlencode({"variables": variables}))
+    )
+
+    with pytest.raises(
+        SpsFacetWireError,
+        match="sps_region_nested_query_transport_not_supported",
+    ):
+        prepare_sps_facet_wire_request(execution)
 
 
 def test_body_placement_does_not_silently_change_the_get_contract():
