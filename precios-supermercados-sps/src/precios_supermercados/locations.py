@@ -357,24 +357,28 @@ LA_COLONIA_SUPERMARKET = SupermarketConfig(
     location_selection_mode=LocationSelectionMode.SOURCE_SELECTION_REQUIRED,
 )
 
-# Ciudades visibles en el selector del sitio observado el 2026-08-22. Esto
-# registra disponibilidad declarada por la UI; no demuestra todavía cómo queda
-# ligado el contexto a las requests ni si precio/inventario varían sólo por ciudad
-# o también por tienda dentro de la ciudad. La radiografía live resolverá ambos
-# puntos antes de habilitar extracción.
+# La observación live read-only del 2026-08-24 (run 32677568208) demostró que
+# seleccionar San Pedro Sula cambia un `regionId` de request con señal fuerte y
+# también cambia cookies VTEX de sesión/segmento. El artifact sanitizado se conserva
+# en reports/discovery/la-colonia-location-binding-2026-08-24.json. La granularidad
+# observada es ciudad; no apareció selector de tienda. Esto confirma binding técnico
+# de `la_colonia_sps`, pero no concede aceptación de catálogo ni habilita extracción.
 LA_COLONIA_SPS = LocationConfig(
     location_id="la_colonia_sps",
     supermarket_id="la_colonia",
     city_id="sps",
     city_name="San Pedro Sula",
-    granularity=LocationGranularity.UNKNOWN,
+    granularity=LocationGranularity.CITY,
     is_available=True,
     in_scope=True,
     extraction_enabled=False,
-    technical_binding_confirmed=False,
-    source_location_key=None,
-    evidence="website_city_selector",
+    technical_binding_confirmed=True,
+    source_location_key="request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7",
+    evidence="location_binding_radiography:sha256:80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95",
 )
+
+# Tegucigalpa continúa fuera del alcance inicial y no ha sido promovida a binding
+# comercial. Su presencia en el selector sólo demuestra disponibilidad declarada.
 LA_COLONIA_TGU = LocationConfig(
     location_id="la_colonia_tgu",
     supermarket_id="la_colonia",

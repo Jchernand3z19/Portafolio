@@ -10,11 +10,27 @@ from precios_supermercados.location_binding_transition import (
     evaluate_location_binding_artifact,
     propose_city_location_binding,
 )
-from precios_supermercados.locations import LA_COLONIA_SPS, LocationGranularity
+from precios_supermercados.locations import LocationConfig, LocationGranularity
 
 
 CITY_KEY = "localStorage:regionid:sha256:" + "a" * 64
 STORE_KEY = "request_variable:storeid:sha256:" + "b" * 64
+
+
+def unconfirmed_sps() -> LocationConfig:
+    return LocationConfig(
+        location_id="la_colonia_sps",
+        supermarket_id="la_colonia",
+        city_id="sps",
+        city_name="San Pedro Sula",
+        granularity=LocationGranularity.UNKNOWN,
+        is_available=True,
+        in_scope=True,
+        extraction_enabled=False,
+        technical_binding_confirmed=False,
+        source_location_key=None,
+        evidence="website_city_selector",
+    )
 
 
 def artifact(
@@ -69,14 +85,15 @@ def test_strong_city_evidence_is_ready_but_does_not_enable_extraction() -> None:
     assert transition.production_authority is False
     assert transition.catalog_accepted is False
 
-    proposed = propose_city_location_binding(LA_COLONIA_SPS, transition)
+    current = unconfirmed_sps()
+    proposed = propose_city_location_binding(current, transition)
     assert proposed.granularity is LocationGranularity.CITY
     assert proposed.technical_binding_confirmed is True
     assert proposed.source_location_key == CITY_KEY
     assert proposed.evidence == transition.evidence_ref
     assert proposed.extraction_enabled is False
-    assert LA_COLONIA_SPS.granularity is LocationGranularity.UNKNOWN
-    assert LA_COLONIA_SPS.technical_binding_confirmed is False
+    assert current.granularity is LocationGranularity.UNKNOWN
+    assert current.technical_binding_confirmed is False
 
 
 def test_city_can_be_ready_even_when_store_ui_exists_but_context_stays_city_level() -> None:
@@ -104,7 +121,7 @@ def test_store_granularity_never_promotes_city_location() -> None:
     assert transition.technical_binding_confirmed_for_location is False
     assert transition.requires_store_binding_discovery is True
     with pytest.raises(LocationBindingTransitionError, match="city_binding_transition_required"):
-        propose_city_location_binding(LA_COLONIA_SPS, transition)
+        propose_city_location_binding(unconfirmed_sps(), transition)
 
 
 def test_unknown_weak_evidence_stays_inconclusive() -> None:
@@ -194,7 +211,7 @@ def test_artifact_fingerprint_is_deterministic_and_changes_with_evidence() -> No
 
 def test_city_proposal_rejects_wrong_location_identity() -> None:
     transition = evaluate_location_binding_artifact(artifact())
-    wrong = copy.copy(LA_COLONIA_SPS)
+    wrong = copy.copy(unconfirmed_sps())
     object.__setattr__(wrong, "location_id", "other_sps")
     with pytest.raises(LocationBindingTransitionError, match="location_id_mismatch"):
         propose_city_location_binding(wrong, transition)

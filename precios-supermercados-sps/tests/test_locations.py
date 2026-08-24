@@ -16,7 +16,7 @@ from precios_supermercados.locations import (
 )
 
 
-def test_la_colonia_registers_all_currently_known_cities_without_assuming_granularity() -> None:
+def test_la_colonia_registers_known_cities_with_only_sps_binding_confirmed() -> None:
     locations = DEFAULT_LOCATION_CATALOG.locations_for_supermarket("la_colonia")
     assert {location.location_id for location in locations} == {
         "la_colonia_sps",
@@ -27,7 +27,10 @@ def test_la_colonia_registers_all_currently_known_cities_without_assuming_granul
         "Tegucigalpa",
     }
     assert all(location.is_available for location in locations)
-    assert all(location.granularity is LocationGranularity.UNKNOWN for location in locations)
+    assert LA_COLONIA_SPS.granularity is LocationGranularity.CITY
+    assert LA_COLONIA_SPS.technical_binding_confirmed is True
+    assert LA_COLONIA_TGU.granularity is LocationGranularity.UNKNOWN
+    assert LA_COLONIA_TGU.technical_binding_confirmed is False
 
 
 def test_initial_scope_contains_only_san_pedro_sula() -> None:
@@ -36,17 +39,23 @@ def test_initial_scope_contains_only_san_pedro_sula() -> None:
     assert LA_COLONIA_TGU.in_scope is False
 
 
-def test_la_colonia_sps_is_not_enabled_before_granularity_and_binding_are_confirmed() -> None:
+def test_la_colonia_sps_remains_disabled_until_catalog_frontier_is_closed() -> None:
     assert DEFAULT_LOCATION_CATALOG.enabled_locations("la_colonia") == ()
-    assert (
-        DEFAULT_LOCATION_CATALOG.extraction_block_reason("la_colonia_sps")
-        == "location_granularity_unconfirmed"
-    )
-    with pytest.raises(
-        LocationConfigError,
-        match="location_granularity_unconfirmed",
-    ):
+    assert DEFAULT_LOCATION_CATALOG.extraction_block_reason("la_colonia_sps") == "extraction_disabled"
+    with pytest.raises(LocationConfigError, match="extraction_disabled"):
         DEFAULT_LOCATION_CATALOG.require_extraction_ready("la_colonia_sps")
+
+
+def test_la_colonia_sps_binding_uses_only_sanitized_fingerprints() -> None:
+    assert LA_COLONIA_SPS.source_location_key == (
+        "request:regionid:sha256:"
+        "d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7"
+    )
+    assert LA_COLONIA_SPS.evidence == (
+        "location_binding_radiography:sha256:"
+        "80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95"
+    )
+    assert LA_COLONIA_SPS.extraction_enabled is False
 
 
 def test_out_of_scope_city_stays_blocked_even_if_source_lists_it() -> None:

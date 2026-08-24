@@ -1,0 +1,66 @@
+{
+  "available_cities": [
+    "SAN PEDRO SULA",
+    "TEGUCIGALPA"
+  ],
+  "available_stores": [],
+  "binding_report": {
+    "city_name": "San Pedro Sula",
+    "confidence": "strong",
+    "decisive_stage": "after_city",
+    "granularity_candidate": "city",
+    "raw_values_exposed": false,
+    "signals": [
+      {
+        "changed_after_city": true,
+        "changed_after_store": false,
+        "channel": "cookie",
+        "city_fingerprint": "475c2feb7ffafa1c3bdd668c5c864b94602e14d3aa26e710226c64dd4a4b65d3",
+        "key": "vtexsegment",
+        "store_fingerprint": null,
+        "strength": "weak"
+      },
+      {
+        "changed_after_city": true,
+        "changed_after_store": false,
+        "channel": "cookie",
+        "city_fingerprint": "a25a19b8bc35038143f7aa0dc6b711f4a86107e3db8e2df09e91b225d6089b1e",
+        "key": "vtexsession",
+        "store_fingerprint": null,
+        "strength": "weak"
+      },
+      {
+        "changed_after_city": true,
+        "changed_after_store": false,
+        "channel": "request",
+        "city_fingerprint": "d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7",
+        "key": "regionid",
+        "store_fingerprint": null,
+        "strength": "strong"
+      }
+    ],
+    "source_location_key_candidate": "request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7",
+    "store_name": null,
+    "store_selection_observed": false,
+    "technical_binding_observed": true
+  },
+  "browser_started": true,
+  "catalog_accepted": false,
+  "city_control_diagnostic": null,
+  "completed_at": "2026-08-24T00:44:49+0000",
+  "errors": [],
+  "extraction_enabled": false,
+  "logical_actions": 3,
+  "mode": "live",
+  "production_authority": false,
+  "raw_values_exposed": false,
+  "selected_store": null,
+  "started_at": "2026-08-24T00:44:03+0000",
+  "stop_reason": null,
+  "store_selection_observed": false,
+  "target_city": "San Pedro Sula",
+  "target_host": "www.lacolonia.com",
+  "target_navigation_completed": true,
+  "target_navigation_started": true,
+  "visible_location": "San pedro sula"
+}

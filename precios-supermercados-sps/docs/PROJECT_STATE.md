@@ -1,244 +1,184 @@
 # Estado actual — Precios de Supermercados SPS
 
-Este documento es la **fuente canónica del estado operativo mutable**. La arquitectura estable vive en [`arquitectura.md`](arquitectura.md), el modelo en [`modelo-datos.md`](modelo-datos.md) y las decisiones técnicas en [`decisiones-tecnicas.md`](decisiones-tecnicas.md). PRs, runs y artifacts son evidencia histórica; por sí solos no conceden autoridad.
+Este documento es la **fuente canónica del estado operativo mutable**. La arquitectura estable vive en [`arquitectura.md`](arquitectura.md), el modelo en [`modelo-datos.md`](modelo-datos.md) y las decisiones técnicas en [`decisiones-tecnicas.md`](decisiones-tecnicas.md). PRs, runs y artifacts son evidencia; no conceden por sí solos autoridad comercial.
 
 ## Corte
 
-Estado verificado al **2026-08-23 (America/Tegucigalpa)**.
+Estado verificado al **2026-08-23/24 (America/Tegucigalpa / UTC)**.
 
 ```text
-main = ba8151da5d49dd1cebc27a83c7f5e667dd68857c (merge de PR #227)
-PR #227 CI = PASS (run 32665734312, 1529/1529 tests)
-python -m pip check = PASS
-compileall = PASS
-ACTIVE_AUTHORIZATION_IDS = []
-READY_FOR_LIVE = NO
-SPS_TECHNICAL_CONTEXT = UNCONFIRMED
+SPS_TECHNICAL_CONTEXT = CONFIRMED
+location_id = la_colonia_sps
+granularity = city
+technical_binding_confirmed = true
+extraction_enabled = false
 production_authority = false
 catalog_accepted = false
-extraction_enabled = false
 ```
 
-## Frontera crítica actual
+La frontera de ubicación de San Pedro Sula está cerrada. La siguiente frontera real es **revalidar la estructura/facets y recorrer el catálogo bajo el contexto SPS confirmado**, sin promover todavía ese recorrido a autoridad comercial hasta que la aceptación autoritativa lo determine.
 
-La siguiente dependencia capaz de cambiar el estado del producto es demostrar técnicamente el binding de **San Pedro Sula** antes de etiquetar precios como SPS.
+## Binding técnico confirmado de San Pedro Sula
+
+La ejecución pública read-only `32677568208`, sobre el merge `01804bedf7302678f096d8cef632ca3f3c407b4f`, completó sin `stop_reason` y observó:
 
 ```text
-location_id = la_colonia_sps
+visible_location = San pedro sula
+available_cities = [SAN PEDRO SULA, TEGUCIGALPA]
+granularity_candidate = city
+confidence = strong
+technical_binding_observed = true
+store_selection_observed = false
+```
+
+El cambio decisivo ocurrió `after_city`. La evidencia sanitizada contiene:
+
+- cambio débil de cookie `vtexsegment`;
+- cambio débil de cookie `vtexsession`;
+- cambio **fuerte** de `request:regionid` asociado a la selección de SPS.
+
+La llave sanitizada canónica es:
+
+```text
+request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+```
+
+El artifact de Actions fue:
+
+```text
+run = 32677568208
+artifact_id = 9503156133
+artifact_name = la-colonia-location-binding-32677568208
+artifact_zip_digest = sha256:39bfed10e0918ea070aa4b3755ed05317f63297ddd3ce227da3afa97d857b2c4
+```
+
+El payload JSON sanitizado se conserva durablemente en:
+
+[`reports/discovery/la-colonia-location-binding-2026-08-24.json`](../reports/discovery/la-colonia-location-binding-2026-08-24.json)
+
+Su hash canónico, calculado por `evaluate_location_binding_artifact`, es:
+
+```text
+80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95
+```
+
+Por tanto la referencia de evidencia de `la_colonia_sps` es:
+
+```text
+location_binding_radiography:sha256:80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95
+```
+
+La transición cumple el contrato `CITY_BINDING_READY` de `location_binding_transition.py`. Esto confirma **ubicación y granularidad de ciudad**, pero deliberadamente conserva:
+
+```text
+extraction_enabled = false
+production_authority = false
+catalog_accepted = false
+```
+
+## Estado canónico de ubicaciones
+
+### `la_colonia_sps`
+
+```text
 city = San Pedro Sula
 in_scope = true
-granularity = unknown
-technical_binding_confirmed = false
-source_location_key = null
+is_available = true
+granularity = city
+technical_binding_confirmed = true
+source_location_key = request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 extraction_enabled = false
 ```
 
-El contexto fuente `la_colonia_online` continúa siendo un contexto raw de catálogo público, no una ubicación comercial. No puede convertirse por inferencia en SPS, Tegucigalpa o una tienda.
+`extraction_enabled` sigue falso porque cerrar la ubicación no equivale a aceptar el catálogo.
 
-Hasta demostrar binding técnico no se habilitan extracción comercial, persistencia de ofertas ni aceptación de catálogo.
-
-## Evidencia live e IDs consumidos
-
-Las autorizaciones históricas de binding son de un solo uso y están consumidas en código y operación:
+### `la_colonia_tgu`
 
 ```text
-LC-location-binding-336
-LC-location-binding-331
-LC-location-binding-332
-LC-location-binding-333
-LC-location-binding-334
-LC-location-binding-335
-LC-location-binding-337
+city = Tegucigalpa
+in_scope = false
+granularity = unknown
+technical_binding_confirmed = false
+extraction_enabled = false
 ```
 
-`LC-location-binding-337` fue incorporada al set canónico `CONSUMED_AUTHORIZATION_IDS` en PR #227. Ninguno de estos IDs puede reutilizarse.
+No se promueve Tegucigalpa por inferencia ni por aparecer en el selector.
 
-Observaciones históricas relevantes:
+### `la_colonia_online`
 
-| Authorization ID | Run | Resultado | Conclusión |
-|---|---:|---|---|
-| `LC-location-binding-336` | `32617926053` | `target_city_not_found` | no encontró control seleccionable de ciudad |
-| `LC-location-binding-331` | `32619994748` | `target_city_not_found` | no encontró control seleccionable de ciudad |
-| `LC-location-binding-332` | `32644498929` | `target_city_not_unique` | encontró más de un candidato exacto para SPS |
-| `LC-location-binding-333` | `32651129634` | `target_city_not_unique` | ambigüedad antes de seleccionar ciudad |
-| `LC-location-binding-334` | `32653410569` | `target_city_not_unique` | persistió ambigüedad después de acotar por modal/rol |
-| `LC-location-binding-335` | `32655634910` | `target_city_not_unique` | persistió ambigüedad después de filtrar controles fuera del viewport |
-| `LC-location-binding-337` | `32658270045` | `target_city_not_found` | el resolver previo no identificó la superficie real de ciudad |
+Continúa siendo un **contexto fuente raw** y no una ubicación comercial. Permanece `location_status=unknown` y no puede reutilizarse como SPS/TGU/tienda.
 
-Ninguna de esas ejecuciones concedió `production_authority`, aceptó catálogo ni persistió ofertas comerciales.
+## Autorización live vigente
 
-## Radiografía completa de 2026-08-23
+La ejecución `32677568208` es evidencia histórica ya producida por una observación pública read-only y puede usarse para cerrar el binding técnico de SPS. Esa evidencia **no se interpreta como autorización abierta para nuevas fases live**.
 
-El usuario autorizó una única radiografía live completa enfocada en entender el selector de ubicación. La activación se fusionó en PR #222 mediante el commit fuente:
+El marker versionado actualmente existente:
 
 ```text
-52d305e97f98840f1b3786b3d7358cbaa5e87e46
+.github/workflows/requests/la-colonia-location-binding-standing-request.json
+purpose = verify-location-binding
 ```
 
-El workflow live fue cerrado inmediatamente después en PR #223. La reconciliación GitHub-only de PR #224 no consiguió recuperar/verificar el artifact de esa ejecución y publicó fallo de reconciliación. Ese fallo **no demuestra que la selección haya fallado ni que haya funcionado**; sólo deja esa ejecución sin evidencia recuperada suficiente para cerrar el binding.
+está acotado a la verificación de binding de ubicación. No concede por sí mismo autorización para `facet_discovery`, smoke de catálogo, recorrido por categorías ni full crawl, y no debe incrementarse o reutilizarse para ampliar alcance sin una instrucción humana explícita que cubra esa nueva observación.
 
-PR #227 retiró el reconciliador temporal y su marker. El workflow de ubicación volvió a quedar exclusivamente en `workflow_dispatch`, con el job `radiography` bloqueado por `if: ${{ false }}` y permisos globales `contents: read`.
+El workflow histórico de facet discovery continúa cerrado mediante `if: ${{ false }}`. Su request histórico `la-colonia-facet-discovery-001` no se reutiliza como permiso para una nueva ejecución.
 
-## Evidencia DOM aportada por el usuario
+Los IDs históricos `LC-location-binding-331` a `337` relevantes siguen consumidos y no se reutilizan.
 
-El usuario aportó la estructura DOM exacta de las opciones de ciudad:
+Siguen fuera de cualquier autorización implícita: secretos, cuentas, billing, compras, checkout, mutaciones externas, infraestructura nueva con coste, persistencia comercial y decisiones manuales de mapping.
+
+## Cómo se cerró el problema del selector
+
+La estructura real aportada por el usuario y posteriormente observada live es:
 
 ```html
 <div class="cont-btn-ciudad">
-  <button class="btn-ciudad-noselected">
-    <span class="radio"></span>
-    Tegucigalpa
-  </button>
-  <button class="btn-ciudad-selected">
-    <span class="radio"></span>
-    San pedro sula
-  </button>
+  <button class="btn-ciudad-noselected">Tegucigalpa</button>
+  <button class="btn-ciudad-selected">San pedro sula</button>
 </div>
 ```
 
-Esto demuestra estructuralmente que:
+El sitio puede montar copias DOM superpuestas y puede renderizar el opener antes de que el estado hidratado acepte el click. La resolución vigente:
 
-- `.cont-btn-ciudad` agrupa las ciudades;
-- `.btn-ciudad-selected` representa la ciudad seleccionada;
-- `.btn-ciudad-noselected` representa una ciudad seleccionable no activa;
-- la identidad de ciudad está en el texto visible del `button`;
-- `San pedro sula` estaba seleccionada en la evidencia aportada.
+- identifica ciudad por texto exacto dentro de `.cont-btn-ciudad`;
+- usa `btn-ciudad-selected` / `btn-ciudad-noselected` sólo como estado, no identidad;
+- colapsa únicamente duplicados visualmente equivalentes con geometría + hit-test;
+- tolera duplicación transitoria del prompt durante readiness;
+- considera efectivo el opener sólo cuando aparece una superficie real del modal;
+- si el primer gesto no produce modal, hace un único reintento bounded tras asentamiento;
+- verifica la selección estructural y luego exige evidencia técnica separada.
 
-También se mantiene la evidencia del botón superior:
+La ejecución `32677568208` es la primera que cerró las tres capas necesarias: control correcto, SPS visible y cambio técnico fuerte de contexto.
 
-```html
-<div class="cont-btn-selector">
-  <button class="btn-modal-selector">San pedro sula</button>
-</div>
-```
+## Catálogo y autoridad — frontera actual
 
-La evidencia DOM identifica el nodo real que representa cada ciudad y el estado visual seleccionado/no seleccionado. **Todavía no demuestra por sí sola qué cookie/storage/request/VTEX binding gobierna precios e inventario**, por lo que `SPS_TECHNICAL_CONTEXT` permanece `UNCONFIRMED`.
-
-## Selección determinista vigente — PR #227
-
-PR #227 (`Hace determinista la selección de ciudad de La Colonia`) fue fusionado con:
+La cadena correcta desde este punto es:
 
 ```text
-ba8151da5d49dd1cebc27a83c7f5e667dd68857c
-```
-
-El contrato offline vigente ahora:
-
-- abre el selector superior `button.btn-modal-selector` cuando es único;
-- resuelve primero `.cont-btn-ciudad`;
-- identifica exactamente el botón de la ciudad por texto visible case-insensitive;
-- deriva un estado explícito `selected|unselected` de `btn-ciudad-selected` / `btn-ciudad-noselected`;
-- falla cerrado si un target tiene un estado estructural contradictorio;
-- hace **no-op** si San Pedro Sula ya está `selected`;
-- hace click únicamente si San Pedro Sula está `unselected`;
-- después de usar el contrato estructural verifica que SPS quede seleccionada y, cuando el header expone ubicación, que éste sea consistente;
-- conserva el fallback histórico ARIA/select para estructuras no equivalentes;
-- mantiene deduplicación estricta, visibilidad/viewport y fail-closed ante ambigüedad;
-- no concede autoridad comercial por una selección visual.
-
-El capturador conserva evidencia `before -> action/no-op -> after` de los canales técnicos permitidos y sólo el analizador de binding puede concluir si existió un cambio técnico fuerte.
-
-### Integración browser-loopback
-
-PR #227 añadió una integración local que reproduce la forma DOM aportada por el usuario:
-
-```text
-Tegucigalpa = btn-ciudad-selected
-San Pedro Sula = btn-ciudad-noselected
--> click SPS
--> Tegucigalpa = btn-ciudad-noselected
--> SPS = btn-ciudad-selected
--> header = San pedro sula
--> cambio sintético de regionId
-```
-
-La prueba demuestra que el flujo detecta la transición y clasifica el cambio técnico sintético como binding de ciudad fuerte.
-
-También existe el caso inverso:
-
-```text
-SPS ya selected
--> no click de ciudad
--> estado visual verificado
--> logical_actions = 2
--> sin inventar cambio técnico
--> granularity_candidate = unknown
-```
-
-Esto es importante: un estado visual ya seleccionado no se convierte artificialmente en evidencia de binding técnico.
-
-CI de PR #227:
-
-```text
-run = 32665734312
-job = 97258706029
-pip check = PASS
-compileall = PASS
-pytest = 1529/1529 PASS
-```
-
-## Seguridad live vigente
-
-Estado efectivo:
-
-```text
-LIVE_EXECUTION_ENABLED = False
-ACTIVE_AUTHORIZATION_IDS = []
-CONSUMED_AUTHORIZATION_IDS incluye LC-location-binding-337
-workflow location binding = workflow_dispatch only
-radiography job = if: false
-reconciliation marker = absent
-reconciliation job = absent
-production_authority = false
-catalog_accepted = false
-extraction_enabled = false
-```
-
-Sin una autorización humana nueva, explícita, vigente y de un solo uso están prohibidos nuevos HTTP/VTEX/GraphQL/Playwright/crawler/diagnostics/facet discovery/smoke/full crawl hacia La Colonia.
-
-Ningún agente puede inventar un Authorization ID y ningún ID consumido puede reutilizarse.
-
-La próxima observación live de binding debe usar un Authorization ID nuevo elegido por el usuario. Esa autorización sólo cubre el alcance expresamente aprobado y no concede automáticamente catálogo, facets, crawl, persistencia comercial ni ejecución diaria.
-
-## Qué puede demostrar la próxima observación
-
-El selector de ciudad ya no es la incógnita estructural. La próxima ejecución controlada puede distinguir dos casos:
-
-1. **SPS aparece no seleccionada:** el flujo hará click, verificará la transición visual y observará los canales técnicos permitidos antes/después. Un cambio fuerte asociado puede cerrar el binding SPS.
-2. **SPS ya aparece seleccionada:** el flujo hará no-op y verificará el estado visual. Si no existe una transición técnica observable, conservará `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` en vez de inferir autoridad.
-
-Si el segundo caso impide demostrar la asociación entre ciudad y contexto técnico, cualquier experimento posterior que altere deliberadamente otra ciudad y regrese a SPS necesitará alcance live explícito separado; no se amplía silenciosamente la autorización.
-
-## Catálogo y autoridad
-
-La estructura offline de catálogo está avanzada, pero sigue separada de la autoridad productiva.
-
-Reglas vigentes:
-
-- `catalog_accepted` no puede venir de un boolean caller-controlled;
-- readiness técnica no equivale a autoridad;
-- una selección visual de ciudad no equivale a binding técnico;
-- evidencia estructural o Cloudflare por sí sola no concede `production_authority`;
-- current/history sólo pueden mutar tras una decisión autoritativa aceptada;
-- runs rechazados, fallidos o no autoritativos no alteran estado comercial.
-
-La cadena correcta sigue siendo:
-
-```text
-binding SPS demostrado
--> revalidación estructural/facets bajo contexto SPS
+binding SPS confirmado
+-> revalidar facets/estructura bajo SPS
 -> recorrido de catálogo con evidencia física
--> autoridad productiva
--> decisión accept/reject
+-> decisión autoritativa accept/reject
+-> habilitación comercial controlada
 -> current/history
 -> Google Sheets
 -> Power BI
 -> automatización diaria
+-> segundo supermercado
 ```
 
-## Persistencia inicial
+Reglas que siguen vigentes:
 
-Google Sheets continúa como backend temporal estructurado de la primera fase. La infraestructura física fue demostrada previamente mediante `check -> apply-config -> check` y read-back de:
+- `catalog_accepted` nunca viene de un boolean caller-controlled;
+- binding técnico no concede `production_authority`;
+- un crawl exitoso no muta `current/history` si no supera la frontera de aceptación;
+- runs fallidos/rechazados/no autoritativos no alteran estado comercial;
+- ausencia de producto en un run no implica baja;
+- hashes prueban igualdad, no autoridad.
+
+## Persistencia
+
+Google Sheets sigue siendo el backend temporal inicial con las ocho tablas comunes:
 
 ```text
 cfg_supermarkets
@@ -251,13 +191,13 @@ fact_scrape_runs
 fact_quality_events
 ```
 
-No se introdujeron ofertas comerciales para demostrar esa infraestructura. La persistencia comercial de La Colonia permanece bloqueada por ubicación no confirmada y falta de autoridad de catálogo.
+La infraestructura física ya fue demostrada previamente. **No se deben persistir ofertas SPS todavía**: primero debe cerrarse la aceptación del catálogo bajo el binding confirmado.
 
 BigQuery y Cloud Run siguen fuera de esta fase salvo justificación posterior.
 
-## Identidad y semántica comercial
+## Identidad y precios
 
-Se mantiene la separación:
+Se conserva:
 
 ```text
 source_product_id = identidad dentro de la fuente
@@ -265,26 +205,12 @@ product_id        = identidad comparable entre fuentes
 offer_id          = supermercado + ubicación comercial + producto fuente
 ```
 
-GTIN válido puede producir identidad fuerte cross-supermercado. Sin GTIN fuerte se mantiene `prod_pending_*` determinista hasta mapping revisado. No se unen productos sólo por semejanza de nombre.
+GTIN válido puede producir identidad fuerte cross-supermercado. Sin identidad fuerte se conserva `prod_pending_*` hasta mapping revisado.
 
-`reported_regular_price` es un precio de referencia declarado por el supermercado; no demuestra ahorro real. La reducción real se calcula contra el `current_price` del periodo histórico aceptado inmediatamente anterior cuando existe baseline confiable.
-
-## Cloudflare / Observability
-
-La sonda física histórica de Cloudflare sigue existiendo, pero la única re-evaluación controlada del verifier actual terminó en:
-
-```text
-probe_discovery_trace_missing
-```
-
-Ese frente permanece `BLOCKED_EXTERNAL`. No se debilita el verifier ni se repite la sonda sólo para intentar obtener otro resultado. Esta frontera tampoco concede ni revoca autoridad de catálogo.
-
-## Power BI
-
-Power BI sigue siendo el dashboard final. La proyección semántica común ya está definida, pero el dataset/refresh productivo debe esperar datos comerciales aceptados y persistidos. No se construye un dashboard productivo con datos cuya ubicación o autoridad aún no están demostradas.
+`reported_regular_price` es sólo el precio regular declarado por la tienda. El ahorro real compara el `current_price` actual contra el `current_price` del periodo aceptado inmediatamente anterior cuando existe baseline confiable.
 
 ## Próxima dependencia real
 
-El trabajo offline justificable para la selección de ciudad quedó cerrado en PR #227.
+No hace falta más trabajo de radiografía para demostrar San Pedro Sula. El trabajo offline puede continuar preparando y endureciendo la revalidación de facets/catálogo para que use exclusivamente el contexto SPS confirmado y permanezca fail-closed.
 
-El siguiente paso capaz de cambiar `SPS_TECHNICAL_CONTEXT=UNCONFIRMED` requiere una **nueva autorización humana explícita y de un solo uso** para una única observación controlada de binding con el resolver vigente. El usuario debe elegir un Authorization ID nuevo; no se inventa desde código ni automatización.
+La **próxima ejecución live** que consulte facets o catálogo bajo SPS es una observación distinta de la verificación de binding y requiere autorización humana explícita vigente para ese alcance antes de emitir tráfico nuevo a La Colonia.
