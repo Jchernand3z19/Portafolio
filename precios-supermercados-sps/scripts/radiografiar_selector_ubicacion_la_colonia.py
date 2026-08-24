@@ -115,7 +115,7 @@ def _visible_body_text(page: Page, limit: int = 12000) -> str:
 
 def _dom_radiography(page: Page) -> dict[str, Any]:
     return page.evaluate(
-        """
+        r"""
         ({targetCity, otherCity}) => {
           const norm = (value) => String(value || '')
             .normalize('NFD')
