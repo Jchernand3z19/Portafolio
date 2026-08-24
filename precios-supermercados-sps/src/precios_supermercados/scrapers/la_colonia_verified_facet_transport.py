@@ -40,6 +40,7 @@ from precios_supermercados.scrapers.la_colonia_facet_discovery import (
     FacetDiscoveryRequest,
 )
 from precios_supermercados.scrapers.la_colonia_sps_facet_context import (
+    ConfirmedSpsFacetBinding,
     SpsFacetContextError,
     confirmed_sps_facet_binding,
 )
@@ -84,14 +85,19 @@ class BearerTokenProvider(Protocol):
 
 
 class VerifiedFacetDiscoveryEdgeTransport:
-    """Adapter stateful de exactamente dos requests context-bound a SPS."""
+    """Adapter stateful de exactamente dos requests context-bound a SPS.
+
+    ``sps_plan=None`` sólo conserva compatibilidad con consumidores offline que
+    materializan observaciones ya verificadas (p. ej. el finalizer). Cualquier
+    intento de ejecutar red sin plan falla antes de construir el request.
+    """
 
     def __init__(
         self,
         client: StructuralEdgeGatewayClient,
         verifier: EdgeStructuralObservationVerifier,
         *,
-        sps_plan: SpsStructuralFacetPlan,
+        sps_plan: SpsStructuralFacetPlan | None = None,
         context_provider: StructuralContextProvider,
         bearer_token_provider: BearerTokenProvider,
     ) -> None:
@@ -99,25 +105,28 @@ class VerifiedFacetDiscoveryEdgeTransport:
             _fail("structural_gateway_client_invalid")
         if not isinstance(verifier, EdgeStructuralObservationVerifier):
             _fail("structural_observation_verifier_invalid")
-        if not isinstance(sps_plan, SpsStructuralFacetPlan):
+        if sps_plan is not None and not isinstance(sps_plan, SpsStructuralFacetPlan):
             _fail("sps_structural_plan_invalid")
         if not callable(context_provider):
             _fail("structural_context_provider_invalid")
         if not callable(bearer_token_provider):
             _fail("bearer_token_provider_invalid")
-        try:
-            binding = confirmed_sps_facet_binding()
-        except SpsFacetContextError as exc:
-            raise VerifiedFacetDiscoveryTransportError("confirmed_sps_binding_invalid") from exc
-        if (
-            sps_plan.location_id != binding.location_id
-            or sps_plan.binding_source_key != binding.source_key
-            or sps_plan.binding_evidence != binding.evidence
-            or sps_plan.context_fingerprint != binding.expected_fingerprint
-        ):
-            _fail("sps_structural_plan_binding_mismatch")
-        if sps_plan.requires_same_browser_context is not True:
-            _fail("sps_structural_plan_browser_context_required")
+
+        binding: ConfirmedSpsFacetBinding | None = None
+        if sps_plan is not None:
+            try:
+                binding = confirmed_sps_facet_binding()
+            except SpsFacetContextError as exc:
+                raise VerifiedFacetDiscoveryTransportError("confirmed_sps_binding_invalid") from exc
+            if (
+                sps_plan.location_id != binding.location_id
+                or sps_plan.binding_source_key != binding.source_key
+                or sps_plan.binding_evidence != binding.evidence
+                or sps_plan.context_fingerprint != binding.expected_fingerprint
+            ):
+                _fail("sps_structural_plan_binding_mismatch")
+            if sps_plan.requires_same_browser_context is not True:
+                _fail("sps_structural_plan_browser_context_required")
 
         self._client = client
         self._verifier = verifier
@@ -172,12 +181,18 @@ class VerifiedFacetDiscoveryEdgeTransport:
             payload.context_fingerprint,
         )
 
+    def _plan_and_binding(self) -> tuple[SpsStructuralFacetPlan, ConfirmedSpsFacetBinding]:
+        if self._sps_plan is None or self._binding is None:
+            _fail("sps_structural_plan_required")
+        return self._sps_plan, self._binding
+
     def _plan_request(
         self,
         logical_request: FacetDiscoveryRequest,
         validated: ValidatedLaColoniaStructuralRequest,
     ) -> SpsStructuralPlanRequest:
-        request = self._sps_plan.requests[logical_request.sequence - 1]
+        plan, _binding = self._plan_and_binding()
+        request = plan.requests[logical_request.sequence - 1]
         if request.request_kind != logical_request.name or request.sequence != logical_request.sequence:
             _fail("sps_structural_plan_request_mismatch")
         if request.canonical_request_digest != validated.canonical_request_sha256:
@@ -188,11 +203,12 @@ class VerifiedFacetDiscoveryEdgeTransport:
         self,
         plan_request: SpsStructuralPlanRequest,
     ) -> StructuralEdgeLocationContext:
+        plan, binding = self._plan_and_binding()
         try:
             return structural_location_context_for_plan_request(
-                self._sps_plan,
+                plan,
                 plan_request,
-                binding=self._binding,
+                binding=binding,
             )
         except StructuralLocationContextError as exc:
             raise VerifiedFacetDiscoveryTransportError(
@@ -224,6 +240,7 @@ class VerifiedFacetDiscoveryEdgeTransport:
     def __call__(self, logical_request: FacetDiscoveryRequest) -> Mapping[str, object]:
         if not isinstance(logical_request, FacetDiscoveryRequest):
             _fail("facet_logical_request_invalid")
+        self._plan_and_binding()
         if self._next_sequence > len(_EXPECTED_REQUESTS):
             _fail("facet_request_count_exceeded")
         expected = _EXPECTED_REQUESTS[self._next_sequence - 1]
