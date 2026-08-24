@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import urlencode
 
 import pytest
 
@@ -129,8 +130,6 @@ def test_nested_query_context_stays_fail_closed_until_transport_is_demonstrated(
         {"delivery": {"regionId": RAW_REGION}},
         separators=(",", ":"),
     )
-    from urllib.parse import urlencode
-
     binding, context = context_for(
         FakeRequest(url=GRAPHQL_URL + "?" + urlencode({"variables": variables}))
     )
@@ -161,8 +160,59 @@ def test_context_from_different_binding_cannot_build_plan() -> None:
     other_binding = binding_for("different-region")
     assert first_binding.source_key != other_binding.source_key
 
-    with pytest.raises(Exception, match="sps_binding_changed"):
+    with pytest.raises(
+        SpsStructuralPlanError,
+        match="sps_structural_plan_context_sps_binding_changed",
+    ):
         build_sps_structural_facet_plan(context, binding=other_binding)
+
+
+def test_constructor_rejects_binding_source_that_does_not_match_context() -> None:
+    binding, context = context_for(
+        FakeRequest(headers={"X-VTEX-Region": RAW_REGION})
+    )
+    valid = build_sps_structural_facet_plan(context, binding=binding)
+
+    with pytest.raises(
+        SpsStructuralPlanError,
+        match="sps_structural_plan_binding_context_mismatch",
+    ):
+        SpsStructuralFacetPlan(
+            location_id=valid.location_id,
+            city_name=valid.city_name,
+            binding_source_key=(
+                "request:regionid:sha256:" + fingerprint_context_value("other")
+            ),
+            binding_evidence=valid.binding_evidence,
+            context_fingerprint=valid.context_fingerprint,
+            placement=valid.placement,
+            wire_key=valid.wire_key,
+            value_path=valid.value_path,
+            requests=valid.requests,
+        )
+
+
+def test_constructor_rejects_invalid_request_member_with_controlled_error() -> None:
+    binding, context = context_for(
+        FakeRequest(headers={"X-VTEX-Region": RAW_REGION})
+    )
+    valid = build_sps_structural_facet_plan(context, binding=binding)
+
+    with pytest.raises(
+        SpsStructuralPlanError,
+        match="sps_structural_plan_request_invalid",
+    ):
+        SpsStructuralFacetPlan(
+            location_id=valid.location_id,
+            city_name=valid.city_name,
+            binding_source_key=valid.binding_source_key,
+            binding_evidence=valid.binding_evidence,
+            context_fingerprint=valid.context_fingerprint,
+            placement=valid.placement,
+            wire_key=valid.wire_key,
+            value_path=valid.value_path,
+            requests=(valid.requests[0], object()),  # type: ignore[arg-type]
+        )
 
 
 def test_plan_constructor_cannot_grant_commercial_flags() -> None:
