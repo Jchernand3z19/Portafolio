@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "precios-supermercados-sps/scripts/auditar_ramas_historicas.py"
+      - "precios-supermercados-sps/scripts/resumir_delta_auditoria_ramas.py"
       - "precios-supermercados-sps/docs/audits/precios-sps-historical-branch-overrides.json"
       - ".github/workflows/precios-supermercados-sps-historical-branch-audit.yml"
 
@@ -48,6 +49,15 @@ jobs:
           --json-output branch-audit-auto.json
           --markdown-output branch-audit-auto.md
 
+      - name: Resumir delta contra decisiones previas
+        run: |
+          CURRENT_MAIN="$(git rev-parse origin/main)"
+          python precios-supermercados-sps/scripts/resumir_delta_auditoria_ramas.py \
+            --automatic-audit branch-audit-auto.json \
+            --overrides precios-supermercados-sps/docs/audits/precios-sps-historical-branch-overrides.json \
+            --current-main "$CURRENT_MAIN" \
+            --output branch-audit-delta.md
+
       - name: Exigir cierre versionado del snapshot
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -64,6 +74,7 @@ jobs:
           path: |
             branch-audit-auto.json
             branch-audit-auto.md
+            branch-audit-delta.md
             branch-audit-strict.json
             branch-audit-strict.md
           if-no-files-found: error
