@@ -51,6 +51,11 @@ function validatePolicy(policy) {
   if (!policy || typeof policy !== "object" || Array.isArray(policy)) fail("structural_sps_context_policy_invalid");
   const evidence = text(policy.bindingEvidence, "structural_sps_context_policy_evidence_invalid", 512);
   if (!EVIDENCE_RE.test(evidence)) fail("structural_sps_context_policy_evidence_invalid");
+  const regionFingerprint = text(policy.regionFingerprint, "structural_sps_region_policy_invalid", 64);
+  if (!SHA256_RE.test(regionFingerprint)) fail("structural_sps_region_policy_invalid");
+  const sourceLocationKey = text(policy.sourceLocationKey, "structural_sps_source_policy_invalid", 512);
+  const sourceMatch = SOURCE_RE.exec(sourceLocationKey);
+  if (!sourceMatch || sourceMatch[1] !== regionFingerprint) fail("structural_sps_source_policy_invalid");
   const fingerprints = exactObject(
     policy.expectedSessionFingerprints,
     SESSION_KEYS,
@@ -62,13 +67,17 @@ function validatePolicy(policy) {
   }
   return Object.freeze({
     bindingEvidence: evidence,
+    regionFingerprint,
+    sourceLocationKey,
     expectedSessionFingerprints: fingerprints,
   });
 }
 
-async function validateSessionSignals(source, bindingEvidence, policy) {
+async function validateSessionSignals(source, bindingEvidence, bindingSourceKey, contextFingerprint, policy) {
   if (!Object.hasOwn(source, "sessionSignals")) return null;
   if (bindingEvidence !== policy.bindingEvidence) fail("structural_session_binding_evidence_mismatch");
+  if (bindingSourceKey !== policy.sourceLocationKey) fail("structural_session_source_location_key_mismatch");
+  if (contextFingerprint !== policy.regionFingerprint) fail("structural_session_region_fingerprint_mismatch");
   const signals = exactObject(
     source.sessionSignals,
     SESSION_KEYS,
@@ -84,18 +93,15 @@ async function validateSessionSignals(source, bindingEvidence, policy) {
     );
     const expected = text(item.fingerprint, `structural_session_${key}_fingerprint_invalid`, 64);
     if (!SHA256_RE.test(expected)) fail(`structural_session_${key}_fingerprint_invalid`);
-    if (expected !== policy.expectedSessionFingerprints[key]) {
-      fail(`structural_session_${key}_fingerprint_policy_mismatch`);
-    }
+    if (expected !== policy.expectedSessionFingerprints[key]) fail(`structural_session_${key}_fingerprint_policy_mismatch`);
     const raw = cookieValue(item.rawValue, `structural_session_${key}_raw_invalid`);
     const observed = await sha256Hex(canonicalBytes(raw));
     if (observed !== expected) fail(`structural_session_${key}_raw_fingerprint_mismatch`);
     rawValues[key] = raw;
     fingerprints[key] = expected;
   }
-  const cookieHeader = SESSION_KEYS.map((key) => `${key}=${rawValues[key]}`).join("; ");
   return Object.freeze({
-    cookieHeader,
+    cookieHeader: SESSION_KEYS.map((key) => `${key}=${rawValues[key]}`).join("; "),
     fingerprints: Object.freeze(fingerprints),
   });
 }
@@ -132,7 +138,13 @@ export async function validateAndApplyStructuralLocationContext(
   const rawValue = text(source.rawValue, "structural_context_raw_value_invalid", 4096);
   const observedFingerprint = await sha256Hex(canonicalBytes(rawValue));
   if (observedFingerprint !== contextFingerprint) fail("structural_context_raw_fingerprint_mismatch");
-  const session = await validateSessionSignals(source, bindingEvidence, policy);
+  const session = await validateSessionSignals(
+    source,
+    bindingEvidence,
+    bindingSourceKey,
+    contextFingerprint,
+    policy,
+  );
 
   let url = originUrl;
   const headers = {};
@@ -148,11 +160,7 @@ export async function validateAndApplyStructuralLocationContext(
   }
   if (session) headers.cookie = session.cookieHeader;
 
-  const computedWireFingerprint = await sha256Hex(canonicalBytes({
-    method: "GET",
-    url,
-    headers,
-  }));
+  const computedWireFingerprint = await sha256Hex(canonicalBytes({ method: "GET", url, headers }));
   if (computedWireFingerprint !== wireRequestFingerprint) fail("structural_wire_request_fingerprint_mismatch");
 
   const receiptContext = {
