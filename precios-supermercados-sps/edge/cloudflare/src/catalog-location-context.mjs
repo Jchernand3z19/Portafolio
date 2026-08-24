@@ -38,6 +38,22 @@ function canonicalRegionKey(value) {
   return value.toLowerCase().replace(/[^a-z0-9]/gu, "");
 }
 
+function rfc3986QueryComponent(value) {
+  return encodeURIComponent(value).replace(/[!'()*]/gu, (character) => (
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  ));
+}
+
+function appendQueryParameterPreservingOrigin(originUrl, wireKey, rawValue) {
+  const parsed = new URL(originUrl);
+  if (parsed.hash) fail("catalog_wire_fragment_forbidden");
+  for (const key of parsed.searchParams.keys()) {
+    if (key.toLowerCase() === wireKey.toLowerCase()) fail("catalog_context_query_key_already_present");
+  }
+  const separator = parsed.search.length > 0 ? "&" : "?";
+  return `${originUrl}${separator}${rfc3986QueryComponent(wireKey)}=${rfc3986QueryComponent(rawValue)}`;
+}
+
 export async function validateAndApplyCatalogLocationContext(originUrl, input) {
   const source = exactObject(input, EXACT_KEYS, "catalog_location_context_shape_invalid");
   if (source.locationId !== "la_colonia_sps") fail("catalog_location_id_invalid");
@@ -63,12 +79,7 @@ export async function validateAndApplyCatalogLocationContext(originUrl, input) {
   let url = originUrl;
   const headers = {};
   if (placement === "query") {
-    const parsed = new URL(originUrl);
-    for (const key of parsed.searchParams.keys()) {
-      if (key.toLowerCase() === wireKey.toLowerCase()) fail("catalog_context_query_key_already_present");
-    }
-    parsed.searchParams.append(wireKey, rawValue);
-    url = parsed.toString();
+    url = appendQueryParameterPreservingOrigin(originUrl, wireKey, rawValue);
   } else {
     headers[wireKey] = rawValue;
   }
