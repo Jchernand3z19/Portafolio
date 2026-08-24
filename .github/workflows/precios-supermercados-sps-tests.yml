@@ -43,8 +43,8 @@ jobs:
       - name: Verificar consistencia de dependencias instaladas
         run: python -m pip check
 
-      - name: Compilar src y scripts
-        run: python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
+      - name: Compilar src y scripts sin SyntaxWarning
+        run: python -W error::SyntaxWarning -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
 
       - name: Ejecutar suite completa
         run: pytest precios-supermercados-sps/tests
