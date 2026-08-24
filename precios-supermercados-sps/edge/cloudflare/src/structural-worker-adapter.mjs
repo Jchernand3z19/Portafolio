@@ -19,10 +19,10 @@ const SHA1_RE = /^[0-9a-f]{40}$/u;
 const SHA256_RE = /^[0-9a-f]{64}$/u;
 const AUTHORIZATION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const REQUEST_KINDS = new Set(["root_total", "category_tree"]);
-const LOCATION_CONTEXT_KEYS = [
+const LOCATION_CONTEXT_KEYS = Object.freeze([
   "locationId", "bindingSourceKey", "bindingEvidence", "contextFingerprint",
   "placement", "wireKey", "valuePath", "wireRequestFingerprint", "rawValue",
-];
+]);
 
 function fail(code, message = code) {
   throw new EdgePolicyError(code, message);
@@ -109,9 +109,9 @@ function parseStructuralBody(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) fail("structural_execute_body_shape_invalid");
   const bodyKeys = Object.keys(body).sort();
   const v1 = ["originUrl", "requestContext"].sort();
-  const v2 = ["locationContext", "originUrl", "requestContext"].sort();
+  const contextual = ["locationContext", "originUrl", "requestContext"].sort();
   const valid = (bodyKeys.length === v1.length && bodyKeys.every((key, index) => key === v1[index]))
-    || (bodyKeys.length === v2.length && bodyKeys.every((key, index) => key === v2[index]));
+    || (bodyKeys.length === contextual.length && bodyKeys.every((key, index) => key === contextual[index]));
   if (!valid) fail("structural_execute_body_shape_invalid");
   const source = exactObject(
     body.requestContext,
@@ -120,8 +120,16 @@ function parseStructuralBody(body) {
   );
   let locationContext = null;
   if (Object.hasOwn(body, "locationContext")) {
-    const raw = exactObject(body.locationContext, LOCATION_CONTEXT_KEYS, "structural_location_context_shape_invalid");
-    // La validación semántica/fingerprint ocurre dentro del runtime justo antes del fetch.
+    if (!body.locationContext || typeof body.locationContext !== "object" || Array.isArray(body.locationContext)) {
+      fail("structural_location_context_shape_invalid");
+    }
+    const hasSession = Object.hasOwn(body.locationContext, "sessionSignals");
+    const expected = hasSession ? [...LOCATION_CONTEXT_KEYS, "sessionSignals"] : LOCATION_CONTEXT_KEYS;
+    const raw = exactObject(body.locationContext, expected, "structural_location_context_shape_invalid");
+    if (hasSession && (!raw.sessionSignals || typeof raw.sessionSignals !== "object" || Array.isArray(raw.sessionSignals))) {
+      fail("structural_session_signals_shape_invalid");
+    }
+    // Fingerprints, claves exactas y raws se validan dentro del runtime antes de reservar/fetch.
     locationContext = Object.freeze({ ...raw });
   }
   return Object.freeze({
