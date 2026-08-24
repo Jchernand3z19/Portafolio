@@ -52,12 +52,13 @@ def test_fingerprints_are_stable_and_do_not_expose_storage_values() -> None:
     assert fingerprint == module._fingerprint(raw)
 
 
-def test_failed_city_resolution_triggers_bounded_radiography_in_same_job() -> None:
+def test_radiography_v2_is_not_wired_into_closed_live_binding_workflow() -> None:
     raw = WORKFLOW.read_text(encoding="utf-8")
-    assert "radiografiar_ubicacion_la_colonia_v2.py" in raw
-    assert "steps.report.outputs.stop_reason == 'target_city_not_found'" in raw
-    assert "la-colonia-location-radiography-v2-${{ github.run_id }}" in raw
-    assert "diagnostic-artifacts/location-radiography-v2" in raw
+
+    assert "if: ${{ false }}" in raw
+    assert "radiografiar_ubicacion_la_colonia_v2.py" not in raw
+    assert "diagnostic-artifacts/location-radiography-v2" not in raw
+    assert "actions/upload-artifact@" not in raw
     assert "secrets." not in raw
     assert "id-token" not in raw
     assert "actions: write" not in raw
