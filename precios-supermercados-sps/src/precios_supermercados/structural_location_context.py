@@ -1,9 +1,10 @@
 """Contexto efímero que permite al gateway aplicar y atestiguar SPS.
 
-El raw ``regionId`` sólo se conserva en memoria y sólo sale por ``wire_dict`` hacia
-el endpoint autenticado del collector. Representaciones públicas y ``repr`` nunca
-lo exponen. El worker debe volver a calcular su fingerprint y el fingerprint del
-request wire antes de firmar un receipt v2.
+El envelope regional v2 prueba el ``regionId`` fuerte. La variante session-bound
+(v3) añade los dos cambios débiles de cookie observados en la misma radiografía:
+``vtexsegment`` y ``vtexsession``. Así una futura ejecución fuera del
+``BrowserContext`` sólo podrá declararse contextualmente completa si reproduce
+todas las señales post-ciudad conocidas y el fingerprint del request wire final.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from precios_supermercados.scrapers.la_colonia_sps_structural_plan import (
     SpsStructuralFacetPlan,
     SpsStructuralPlanRequest,
 )
+from precios_supermercados.sps_session_context import VerifiedSpsSessionContext
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _REGION_KEY = re.compile(r"[^a-z0-9]")
@@ -39,13 +41,22 @@ def _fail(code: str, message: str | None = None) -> NoReturn:
 
 
 def _fingerprint(value: str) -> str:
-    rendered = json.dumps(
-        value,
+    rendered = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+
+
+def _wire_fingerprint(method: str, url: str, headers: Mapping[str, str]) -> str:
+    payload = json.dumps(
+        {
+            "method": method,
+            "url": url,
+            "headers": dict(sorted(headers.items(), key=lambda item: item[0].casefold())),
+        },
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
     )
-    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _canonical_region_key(value: str) -> str:
@@ -63,6 +74,7 @@ class StructuralEdgeLocationContext:
     value_path: tuple[str, ...]
     wire_request_fingerprint: str
     _raw_value: str = field(repr=False, compare=False)
+    session_context: VerifiedSpsSessionContext | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.location_id != "la_colonia_sps":
@@ -90,6 +102,15 @@ class StructuralEdgeLocationContext:
         expected_source = f"request:regionid:sha256:{self.context_fingerprint}"
         if self.binding_source_key != expected_source:
             _fail("structural_binding_source_fingerprint_mismatch")
+        if self.session_context is not None:
+            if not isinstance(self.session_context, VerifiedSpsSessionContext):
+                _fail("structural_session_context_invalid")
+            if self.session_context.binding_evidence != self.binding_evidence:
+                _fail("structural_session_binding_evidence_mismatch")
+
+    @property
+    def session_context_complete(self) -> bool:
+        return self.session_context is not None and self.session_context.complete
 
     def __repr__(self) -> str:
         return (
@@ -98,11 +119,12 @@ class StructuralEdgeLocationContext:
             f"binding_evidence={self.binding_evidence!r}, context_fingerprint={self.context_fingerprint!r}, "
             f"placement={self.placement.value!r}, wire_key={self.wire_key!r}, "
             f"value_path={self.value_path!r}, wire_request_fingerprint={self.wire_request_fingerprint!r}, "
-            "raw_value='<redacted>')"
+            f"session_context_complete={self.session_context_complete!r}, "
+            "raw_value='<redacted>', session_values='<redacted>')"
         )
 
     def public_dict(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "location_id": self.location_id,
             "binding_source_key": self.binding_source_key,
             "binding_evidence": self.binding_evidence,
@@ -111,11 +133,15 @@ class StructuralEdgeLocationContext:
             "wire_key": self.wire_key,
             "value_path": list(self.value_path),
             "wire_request_fingerprint": self.wire_request_fingerprint,
+            "session_context_complete": self.session_context_complete,
             "raw_values_exposed": False,
         }
+        if self.session_context is not None:
+            result["session_signal_fingerprints"] = dict(self.session_context.signal_fingerprints)
+        return result
 
     def wire_dict(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "locationId": self.location_id,
             "bindingSourceKey": self.binding_source_key,
             "bindingEvidence": self.binding_evidence,
@@ -126,25 +152,16 @@ class StructuralEdgeLocationContext:
             "wireRequestFingerprint": self.wire_request_fingerprint,
             "rawValue": self._raw_value,
         }
+        if self.session_context is not None:
+            result["sessionSignals"] = self.session_context.wire_signals()
+        return result
 
 
-def structural_location_context_for_plan_request(
+def _raw_region_from_plan(
     plan: SpsStructuralFacetPlan,
     request: SpsStructuralPlanRequest,
-    *,
     binding: ConfirmedSpsFacetBinding,
-) -> StructuralEdgeLocationContext:
-    """Deriva el envelope raw sólo desde un request que pertenece al plan SPS."""
-
-    if not isinstance(plan, SpsStructuralFacetPlan):
-        _fail("sps_structural_plan_required")
-    if not isinstance(request, SpsStructuralPlanRequest) or request not in plan.requests:
-        _fail("sps_structural_plan_request_required")
-    if not isinstance(binding, ConfirmedSpsFacetBinding):
-        _fail("confirmed_sps_binding_required")
-    if binding.source_key != plan.binding_source_key or binding.evidence != plan.binding_evidence:
-        _fail("sps_structural_plan_binding_mismatch")
-
+) -> tuple[str, str, Mapping[str, str]]:
     url, headers = request.wire.reveal_for_transport(binding)
     raw: str | None = None
     if plan.placement is RequestContextPlacement.QUERY:
@@ -161,9 +178,36 @@ def structural_location_context_for_plan_request(
         if len(matches) != 1:
             _fail("structural_header_context_not_unique")
         raw = matches[0]
-    else:  # pragma: no cover - plan ya lo prohíbe
+    else:  # pragma: no cover
         _fail("structural_context_placement_invalid")
+    return raw, url, headers
 
+
+def _validate_plan_inputs(
+    plan: SpsStructuralFacetPlan,
+    request: SpsStructuralPlanRequest,
+    binding: ConfirmedSpsFacetBinding,
+) -> None:
+    if not isinstance(plan, SpsStructuralFacetPlan):
+        _fail("sps_structural_plan_required")
+    if not isinstance(request, SpsStructuralPlanRequest) or request not in plan.requests:
+        _fail("sps_structural_plan_request_required")
+    if not isinstance(binding, ConfirmedSpsFacetBinding):
+        _fail("confirmed_sps_binding_required")
+    if binding.source_key != plan.binding_source_key or binding.evidence != plan.binding_evidence:
+        _fail("sps_structural_plan_binding_mismatch")
+
+
+def structural_location_context_for_plan_request(
+    plan: SpsStructuralFacetPlan,
+    request: SpsStructuralPlanRequest,
+    *,
+    binding: ConfirmedSpsFacetBinding,
+) -> StructuralEdgeLocationContext:
+    """Envelope v2: prueba regionId, pero no afirma continuidad de sesión."""
+
+    _validate_plan_inputs(plan, request, binding)
+    raw, _url, _headers = _raw_region_from_plan(plan, request, binding)
     return StructuralEdgeLocationContext(
         location_id=plan.location_id,
         binding_source_key=plan.binding_source_key,
@@ -174,4 +218,36 @@ def structural_location_context_for_plan_request(
         value_path=plan.value_path,
         wire_request_fingerprint=request.wire_request_fingerprint,
         _raw_value=raw,
+    )
+
+
+def session_bound_structural_location_context_for_plan_request(
+    plan: SpsStructuralFacetPlan,
+    request: SpsStructuralPlanRequest,
+    *,
+    binding: ConfirmedSpsFacetBinding,
+    session_context: VerifiedSpsSessionContext,
+) -> StructuralEdgeLocationContext:
+    """Envelope v3: regionId + todas las cookies post-ciudad observadas."""
+
+    _validate_plan_inputs(plan, request, binding)
+    if not isinstance(session_context, VerifiedSpsSessionContext):
+        _fail("verified_sps_session_context_required")
+    if session_context.binding_evidence != plan.binding_evidence:
+        _fail("structural_session_binding_evidence_mismatch")
+    raw, url, headers = _raw_region_from_plan(plan, request, binding)
+    final_headers = dict(headers)
+    final_headers["cookie"] = session_context.cookie_header()
+    final_fingerprint = _wire_fingerprint("GET", url, final_headers)
+    return StructuralEdgeLocationContext(
+        location_id=plan.location_id,
+        binding_source_key=plan.binding_source_key,
+        binding_evidence=plan.binding_evidence,
+        context_fingerprint=plan.context_fingerprint,
+        placement=plan.placement,
+        wire_key=plan.wire_key,
+        value_path=plan.value_path,
+        wire_request_fingerprint=final_fingerprint,
+        _raw_value=raw,
+        session_context=session_context,
     )
