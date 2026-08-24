@@ -8,13 +8,19 @@ import {
 } from "./core.mjs";
 
 export const STRUCTURAL_PROVENANCE_SCHEMA_VERSION = "1";
+export const STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION = "2";
 export const STRUCTURAL_SIGNATURE_DOMAIN = "precios-sps/structural-receipt-signature/v1\0";
 export const STRUCTURAL_DIGEST_DOMAIN = "precios-sps/structural-receipt/v1\0";
+export const STRUCTURAL_CONTEXT_SIGNATURE_DOMAIN = "precios-sps/structural-receipt-signature/v2\0";
+export const STRUCTURAL_CONTEXT_DIGEST_DOMAIN = "precios-sps/structural-receipt/v2\0";
 
 const encoder = new TextEncoder();
 const SHA1_RE = /^[0-9a-f]{40}$/u;
 const SHA256_RE = /^[0-9a-f]{64}$/u;
+const SOURCE_RE = /^request:regionid:sha256:([0-9a-f]{64})$/u;
+const EVIDENCE_RE = /^location_binding_radiography:sha256:[0-9a-f]{64}$/u;
 const KINDS = new Set(["root_total", "category_tree"]);
+const CONTEXT_PLACEMENTS = new Set(["query", "header"]);
 
 function fail(code) {
   const error = new Error(code);
@@ -63,6 +69,35 @@ function concat(...parts) {
   return result;
 }
 
+function normalizeLocationContext(value) {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail("structural_receipt_location_context_invalid");
+  if (value.locationId !== "la_colonia_sps") fail("structural_receipt_location_id_invalid");
+  const bindingSourceKey = text(value.bindingSourceKey, "structural_receipt_binding_source_key_invalid");
+  const match = SOURCE_RE.exec(bindingSourceKey);
+  if (!match) fail("structural_receipt_binding_source_key_invalid");
+  const bindingEvidence = text(value.bindingEvidence, "structural_receipt_binding_evidence_invalid");
+  if (!EVIDENCE_RE.test(bindingEvidence)) fail("structural_receipt_binding_evidence_invalid");
+  const contextFingerprint = sha256(value.contextFingerprint, "structural_receipt_context_fingerprint_invalid");
+  if (match[1] !== contextFingerprint) fail("structural_receipt_binding_context_fingerprint_mismatch");
+  const contextPlacement = text(value.contextPlacement, "structural_receipt_context_placement_invalid", 16);
+  if (!CONTEXT_PLACEMENTS.has(contextPlacement)) fail("structural_receipt_context_placement_invalid");
+  const contextWireKey = text(value.contextWireKey, "structural_receipt_context_wire_key_invalid", 160);
+  if (!Array.isArray(value.contextValuePath) || value.contextValuePath.length !== 0) {
+    fail("structural_receipt_context_value_path_invalid");
+  }
+  return Object.freeze({
+    binding_evidence: bindingEvidence,
+    binding_source_key: bindingSourceKey,
+    context_fingerprint: contextFingerprint,
+    context_placement: contextPlacement,
+    context_value_path: Object.freeze([]),
+    context_wire_key: contextWireKey,
+    location_id: "la_colonia_sps",
+    wire_request_fingerprint: sha256(value.wireRequestFingerprint, "structural_receipt_wire_request_fingerprint_invalid"),
+  });
+}
+
 export function buildStructuralReceiptPayload(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) fail("structural_receipt_input_invalid");
   const requestKind = input.requestKind;
@@ -82,8 +117,9 @@ export function buildStructuralReceiptPayload(input) {
   if (input.responseStatus !== 200) fail("structural_receipt_response_status_invalid");
   if (input.collectorProvider !== "cloudflare_workers") fail("structural_receipt_collector_provider_invalid");
   if (input.signingAlgorithm !== "Ed25519") fail("structural_receipt_signing_algorithm_invalid");
+  const locationContext = normalizeLocationContext(input.locationContext);
 
-  return Object.freeze({
+  const result = {
     approved_commit_sha: sha1(input.approvedCommitSha, "structural_receipt_approved_commit_sha_invalid"),
     authorization_id: text(input.authorizationId, "structural_receipt_authorization_id_invalid"),
     canonical_request_sha256: canonicalRequestSha256,
@@ -114,17 +150,30 @@ export function buildStructuralReceiptPayload(input) {
     response_completed_at_utc: completedText,
     response_status: input.responseStatus,
     run_id: text(input.runId, "structural_receipt_run_id_invalid"),
-    schema_version: STRUCTURAL_PROVENANCE_SCHEMA_VERSION,
+    schema_version: locationContext ? STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION : STRUCTURAL_PROVENANCE_SCHEMA_VERSION,
     signing_algorithm: input.signingAlgorithm,
     signing_key_id: text(input.signingKeyId, "structural_receipt_signing_key_id_invalid"),
     target_host: input.targetHost,
     target_path: input.targetPath,
     target_scheme: input.targetScheme,
-  });
+  };
+  if (locationContext) Object.assign(result, locationContext);
+  return Object.freeze(result);
+}
+
+function domains(payload) {
+  if (payload?.schema_version === STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION) {
+    return [STRUCTURAL_CONTEXT_SIGNATURE_DOMAIN, STRUCTURAL_CONTEXT_DIGEST_DOMAIN];
+  }
+  if (payload?.schema_version === STRUCTURAL_PROVENANCE_SCHEMA_VERSION) {
+    return [STRUCTURAL_SIGNATURE_DOMAIN, STRUCTURAL_DIGEST_DOMAIN];
+  }
+  fail("structural_receipt_schema_version_invalid");
 }
 
 export function structuralReceiptSigningBytes(payload) {
-  return concat(encoder.encode(STRUCTURAL_SIGNATURE_DOMAIN), canonicalBytes(payload));
+  const [signatureDomain] = domains(payload);
+  return concat(encoder.encode(signatureDomain), canonicalBytes(payload));
 }
 
 export async function signStructuralReceipt(payload, privateKeyPkcs8B64Url) {
@@ -143,5 +192,6 @@ export async function verifyStructuralReceipt(payload, signatureB64Url, publicKe
 export async function structuralReceiptDigest(payload, signatureB64Url) {
   const signature = decodeBase64Url(signatureB64Url);
   if (signature.byteLength !== 64) fail("structural_receipt_signature_length_invalid");
-  return sha256Hex(concat(encoder.encode(STRUCTURAL_DIGEST_DOMAIN), canonicalBytes(payload), new Uint8Array([0]), signature));
+  const [, digestDomain] = domains(payload);
+  return sha256Hex(concat(encoder.encode(digestDomain), canonicalBytes(payload), new Uint8Array([0]), signature));
 }
