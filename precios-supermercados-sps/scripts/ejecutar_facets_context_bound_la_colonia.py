@@ -148,7 +148,7 @@ def _validate_oidc_url(raw_url: str) -> str:
     pairs = parse_qsl(parsed.query, keep_blank_values=True)
     if any(key.casefold() == "audience" for key, _ in pairs):
         _fail("oidc_request_url_audience_preexisting")
-    query = parsed.query + ("&" if parsed.query else "") + f"audience={quote(OIDC_AUDIENCE, safe='-._~:')}"
+    query = parsed.query + ("&" if parsed.query else "") + f"audience={quote(OIDC_AUDIENCE, safe='-._~')}"
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, ""))
 
 
