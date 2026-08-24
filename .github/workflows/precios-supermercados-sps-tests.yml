@@ -48,3 +48,37 @@ jobs:
 
       - name: Ejecutar suite completa
         run: pytest precios-supermercados-sps/tests
+
+  audit-historical-branches-snapshot:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Completar grafo y ramas remotas sin credenciales persistidas
+        run: |
+          git fetch --no-tags --unshallow origin
+          git fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'
+
+      - name: Generar snapshot automático sin consultar PRs
+        run: >-
+          python precios-supermercados-sps/scripts/auditar_ramas_historicas.py
+          --inspect-only
+          --json-output branch-audit-auto.json
+          --markdown-output branch-audit-auto.md
+
+      - name: Conservar snapshot temporal
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v6.0.0
+        with:
+          name: precios-sps-historical-branch-pr-snapshot-${{ github.run_id }}
+          path: |
+            branch-audit-auto.json
+            branch-audit-auto.md
+          if-no-files-found: error
+          retention-days: 7
