@@ -5,10 +5,10 @@ Este módulo no descubre contexto y no abre red. Consume únicamente un
 redactado. El valor de ``regionId`` sólo puede revelarse de forma explícita a una
 capa de ejecución futura.
 
-Las operaciones estructurales vigentes son GET. Por eso sólo se pueden aplicar de
-forma demostrable placements ``query`` o ``header``. Si la observación futura
-encuentra ``regionId`` únicamente en body, esta capa falla cerrada: no transforma
-silenciosamente un contrato GET en otro transporte.
+Las operaciones estructurales vigentes son GET. Sólo se aplican automáticamente
+placements directos ``query`` o ``header``. Un ``regionId`` anidado dentro de JSON
+de query, o cualquier valor en body, requiere un contrato específico demostrado y
+por tanto falla cerrado.
 
 La evidencia live también observó cambios de sesión VTEX. Por eso el material que
 sale de aquí **no es suficiente para un cliente HTTP nuevo**: la futura ejecución
@@ -57,6 +57,7 @@ class PreparedSpsFacetWireRequest:
         "method",
         "placement",
         "wire_key",
+        "value_path",
         "base_request_digest",
         "wire_request_fingerprint",
         "_url",
@@ -70,6 +71,7 @@ class PreparedSpsFacetWireRequest:
         method: str,
         placement: RequestContextPlacement,
         wire_key: str,
+        value_path: tuple[str, ...],
         base_request_digest: str,
         url: str,
         headers: Mapping[str, str],
@@ -81,11 +83,14 @@ class PreparedSpsFacetWireRequest:
             raise SpsFacetWireError("facet_wire_placement_invalid")
         if not isinstance(wire_key, str) or not wire_key:
             raise SpsFacetWireError("facet_wire_key_invalid")
+        if value_path:
+            raise SpsFacetWireError("facet_wire_nested_context_forbidden")
         if not isinstance(base_request_digest, str) or len(base_request_digest) != 64:
             raise SpsFacetWireError("facet_base_request_digest_invalid")
         self.method = method
         self.placement = placement
         self.wire_key = wire_key
+        self.value_path = value_path
         self.base_request_digest = base_request_digest
         self._url = url
         self._headers = MappingProxyType(dict(headers))
@@ -96,7 +101,7 @@ class PreparedSpsFacetWireRequest:
         return (
             "PreparedSpsFacetWireRequest("
             f"method={self.method!r}, placement={self.placement.value!r}, "
-            f"wire_key={self.wire_key!r}, "
+            f"wire_key={self.wire_key!r}, value_path={self.value_path!r}, "
             f"base_request_digest={self.base_request_digest!r}, "
             f"wire_request_fingerprint={self.wire_request_fingerprint!r}, "
             "url='<redacted>', headers='<redacted>', "
@@ -108,6 +113,7 @@ class PreparedSpsFacetWireRequest:
             "method": self.method,
             "placement": self.placement.value,
             "wire_key": self.wire_key,
+            "value_path": list(self.value_path),
             "base_request_digest": self.base_request_digest,
             "wire_request_fingerprint": self.wire_request_fingerprint,
             "requires_same_browser_context": True,
@@ -132,7 +138,7 @@ class PreparedSpsFacetWireRequest:
 def prepare_sps_facet_wire_request(
     execution: PreparedSpsFacetExecution,
 ) -> PreparedSpsFacetWireRequest:
-    """Aplica exactamente placement + wire key observados, todavía sin HTTP."""
+    """Aplica placement directo demostrado, todavía sin ejecutar HTTP."""
 
     if not isinstance(execution, PreparedSpsFacetExecution):
         raise SpsFacetWireError("prepared_sps_facet_execution_required")
@@ -146,9 +152,12 @@ def prepare_sps_facet_wire_request(
     base_url = execution.structural_request.source_url
     placement = execution.context.placement
     wire_key = execution.context.wire_key
+    value_path = execution.context.value_path
     headers: dict[str, str] = {}
 
     if placement is RequestContextPlacement.QUERY:
+        if value_path:
+            raise SpsFacetWireError("sps_region_nested_query_transport_not_supported")
         parsed = urlsplit(base_url)
         pairs = parse_qsl(parsed.query, keep_blank_values=True)
         if any(key.casefold() == wire_key.casefold() for key, _ in pairs):
@@ -158,6 +167,8 @@ def prepare_sps_facet_wire_request(
             (parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment)
         )
     elif placement is RequestContextPlacement.HEADER:
+        if value_path:
+            raise SpsFacetWireError("sps_region_nested_header_transport_not_supported")
         url = base_url
         headers[wire_key] = raw
     elif placement is RequestContextPlacement.BODY:
@@ -169,6 +180,7 @@ def prepare_sps_facet_wire_request(
         method="GET",
         placement=placement,
         wire_key=wire_key,
+        value_path=value_path,
         base_request_digest=execution.structural_request.canonical_request_sha256,
         url=url,
         headers=headers,
