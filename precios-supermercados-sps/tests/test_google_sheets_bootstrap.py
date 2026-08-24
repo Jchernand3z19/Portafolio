@@ -85,7 +85,7 @@ def test_default_configuration_records_confirmed_sps_binding_without_enabling_ex
     assert locations["la_colonia_sps"]["technical_binding_confirmed"] is True
     assert locations["la_colonia_sps"]["source_location_key"] == (
         "request:regionid:sha256:"
-        "32de1cadb8d72753bce236ee6089001d4f27a6b1ac178a781500524bef3fe1ae"
+        "d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7"
     )
 
     assert locations["la_colonia_tgu"]["city_name"] == "Tegucigalpa"
