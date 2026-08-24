@@ -71,7 +71,7 @@ def test_configuration_batch_contains_only_configuration_tables():
     assert not any(name.startswith("fact_") for name in batch.rows)
 
 
-def test_default_configuration_records_known_cities_without_enabling_extraction():
+def test_default_configuration_records_confirmed_sps_binding_without_enabling_extraction():
     batch = build_configuration_batch()
     locations = {
         row["location_id"]: row for row in batch.rows["cfg_locations"]
@@ -79,10 +79,14 @@ def test_default_configuration_records_known_cities_without_enabling_extraction(
 
     assert set(locations) == {"la_colonia_sps", "la_colonia_tgu"}
     assert locations["la_colonia_sps"]["city_name"] == "San Pedro Sula"
+    assert locations["la_colonia_sps"]["granularity"] == "city"
     assert locations["la_colonia_sps"]["in_scope"] is True
     assert locations["la_colonia_sps"]["extraction_enabled"] is False
-    assert locations["la_colonia_sps"]["technical_binding_confirmed"] is False
-    assert locations["la_colonia_sps"]["source_location_key"] is None
+    assert locations["la_colonia_sps"]["technical_binding_confirmed"] is True
+    assert locations["la_colonia_sps"]["source_location_key"] == (
+        "request:regionid:sha256:"
+        "32de1cadb8d72753bce236ee6089001d4f27a6b1ac178a781500524bef3fe1ae"
+    )
 
     assert locations["la_colonia_tgu"]["city_name"] == "Tegucigalpa"
     assert locations["la_colonia_tgu"]["in_scope"] is False
