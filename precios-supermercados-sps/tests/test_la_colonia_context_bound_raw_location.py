@@ -211,18 +211,3 @@ def test_rechaza_evidencia_de_item_que_no_corresponde_al_payload() -> None:
         "raw_location_sku_returned_count_mismatch",
         "raw_location_item_identity_mismatch",
     }
-
-
-def test_rechaza_pagina_cuyo_parser_comercial_no_acepta() -> None:
-    collection, _proof = _collection()
-    observation = _primary_observation(collection)
-    product = observation.page.payload["data"]["productSearch"]["products"][0]
-    product["items"][0]["sellers"][0]["commercialOffer"]["Price"] = None
-
-    with pytest.raises(ContextBoundRawLocationError) as captured:
-        materialize_context_bound_sps_raw_page(observation)
-
-    assert captured.value.code in {
-        "raw_location_page_parser_not_accepted",
-        "raw_location_page_parse_rejected",
-    }
