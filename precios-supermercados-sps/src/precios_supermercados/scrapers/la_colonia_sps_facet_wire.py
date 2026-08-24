@@ -22,7 +22,7 @@ import hashlib
 import json
 from types import MappingProxyType
 from typing import Mapping
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlsplit
 
 from precios_supermercados.scrapers.la_colonia_sps_facet_context import (
     ConfirmedSpsFacetBinding,
@@ -48,6 +48,20 @@ def _wire_fingerprint(method: str, url: str, headers: Mapping[str, str]) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _append_query_parameter_preserving_origin(url: str, key: str, value: str) -> str:
+    parsed = urlsplit(url)
+    if parsed.fragment:
+        raise SpsFacetWireError("sps_region_query_fragment_forbidden")
+    pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    if any(existing.casefold() == key.casefold() for existing, _ in pairs):
+        raise SpsFacetWireError("sps_region_query_key_already_present")
+    separator = "&" if parsed.query else "?"
+    return (
+        f"{url}{separator}"
+        f"{quote(key, safe='-._~')}={quote(value, safe='-._~')}"
+    )
 
 
 class PreparedSpsFacetWireRequest:
@@ -158,14 +172,7 @@ def prepare_sps_facet_wire_request(
     if placement is RequestContextPlacement.QUERY:
         if value_path:
             raise SpsFacetWireError("sps_region_nested_query_transport_not_supported")
-        parsed = urlsplit(base_url)
-        pairs = parse_qsl(parsed.query, keep_blank_values=True)
-        if any(key.casefold() == wire_key.casefold() for key, _ in pairs):
-            raise SpsFacetWireError("sps_region_query_key_already_present")
-        query = urlencode([*pairs, (wire_key, raw)])
-        url = urlunsplit(
-            (parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment)
-        )
+        url = _append_query_parameter_preserving_origin(base_url, wire_key, raw)
     elif placement is RequestContextPlacement.HEADER:
         if value_path:
             raise SpsFacetWireError("sps_region_nested_header_transport_not_supported")
