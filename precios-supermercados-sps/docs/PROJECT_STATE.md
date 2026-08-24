@@ -110,20 +110,24 @@ Continúa siendo un **contexto fuente raw** y no una ubicación comercial. Perma
 
 ## Autorización live vigente
 
-La ejecución `32677568208` es evidencia histórica ya producida por una observación pública read-only y puede usarse para cerrar el binding técnico de SPS. Esa evidencia **no se interpreta como autorización abierta para nuevas fases live**.
+La ejecución `32677568208` es evidencia histórica ya producida por una observación pública read-only y puede reutilizarse offline para cerrar el binding técnico de SPS. Esa evidencia **no se interpreta como autorización abierta** para repetir el binding ni para nuevas fases live.
 
-El marker versionado actualmente existente:
+Estado fail-closed actual:
 
 ```text
-.github/workflows/requests/la-colonia-location-binding-standing-request.json
-purpose = verify-location-binding
+standing location-binding marker = absent
+location-binding workflow = workflow_dispatch only
+location-binding job = if: false
+facet-discovery workflow = workflow_dispatch only
+facet-discovery job = if: false
+ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-está acotado a la verificación de binding de ubicación. No concede por sí mismo autorización para `facet_discovery`, smoke de catálogo, recorrido por categorías ni full crawl, y no debe incrementarse o reutilizarse para ampliar alcance sin una instrucción humana explícita que cubra esa nueva observación.
+El CLI de binding ya no expone `--standing-public-read-only`; exige un `--authorization-id` explícito y, sin un ID activo versionado, la captura se detiene antes de abrir navegador.
 
-El workflow histórico de facet discovery continúa cerrado mediante `if: ${{ false }}`. Su request histórico `la-colonia-facet-discovery-001` no se reutiliza como permiso para una nueva ejecución.
+Los IDs históricos `LC-location-binding-331` a `337` relevantes siguen consumidos y no se reutilizan. La solicitud histórica `la-colonia-facet-discovery-001` tampoco concede permiso para una nueva ejecución.
 
-Los IDs históricos `LC-location-binding-331` a `337` relevantes siguen consumidos y no se reutilizan.
+La **próxima ejecución live** que consulte facets, catálogo o repita binding requiere autorización humana explícita vigente para ese alcance antes de emitir tráfico nuevo a La Colonia.
 
 Siguen fuera de cualquier autorización implícita: secretos, cuentas, billing, compras, checkout, mutaciones externas, infraestructura nueva con coste, persistencia comercial y decisiones manuales de mapping.
 
@@ -150,12 +154,32 @@ El sitio puede montar copias DOM superpuestas y puede renderizar el opener antes
 
 La ejecución `32677568208` es la primera que cerró las tres capas necesarias: control correcto, SPS visible y cambio técnico fuerte de contexto.
 
+## Preparación offline de facets bajo SPS
+
+El merge `54fc86a4eae7e85bea7e61b9951a0b70362ede9e` incorporó la frontera offline que impide reutilizar una consulta GraphQL genérica como si ya estuviera ligada a SPS.
+
+La preparación vigente:
+
+- exige `la_colonia_sps` con granularidad `city` y binding técnico confirmado;
+- toma como evidencia canónica el fingerprint de `request:regionid`;
+- sólo observa `regionId` en memoria y únicamente sobre el endpoint GraphQL estructural esperado;
+- conserva de forma sanitizada `placement`, `wire_key` y `value_path`;
+- falla cerrado ante fingerprint, placement, wire key, ruta o valor ambiguos;
+- prepara sólo `root_total` y `category_tree`;
+- no abre red, no acepta catálogo y no habilita extracción;
+- no expone el valor raw en `repr` ni en artefactos públicos;
+- exige reutilizar el mismo `BrowserContext` que establezca SPS porque la evidencia de binding también observó cambios de sesión VTEX;
+- para GET sólo aplica automáticamente placements directos `query` o `header`; un `regionId` anidado o en body requiere evidencia/contrato adicional y falla cerrado.
+
+Esto deja preparado el puente técnico para una futura revalidación live sin inventar dónde ni cómo transportar el contexto SPS.
+
 ## Catálogo y autoridad — frontera actual
 
 La cadena correcta desde este punto es:
 
 ```text
 binding SPS confirmado
+-> observar bajo autorización cómo viaja regionId en requests GraphQL relevantes
 -> revalidar facets/estructura bajo SPS
 -> recorrido de catálogo con evidencia física
 -> decisión autoritativa accept/reject
@@ -211,6 +235,6 @@ GTIN válido puede producir identidad fuerte cross-supermercado. Sin identidad f
 
 ## Próxima dependencia real
 
-No hace falta más trabajo de radiografía para demostrar San Pedro Sula. El trabajo offline puede continuar preparando y endureciendo la revalidación de facets/catálogo para que use exclusivamente el contexto SPS confirmado y permanezca fail-closed.
+No hace falta más radiografía para demostrar San Pedro Sula. Todo el trabajo offline posible para ligar facets al contexto SPS debe continuar sin emitir tráfico externo.
 
-La **próxima ejecución live** que consulte facets o catálogo bajo SPS es una observación distinta de la verificación de binding y requiere autorización humana explícita vigente para ese alcance antes de emitir tráfico nuevo a La Colonia.
+La siguiente dependencia que no puede resolverse honestamente offline es observar, dentro de una sesión SPS autorizada, **en qué request GraphQL relevante y con qué estructura exacta viaja el `regionId` cuyo fingerprint ya está confirmado**. Esa observación es live y requiere autorización humana explícita vigente para ese alcance.

@@ -1,15 +1,14 @@
 """Captura controlada del binding de ubicación de La Colonia.
 
 Las autorizaciones históricas por ID se conservan únicamente para compatibilidad y
-evidencia. Desde la instrucción humana del 2026-08-23T21:02:02Z existe además una
-autorización permanente para observación pública read-only. Esa ruta requiere una
-invocación explícita con ``standing_public_read_only=True`` y mantiene target,
-presupuesto, pacing y artefacto sanitizado cerrados en código.
+evidencia. La antigua ruta ``standing_public_read_only`` se conserva como parámetro
+compatibilidad para que callers viejos fallen de forma explícita, pero está
+permanentemente cerrada y no puede conceder una ejecución live.
 
-El modo permanente read-only no concede autoridad comercial, no usa secretos, no
-realiza checkout ni mutaciones externas y no permite cambiar el target live por
-runtime. Los parámetros inyectables de allow-list/fuse continúan existiendo sólo
-para tests ``local_only``.
+Una captura live sólo puede avanzar mediante el contrato explícito de
+``authorization_id`` y los gates versionados en este módulo. Con el estado actual
+(``ACTIVE_AUTHORIZATION_IDS`` vacío y ``LIVE_EXECUTION_ENABLED=False``), cualquier
+intento live se detiene antes de abrir navegador.
 
 El artefacto sólo contiene nombres públicos de ciudades/tiendas, nombres de
 mecanismos de contexto, contadores DOM sanitizados y SHA-256 de valores opacos. No
@@ -56,7 +55,7 @@ from precios_supermercados.diagnostics.location_binding_dom_controls import (
 TARGET_URL = "https://www.lacolonia.com/"
 TARGET_CITY = "San Pedro Sula"
 LIVE_EXECUTION_ENABLED = False
-STANDING_PUBLIC_READ_ONLY_AUTHORIZED = True
+STANDING_PUBLIC_READ_ONLY_AUTHORIZED = False
 STANDING_PUBLIC_READ_ONLY_AUTHORIZED_AT = "2026-08-23T21:02:02Z"
 ACTIVE_AUTHORIZATION_IDS: frozenset[str] = frozenset()
 CONSUMED_AUTHORIZATION_IDS: frozenset[str] = frozenset(
@@ -457,9 +456,7 @@ def validate_capture_authorization(
         if standing_public_read_only:
             if authorization_id is not None:
                 raise LocationBindingCaptureError("authorization_mode_conflict")
-            if not STANDING_PUBLIC_READ_ONLY_AUTHORIZED:
-                raise LocationBindingCaptureError("standing_public_read_only_not_authorized")
-            return
+            raise LocationBindingCaptureError("standing_public_read_only_not_authorized")
         effective_active_ids = ACTIVE_AUTHORIZATION_IDS
         effective_consumed_ids = CONSUMED_AUTHORIZATION_IDS
         effective_live_enabled = LIVE_EXECUTION_ENABLED
@@ -546,11 +543,12 @@ def run_capture(
 ) -> LocationBindingCaptureResult:
     """Ejecuta una captura bounded de binding; ``local_only`` sirve a CI.
 
-    La ruta live puede usar el modelo legado por authorization-id o la autorización
-    permanente pública read-only. Ninguna ruta concede autoridad comercial. La
-    función no realiza replay GraphQL ni visita páginas de producto. El máximo son
-    cuatro acciones lógicas: abrir home, abrir selector, elegir ciudad sólo si hace
-    falta y, únicamente si aparece, elegir una tienda.
+    La ruta live sólo puede avanzar con un authorization-id activo y el fuse live
+    habilitado en código. ``standing_public_read_only`` existe únicamente como
+    compatibilidad fail-closed y nunca autoriza red. La función no realiza replay
+    GraphQL ni visita páginas de producto. El máximo son cuatro acciones lógicas:
+    abrir home, abrir selector, elegir ciudad sólo si hace falta y, únicamente si
+    aparece, elegir una tienda.
     """
 
     budget = budget or DiagnosticBudget(max_logical_requests=4)

@@ -1,8 +1,8 @@
 """CLI cerrada para observación del binding de ubicación de La Colonia.
 
 No expone flags para cambiar target, política de red, allow-list ni fuse live.
-Puede usar el mecanismo histórico por authorization-id o la autorización permanente
-pública read-only vigente desde 2026-08-23T21:02:02Z.
+Sólo conserva el mecanismo explícito por ``authorization-id``. Mientras no exista
+un ID activo versionado, la captura live falla antes de abrir navegador.
 """
 
 from __future__ import annotations
@@ -20,15 +20,10 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Observación cerrada del binding de ubicación de La Colonia",
     )
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument(
+    parser.add_argument(
         "--authorization-id",
-        help="ID histórico de autorización live versionado y activo",
-    )
-    mode.add_argument(
-        "--standing-public-read-only",
-        action="store_true",
-        help="Usa la autorización permanente para observación pública read-only",
+        required=True,
+        help="ID de autorización live explícito, versionado y activo",
     )
     parser.add_argument(
         "--output-path",
@@ -61,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     result = run_capture(
         authorization_id=args.authorization_id,
-        standing_public_read_only=bool(args.standing_public_read_only),
+        standing_public_read_only=False,
         output_path=Path(args.output_path),
     )
     print(json.dumps(_summary(result), ensure_ascii=False, sort_keys=True))

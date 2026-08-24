@@ -36,120 +36,72 @@ def load_script_module():
     return module
 
 
-def test_workflow_is_bounded_read_only_and_can_run_from_main_marker() -> None:
+def test_workflow_is_manual_read_only_and_fail_closed() -> None:
     workflow = load_workflow()
-    assert workflow["permissions"] == {"contents": "read"}
-    assert set(workflow["on"]) == {"workflow_dispatch", "push"}
-    assert workflow["on"]["workflow_dispatch"] in ("", None)
-    assert workflow["on"]["push"] == {
-        "branches": ["main"],
-        "paths": [
-            ".github/workflows/requests/la-colonia-location-binding-standing-request.json"
-        ],
-    }
 
-    assert set(workflow["jobs"]) == {"binding", "publish-status"}
+    assert workflow["permissions"] == {"contents": "read"}
+    assert set(workflow["on"]) == {"workflow_dispatch"}
+    assert workflow["on"]["workflow_dispatch"] in ("", None)
+    assert set(workflow["jobs"]) == {"binding"}
+
     job = workflow["jobs"]["binding"]
-    assert job["if"] == (
-        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
-        "github.ref == 'refs/heads/main' }}"
-    )
+    assert job["if"] == "${{ false }}"
+    assert job["timeout-minutes"] == "1"
     assert "environment" not in job
     assert "permissions" not in job
-    assert job["timeout-minutes"] == "10"
     assert workflow["concurrency"] == {
         "group": "la-colonia-location-binding-read-only",
         "cancel-in-progress": "false",
     }
-    assert job["outputs"] == {
-        "run_state": "${{ steps.report.outputs.run_state }}",
-        "stop_reason": "${{ steps.report.outputs.stop_reason }}",
-        "technical_binding_observed": "${{ steps.report.outputs.technical_binding_observed }}",
-        "granularity_candidate": "${{ steps.report.outputs.granularity_candidate }}",
-        "confidence": "${{ steps.report.outputs.confidence }}",
-        "visible_location": "${{ steps.report.outputs.visible_location }}",
-        "logical_actions": "${{ steps.report.outputs.logical_actions }}",
-    }
+    assert not REQUEST.exists()
     assert not RECONCILE_REQUEST.exists()
 
 
-def test_workflow_has_versioned_standing_authorization_contract() -> None:
+def test_workflow_has_no_standing_authorization_or_execution_surface() -> None:
     raw = WORKFLOW.read_text(encoding="utf-8")
-    assert "precios-sps-standing-public-readonly-location-binding/v1" in raw
-    assert "2026-08-23T21:02:02Z" in raw
-    assert "verify-location-binding" in raw
-    assert "requestSequence" in raw
-    assert "authority" in raw
-    assert "--standing-public-read-only" in raw
-    assert "--authorization-id" not in raw
-    assert "secrets." not in raw
-    assert "vars." not in raw
-    assert "id-token" not in raw
-    assert "actions: write" not in raw
-    assert "pull_request_target" not in raw
-    assert "issue_comment" not in raw
-    assert "schedule:" not in raw
-    assert "--target" not in raw
-    assert "--network-policy" not in raw
-    assert "--live-execution" not in raw
-    assert "--active-id" not in raw
+
+    for forbidden in (
+        "precios-sps-standing-public-readonly-location-binding/v1",
+        "--standing-public-read-only",
+        "--authorization-id",
+        "actions/checkout@",
+        "actions/upload-artifact@",
+        "actions/github-script@",
+        "createCommitStatus",
+        "scripts/diagnosticar_binding_ubicacion_la_colonia.py",
+        "radiografiar_ubicacion_la_colonia_v2.py",
+        "secrets.",
+        "vars.",
+        "id-token",
+        "actions: write",
+        "statuses: write",
+        "pull_request_target",
+        "issue_comment",
+        "schedule:",
+        "push:",
+    ):
+        assert forbidden not in raw
 
 
-def test_checkout_and_artifact_actions_are_pinned_and_output_is_only_sanitized_json() -> None:
+def test_blocked_job_contains_no_repository_checkout_or_artifact_upload() -> None:
     workflow = load_workflow()
     steps = workflow["jobs"]["binding"]["steps"]
-    checkout = next(
-        step for step in steps if str(step.get("uses", "")).startswith("actions/checkout@")
-    )
-    assert checkout["uses"] == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-    assert checkout["with"] == {
-        "ref": "${{ github.sha }}",
-        "persist-credentials": "false",
-    }
-    upload = next(
-        step
-        for step in steps
-        if str(step.get("uses", "")).startswith("actions/upload-artifact@")
-    )
-    assert upload["uses"] == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
-    assert upload["with"]["path"] == (
-        "precios-supermercados-sps/diagnostic-artifacts/location-binding-radiography.json"
-    )
+
+    assert steps
+    assert all("uses" not in step for step in steps)
+    rendered = "\n".join(str(step.get("run", "")) for step in steps)
+    assert "autorización humana nueva y explícita" in rendered
+    assert "exit 1" in rendered
 
 
-def test_status_publisher_is_isolated_and_only_receives_sanitized_outputs() -> None:
-    workflow = load_workflow()
-    publisher = workflow["jobs"]["publish-status"]
-    assert publisher["needs"] == ["binding"]
-    assert publisher["if"] == (
-        "${{ always() && github.repository == 'Jchernand3z19/Portafolio' && "
-        "github.ref == 'refs/heads/main' }}"
-    )
-    assert publisher["permissions"] == {"contents": "read", "statuses": "write"}
-    assert "environment" not in publisher
-    assert publisher["env"] == {
-        "RUN_STATE": "${{ needs.binding.outputs.run_state }}",
-        "STOP_REASON": "${{ needs.binding.outputs.stop_reason }}",
-        "TECHNICAL_BINDING": "${{ needs.binding.outputs.technical_binding_observed }}",
-        "GRANULARITY": "${{ needs.binding.outputs.granularity_candidate }}",
-        "CONFIDENCE": "${{ needs.binding.outputs.confidence }}",
-        "VISIBLE_LOCATION": "${{ needs.binding.outputs.visible_location }}",
-        "LOGICAL_ACTIONS": "${{ needs.binding.outputs.logical_actions }}",
-    }
-    raw = "\n".join(str(step) for step in publisher["steps"])
-    assert "actions/checkout@" not in raw
-    assert "actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3" in raw
-    assert "createCommitStatus" in raw
-    assert "precios-sps/location-binding-run" in raw
-    assert "precios-sps/location-binding-location" in raw
-    assert "precios-sps/location-binding-readonly" in raw
-    assert "secrets." not in raw
-
-
-def test_cli_exposes_standing_mode_but_no_runtime_target_or_network_overrides() -> None:
+def test_cli_requires_explicit_id_and_exposes_no_standing_or_runtime_overrides() -> None:
     raw = SCRIPT.read_text(encoding="utf-8")
-    assert "--standing-public-read-only" in raw
+
+    assert '"--authorization-id"' in raw
+    assert "required=True" in raw
+    assert "standing_public_read_only=False" in raw
     for forbidden in (
+        "--standing-public-read-only",
         "--target-url",
         "--network-policy",
         "--live-execution-enabled",
@@ -187,8 +139,5 @@ def test_legacy_consumed_authorizations_remain_blocked(tmp_path: Path) -> None:
         assert '"extraction_enabled": false' in rendered
 
 
-def test_marker_is_optional_for_manual_dispatch_and_safe_when_present() -> None:
-    if REQUEST.exists():
-        value = REQUEST.read_text(encoding="utf-8")
-        assert "precios-sps-standing-public-readonly-location-binding/v1" in value
-        assert '"authority": false' in value
+def test_standing_marker_must_remain_absent() -> None:
+    assert REQUEST.exists() is False
