@@ -6,7 +6,8 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EDGE_ROOT = PROJECT_ROOT / "edge" / "cloudflare"
-RUNBOOK = PROJECT_ROOT / "docs" / "cloudflare-controlled-probe-runbook.md"
+PROBE_RUNBOOK = PROJECT_ROOT / "docs" / "cloudflare-controlled-probe-runbook.md"
+PRODUCTION_RUNBOOK = PROJECT_ROOT / "docs" / "cloudflare-production-deploy-runbook.md"
 WRANGLER_VERSION = "4.125.0"
 PINNED_WRANGLER = f"npx --yes wrangler@{WRANGLER_VERSION}"
 
@@ -43,7 +44,7 @@ def test_wrangler_cli_is_pinned_and_no_productive_deploy_script_exists() -> None
 
 
 def test_probe_runbook_uses_only_the_pinned_wrangler_entrypoint() -> None:
-    raw = RUNBOOK.read_text(encoding="utf-8")
+    raw = PROBE_RUNBOOK.read_text(encoding="utf-8")
     commands = _bash_commands(raw)
 
     assert f"wrangler = {PINNED_WRANGLER}" in raw
@@ -58,7 +59,30 @@ def test_probe_runbook_uses_only_the_pinned_wrangler_entrypoint() -> None:
     assert all(not command.startswith("npx wrangler") for command in commands)
     assert all("wrangler@latest" not in command for command in commands)
     assert all("--config wrangler.json" not in command for command in commands)
-    assert "4.125.0" in raw
+    assert WRANGLER_VERSION in raw
+
+
+def test_productive_runbook_is_manual_pinned_and_keeps_live_closed() -> None:
+    raw = PRODUCTION_RUNBOOK.read_text(encoding="utf-8")
+    commands = _bash_commands(raw)
+
+    assert f"wrangler = {PINNED_WRANGLER}" in raw
+    assert "npm run wrangler -- --version" in commands
+    assert any(
+        command.startswith(
+            "npm run wrangler -- deploy --config wrangler.json --secrets-file /ruta/fuera-del-repo/"
+        )
+        for command in commands
+    )
+    assert "npm run wrangler -- deployments status --config wrangler.json --json" in commands
+    assert all(not command.startswith("npx wrangler") for command in commands)
+    assert all("wrangler@latest" not in command for command in commands)
+    assert "deploy:production" in raw
+    assert "no expone un script automático `deploy:production`" in raw
+    assert "ACTIVE_AUTHORIZATION_IDS = []" in raw
+    assert "no autoriza ninguna solicitud a La Colonia" in raw
+    assert "fuera del repositorio" in raw
+    assert WRANGLER_VERSION in raw
 
 
 def test_cloudflare_local_secret_and_state_files_are_ignored() -> None:
