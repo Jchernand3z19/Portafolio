@@ -21,7 +21,8 @@ Principios:
 7. todo run terminal se registra;
 8. un mismo esquema sirve a todos los supermercados;
 9. lógica comercial independiente del backend;
-10. logs, artifacts, hashes y telemetry no conceden autoridad.
+10. logs, artifacts, hashes y telemetry no conceden autoridad;
+11. una entidad lógica no obliga a crear una tabla física: materializar exige grain, lifecycle, consumidor o frontera distinta demostrable.
 
 ## 2. Flujo principal
 
@@ -30,7 +31,7 @@ Fuente
   ↓
 Extractor específico
   ↓
-RawProduct
+RawProduct                         # RAW / source-faithful
   ↓
 Normalización
   ↓
@@ -38,11 +39,11 @@ NormalizedOffer
   ↓
 Validación + identidad + state_hash
   ↓
-ValidatedOffer
+ValidatedOffer                    # CLEAN / validated
   ↓
 Completitud / provenance / decisión autoritativa
   ↓
-Máquina current/history
+Máquina current/history           # CURATED
   ↓
 TabularBatch común
   ↓
@@ -50,12 +51,12 @@ Adapter de persistencia
   ↓
 Google Sheets (fase inicial)
   ↓
-Proyección semántica
+Proyección semántica              # SERVE
   ↓
 Power BI
 ```
 
-BigQuery queda como evolución posterior cuando extracción, calidad, identidad, persistencia y operación diaria sean estables.
+BigQuery queda como evolución posterior cuando extracción, calidad, identidad, persistencia y operación diaria sean estables. Las responsabilidades RAW/CLEAN/CURATED/SERVE son contratos lógicos; no se fuerza una tabla por capa si el storage actual no la necesita.
 
 ## 3. Contratos protegidos
 
@@ -76,17 +77,17 @@ Se separan:
 
 ```text
 source_product_id = identidad del producto dentro de la fuente
-product_id        = identidad normalizada/comparable entre fuentes
+product_id        = identidad potencialmente comparable entre fuentes
 offer_id          = supermercado + ubicación comercial + producto fuente
 ```
 
 `source_product_id` y `offer_id` son deterministas y se recalculan en fronteras críticas.
 
-Para identidad cross-supermercado, un GTIN-8/12/13/14 sólo se acepta si supera su check digit y se normaliza a GTIN-14. Si no existe una identidad fuerte usable, el producto queda bajo `prod_pending_*` y `pending_product_mapping` hasta revisión. El identificador pendiente también es determinista respecto a `source_product_id` y se revalida antes de materializar dimensión/mapping. Un mapping explícito puede reemplazar el `product_id` provisional sin alterar la identidad fuente.
+Para identidad cross-supermercado, un GTIN-8/12/13/14 sólo se acepta si supera su check digit y se normaliza a GTIN-14. Si no existe una identidad fuerte usable, el producto queda bajo `prod_pending_*` y `pending_product_mapping` hasta revisión. El identificador pendiente también es determinista respecto a `source_product_id` y se revalida en la frontera lógica de mapping. Un mapping explícito puede reemplazar el `product_id` provisional sin alterar la identidad fuente.
 
 Precio, promoción, disponibilidad y fecha nunca forman parte de IDs estables.
 
-Antes de incorporar un segundo supermercado, las equivalencias sin GTIN compartido ni mapping explícitamente revisado deben permanecer pendientes; la semejanza textual por sí sola no autoriza una unión cross-supermercado.
+Mientras exista una sola fuente, conservar `product_id` dentro de current/history es suficiente para trazabilidad y evolución. Las tablas canónicas cross-source se materializan sólo cuando exista una segunda fuente o un consumidor que realmente necesite equivalencias.
 
 ## 5. Presentación
 
@@ -237,30 +238,50 @@ max(historical_previous_price - current_price, 0)
 
 `reported_regular_price` e `is_promotion` no demuestran ahorro. Sin baseline aceptado no se inventa una reducción.
 
-## 12. Modelo tabular común
+## 12. Modelo tabular: lógico vs físico
 
-La fase inicial usa ocho tablas compartidas:
+El contrato lógico conserva las identidades necesarias para una futura comparación cross-source, pero Google Sheets materializa sólo las estructuras justificadas en la fase actual.
+
+### Contrato físico activo
 
 ```text
 cfg_supermarkets
 cfg_locations
-dim_products
-map_source_products
 fact_offers_current
 fact_offer_history
 fact_scrape_runs
 fact_quality_events
 ```
 
-`dim_products` contiene únicamente atributos normalizados/canónicos por `product_id`; no contiene supermercado, ubicación, precio ni run. `map_source_products` conserva la relación fuente -> producto y la cola de mappings pendientes.
+Grain:
 
-Current/history siguen siendo comunes a todas las cadenas; nunca se crea una tabla por supermercado.
+- `cfg_supermarkets`: una fila por supermercado;
+- `cfg_locations`: una fila por ubicación comercial;
+- `fact_offers_current`: una fila por `offer_id` con el estado aceptado más reciente;
+- `fact_offer_history`: una fila por periodo histórico de una oferta;
+- `fact_scrape_runs`: una fila por run terminal;
+- `fact_quality_events`: una fila por evento de calidad.
+
+No se separan marca, categoría, presentación, precio o disponibilidad en tablas propias porque comparten el grain/lifecycle de la oferta en esta etapa.
+
+### Contratos lógicos diferidos
+
+```text
+dim_products
+map_source_products
+```
+
+`dim_products` define el futuro producto canónico cross-source y `map_source_products` la futura relación fuente -> producto/revisión. Las funciones y validaciones de identidad pueden existir y probarse ahora, pero estas tablas no son tabs físicos activos hasta que exista una segunda fuente o un consumidor real que requiera equivalencias.
+
+Current/history siguen conservando `source_product_id` y `product_id`; por tanto la materialización futura puede reconstruirse/backfillearse sin inventar observaciones.
+
+Nunca se crea una tabla por supermercado.
 
 ## 13. Rehidratación durable
 
 La persistencia debe permitir reconstruir un runner nuevo y revalidar IDs, `state_hash`, review status, runs de apertura/current, cronología, cierre de periodos, gaps/overlaps y correspondencia current/history.
 
-`raw_values` no se conserva en el snapshot durable cuando no participa en identidad/hash/transición.
+`raw_values` no se conserva en el snapshot tabular durable cuando no participa en identidad/hash/transición. La evidencia raw necesaria para auditoría/reconstrucción vive en la frontera de provenance apropiada, no mezclada con el modelo curado.
 
 ## 14. Batch comercial
 
@@ -271,13 +292,14 @@ estado persistido
 -> rehidratación
 -> preflight comercial
 -> transición current/history
--> dimensión/mapping de producto
 -> registros de run/calidad
--> snapshot tabular
+-> snapshot tabular activo
 -> adapter
 ```
 
-Runs no aceptados no materializan dimensión/mapping/current/history. Un backend no recibe una mutación parcial que pueda dejar el snapshot incoherente.
+Un run aceptado puede materializar configuración, current/history, run y quality events. Un run no aceptado sólo registra lo permitido por su estado y nunca muta current/history.
+
+El store backend-neutral conserva los contratos lógicos necesarios para pruebas/evolución. El adapter de Google Sheets rechaza un batch que intente escribir una tabla diferida, evitando que una capacidad lógica futura se convierta accidentalmente en estado durable prematuro.
 
 ## 15. Google Sheets
 
@@ -285,14 +307,16 @@ Google Sheets es el backend temporal estructurado de la primera fase.
 
 Capas:
 
-1. **plan**: snapshot -> operación de workbook;
+1. **plan**: snapshot activo -> operación de workbook;
 2. **transport**: autenticación y endpoints/scopes cerrados;
-3. **adapter**: read-modify-write del snapshot gestionado;
+3. **adapter**: read-modify-write del snapshot físico activo;
 4. **bootstrap**: validación/aplicación controlada de configuración.
 
-La materialización usa una operación `spreadsheets.batchUpdate` planificada y preserva pestañas ajenas al proyecto. Texto fuente se escribe como string explícito para evitar fórmulas accidentales. El planner reserva al menos una fila visible no congelada cuando una tabla sólo contiene encabezado, porque Google Sheets no permite congelar todas las filas visibles.
+La materialización usa una operación `spreadsheets.batchUpdate` planificada y preserva pestañas ajenas o diferidas. Texto fuente se escribe como string explícito para evitar fórmulas accidentales. El planner reserva al menos una fila visible no congelada cuando una tabla sólo contiene encabezado, porque Google Sheets no permite congelar todas las filas visibles.
 
 El workflow de storage implementa un único escritor mediante `concurrency`, separa preflight sin secretos, ejecución autenticada y publicación de resultado sanitizado. La existencia/configuración física del workbook se comprueba por la ruta `check -> apply-config -> check`; el resultado productivo concreto vive en `PROJECT_STATE.md`.
+
+La limpieza o retiro de tabs que dejan de pertenecer al contrato activo es una migración explícita: se verifica que no contengan datos que deban conservarse, se ejecuta de forma acotada y se confirma por read-back. No se oculta dentro de una escritura comercial.
 
 La infraestructura de storage no concede por sí misma autoridad comercial: current/history sólo reciben datos cuando las fronteras de ubicación, completitud y aceptación autoritativa están cerradas.
 

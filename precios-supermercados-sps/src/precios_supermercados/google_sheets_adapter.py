@@ -1,13 +1,14 @@
 """Adapter transaccional entre Google Sheets y el store tabular común.
 
 La hoja se trata como un snapshot materializado, no como una colección de
-`append`s. Antes de escribir se reconstruyen todas las pestañas gestionadas,
+`append`s. Antes de escribir se reconstruyen todas las pestañas físicas activas,
 se validan encabezados/tipos/llaves, se aplica el batch localmente y sólo entonces
 se genera un único ``spreadsheets.batchUpdate`` atómico.
 
-Las pestañas ajenas al proyecto se ignoran y preservan. Una pestaña gestionada
-con estructura inesperada provoca fallo cerrado para evitar pérdida silenciosa de
-datos. Este módulo no conoce supermercados concretos ni endpoints de scraping.
+Las pestañas ajenas o lógicamente diferidas se ignoran y preservan. Una pestaña
+activa con estructura inesperada provoca fallo cerrado para evitar pérdida
+silenciosa de datos. Este módulo no conoce supermercados concretos ni endpoints
+de scraping.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from .google_sheets_plan import (
     build_atomic_workbook_plan,
     parse_spreadsheet_metadata,
 )
+from .storage_contract import ACTIVE_STORAGE_TABLE_SPECS
 from .tabular_persistence import TABLE_SPECS, TableSpec
 from .tabular_store import (
     InMemoryTabularStore,
@@ -129,8 +131,6 @@ def _column_letter(index_one_based: int) -> str:
 
 
 def _a1_range(spec: TableSpec) -> str:
-    # Los títulos gestionados provienen de constantes internas; aun así se
-    # escapan comillas simples para que la construcción siga siendo genérica.
     title = spec.name.replace("'", "''")
     end_column = _column_letter(len(spec.columns))
     return f"'{title}'!A:{end_column}"
@@ -139,13 +139,13 @@ def _a1_range(spec: TableSpec) -> str:
 def managed_existing_ranges(
     metadata: SpreadsheetMetadata,
 ) -> tuple[tuple[str, str], ...]:
-    """Devuelve ``(table_name, A1 range)`` sólo para tabs ya existentes."""
+    """Devuelve ``(table_name, A1 range)`` sólo para tabs físicos activos."""
 
     if not isinstance(metadata, SpreadsheetMetadata):
         raise GoogleSheetsAdapterError("spreadsheet_metadata_invalid")
     return tuple(
         (table_name, _a1_range(spec))
-        for table_name, spec in TABLE_SPECS.items()
+        for table_name, spec in ACTIVE_STORAGE_TABLE_SPECS.items()
         if table_name in metadata.sheets
     )
 
@@ -193,7 +193,7 @@ def _parse_table_values(
     values: Any,
 ) -> tuple[Mapping[str, Any], ...]:
     try:
-        spec = TABLE_SPECS[table_name]
+        spec = ACTIVE_STORAGE_TABLE_SPECS[table_name]
     except KeyError as exc:
         raise GoogleSheetsAdapterError("managed_table_unknown") from exc
 
@@ -239,7 +239,7 @@ def parse_managed_values_payload(
     *,
     expected_spreadsheet_id: str | None = None,
 ) -> Mapping[str, tuple[Mapping[str, Any], ...]]:
-    """Valida la respuesta de ``values:batchGet`` sin confiar en encabezados."""
+    """Valida la respuesta de ``values:batchGet`` de tabs físicos activos."""
 
     if isinstance(table_names, (str, bytes)) or not isinstance(table_names, Sequence):
         raise GoogleSheetsAdapterError("managed_table_names_invalid")
@@ -260,7 +260,7 @@ def parse_managed_values_payload(
 
     result: dict[str, tuple[Mapping[str, Any], ...]] = {}
     for table_name, raw_range in zip(table_names, raw_ranges, strict=True):
-        if table_name not in TABLE_SPECS:
+        if table_name not in ACTIVE_STORAGE_TABLE_SPECS:
             raise GoogleSheetsAdapterError("managed_table_unknown")
         if table_name in result:
             raise GoogleSheetsAdapterError("managed_table_duplicate")
@@ -279,11 +279,16 @@ def parse_managed_values_payload(
 def hydrate_store_from_managed_rows(
     rows_by_table: Mapping[str, tuple[Mapping[str, Any], ...]],
 ) -> InMemoryTabularStore:
-    """Reconstruye el store usando exactamente las mismas invariantes locales."""
+    """Reconstruye el store desde las tablas físicas activas.
+
+    Las tablas lógicas diferidas permanecen vacías en memoria. No se interpretan
+    como datos ausentes o borrados: simplemente no pertenecen al backend físico
+    actual.
+    """
 
     if not isinstance(rows_by_table, Mapping):
         raise GoogleSheetsAdapterError("managed_rows_invalid")
-    unexpected = set(rows_by_table).difference(TABLE_SPECS)
+    unexpected = set(rows_by_table).difference(ACTIVE_STORAGE_TABLE_SPECS)
     if unexpected:
         raise GoogleSheetsAdapterError("managed_table_unknown")
 
@@ -304,12 +309,15 @@ def snapshot_row_counts(store: InMemoryTabularStore) -> Mapping[str, int]:
     if not isinstance(store, InMemoryTabularStore):
         raise GoogleSheetsAdapterError("tabular_store_invalid")
     return MappingProxyType(
-        {table_name: store.count(table_name) for table_name in TABLE_SPECS}
+        {
+            table_name: store.count(table_name)
+            for table_name in ACTIVE_STORAGE_TABLE_SPECS
+        }
     )
 
 
 class GoogleSheetsWorkbookAdapter:
-    """Lee, valida, aplica y materializa un snapshot completo."""
+    """Lee, valida, aplica y materializa el snapshot físico activo."""
 
     def __init__(self, transport: GoogleSheetsTransportLike) -> None:
         required = (
@@ -363,6 +371,8 @@ class GoogleSheetsWorkbookAdapter:
     def apply(self, batch: TabularBatch) -> GoogleSheetsApplyResult:
         if not isinstance(batch, TabularBatch):
             raise GoogleSheetsAdapterError("tabular_batch_invalid")
+        if set(batch.rows).difference(ACTIVE_STORAGE_TABLE_SPECS):
+            raise GoogleSheetsAdapterError("tabular_batch_contains_deferred_table")
 
         snapshot = self.load_snapshot()
         try:
@@ -389,5 +399,5 @@ class GoogleSheetsWorkbookAdapter:
             initial_row_counts=snapshot.row_counts,
             final_row_counts=final_counts,
             payload_bytes=plan.payload_bytes,
-            managed_sheet_count=len(TABLE_SPECS),
+            managed_sheet_count=len(ACTIVE_STORAGE_TABLE_SPECS),
         )

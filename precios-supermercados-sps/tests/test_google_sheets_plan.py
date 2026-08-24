@@ -11,6 +11,10 @@ from precios_supermercados.google_sheets_plan import (
     build_atomic_workbook_plan,
     parse_spreadsheet_metadata,
 )
+from precios_supermercados.storage_contract import (
+    ACTIVE_STORAGE_TABLE_SPECS,
+    DEFERRED_STORAGE_TABLE_NAMES,
+)
 from precios_supermercados.tabular_persistence import (
     FACT_OFFERS_CURRENT,
     TABLE_SPECS,
@@ -53,16 +57,19 @@ def requests_of(plan, kind: str):
     return [request[kind] for request in plan.payload["requests"] if kind in request]
 
 
-def test_empty_spreadsheet_bootstraps_all_managed_tabs_in_one_payload() -> None:
+def test_empty_spreadsheet_bootstraps_only_active_storage_tabs_in_one_payload() -> None:
     store = configured_store()
     plan = build_atomic_workbook_plan(store, SpreadsheetMetadata({}))
 
     payload = plan.payload
     assert payload["includeSpreadsheetInResponse"] is False
     add_sheets = requests_of(plan, "addSheet")
-    assert len(add_sheets) == len(TABLE_SPECS)
-    assert {item["properties"]["title"] for item in add_sheets} == set(TABLE_SPECS)
-    assert len(set(plan.sheet_ids.values())) == len(TABLE_SPECS)
+    assert len(add_sheets) == len(ACTIVE_STORAGE_TABLE_SPECS)
+    assert {item["properties"]["title"] for item in add_sheets} == set(
+        ACTIVE_STORAGE_TABLE_SPECS
+    )
+    assert len(set(plan.sheet_ids.values())) == len(ACTIVE_STORAGE_TABLE_SPECS)
+    assert not set(DEFERRED_STORAGE_TABLE_NAMES).intersection(plan.sheet_ids)
     assert plan.row_counts["cfg_supermarkets"] == 1
     assert plan.row_counts["cfg_locations"] == 2
     assert plan.row_counts["fact_offers_current"] == 0
@@ -107,15 +114,17 @@ def test_empty_managed_tabs_keep_one_unfrozen_visible_row() -> None:
         assert grid["rowCount"] > grid["frozenRowCount"]
 
 
-def test_existing_managed_tabs_are_reused_and_extra_tabs_are_preserved() -> None:
+def test_existing_active_tabs_are_reused_and_extra_or_deferred_tabs_are_preserved() -> None:
     metadata = SpreadsheetMetadata(
         {
             "fact_offers_current": SheetMetadata(7, "fact_offers_current", 1000, 60),
+            "dim_products": SheetMetadata(8, "dim_products", 100, 12),
             "Mis notas": SheetMetadata(99, "Mis notas", 200, 10),
         }
     )
     plan = build_atomic_workbook_plan(configured_store(), metadata)
     assert plan.sheet_ids["fact_offers_current"] == 7
+    assert 8 not in plan.sheet_ids.values()
     assert 99 not in plan.sheet_ids.values()
     assert not any("deleteSheet" in request for request in plan.payload["requests"])
 
@@ -192,10 +201,10 @@ def test_plan_payload_property_returns_fresh_copy() -> None:
     assert len(plan.payload["requests"]) == original_count
 
 
-def test_new_sheet_ids_avoid_all_existing_ids() -> None:
+def test_new_sheet_ids_avoid_all_existing_ids_including_deferred_tabs() -> None:
     metadata = SpreadsheetMetadata(
         {
-            "Extra 1": SheetMetadata(1000, "Extra 1", 10, 10),
+            "dim_products": SheetMetadata(1000, "dim_products", 10, 12),
             "Extra 2": SheetMetadata(1001, "Extra 2", 10, 10),
             "Extra 3": SheetMetadata(1002, "Extra 3", 10, 10),
         }
