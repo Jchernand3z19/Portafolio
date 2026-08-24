@@ -5,7 +5,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit
 
 import pytest
 
@@ -50,9 +50,12 @@ def _canonical_wire_fingerprint(url: str, headers: dict[str, str]) -> str:
 
 def _query_wire(base_url: str, wire_key: str, raw: str) -> str:
     parsed = urlsplit(base_url)
-    pairs = parse_qsl(parsed.query, keep_blank_values=True)
-    query = urlencode([*pairs, (wire_key, raw)])
-    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
+    assert parsed.fragment == ""
+    separator = "&" if parsed.query else "?"
+    return (
+        f"{base_url}{separator}"
+        f"{quote(wire_key, safe='-._~')}={quote(raw, safe='-._~')}"
+    )
 
 
 @pytest.mark.parametrize(
