@@ -39,7 +39,7 @@ offer_id          = supermercado + ubicación comercial + producto fuente
 - no elimines una observación sólo porque el mapping esté pendiente;
 - no colapses multipacks: conserva `unit_count`, contenido por unidad y total.
 
-`dim_products` es canónica/normalizada y no debe adquirir columnas específicas de supermercado, ubicación, precio o run. `map_source_products` conserva la relación fuente -> producto y la cola de revisión.
+`dim_products` y `map_source_products` son contratos lógicos para identidad canónica cross-source. No deben materializarse físicamente sólo por previsión: se activan cuando exista una segunda fuente o un consumidor real que requiera equivalencias. `dim_products` no debe adquirir columnas específicas de supermercado, ubicación, precio o run; `map_source_products` conserva la relación fuente -> producto y la cola de revisión cuando esa capacidad se active.
 
 ## Autonomía técnica y tráfico live
 
@@ -106,34 +106,35 @@ El verifier actual de Observability usa discovery de traces y detalle `view: eve
 
 La primera persistencia es Google Sheets; BigQuery queda para una fase posterior.
 
-Reutiliza las ocho tablas comunes y las fronteras existentes:
+El modelo lógico conserva capacidades de identidad cross-source, pero el backend físico actual materializa únicamente seis tablas con grain/lifecycle/consumidor ya justificado:
 
 ```text
 cfg_supermarkets
 cfg_locations
-dim_products
-map_source_products
 fact_offers_current
 fact_offer_history
 fact_scrape_runs
 fact_quality_events
 ```
 
+`dim_products` y `map_source_products` permanecen diferidas hasta que exista necesidad cross-source real. No se crean, escriben ni leen como tabs activos de Google Sheets durante la fase de una sola fuente. La identidad fuente y `product_id` siguen dentro de current/history, por lo que la futura activación puede reconstruirse sin inventar observaciones.
+
 También reutiliza `InMemoryTabularStore`/`TabularBatch`, rehidratación/restauración, guard de autoridad, binding durable de replay, plan Sheets, transporte cerrado, adapter read-modify-write, bootstrap, loader read-only y batch comercial.
 
 Reglas críticas:
 
 - no crear tablas por supermercado;
+- antes de crear/materializar una tabla, justificar grain, key, lifecycle y consumidor; concepto futuro no basta;
 - todo run final se registra;
 - current/history sólo mutan con decisión aceptada y autoridad real;
 - hashes/fingerprints prueban igualdad, no autoridad;
-- runs rechazados/fallidos no alteran current/history ni materializan dimensión/mapping comercial;
+- runs rechazados/fallidos no alteran current/history;
 - ausencia no implica baja;
 - restaurar estado no autoriza un run nuevo;
 - el loader de Sheets sigue read-only;
 - no conectar persistencia productiva a un `catalog_accepted` caller-controlled.
 
-El workbook físico puede tener un esquema anterior al lógico. Las migraciones de tabs gestionadas deben hacerse por la ruta segura de storage y comprobarse por read-back; no se arreglan manualmente para saltar el preflight productivo.
+El workbook físico puede tener tabs legados o diferidos. El adapter sólo gestiona el contrato físico activo y debe preservar tabs ajenos; una limpieza/migración real se hace explícitamente, con preflight y read-back, nunca ocultándola dentro de una escritura comercial.
 
 ## Power BI
 
