@@ -134,7 +134,27 @@ def test_query_region_context_is_resolved_only_when_fingerprint_matches():
     assert context.placement is RequestContextPlacement.QUERY
     assert context.context_key == "regionid"
     assert context.wire_key == "regionId"
+    assert context.value_path == ()
     assert context.fingerprint == binding.expected_fingerprint
+    assert context.reveal_for_transport(binding) == RAW_REGION
+
+
+def test_nested_query_json_preserves_container_and_value_path():
+    binding = synthetic_binding()
+    variables = json.dumps(
+        {"delivery": {"context": {"regionId": RAW_REGION}}},
+        separators=(",", ":"),
+    )
+    collector = EphemeralSpsRequestContextCollector()
+    collector.observe_request(
+        FakeRequest(url=GRAPHQL_URL + "?" + urlencode({"variables": variables}))
+    )
+
+    context = collector.resolve(binding)
+
+    assert context.placement is RequestContextPlacement.QUERY
+    assert context.wire_key == "variables"
+    assert context.value_path == ("delivery", "context", "regionId")
     assert context.reveal_for_transport(binding) == RAW_REGION
 
 
@@ -147,6 +167,7 @@ def test_header_alias_can_resolve_same_confirmed_region_context():
 
     assert context.placement is RequestContextPlacement.HEADER
     assert context.wire_key == "X-VTEX-Region"
+    assert context.value_path == ()
     assert context.reveal_for_transport(binding) == RAW_REGION
 
 
@@ -160,8 +181,10 @@ def test_nested_body_region_context_is_observed_without_persisting_body():
     context = collector.resolve(binding)
 
     assert context.placement is RequestContextPlacement.BODY
-    assert context.wire_key == "regionId"
+    assert context.wire_key == "$body"
+    assert context.value_path == ("variables", "delivery", "regionId")
     public = context.public_dict()
+    assert public["value_path"] == ["variables", "delivery", "regionId"]
     assert public["raw_values_exposed"] is False
     assert public["target_host"] == FACET_CONTEXT_HOST
     assert public["target_path"] == FACET_CONTEXT_PATH
@@ -222,6 +245,25 @@ def test_same_region_in_two_request_placements_is_still_ambiguous():
     with pytest.raises(
         SpsFacetContextError,
         match="sps_region_context_placement_ambiguous",
+    ):
+        collector.resolve(binding)
+
+
+def test_same_region_with_two_structural_paths_is_ambiguous():
+    binding = synthetic_binding()
+    collector = EphemeralSpsRequestContextCollector()
+    collector.observe_request(
+        FakeRequest(
+            body={
+                "first": {"regionId": RAW_REGION},
+                "second": {"regionId": RAW_REGION},
+            }
+        )
+    )
+
+    with pytest.raises(
+        SpsFacetContextError,
+        match="sps_region_context_value_path_ambiguous",
     ):
         collector.resolve(binding)
 
