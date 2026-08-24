@@ -1,11 +1,12 @@
 import { canonicalBytes, EdgePolicyError, sha256Hex } from "./core.mjs";
+import { STRUCTURAL_SPS_CONTEXT_POLICY } from "./worker-policy.mjs";
 
 const SHA256_RE = /^[0-9a-f]{64}$/u;
 const SOURCE_RE = /^request:regionid:sha256:([0-9a-f]{64})$/u;
 const EVIDENCE_RE = /^location_binding_radiography:sha256:[0-9a-f]{64}$/u;
 const PLACEMENTS = new Set(["query", "header"]);
 const REGION_KEYS = new Set(["region", "regionid", "xvtexregion"]);
-const EXACT_KEYS = [
+const BASE_KEYS = Object.freeze([
   "locationId",
   "bindingSourceKey",
   "bindingEvidence",
@@ -15,7 +16,9 @@ const EXACT_KEYS = [
   "valuePath",
   "wireRequestFingerprint",
   "rawValue",
-];
+]);
+const SESSION_KEYS = Object.freeze(["vtexsegment", "vtexsession"]);
+const SESSION_SIGNAL_KEYS = Object.freeze(["fingerprint", "rawValue"]);
 
 function fail(code) {
   throw new EdgePolicyError(code, code);
@@ -34,12 +37,82 @@ function text(value, code, maximum = 4096) {
   return value;
 }
 
+function cookieValue(value, code) {
+  const raw = text(value, code, 8192);
+  if (raw.includes("\r") || raw.includes("\n") || raw.includes(";")) fail(code);
+  return raw;
+}
+
 function canonicalRegionKey(value) {
   return value.toLowerCase().replace(/[^a-z0-9]/gu, "");
 }
 
-export async function validateAndApplyStructuralLocationContext(originUrl, input) {
-  const source = exactObject(input, EXACT_KEYS, "structural_location_context_shape_invalid");
+function validatePolicy(policy) {
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) fail("structural_sps_context_policy_invalid");
+  const evidence = text(policy.bindingEvidence, "structural_sps_context_policy_evidence_invalid", 512);
+  if (!EVIDENCE_RE.test(evidence)) fail("structural_sps_context_policy_evidence_invalid");
+  const fingerprints = exactObject(
+    policy.expectedSessionFingerprints,
+    SESSION_KEYS,
+    "structural_sps_session_policy_shape_invalid",
+  );
+  for (const key of SESSION_KEYS) {
+    const value = text(fingerprints[key], `structural_sps_${key}_policy_invalid`, 64);
+    if (!SHA256_RE.test(value)) fail(`structural_sps_${key}_policy_invalid`);
+  }
+  return Object.freeze({
+    bindingEvidence: evidence,
+    expectedSessionFingerprints: fingerprints,
+  });
+}
+
+async function validateSessionSignals(source, bindingEvidence, policy) {
+  if (!Object.hasOwn(source, "sessionSignals")) return null;
+  if (bindingEvidence !== policy.bindingEvidence) fail("structural_session_binding_evidence_mismatch");
+  const signals = exactObject(
+    source.sessionSignals,
+    SESSION_KEYS,
+    "structural_session_signals_shape_invalid",
+  );
+  const rawValues = {};
+  const fingerprints = {};
+  for (const key of SESSION_KEYS) {
+    const item = exactObject(
+      signals[key],
+      SESSION_SIGNAL_KEYS,
+      `structural_session_${key}_shape_invalid`,
+    );
+    const expected = text(item.fingerprint, `structural_session_${key}_fingerprint_invalid`, 64);
+    if (!SHA256_RE.test(expected)) fail(`structural_session_${key}_fingerprint_invalid`);
+    if (expected !== policy.expectedSessionFingerprints[key]) {
+      fail(`structural_session_${key}_fingerprint_policy_mismatch`);
+    }
+    const raw = cookieValue(item.rawValue, `structural_session_${key}_raw_invalid`);
+    const observed = await sha256Hex(canonicalBytes(raw));
+    if (observed !== expected) fail(`structural_session_${key}_raw_fingerprint_mismatch`);
+    rawValues[key] = raw;
+    fingerprints[key] = expected;
+  }
+  const cookieHeader = SESSION_KEYS.map((key) => `${key}=${rawValues[key]}`).join("; ");
+  return Object.freeze({
+    cookieHeader,
+    fingerprints: Object.freeze(fingerprints),
+  });
+}
+
+export async function validateAndApplyStructuralLocationContext(
+  originUrl,
+  input,
+  policyInput = STRUCTURAL_SPS_CONTEXT_POLICY,
+) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) fail("structural_location_context_shape_invalid");
+  const hasSession = Object.hasOwn(input, "sessionSignals");
+  const source = exactObject(
+    input,
+    hasSession ? [...BASE_KEYS, "sessionSignals"] : BASE_KEYS,
+    "structural_location_context_shape_invalid",
+  );
+  const policy = validatePolicy(policyInput);
   if (source.locationId !== "la_colonia_sps") fail("structural_location_id_invalid");
   const bindingSourceKey = text(source.bindingSourceKey, "structural_binding_source_key_invalid", 512);
   const sourceMatch = SOURCE_RE.exec(bindingSourceKey);
@@ -59,6 +132,7 @@ export async function validateAndApplyStructuralLocationContext(originUrl, input
   const rawValue = text(source.rawValue, "structural_context_raw_value_invalid", 4096);
   const observedFingerprint = await sha256Hex(canonicalBytes(rawValue));
   if (observedFingerprint !== contextFingerprint) fail("structural_context_raw_fingerprint_mismatch");
+  const session = await validateSessionSignals(source, bindingEvidence, policy);
 
   let url = originUrl;
   const headers = {};
@@ -72,6 +146,7 @@ export async function validateAndApplyStructuralLocationContext(originUrl, input
   } else {
     headers[wireKey] = rawValue;
   }
+  if (session) headers.cookie = session.cookieHeader;
 
   const computedWireFingerprint = await sha256Hex(canonicalBytes({
     method: "GET",
@@ -80,18 +155,27 @@ export async function validateAndApplyStructuralLocationContext(originUrl, input
   }));
   if (computedWireFingerprint !== wireRequestFingerprint) fail("structural_wire_request_fingerprint_mismatch");
 
+  const receiptContext = {
+    locationId: "la_colonia_sps",
+    bindingSourceKey,
+    bindingEvidence,
+    contextFingerprint,
+    contextPlacement: placement,
+    contextWireKey: wireKey,
+    contextValuePath: Object.freeze([]),
+    wireRequestFingerprint,
+  };
+  if (session) {
+    Object.assign(receiptContext, {
+      sessionContextComplete: true,
+      vtexsegmentFingerprint: session.fingerprints.vtexsegment,
+      vtexsessionFingerprint: session.fingerprints.vtexsession,
+    });
+  }
+
   return Object.freeze({
     fetchUrl: url,
     fetchHeaders: Object.freeze(headers),
-    receiptContext: Object.freeze({
-      locationId: "la_colonia_sps",
-      bindingSourceKey,
-      bindingEvidence,
-      contextFingerprint,
-      contextPlacement: placement,
-      contextWireKey: wireKey,
-      contextValuePath: Object.freeze([]),
-      wireRequestFingerprint,
-    }),
+    receiptContext: Object.freeze(receiptContext),
   });
 }
