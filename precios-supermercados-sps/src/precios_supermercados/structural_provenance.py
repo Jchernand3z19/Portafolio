@@ -1,10 +1,13 @@
 """Receipt criptográfico dedicado al descubrimiento estructural de La Colonia.
 
-El schema v1 preserva el contrato estructural histórico. El schema v2 añade una
-frontera explícita de ubicación: el receipt firmado liga la respuesta física al
-binding confirmado de San Pedro Sula, al fingerprint del ``regionId`` y al
-fingerprint del request wire que el collector ejecutó. El valor raw de región
-nunca forma parte del receipt.
+- v1: provenance estructural sin ubicación;
+- v2: respuesta ligada al ``regionId`` fuerte de SPS;
+- v3: respuesta ligada al mismo ``regionId`` y a las dos señales de sesión VTEX
+  observadas al seleccionar San Pedro Sula.
+
+Los valores raw de región/cookies nunca forman parte del receipt firmado. v3 sólo
+firma fingerprints canónicos y no concede por sí mismo autoridad productiva ni
+aceptación comercial.
 """
 
 from __future__ import annotations
@@ -18,12 +21,20 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal, NoReturn
 
+from precios_supermercados.sps_session_context import (
+    SPS_BINDING_EVIDENCE,
+    SPS_SESSION_SIGNAL_FINGERPRINTS,
+)
+
 STRUCTURAL_PROVENANCE_SCHEMA_VERSION = "1"
 STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION = "2"
+STRUCTURAL_PROVENANCE_SESSION_CONTEXT_SCHEMA_VERSION = "3"
 STRUCTURAL_SIGNATURE_DOMAIN = b"precios-sps/structural-receipt-signature/v1\0"
 STRUCTURAL_DIGEST_DOMAIN = b"precios-sps/structural-receipt/v1\0"
 STRUCTURAL_CONTEXT_SIGNATURE_DOMAIN = b"precios-sps/structural-receipt-signature/v2\0"
 STRUCTURAL_CONTEXT_DIGEST_DOMAIN = b"precios-sps/structural-receipt/v2\0"
+STRUCTURAL_SESSION_CONTEXT_SIGNATURE_DOMAIN = b"precios-sps/structural-receipt-signature/v3\0"
+STRUCTURAL_SESSION_CONTEXT_DIGEST_DOMAIN = b"precios-sps/structural-receipt/v3\0"
 _ALLOWED_KINDS = {"root_total", "category_tree"}
 _CONTEXT_PLACEMENTS = {"query", "header"}
 _SHA1 = re.compile(r"[0-9a-f]{40}\Z")
@@ -166,11 +177,15 @@ class StructuralReceiptPayload:
     context_wire_key: str | None = None
     context_value_path: tuple[str, ...] | None = None
     wire_request_fingerprint: str | None = None
+    session_context_complete: bool | None = None
+    vtexsegment_fingerprint: str | None = None
+    vtexsession_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         if self.schema_version not in {
             STRUCTURAL_PROVENANCE_SCHEMA_VERSION,
             STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION,
+            STRUCTURAL_PROVENANCE_SESSION_CONTEXT_SCHEMA_VERSION,
         }:
             _fail("structural_receipt_schema_version_invalid")
         if self.request_kind not in _ALLOWED_KINDS:
@@ -232,9 +247,9 @@ class StructuralReceiptPayload:
             _fail("structural_receipt_time_order_invalid")
         object.__setattr__(self, "physical_started_at_utc", started)
         object.__setattr__(self, "response_completed_at_utc", completed)
-        self._validate_location_context()
+        self._validate_context_contract()
 
-    def _validate_location_context(self) -> None:
+    def _validate_location_fields(self) -> None:
         fields = (
             self.location_id,
             self.binding_source_key,
@@ -245,10 +260,6 @@ class StructuralReceiptPayload:
             self.context_value_path,
             self.wire_request_fingerprint,
         )
-        if self.schema_version == STRUCTURAL_PROVENANCE_SCHEMA_VERSION:
-            if any(value is not None for value in fields):
-                _fail("structural_receipt_v1_location_context_forbidden")
-            return
         if any(value is None for value in fields):
             _fail("structural_receipt_location_context_incomplete")
         if self.location_id != "la_colonia_sps":
@@ -260,10 +271,7 @@ class StructuralReceiptPayload:
         evidence = _text(self.binding_evidence, "structural_receipt_binding_evidence_invalid")
         if _BINDING_EVIDENCE.fullmatch(evidence) is None:
             _fail("structural_receipt_binding_evidence_invalid")
-        fingerprint = _sha256(
-            self.context_fingerprint,
-            "structural_receipt_context_fingerprint_invalid",
-        )
+        fingerprint = _sha256(self.context_fingerprint, "structural_receipt_context_fingerprint_invalid")
         if match.group("digest") != fingerprint:
             _fail("structural_receipt_binding_context_fingerprint_mismatch")
         if self.context_placement not in _CONTEXT_PLACEMENTS:
@@ -271,14 +279,62 @@ class StructuralReceiptPayload:
         _text(self.context_wire_key, "structural_receipt_context_wire_key_invalid", maximum=160)
         if self.context_value_path != ():
             _fail("structural_receipt_context_value_path_invalid")
-        _sha256(
+        _sha256(self.wire_request_fingerprint, "structural_receipt_wire_request_fingerprint_invalid")
+
+    def _validate_context_contract(self) -> None:
+        location_fields = (
+            self.location_id,
+            self.binding_source_key,
+            self.binding_evidence,
+            self.context_fingerprint,
+            self.context_placement,
+            self.context_wire_key,
+            self.context_value_path,
             self.wire_request_fingerprint,
-            "structural_receipt_wire_request_fingerprint_invalid",
         )
+        session_fields = (
+            self.session_context_complete,
+            self.vtexsegment_fingerprint,
+            self.vtexsession_fingerprint,
+        )
+        if self.schema_version == STRUCTURAL_PROVENANCE_SCHEMA_VERSION:
+            if any(value is not None for value in (*location_fields, *session_fields)):
+                _fail("structural_receipt_v1_context_forbidden")
+            return
+
+        self._validate_location_fields()
+        if self.schema_version == STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION:
+            if any(value is not None for value in session_fields):
+                _fail("structural_receipt_v2_session_context_forbidden")
+            return
+
+        if self.binding_evidence != SPS_BINDING_EVIDENCE:
+            _fail("structural_receipt_session_binding_evidence_mismatch")
+        if self.session_context_complete is not True:
+            _fail("structural_receipt_session_context_incomplete")
+        segment = _sha256(
+            self.vtexsegment_fingerprint,
+            "structural_receipt_vtexsegment_fingerprint_invalid",
+        )
+        session = _sha256(
+            self.vtexsession_fingerprint,
+            "structural_receipt_vtexsession_fingerprint_invalid",
+        )
+        if segment != SPS_SESSION_SIGNAL_FINGERPRINTS["vtexsegment"]:
+            _fail("structural_receipt_vtexsegment_fingerprint_mismatch")
+        if session != SPS_SESSION_SIGNAL_FINGERPRINTS["vtexsession"]:
+            _fail("structural_receipt_vtexsession_fingerprint_mismatch")
 
     @property
     def location_context_bound(self) -> bool:
-        return self.schema_version == STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION
+        return self.schema_version in {
+            STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION,
+            STRUCTURAL_PROVENANCE_SESSION_CONTEXT_SCHEMA_VERSION,
+        }
+
+    @property
+    def session_context_bound(self) -> bool:
+        return self.schema_version == STRUCTURAL_PROVENANCE_SESSION_CONTEXT_SCHEMA_VERSION
 
     def canonical_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
@@ -332,6 +388,14 @@ class StructuralReceiptPayload:
                     "wire_request_fingerprint": self.wire_request_fingerprint,
                 }
             )
+        if self.session_context_bound:
+            result.update(
+                {
+                    "session_context_complete": True,
+                    "vtexsegment_fingerprint": self.vtexsegment_fingerprint,
+                    "vtexsession_fingerprint": self.vtexsession_fingerprint,
+                }
+            )
         return result
 
     def canonical_bytes(self) -> bytes:
@@ -355,13 +419,19 @@ class SignedStructuralReceipt:
             _fail("structural_receipt_signature_length_invalid")
         object.__setattr__(self, "signature_b64url", text)
 
+    def _domains(self) -> tuple[bytes, bytes]:
+        if self.payload.session_context_bound:
+            return (
+                STRUCTURAL_SESSION_CONTEXT_SIGNATURE_DOMAIN,
+                STRUCTURAL_SESSION_CONTEXT_DIGEST_DOMAIN,
+            )
+        if self.payload.location_context_bound:
+            return STRUCTURAL_CONTEXT_SIGNATURE_DOMAIN, STRUCTURAL_CONTEXT_DIGEST_DOMAIN
+        return STRUCTURAL_SIGNATURE_DOMAIN, STRUCTURAL_DIGEST_DOMAIN
+
     def signing_bytes(self) -> bytes:
-        domain = (
-            STRUCTURAL_CONTEXT_SIGNATURE_DOMAIN
-            if self.payload.location_context_bound
-            else STRUCTURAL_SIGNATURE_DOMAIN
-        )
-        return domain + self.payload.canonical_bytes()
+        signature_domain, _digest_domain = self._domains()
+        return signature_domain + self.payload.canonical_bytes()
 
     @property
     def digest(self) -> str:
@@ -370,10 +440,6 @@ class SignedStructuralReceipt:
             "structural_receipt_signature_invalid",
             maximum=1024,
         )
-        domain = (
-            STRUCTURAL_CONTEXT_DIGEST_DOMAIN
-            if self.payload.location_context_bound
-            else STRUCTURAL_DIGEST_DOMAIN
-        )
-        material = domain + self.payload.canonical_bytes() + b"\0" + signature
+        _signature_domain, digest_domain = self._domains()
+        material = digest_domain + self.payload.canonical_bytes() + b"\0" + signature
         return hashlib.sha256(material).hexdigest()
