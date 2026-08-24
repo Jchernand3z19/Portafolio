@@ -31,6 +31,7 @@ from precios_supermercados.scrapers.la_colonia_sps_facet_context import (
     ConfirmedSpsFacetBinding,
     EphemeralSpsRequestContext,
     RequestContextPlacement,
+    SpsFacetContextError,
     confirmed_sps_facet_binding,
     prepare_sps_facet_execution,
 )
@@ -44,6 +45,8 @@ from precios_supermercados.scrapers.la_colonia_sps_facet_wire import (
 SPS_STRUCTURAL_PLAN_SCHEMA_VERSION = "1"
 _SPS_STRUCTURAL_PLAN_DOMAIN = b"precios-sps/la-colonia-sps-structural-plan/v1\0"
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_BINDING_SOURCE = re.compile(r"request:regionid:sha256:(?P<digest>[0-9a-f]{64})\Z")
+_BINDING_EVIDENCE = re.compile(r"location_binding_radiography:sha256:[0-9a-f]{64}\Z")
 _EXPECTED_SEQUENCE = ("root_total", "category_tree")
 
 
@@ -151,18 +154,28 @@ class SpsStructuralFacetPlan:
             _fail("sps_structural_plan_location_invalid")
         if self.city_name != "San Pedro Sula":
             _fail("sps_structural_plan_city_invalid")
-        if not isinstance(self.binding_source_key, str) or not self.binding_source_key:
-            _fail("sps_structural_plan_binding_source_key_invalid")
-        if not isinstance(self.binding_evidence, str) or not self.binding_evidence:
-            _fail("sps_structural_plan_binding_evidence_invalid")
-        object.__setattr__(
-            self,
-            "context_fingerprint",
-            _sha256(
-                self.context_fingerprint,
-                "sps_structural_plan_context_fingerprint_invalid",
-            ),
+
+        source_match = (
+            _BINDING_SOURCE.fullmatch(self.binding_source_key)
+            if isinstance(self.binding_source_key, str)
+            else None
         )
+        if source_match is None:
+            _fail("sps_structural_plan_binding_source_key_invalid")
+        if (
+            not isinstance(self.binding_evidence, str)
+            or _BINDING_EVIDENCE.fullmatch(self.binding_evidence) is None
+        ):
+            _fail("sps_structural_plan_binding_evidence_invalid")
+
+        fingerprint = _sha256(
+            self.context_fingerprint,
+            "sps_structural_plan_context_fingerprint_invalid",
+        )
+        object.__setattr__(self, "context_fingerprint", fingerprint)
+        if source_match.group("digest") != fingerprint:
+            _fail("sps_structural_plan_binding_context_mismatch")
+
         if not isinstance(self.placement, RequestContextPlacement):
             _fail("sps_structural_plan_placement_invalid")
         if not isinstance(self.wire_key, str) or not self.wire_key:
@@ -173,14 +186,14 @@ class SpsStructuralFacetPlan:
             _fail("sps_structural_plan_value_path_invalid")
         if not isinstance(self.requests, tuple) or len(self.requests) != 2:
             _fail("sps_structural_plan_request_pair_invalid")
+        if any(not isinstance(item, SpsStructuralPlanRequest) for item in self.requests):
+            _fail("sps_structural_plan_request_invalid")
         if tuple(item.request_kind for item in self.requests) != _EXPECTED_SEQUENCE:
             _fail("sps_structural_plan_request_pair_order_invalid")
         if tuple(item.sequence for item in self.requests) != (1, 2):
             _fail("sps_structural_plan_request_pair_sequence_invalid")
 
         for item in self.requests:
-            if not isinstance(item, SpsStructuralPlanRequest):
-                _fail("sps_structural_plan_request_invalid")
             if item.wire.placement is not self.placement:
                 _fail("sps_structural_plan_request_placement_mismatch")
             if item.wire.wire_key != self.wire_key:
@@ -269,8 +282,12 @@ def build_sps_structural_facet_plan(
     if not isinstance(context, EphemeralSpsRequestContext):
         _fail("sps_structural_plan_context_invalid")
 
-    # Valida coherencia binding/context antes de construir cualquier request.
-    context.reveal_for_transport(effective_binding)
+    try:
+        # Valida coherencia binding/context antes de construir cualquier request.
+        context.reveal_for_transport(effective_binding)
+    except SpsFacetContextError as exc:
+        raise SpsStructuralPlanError(f"sps_structural_plan_context_{exc}") from exc
+
     requests = tuple(
         _plan_request(
             logical,
@@ -279,7 +296,8 @@ def build_sps_structural_facet_plan(
         )
         for logical in CATALOG_CATEGORIES_V1.requests
     )
-    assert len(requests) == 2
+    if len(requests) != 2:  # defensa frente a una futura mutación del plan base
+        _fail("sps_structural_plan_request_pair_invalid")
 
     return SpsStructuralFacetPlan(
         location_id=effective_binding.location_id,
