@@ -92,7 +92,7 @@ facet-discovery workflow = workflow_dispatch only / job fail-closed
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-Los IDs históricos consumidos no se reutilizan. La autonomía técnica del agente cubre GitHub/offline, pero no crea por inferencia autorización de tráfico contra el supermercado.
+La ejecución histórica de binding puede reutilizarse como evidencia offline, pero **no se interpreta como autorización abierta**. Los IDs históricos consumidos no se reutilizan. La autonomía técnica del agente cubre GitHub/offline, pero no crea por inferencia autorización de tráfico contra el supermercado.
 
 La próxima observación live prevista es mínima y exclusivamente de **facets bajo SPS**, después de agotar el trabajo offline. Requiere autorización humana explícita nueva y acotada. No concede por sí sola `production_authority`, `catalog_accepted`, persistencia comercial ni autorización para un crawl de catálogo.
 
