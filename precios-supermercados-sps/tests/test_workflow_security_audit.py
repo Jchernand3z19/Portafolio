@@ -57,10 +57,6 @@ GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storag
 GOOGLE_SHEETS_STORAGE_REQUEST = (
     "precios-supermercados-sps/.automation/google-sheets-storage-request.json"
 )
-FACET_AUTHORIZATION_MARKER = (
-    "precios-supermercados-sps/.automation/"
-    "la-colonia-context-bound-facets-authorization.json"
-)
 PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
 PROBE_OBSERVABILITY_SECRET = "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN"
 PROBE_PUBLIC_KEY_VAR = "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL"
@@ -102,7 +98,7 @@ EXPECTED_TRIGGERS = {
     LA_DIAGNOSTIC_WORKFLOW: {"workflow_dispatch"},
     RECOVERY_WORKFLOW: {"workflow_run"},
     FACET_WORKFLOW: {"workflow_dispatch"},
-    LIVE_WORKFLOW: {"workflow_dispatch", "push"},
+    LIVE_WORKFLOW: {"workflow_dispatch"},
     LOCATION_BINDING_WORKFLOW: {"workflow_dispatch"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch", "push"},
     TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
@@ -113,6 +109,7 @@ BLOCKED_ENTRYPOINTS = {
     LA_DIAGNOSTIC_WORKFLOW,
     RECOVERY_WORKFLOW,
     FACET_WORKFLOW,
+    LIVE_WORKFLOW,
     LOCATION_BINDING_WORKFLOW,
 }
 
@@ -263,16 +260,10 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
             assert inputs == {"ref": expected_ref, "persist-credentials": "false"}
 
 
-def test_non_authorized_privileged_entrypoints_remain_globally_blocked():
+def test_privileged_and_mutating_entrypoints_are_globally_blocked():
     by_name = {path.name: workflow for path, workflow in workflows()}
     for name in BLOCKED_ENTRYPOINTS:
         assert all_jobs_blocked(by_name[name]), name
-
-    live = jobs(by_name[LIVE_WORKFLOW])
-    assert live["live-crawl"]["if"] == "${{ false }}"
-    assert live[LIVE_FACET_JOB]["if"] == (
-        "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
-    )
 
     command = by_name[COMMAND_WORKFLOW]
     assert "actions" not in command["permissions"]
@@ -418,16 +409,13 @@ def test_only_explicit_oidc_jobs_can_request_write_permission():
     assert observed == allowed
 
 
-def test_context_bound_facet_job_has_exact_transient_authority() -> None:
+def test_context_bound_facet_job_has_exact_privilege_and_stays_inert() -> None:
     path = WORKFLOW_DIR / LIVE_WORKFLOW
     workflow = load_workflow(path)
     live_jobs = jobs(workflow)
     assert set(live_jobs) == {"live-crawl", LIVE_FACET_JOB}
     facet = live_jobs[LIVE_FACET_JOB]
-    assert live_jobs["live-crawl"]["if"] == "${{ false }}"
-    assert facet["if"] == (
-        "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
-    )
+    assert facet["if"] == "${{ false }}"
     assert facet["environment"] == "la-colonia-live"
     assert facet["permissions"] == {"contents": "read", "id-token": "write"}
     assert facet["timeout-minutes"] == "15"
@@ -436,15 +424,10 @@ def test_context_bound_facet_job_has_exact_transient_authority() -> None:
         EDGE_GATEWAY_VAR: "${{ vars.CLOUDFLARE_EDGE_GATEWAY_URL }}",
         EDGE_PUBLIC_KEY_VAR: "${{ vars.CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL }}",
     }
-    triggers = workflow["on"]
-    assert triggers["push"] == {
-        "branches": ["main"],
-        "paths": [FACET_AUTHORIZATION_MARKER],
-    }
     raw = path.read_text(encoding="utf-8")
     assert "facet_authorization_id:" in raw
-    assert "ejecutar_facets_context_bound_la_colonia_autorizado.py" in raw
-    assert FACET_AUTHORIZATION_MARKER in raw
+    assert "ejecutar_facets_context_bound_la_colonia.py" in raw
+    assert "--authorization-id \"${{ inputs.facet_authorization_id }}\"" in raw
     assert "secrets." not in raw
     assert "schedule:" not in raw
     assert "pull_request:" not in raw
@@ -479,29 +462,19 @@ def test_pull_request_target_never_checks_out_untrusted_pr_code():
         assert all(step["with"]["ref"] == "${{ github.workflow_sha }}" for step in checkout)
 
 
-def test_network_capable_scripts_require_current_exact_authority() -> None:
+def test_network_capable_scripts_are_blocked_without_current_live_authority() -> None:
     blocked_commands = {
         "scripts/probar_la_colonia.py",
         "scripts/diagnosticar_ventanas_la_colonia.py",
         "scripts/descubrir_facets_la_colonia.py",
         "scripts/diagnosticar_binding_ubicacion_la_colonia.py",
         "scripts/ejecutar_facets_context_bound_la_colonia.py",
-        "scripts/ejecutar_facets_context_bound_la_colonia_autorizado.py",
     }
     for path, workflow in workflows():
         commands = "\n".join(str(step.get("run", "")) for step in steps(workflow))
-        if not any(command in commands for command in blocked_commands):
-            continue
-        if path.name == LIVE_WORKFLOW:
-            live_jobs = jobs(workflow)
-            assert live_jobs["live-crawl"]["if"] == "${{ false }}"
-            assert live_jobs[LIVE_FACET_JOB]["if"] == (
-                "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
-            )
-            assert FACET_AUTHORIZATION_MARKER in commands
-            continue
-        assert path.name in BLOCKED_ENTRYPOINTS
-        assert all_jobs_blocked(workflow)
+        if any(command in commands for command in blocked_commands):
+            assert path.name in BLOCKED_ENTRYPOINTS
+            assert all_jobs_blocked(workflow)
 
 
 def test_google_sheets_storage_has_controlled_main_trigger_and_least_privilege():

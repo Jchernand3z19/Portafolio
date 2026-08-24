@@ -14,6 +14,7 @@ Estas reglas adicionales aplican únicamente al trabajar con workflows identific
 - PR #17 y PR #7 están integrados en `main`; cualquier texto histórico que diga que siguen abiertos, draft o congelados es estado obsoleto y no gobierna el repositorio actual.
 - `precios-supermercados-sps/.automation/la-colonia-live-command.json` y cualquier solicitud histórica que contenga no equivalen a autoridad comercial ni live vigente.
 - `SPS-context-and-root-facets-001`, `LC-location-binding-336`, `LC-location-binding-331`, `LC-location-binding-332`, `LC-location-binding-333`, `LC-location-binding-334`, `LC-location-binding-335` y `LC-location-binding-337` están consumidas; `SPS-context-and-root-facets-002` no concede ninguna autoridad adicional.
+- `SPS-context-and-root-facets-003` está cerrada tras el run `32777363742`: el preflight falló por configuración del Environment antes de OIDC, navegador o red, por lo que no produjo requests a La Colonia y no concede autoridad reutilizable.
 - Todo cambio de workflow requiere revisión explícita de seguridad y validación estática/CI offline cuando corresponda.
 - La CI del proyecto debe cubrir cambios por pull request y también pushes a `main` que afecten `precios-supermercados-sps/**` o `.github/workflows/**`.
 - Las Actions externas deben continuar referenciadas por SHA completo verificado; no uses tags o ramas mutables.
