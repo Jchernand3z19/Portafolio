@@ -11,6 +11,36 @@ Antes de modificar, inspecciona `main`, PRs abiertos, CI y código. [`docs/PROJE
 
 Si `PROJECT_STATE.md` contradice evidencia más nueva en `main`, corrige primero el documento mediante PR; no reviertas código nuevo por seguir un corte viejo.
 
+## MVP primero — control explícito contra sobrearquitectura
+
+El objetivo inmediato del proyecto es producir un **primer catálogo real y verificable de La Colonia para San Pedro Sula**, con productos/precios utilizables. La calidad técnica sigue siendo obligatoria, pero la arquitectura no es un fin en sí misma.
+
+Antes de crear una clase, adapter, verifier, preflight, workflow, tabla, documento, runbook o capa nueva, responde de forma concreta:
+
+1. ¿bloquea hoy obtener datos reales, demostrar que pertenecen a SPS, validarlos o guardarlos de forma segura?;
+2. ¿existe ya una pieza reutilizable que resuelva el problema?;
+3. ¿puede resolverse dentro de una pieza existente sin perder una frontera de seguridad real?;
+4. ¿la nueva abstracción tiene al menos dos consumidores actuales o una obligación de seguridad que no puede satisfacerse de forma más simple?
+
+Si las respuestas no justifican la nueva capa, **no la crees; difiérela**.
+
+Reglas de ejecución para la fase de prueba/MVP:
+
+- prioriza el camino más corto `fuente -> contexto SPS -> extracción -> validación -> salida utilizable`;
+- una prueba read-only y acotada no necesita adoptar por anticipado todas las garantías de la futura operación productiva; debe mantener únicamente los controles necesarios para seguridad, ubicación correcta, límites de tráfico y no persistir datos comerciales como autoritativos antes de su aceptación;
+- Cloudflare/OIDC/receipts/Observability y otras garantías productivas sólo bloquean una prueba si son necesarias para ejecutar esa prueba de forma segura o para demostrar una propiedad que la prueba necesita demostrar;
+- no conviertas una mejora futura de provenance, observability, hardening, genericidad o multi-supermercado en blocker del primer catálogo si el riesgo puede aislarse manteniendo el resultado como evidencia de prueba/no autoritativa;
+- no crear abstracciones para escenarios hipotéticos, segunda fuente, escala futura o reutilización futura sin consumidor actual;
+- no crear un documento nuevo si `PROJECT_STATE.md`, `arquitectura.md`, `decisiones-tecnicas.md`, un README existente o comentarios cercanos al código pueden alojar la información suficiente;
+- no crear un PR sólo para actualizar un conteo de tests, SHA o texto de estado si esa actualización puede viajar con el cambio funcional que produjo el nuevo estado;
+- separar un PR documental previo únicamente cuando el estado canónico incorrecto cambiaría materialmente la decisión técnica siguiente;
+- el número de PRs, tests, capas o documentos **no es una métrica de progreso**. Progreso significa blockers reales eliminados y datos utilizables más cerca de existir;
+- cada PR debe indicar qué blocker actual elimina o qué resultado observable acerca. Si no puede hacerlo, probablemente debe combinarse, diferirse o descartarse;
+- después de un fallo de prueba, corrige primero la causa directa. No abras una cadena nueva de hardening salvo que el fallo revele un riesgo real reproducible;
+- durante el MVP, prefiere una implementación específica y clara para La Colonia sobre una plataforma genérica prematura, siempre que no viole contratos protegidos ni cree deuda irreversible.
+
+La simplificación **no** permite evadir controles del sitio, exceder presupuestos de tráfico, inventar ubicación SPS, exponer secretos/datos personales ni convertir evidencia de prueba en autoridad comercial. Esas fronteras siguen protegidas.
+
 ## Contratos protegidos
 
 `RawProduct`, `NormalizedOffer` y `ValidatedOffer` son contratos protegidos. No se modifican sin necesidad demostrada, compatibilidad y pruebas.
