@@ -4,6 +4,8 @@ import importlib.util
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import urlencode
 
 import pytest
 
@@ -40,6 +42,15 @@ def _walk_keys(value):
     elif isinstance(value, list):
         for nested in value:
             yield from _walk_keys(nested)
+
+
+def _fake_response(variables: dict[str, object]):
+    url = (
+        "https://www.lacolonia.com/_v/segment/graphql/v1?"
+        + urlencode({"variables": json.dumps(variables, separators=(",", ":"))})
+    )
+    request = SimpleNamespace(url=url, post_data_json=None)
+    return SimpleNamespace(url=url, request=request)
 
 
 def test_builds_small_sps_sample_from_existing_extractor_contract() -> None:
@@ -100,6 +111,28 @@ def test_sample_artifact_does_not_persist_request_or_session_context() -> None:
     assert "token" not in keys
     assert "vtex_session" not in keys
     assert "raw_values" not in keys
+
+
+def test_only_catalog_product_search_shape_is_eligible_for_capture() -> None:
+    catalog = _fake_response(
+        {
+            "query": "supermercado",
+            "selectedFacets": [{"key": "category-1", "value": "supermercado"}],
+            "from": 0,
+            "to": 9,
+        }
+    )
+    unrelated = _fake_response(
+        {
+            "query": "otra-categoria",
+            "selectedFacets": [{"key": "category-1", "value": "otra-categoria"}],
+            "from": 0,
+            "to": 9,
+        }
+    )
+
+    assert module._is_catalog_product_search_response(catalog) is True
+    assert module._is_catalog_product_search_response(unrelated) is False
 
 
 def test_live_fuse_is_required_before_browser_path(monkeypatch) -> None:
