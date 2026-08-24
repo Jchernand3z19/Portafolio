@@ -4,10 +4,10 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)**, después de fusionar los PRs `#248`, `#249` y `#250`.
+Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)**, después de fusionar los PRs `#254`, `#255`, `#256` y `#257`.
 
 ```text
-main_observed = 6184e3e8687ba72e2ce31f6edd0dde5f7b25eb7c
+main_observed = d4fcd3c8fe30986a9e1e73109e3c99d0c92a888e
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
 granularity = city
@@ -18,11 +18,11 @@ catalog_accepted = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-La frontera de ubicación de San Pedro Sula está cerrada y el transporte **estructural/facets** ya quedó ligado offline al contexto SPS confirmado. Fase 0 todavía no sale: quedan trabajo reproducible/offline y documentación antes de llegar a la siguiente frontera humana live.
+La ubicación SPS, el plan estructural y la ruta offline de catálogo quedaron ligados criptográficamente al mismo contexto técnico. La suite completa del PR `#257` terminó verde en el run `32751267460`: **1640 passed**. Ese run también ejecutó `compileall` con `SyntaxWarning` tratado como error y terminó limpio.
 
-## Binding técnico confirmado de San Pedro Sula
+## Binding técnico de San Pedro Sula
 
-La ejecución pública read-only `32677568208`, sobre el merge `01804bedf7302678f096d8cef632ca3f3c407b4f`, completó sin `stop_reason` y observó:
+La ejecución pública read-only histórica `32677568208`, sobre el merge `01804bedf7302678f096d8cef632ca3f3c407b4f`, confirmó:
 
 ```text
 visible_location = San pedro sula
@@ -33,52 +33,28 @@ technical_binding_observed = true
 store_selection_observed = false
 ```
 
-El cambio decisivo ocurrió `after_city`. La evidencia sanitizada contiene:
+El cambio decisivo ocurrió `after_city`. La evidencia sanitizada conserva dos cambios débiles de sesión (`vtexsegment`, `vtexsession`) y un cambio fuerte de `request:regionid`.
 
-- cambio débil de cookie `vtexsegment`;
-- cambio débil de cookie `vtexsession`;
-- cambio **fuerte** de `request:regionid` asociado a la selección de SPS.
-
-La llave sanitizada canónica es:
+Llave canónica sanitizada:
 
 ```text
 request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 ```
 
-El artifact de Actions fue:
+Evidencia durable:
 
 ```text
 run = 32677568208
 artifact_id = 9503156133
 artifact_name = la-colonia-location-binding-32677568208
 artifact_zip_digest = sha256:39bfed10e0918ea070aa4b3755ed05317f63297ddd3ce227da3afa97d857b2c4
+artifact_json = reports/discovery/la-colonia-location-binding-2026-08-24.json
+artifact_canonical_sha256 = 80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95
 ```
 
-El payload JSON sanitizado se conserva durablemente en:
+La captura histórica deliberadamente **no conserva el placement** de `regionId` dentro del request. Por tanto el repositorio no puede afirmar todavía si el contexto real observado para el endpoint GraphQL relevante fue `header`, `query` o una forma anidada. Esa ausencia no se completa por inferencia.
 
-[`reports/discovery/la-colonia-location-binding-2026-08-24.json`](../reports/discovery/la-colonia-location-binding-2026-08-24.json)
-
-Su hash canónico, calculado por `evaluate_location_binding_artifact`, es:
-
-```text
-80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95
-```
-
-Por tanto la referencia de evidencia de `la_colonia_sps` es:
-
-```text
-location_binding_radiography:sha256:80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95
-```
-
-La transición cumple el contrato `CITY_BINDING_READY` de `location_binding_transition.py`. Esto confirma **ubicación y granularidad de ciudad**, pero deliberadamente conserva:
-
-```text
-extraction_enabled = false
-production_authority = false
-catalog_accepted = false
-```
-
-## Estado canónico de ubicaciones
+## Ubicaciones
 
 ### `la_colonia_sps`
 
@@ -92,8 +68,6 @@ source_location_key = request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65
 extraction_enabled = false
 ```
 
-`extraction_enabled` sigue falso porque cerrar la ubicación no equivale a aceptar el catálogo.
-
 ### `la_colonia_tgu`
 
 ```text
@@ -104,161 +78,148 @@ technical_binding_confirmed = false
 extraction_enabled = false
 ```
 
-No se promueve Tegucigalpa por inferencia ni por aparecer en el selector.
-
 ### `la_colonia_online`
 
-Continúa siendo un **contexto fuente raw** y no una ubicación comercial. Permanece `location_status=unknown` y no puede reutilizarse ni convertirse silenciosamente a SPS/TGU/tienda.
+Continúa siendo un **contexto fuente raw**, no una ubicación comercial. Permanece `location_status=unknown`; no puede convertirse silenciosamente a SPS/TGU/tienda.
 
-## Autorización live vigente
+## Autorización live
 
-La ejecución `32677568208` es evidencia histórica ya producida por una observación pública read-only y puede reutilizarse offline. Esa evidencia **no se interpreta como autorización abierta** para repetir el binding ni para nuevas fases live.
-
-Estado fail-closed actual:
+No existe autorización live vigente para una observación nueva:
 
 ```text
-standing location-binding marker = absent
-location-binding workflow = workflow_dispatch only
-location-binding job = if: false
-facet-discovery workflow = workflow_dispatch only
-facet-discovery job = if: false
+location-binding workflow = workflow_dispatch only / job fail-closed
+facet-discovery workflow = workflow_dispatch only / job fail-closed
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-El CLI de binding no expone `--standing-public-read-only`; exige un `--authorization-id` explícito y, sin un ID activo versionado, la captura se detiene antes de abrir navegador.
+La ejecución histórica de binding puede reutilizarse como evidencia offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** y limitada al propósito autorizado. Los IDs históricos consumidos no se reutilizan. La autonomía técnica del agente cubre GitHub/offline, pero no crea por inferencia autorización de tráfico contra el supermercado.
 
-Los IDs históricos `LC-location-binding-331` a `337` relevantes siguen consumidos y no se reutilizan. La solicitud histórica `la-colonia-facet-discovery-001` tampoco concede permiso para una nueva ejecución.
+La próxima observación live prevista es mínima y exclusivamente de **facets bajo SPS**, después de agotar el trabajo offline. Requiere autorización humana explícita nueva y acotada. No concede por sí sola `production_authority`, `catalog_accepted`, persistencia comercial ni autorización para un crawl de catálogo.
 
-La **próxima observación live** permitida por el plan, cuando todo el trabajo offline previo haya terminado, debe ser mínima y exclusivamente de facets bajo SPS. Esta frontera requiere autorización humana explícita vigente y nueva, con propósito, supermercado, alcance, máximo de requests, concurrencia, pacing, observables y exclusiones. No puede conceder por sí sola persistencia comercial, `production_authority` ni `catalog_accepted`.
+## Facets estructurales context-bound
 
-Siguen fuera de cualquier autorización implícita: secretos, cuentas, billing, compras, checkout, mutaciones externas, infraestructura nueva con coste, persistencia comercial y decisiones manuales de mapping.
-
-## Cómo se cerró el problema del selector
-
-La estructura real aportada por el usuario y posteriormente observada live es:
-
-```html
-<div class="cont-btn-ciudad">
-  <button class="btn-ciudad-noselected">Tegucigalpa</button>
-  <button class="btn-ciudad-selected">San pedro sula</button>
-</div>
-```
-
-El sitio puede montar copias DOM superpuestas y puede renderizar el opener antes de que el estado hidratado acepte el click. La resolución vigente:
-
-- identifica ciudad por texto exacto dentro de `.cont-btn-ciudad`;
-- usa `btn-ciudad-selected` / `btn-ciudad-noselected` sólo como estado, no identidad;
-- colapsa únicamente duplicados visualmente equivalentes con geometría + hit-test;
-- tolera duplicación transitoria del prompt durante readiness;
-- considera efectivo el opener sólo cuando aparece una superficie real del modal;
-- si el primer gesto no produce modal, hace un único reintento bounded tras asentamiento;
-- verifica la selección estructural y luego exige evidencia técnica separada.
-
-La ejecución `32677568208` es la primera que cerró las tres capas necesarias: control correcto, SPS visible y cambio técnico fuerte de contexto.
-
-## Facets estructurales bajo SPS — estado offline
-
-El merge `54fc86a4eae7e85bea7e61b9951a0b70362ede9e` preparó la frontera offline que impide reutilizar una consulta GraphQL genérica como si ya estuviera ligada a SPS. Posteriormente, el PR `#248` (`2b454df97e05af443d7a8fb3d87a82bd2d2bc239`) cerró la integración del transporte verificado de facets con ese plan SPS.
-
-La ruta vigente:
-
-- exige `la_colonia_sps` con granularidad `city` y binding técnico confirmado;
-- toma como evidencia canónica el fingerprint de `request:regionid`;
-- sólo observa/conserva el valor raw de contexto en memoria y no lo expone en representaciones públicas;
-- conserva de forma sanitizada `placement`, `wire_key`, `value_path` y `wire_request_fingerprint`;
-- deriva `StructuralEdgeLocationContext` desde el plan y binding confirmados, no desde valores caller-controlled;
-- transmite el contexto al gateway estructural y exige receipt contextual firmado;
-- rechaza downgrade o mismatch de `location_id`, binding, evidencia, fingerprint, placement, wire key/path o wire fingerprint;
-- prepara/acepta exactamente `root_total` y `category_tree` en esta frontera;
-- conserva `production_authority=false` y no acepta catálogo;
-- para ejecución de red exige plan SPS: la construcción offline sin plan puede existir para consumers ya materializados, pero un `__call__` sin plan falla cerrado;
-- no hay retries ocultos ante `WAIT`, `DENY`, firma/body inválidos o cambio de contexto.
-
-El CI de integración del PR `#248` quedó verde en el run `32736195663`: `1591 passed`. Ese mismo run demuestra que `compileall` todavía emite un warning corregible en `scripts/radiografiar_selector_ubicacion_la_colonia.py` por una secuencia `\s` dentro del JavaScript embebido. Por tanto **Fase 0 no puede declararse limpia todavía**.
-
-## Storage físico de Google Sheets
-
-Los PRs `#249` y `#250` usaron la ruta productiva ya existente de storage (`apply-config` y luego `check`), sin arreglos manuales de celdas para saltar el preflight.
-
-El read-back físico posterior de `cfg_locations` confirmó para `la_colonia_sps`:
+La ruta estructural ya exige el binding SPS confirmado y mantiene el valor raw sólo en memoria. El plan cerrado contiene exactamente:
 
 ```text
-granularity = city
-technical_binding_confirmed = true
-source_location_key = request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+root_total
+category_tree
+```
+
+La cadena valida y liga:
+
+- `location_id`;
+- binding source/evidence;
+- fingerprint de contexto;
+- placement y wire key/path observados en memoria;
+- fingerprint del request wire;
+- request digest y run context;
+- receipt contextual firmado;
+- misma identidad criptográfica en root/tree.
+
+Un receipt legacy, cambio de contexto, mismatch de fingerprint o material caller-controlled falla cerrado. La ejecución de red no está autorizada actualmente.
+
+## Catálogo context-bound — cerrado offline
+
+Los PRs `#254`–`#257` cerraron la frontera que antes faltaba.
+
+Cadena vigente:
+
+```text
+VerifiedStructuralDiscovery
++ receipts estructurales contextuales
++ SpsStructuralFacetPlan
+-> VerifiedSpsStructuralContext
+-> contexto SPS derivado por página
+-> /v1/catalog-execute
+-> receipt de catálogo schema v3
+-> verificación criptográfica + body estricto
+-> primary + reconciliation canónicos
+-> provenance físico reconciliable
+-> readiness técnico context-bound
+```
+
+Invariantes principales:
+
+- cada página de catálogo exige `CatalogEdgeLocationContext` derivado del proof SPS, no del caller;
+- `/v1/catalog-execute` aplica el contexto justo antes del fetch y firma receipt `schema_version=3`;
+- el receipt v3 conserva sólo binding/evidencia/fingerprints y nunca el `regionId` raw;
+- downgrade a v2/legacy se rechaza;
+- primary y reconciliation derivan del mismo discovery y plan;
+- request IDs, reservation IDs, nonces, receipts, evidence IDs y wire fingerprints no se pueden reutilizar entre páginas;
+- `WAIT`/`DENY` no producen retries ocultos;
+- el resultado continúa con `production_authority=false` y `catalog_accepted=false`.
+
+### Observability y placement
+
+El finalizador context-bound conserva una restricción explícita:
+
+- `header`: puede reconciliarse con el contrato de tracing actual porque el URL físico continúa igual al request base y el valor sensible no entra en la traza pública;
+- `query`: falla antes de solicitar token de Observability con `catalog_context_query_observability_redaction_required`, porque el contrato legacy serializa el URL físico y podría exponer el contexto raw.
+
+Como la evidencia histórica de binding no guardó placement, **todavía no se sabe cuál de estas rutas corresponde al sitio real**. No se debe elegir `header` por comodidad ni usar `query` sin crear primero un contrato de provenance redactado seguro.
+
+## Readiness de catálogo
+
+La evaluación nueva exige simultáneamente:
+
+- `VerifiedSpsStructuralContext`;
+- collection context-bound;
+- manifest físico del mismo plan/discovery;
+- mismo `location_id` y `context_fingerprint`;
+- page set exacto del plan;
+- cobertura canónica primary/reconciliation.
+
+Aunque toda la parte técnica esté completa, el resultado mantiene obligatoriamente los blockers:
+
+```text
+trusted_collector_provenance_unavailable
+production_authority_not_established
+```
+
+Por diseño, esta capa no puede devolver `catalog_accepted=true` ni `production_authority=true`.
+
+## Google Sheets y persistencia
+
+El storage físico ya refleja el binding SPS confirmado, pero continúa con:
+
+```text
 extraction_enabled = false
 ```
 
-El workbook sigue siendo almacenamiento temporal y **no debe recibir ofertas SPS** antes de la aceptación autoritativa del catálogo.
+No se escriben ofertas SPS en `current/history` antes de cerrar aceptación autoritativa. Runs fallidos, rechazados o no autoritativos no alteran estado comercial. Hashes y fingerprints prueban igualdad, no autoridad.
 
-## Catálogo y provenance — frontera actual
+## Auditoría y CI de Fase 0
 
-La ruta de catálogo todavía no está cerrada al mismo nivel que la estructural. La frontera pendiente exige que **cada página** quede criptográficamente ligada a `la_colonia_sps` y al binding/evidence/fingerprint confirmado, manteniendo el mismo contexto entre traversal primario y reconciliación y rechazando cualquier receipt legacy/no contextual o página sin contexto SPS.
+La reauditoría reproducible de ramas históricas se incorporó mediante PR `#253`. El warning conocido de `compileall` fue corregido en PR `#252` y el run `32751267460` confirma que `compileall` fail-closed continúa limpio.
 
-No es válido inferir SPS porque el proyecto esté limitado a SPS ni porque la sesión haya seleccionado SPS en otro paso.
-
-La cadena correcta sigue siendo:
+Último conteo observado:
 
 ```text
-binding SPS confirmado
--> facets estructurales context-bound offline
--> entrypoint de facets verificado y fail-closed
--> páginas de catálogo context-bound y provenance reconciliable
--> frontera raw -> ubicación comercial evidence-bound
--> autorización humana mínima de facets
--> revalidación live de facets/estructura bajo SPS
--> autorización separada para catálogo si corresponde
--> recorrido de catálogo con evidencia física
--> decisión autoritativa accept/reject
--> habilitación comercial controlada
--> current/history
--> Google Sheets
--> Power BI
--> automatización diaria
--> segundo supermercado
+workflow = Precios Supermercados SPS - Pruebas base
+run = 32751267460
+result = success
+pytest = 1640 passed
+compileall SyntaxWarning = none
 ```
 
-Reglas que siguen vigentes:
+## Fronteras offline restantes
 
-- `catalog_accepted` nunca viene de un boolean caller-controlled;
-- binding técnico no concede `production_authority`;
-- un crawl exitoso no muta `current/history` si no supera la frontera de aceptación;
-- runs fallidos/rechazados/no autoritativos no alteran estado comercial;
-- ausencia de producto en un run no implica baja;
-- hashes prueban igualdad, no autoridad.
+Antes de pedir autorización live para facets todavía se debe cerrar, como mínimo:
 
-## Identidad, normalización y ubicación raw
-
-Se conserva:
-
-```text
-source_product_id = identidad dentro de la fuente
-product_id        = identidad comparable entre fuentes
-offer_id          = supermercado + ubicación comercial + producto fuente
-```
-
-GTIN válido puede producir identidad fuerte cross-supermercado. Sin identidad fuerte se conserva `prod_pending_*` hasta mapping revisado. No se reintroduce una materialización automática de `dim_products`/`map_source_products` por el simple hecho de cerrar SPS; el mapping cross-supermercado puede permanecer pendiente hasta antes del supermercado #2 cuando no exista identidad fuerte determinística.
-
-La normalización común preserva el `location_id` del `RawProduct`. Eso es intencional: un RawProduct histórico con `la_colonia_online` no puede salir como oferta SPS por intuición. La frontera pendiente de Fase 0 debe exigir evidencia concreta para cualquier promoción de contexto raw a ubicación comercial y mantener `UNKNOWN` cuando no exista.
-
-`reported_regular_price` es sólo el precio regular declarado por la tienda. El ahorro real compara el `current_price` actual contra el `current_price` del periodo aceptado inmediatamente anterior cuando existe baseline confiable.
-
-## Trabajo pendiente antes de salir de Fase 0
-
-Fase 0 sólo puede salir cuando, sobre `main` limpio:
-
-- PRs de la fase estén fusionados y CI verde;
-- el conteo final de tests se observe en un run real y quede documentado;
-- `python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts` no emita el `SyntaxWarning` conocido corregible;
-- se re-ejecute de forma reproducible la auditoría de ramas históricas y se conserven sus resultados sanitizados;
-- el entrypoint futuro de facets reemplace el camino histórico/legacy y use edge verificada + plan SPS contextual + OIDC/environment/collector existentes, exactamente `root_total` y `category_tree`, `max_requests=2`, `concurrency=1`, sin retries ocultos y fail-closed si no hay autorización humana vigente;
-- cada página de catálogo quede context-bound a SPS y su provenance rechace downgrade/mismatch;
-- la frontera RawProduct -> ubicación comercial impida convertir `la_colonia_online` a SPS sin evidencia;
-- `PROJECT_STATE.md`, README, `AGENTS.md`, `.github/workflows/AGENTS.md`, arquitectura, modelo y decisiones técnicas estén sincronizados con el corte final;
-- `production_authority=false`, `catalog_accepted=false`, `extraction_enabled=false` y `ACTIVE_AUTHORIZATION_IDS=[]` se mantengan hasta una frontera posterior que los pueda cambiar legítimamente.
+1. **RawProduct -> ubicación comercial evidence-bound**: impedir que `la_colonia_online` se convierta a `la_colonia_sps` sólo por configuración/alcance y exigir evidencia ligada al mismo catálogo/run.
+2. **Placement-safe provenance**: decidir sólo con evidencia si el contexto real es header/query. Si resulta query, implementar una ruta de trace/provenance redactada que pruebe el fetch físico sin persistir el valor raw.
+3. **Composición del entrypoint futuro de facets**: mantener exactamente `root_total` + `category_tree`, `max_requests=2`, `concurrency=1`, OIDC/environment/collector y todos los gates de autorización fail-closed.
+4. **Sincronización documental final de Fase 0**: README, arquitectura, modelo, decisiones técnicas y agentes deben reflejar la cadena context-bound ya fusionada.
 
 ## Próxima dependencia humana real
 
-Todavía **no** corresponde pedir autorización live: queda trabajo offline de Fase 0.
+Todavía **no** corresponde ejecutar tráfico live ni pedir autorización para catálogo. Cuando las fronteras offline anteriores estén cerradas, la primera dependencia humana real será una autorización nueva, mínima y explícita para observar **facets bajo SPS** y capturar de forma sanitizada el placement real de `regionId` en los requests GraphQL pertinentes.
 
-Cuando todo lo anterior esté cerrado, la siguiente acción que no puede resolverse honestamente offline será una observación mínima de **facets bajo SPS**. En ese momento se debe detener el desarrollo en la frontera live y pedir una autorización humana explícita nueva; no se inventa ni reutiliza ningún Authorization ID histórico.
+Hasta entonces deben permanecer:
+
+```text
+production_authority = false
+catalog_accepted = false
+extraction_enabled = false
+ACTIVE_AUTHORIZATION_IDS = []
+```
