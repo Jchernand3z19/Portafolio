@@ -166,7 +166,10 @@ test("header SPS llega al fetch y raw alterado falla antes de reservar", async (
   const tampered = { ...location, rawValue: "different-region" };
   const blocked = store();
   await assert.rejects(
-    () => executeStructuralGatewayRequest(await structuralInput(tampered), deps(blocked, async () => { throw new Error("no fetch"); })),
+    async () => executeStructuralGatewayRequest(
+      await structuralInput(tampered),
+      deps(blocked, async () => { throw new Error("no fetch"); }),
+    ),
     (error) => error?.code === "structural_context_raw_fingerprint_mismatch",
   );
   assert.equal(blocked.completed.length, 0);
