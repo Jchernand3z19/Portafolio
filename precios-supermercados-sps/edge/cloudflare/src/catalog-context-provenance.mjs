@@ -1,4 +1,5 @@
 import { canonicalJson, EdgePolicyError } from "./core.mjs";
+import { canonicalEdgeTimestamp } from "./canonical-time.mjs";
 
 export const CATALOG_CONTEXT_RECEIPT_SCHEMA_VERSION = "3";
 
@@ -39,6 +40,13 @@ function canonicalRegionKey(value) {
   return value.toLowerCase().replace(/[^a-z0-9]/gu, "");
 }
 
+function canonicalTimestamp(value, code) {
+  const textValue = text(value, code, 64);
+  const parsed = new Date(textValue);
+  if (Number.isNaN(parsed.getTime())) fail(code);
+  return canonicalEdgeTimestamp(parsed);
+}
+
 function validateReceiptLocationContext(value) {
   const source = exactObject(value, LOCATION_KEYS, "catalog_receipt_location_context_shape_invalid");
   if (source.locationId !== "la_colonia_sps") fail("catalog_receipt_location_id_invalid");
@@ -75,6 +83,14 @@ export function buildContextBoundCatalogReceiptPayload(basePayload, locationCont
   const location = validateReceiptLocationContext(locationContext);
   const payload = {
     ...basePayload,
+    physical_started_at_utc: canonicalTimestamp(
+      basePayload.physical_started_at_utc,
+      "catalog_receipt_physical_started_at_invalid",
+    ),
+    response_completed_at_utc: canonicalTimestamp(
+      basePayload.response_completed_at_utc,
+      "catalog_receipt_response_completed_at_invalid",
+    ),
     schema_version: CATALOG_CONTEXT_RECEIPT_SCHEMA_VERSION,
     location_id: location.locationId,
     binding_source_key: location.bindingSourceKey,
