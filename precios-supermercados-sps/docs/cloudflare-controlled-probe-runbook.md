@@ -235,8 +235,10 @@ production_authority = false
 catalog_accepted = false
 ```
 
-## 12. Relación con el próximo paso del proyecto
+## 12. Relación con el camino productivo
 
-La evidencia de sonda ya no es el bloqueo inmediato para el contexto SPS. El siguiente hito específico de La Colonia se documenta en `PROJECT_STATE.md` y requiere una autorización humana separada para la radiografía mínima de ubicación.
+La evidencia de sonda ya cumplió su función histórica de demostrar capacidades físicas contra infraestructura propia. **No es el bloqueo inmediato del proyecto y no debe repetirse por defecto.**
 
-No usar este runbook como justificación para ejecutar esa radiografía ni cualquier crawl de La Colonia.
+El despliegue productivo de `precios-sps-provenance` es una frontera distinta y se prepara mediante [`cloudflare-production-deploy-runbook.md`](cloudflare-production-deploy-runbook.md). Ese despliegue modifica infraestructura externa, no se deriva de la sonda y tampoco autoriza tráfico a La Colonia.
+
+El binding técnico de SPS y el siguiente blocker live se consultan únicamente en `PROJECT_STATE.md`; este runbook no debe fijar ni inferir ese estado mutable.
