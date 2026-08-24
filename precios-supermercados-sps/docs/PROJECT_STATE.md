@@ -7,8 +7,8 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)** contra:
 
 ```text
-main_observed = adcaefaeccbaf443c52e09895c096b79e6b1dba2
-last_technical_pr = #268
+main_observed = 75413dbe27bd563e803d5ff8282b3c79ba591c7e
+last_technical_pr = #269
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -17,14 +17,14 @@ technical_binding_confirmed = true
 extraction_enabled = false
 production_authority = false
 catalog_accepted = false
-ACTIVE_AUTHORIZATION_IDS = []
+ACTIVE_AUTHORIZATION_IDS = [SPS-context-and-root-facets-003]
 ```
 
-Los PRs `#254`–`#268` cerraron las fronteras offline conocidas de la fase: contexto SPS estructural, catálogo context-bound, materialización raw evidence-bound, storage físico simplificado, entrypoint futuro de facets fail-closed, provenance segura para los placements soportados y reauditoría histórica reproducible.
+Los PRs `#254`–`#269` cerraron las fronteras offline conocidas de la fase: contexto SPS estructural, catálogo context-bound, materialización raw evidence-bound, storage físico simplificado, entrypoint futuro de facets, provenance segura para los placements soportados y reauditoría histórica reproducible.
 
-La siguiente dependencia real ya no es una tarea offline: requiere una **autorización humana nueva y explícita** para una observación mínima de facets bajo SPS. Esa autorización todavía no existe.
+El usuario otorgó el **2026-08-24T20:46:11Z** una autorización humana nueva para continuar con lo pendiente después de que se le indicó explícitamente que el siguiente paso era la observación mínima live de facets SPS. Esa autorización se materializa transitoriamente como `SPS-context-and-root-facets-003` y queda limitada al alcance descrito en la sección **Autorización live transitoria actual**.
 
-La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** para el alcance exacto autorizado.
+La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo fuera del alcance transitorio actual **requiere autorización humana explícita vigente** para ese alcance exacto.
 
 ## Binding técnico de San Pedro Sula
 
@@ -118,9 +118,9 @@ Invariantes:
 - la materialización comercial usa sólo traversal `primary`;
 - `production_authority=false`, `catalog_accepted=false` y `extraction_enabled=false` se preservan.
 
-## Facets estructurales context-bound — preparación offline cerrada
+## Facets estructurales context-bound — autorización transitoria preparada
 
-Los PRs `#263`–`#265` dejaron compuesto el futuro entrypoint sin habilitar tráfico live.
+Los PRs `#263`–`#265` dejaron compuesto el entrypoint y la autorización actual abre únicamente una ejecución transitoria mediante un marker versionado que se valida antes de OIDC, navegador o red.
 
 Plan exacto:
 
@@ -135,7 +135,9 @@ max_retries = 0
 Cadena preparada:
 
 ```text
-GitHub workflow fail-closed
+push exacto a main con marker autorizado
+-> checkout inmutable del mismo SHA
+-> validación estricta del marker
 -> gate humano
 -> environment controlado
 -> OIDC audience fija
@@ -151,14 +153,16 @@ GitHub workflow fail-closed
 
 Invariantes:
 
-- el gate humano ocurre antes de OIDC, browser y red;
-- el job live permanece bloqueado en el estado actual;
+- sólo el workflow live canónico sobre `refs/heads/main` puede ejecutar la ventana transitoria;
+- el marker exige exactamente `SPS-context-and-root-facets-003`, dos requests, concurrencia `1`, cero retries y flags productivos/comerciales en `false`;
+- el live crawl general permanece `if: false`;
 - no existen retries ocultos ni redirects implícitos;
 - sólo se permiten los endpoints/rutas edge contratados;
 - el mismo BrowserContext que establece SPS debe conservar la sesión VTEX durante la observación;
 - el valor raw de `regionId` sólo puede existir transitoriamente en memoria;
 - receipts legacy, cambio de contexto, secuencia distinta de `root_total -> category_tree` o request adicional fallan cerrado;
-- ninguna observación estructural concede autoridad comercial.
+- ninguna observación estructural concede autoridad comercial;
+- el marker y la apertura por `push` se retiran inmediatamente después de consumir esta autorización.
 
 ## Catálogo context-bound — cerrado offline
 
@@ -187,7 +191,7 @@ El PR `#266` cerró offline la provenance segura para los dos placements explíc
 - `header`: reconciliación donde el URL físico no incorpora el valor sensible;
 - `query`: verificación transitoria del URL físico y salida durable redactada basada en hashes, sin persistir `url.full`, `fetch_url` ni el valor raw de ubicación.
 
-El finalizador selecciona una ruta sólo a partir del placement realmente atestiguado. Si la observación futura revela otra forma, se abrirá una nueva frontera evidence-bound; no se adivina ahora.
+El finalizador selecciona una ruta sólo a partir del placement realmente atestiguado. Si la observación autorizada revela otra forma, se abrirá una nueva frontera evidence-bound; no se adivina ahora.
 
 ## Readiness de catálogo
 
@@ -262,7 +266,7 @@ No quedaron ramas históricas con patches únicos sin decisión versionada ni ra
 
 ## CI
 
-Última validación completa observada:
+Última validación completa observada del cierre offline:
 
 ```text
 workflow = Precios Supermercados SPS - Pruebas base
@@ -273,7 +277,7 @@ pip check = clean
 compileall SyntaxWarning = none
 ```
 
-Ese mismo run contiene el job `phase0-final-historical-reaudit` aprobado y constituye la evidencia conjunta de suite base + cierre histórico contra el `main` observado.
+La ventana transitoria debe volver a pasar la suite completa en PR antes de fusionarse; el tráfico live sólo ocurre después, en el `push` del marker a `main`.
 
 ## Fronteras offline restantes
 
@@ -283,11 +287,13 @@ NONE
 
 A este corte no existe deuda de implementación conocida que pueda cerrar el placement real sin volver a observar el sitio. La selección del placement de `regionId` es evidencia live faltante, no una tarea que deba resolverse por inferencia.
 
-## Próxima dependencia humana real
+## Autorización live transitoria actual
 
-La siguiente acción requiere una **autorización humana nueva, mínima y explícita** para una observación pública read-only de facets bajo SPS con este alcance cerrado:
+La autorización vigente cubre exclusivamente una observación pública read-only de facets bajo SPS:
 
 ```text
+authorization_id = SPS-context-and-root-facets-003
+authorized_at = 2026-08-24T20:46:11Z
 purpose = attest actual regionId placement under SPS
 requests = [root_total, category_tree]
 max_requests = 2
@@ -302,11 +308,4 @@ catalog_accepted = false
 extraction_enabled = false
 ```
 
-Hasta recibir esa autorización deben permanecer:
-
-```text
-production_authority = false
-catalog_accepted = false
-extraction_enabled = false
-ACTIVE_AUTHORIZATION_IDS = []
-```
+Esta autorización se considera consumida al terminar su run, tenga éxito técnico o falle después de iniciar la ventana live. No se reutiliza para smoke, staged, full crawl, persistencia ni otra observación.
