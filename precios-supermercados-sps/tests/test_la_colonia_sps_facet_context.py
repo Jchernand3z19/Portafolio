@@ -18,6 +18,8 @@ from precios_supermercados.scrapers.la_colonia_facet_discovery import (
     CATALOG_CATEGORIES_V1,
 )
 from precios_supermercados.scrapers.la_colonia_sps_facet_context import (
+    FACET_CONTEXT_HOST,
+    FACET_CONTEXT_PATH,
     EphemeralSpsRequestContextCollector,
     RequestContextPlacement,
     SpsFacetContextError,
@@ -27,8 +29,11 @@ from precios_supermercados.scrapers.la_colonia_sps_facet_context import (
 )
 
 
+GRAPHQL_URL = f"https://{FACET_CONTEXT_HOST}{FACET_CONTEXT_PATH}"
+
+
 class FakeRequest:
-    def __init__(self, *, url="https://www.lacolonia.com/", headers=None, body=None):
+    def __init__(self, *, url=GRAPHQL_URL, headers=None, body=None):
         self.url = url
         self.headers = headers or {}
         self._body = body
@@ -117,7 +122,8 @@ def test_query_region_context_is_resolved_only_when_fingerprint_matches():
     collector.observe_request(
         FakeRequest(
             url=(
-                "https://www.lacolonia.com/_v/segment/graphql/v1?"
+                GRAPHQL_URL
+                + "?"
                 + urlencode({"regionId": RAW_REGION, "operationName": "x"})
             )
         )
@@ -127,6 +133,7 @@ def test_query_region_context_is_resolved_only_when_fingerprint_matches():
 
     assert context.placement is RequestContextPlacement.QUERY
     assert context.context_key == "regionid"
+    assert context.wire_key == "regionId"
     assert context.fingerprint == binding.expected_fingerprint
     assert context.reveal_for_transport(binding) == RAW_REGION
 
@@ -139,6 +146,7 @@ def test_header_alias_can_resolve_same_confirmed_region_context():
     context = collector.resolve(binding)
 
     assert context.placement is RequestContextPlacement.HEADER
+    assert context.wire_key == "X-VTEX-Region"
     assert context.reveal_for_transport(binding) == RAW_REGION
 
 
@@ -152,10 +160,27 @@ def test_nested_body_region_context_is_observed_without_persisting_body():
     context = collector.resolve(binding)
 
     assert context.placement is RequestContextPlacement.BODY
+    assert context.wire_key == "regionId"
     public = context.public_dict()
     assert public["raw_values_exposed"] is False
+    assert public["target_host"] == FACET_CONTEXT_HOST
+    assert public["target_path"] == FACET_CONTEXT_PATH
     assert RAW_REGION not in json.dumps(public, sort_keys=True)
     assert RAW_REGION not in repr(context)
+
+
+def test_region_context_on_unrelated_request_is_ignored():
+    binding = synthetic_binding()
+    collector = EphemeralSpsRequestContextCollector()
+    collector.observe_request(
+        FakeRequest(
+            url="https://www.lacolonia.com/other?regionId=" + RAW_REGION,
+            headers={"X-VTEX-Region": RAW_REGION},
+        )
+    )
+
+    with pytest.raises(SpsFacetContextError, match="sps_region_context_not_observed"):
+        collector.resolve(binding)
 
 
 def test_missing_or_wrong_region_context_fails_closed():
@@ -175,7 +200,7 @@ def test_matching_and_conflicting_region_values_fail_closed():
     collector = EphemeralSpsRequestContextCollector()
     collector.observe_request(
         FakeRequest(
-            url="https://www.lacolonia.com/?regionId=" + RAW_REGION,
+            url=GRAPHQL_URL + "?regionId=" + RAW_REGION,
             headers={"X-VTEX-Region": RAW_OTHER},
         )
     )
@@ -189,7 +214,7 @@ def test_same_region_in_two_request_placements_is_still_ambiguous():
     collector = EphemeralSpsRequestContextCollector()
     collector.observe_request(
         FakeRequest(
-            url="https://www.lacolonia.com/?regionId=" + RAW_REGION,
+            url=GRAPHQL_URL + "?regionId=" + RAW_REGION,
             headers={"X-VTEX-Region": RAW_REGION},
         )
     )
