@@ -9,6 +9,11 @@ Las operaciones estructurales vigentes son GET. Por eso sólo se pueden aplicar 
 forma demostrable placements ``query`` o ``header``. Si la observación futura
 encuentra ``regionId`` únicamente en body, esta capa falla cerrada: no transforma
 silenciosamente un contrato GET en otro transporte.
+
+La evidencia live también observó cambios de sesión VTEX. Por eso el material que
+sale de aquí **no es suficiente para un cliente HTTP nuevo**: la futura ejecución
+debe usar el mismo ``BrowserContext`` Playwright que estableció y verificó SPS, de
+modo que conserve sus cookies de sesión/segmento además del ``regionId`` fuerte.
 """
 
 from __future__ import annotations
@@ -94,7 +99,8 @@ class PreparedSpsFacetWireRequest:
             f"wire_key={self.wire_key!r}, "
             f"base_request_digest={self.base_request_digest!r}, "
             f"wire_request_fingerprint={self.wire_request_fingerprint!r}, "
-            "url='<redacted>', headers='<redacted>')"
+            "url='<redacted>', headers='<redacted>', "
+            "requires_same_browser_context=True)"
         )
 
     def public_dict(self) -> dict[str, object]:
@@ -104,6 +110,7 @@ class PreparedSpsFacetWireRequest:
             "wire_key": self.wire_key,
             "base_request_digest": self.base_request_digest,
             "wire_request_fingerprint": self.wire_request_fingerprint,
+            "requires_same_browser_context": True,
             "network_executed": False,
             "production_authority": False,
             "catalog_accepted": False,
