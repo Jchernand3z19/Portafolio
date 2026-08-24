@@ -7,8 +7,8 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)** contra:
 
 ```text
-main_observed = 56f210d04928c197c2b20a38e29269eed66bc4ca
-last_technical_pr = #272
+main_observed = 50d63081c3c2634f5f0d4a7649f018f922527d91
+last_technical_pr = #274
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -23,6 +23,8 @@ ACTIVE_AUTHORIZATION_IDS = []
 Los PRs `#254`–`#269` cerraron las fronteras offline conocidas de Fase 0: contexto SPS estructural, catálogo context-bound, materialización raw evidence-bound, storage físico simplificado, entrypoint de facets fail-closed, provenance segura para los placements soportados y reauditoría histórica reproducible.
 
 Los PRs `#270`–`#271` materializaron una autorización humana transitoria para la observación mínima de facets y añadieron observabilidad GitHub temporal para identificar su run. La ventana terminó **sin realizar tráfico a La Colonia** porque el preflight de configuración Cloudflare falló antes de OIDC, navegador o red. El PR `#272` retiró el marker, wrapper y observador transitorios, restauró el workflow live manual fail-closed y dejó `SPS-context-and-root-facets-003` cerrada y no reutilizable.
+
+El PR `#274` preparó un runbook productivo de Cloudflare, eliminó estado mutable obsoleto del README del edge y dejó explícito que el despliegue de infraestructura es una frontera separada de cualquier autorización live. Durante esa revisión se detectó una deuda offline adicional: el preflight Cloudflare todavía conserva el blocker histórico `sps_context_unconfirmed` aunque este documento y la evidencia canónica ya tienen `SPS_TECHNICAL_CONTEXT=CONFIRMED`. La declaración anterior `OFFLINE APPLICATION CODE = none known` queda por tanto invalidada y se corrige en este corte antes de modificar código.
 
 La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** para el alcance exacto solicitado.
 
@@ -164,6 +166,8 @@ La sonda controlada no-La-Colonia ya produjo evidencia física histórica. Eso n
 
 El repositorio contiene el Worker productivo preparado en `edge/cloudflare/`, pero **no existe evidencia vigente de que `precios-sps-provenance` esté desplegado y conectado al Environment `la-colonia-live`**. El intento `32777363742` confirmó además que las dos variables necesarias para el entrypoint estaban ausentes.
 
+El PR `#274` añadió [`cloudflare-production-deploy-runbook.md`](cloudflare-production-deploy-runbook.md) para que el despliegue, read-back y configuración posterior del Environment se realicen de forma manual, versionada y fail-closed. Ese runbook no autoriza tráfico a La Colonia.
+
 Antes del siguiente intento live deben existir, con provenance verificable:
 
 ```text
@@ -174,7 +178,7 @@ Antes del siguiente intento live deben existir, con provenance verificable:
 5. GitHub Environment la-colonia-live con:
    - CLOUDFLARE_EDGE_GATEWAY_URL
    - CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
-6. Preflight de identidad/release/clave en verde.
+6. Preflight de identidad/release/clave en verde y semánticamente alineado con SPS ya confirmado.
 ```
 
 La configuración/deploy real de Cloudflare requiere credenciales de la cuenta y puede crear o modificar infraestructura externa; no se deriva de una autorización read-only del supermercado.
@@ -246,6 +250,16 @@ pip check = clean
 compileall SyntaxWarning = none
 ```
 
+Runbook productivo Cloudflare, PR `#274`:
+
+```text
+run = 32783366331
+result = success
+pytest = 1706 passed
+pip check = clean
+compileall SyntaxWarning = none
+```
+
 El observador confirmó sobre SHA `7a0df3c3971a4021862855166e527827035a3ea2`:
 
 ```text
@@ -256,12 +270,14 @@ El observador confirmó sobre SHA `7a0df3c3971a4021862855166e527827035a3ea2`:
 ## Fronteras pendientes
 
 ```text
-OFFLINE APPLICATION CODE = none known
+OFFLINE APPLICATION CODE = cloudflare preflight still emits stale sps_context_unconfirmed blocker
 EXTERNAL PLATFORM CONFIGURATION = Cloudflare product worker + la-colonia-live vars
 LIVE EVIDENCE = actual regionId placement still unobserved
 ```
 
-No se debe pedir ni ejecutar una nueva autorización live hasta que la infraestructura Cloudflare productiva y las variables del Environment hayan sido configuradas y verificadas sin tráfico a La Colonia.
+La deuda offline del preflight debe corregirse antes de usar ese assessment como criterio de readiness: `SPS_TECHNICAL_CONTEXT=CONFIRMED` y `technical_binding_confirmed=true` no son compatibles con conservar `sps_context_unconfirmed` como blocker obligatorio. La corrección no debe eliminar `human_live_authorization_required` ni `production_authority_not_established`, ni convertir readiness técnica en autorización comercial.
+
+No se debe pedir ni ejecutar una nueva autorización live hasta que la deuda offline anterior esté cerrada y la infraestructura Cloudflare productiva y las variables del Environment hayan sido configuradas y verificadas sin tráfico a La Colonia.
 
 Mientras tanto deben permanecer:
 
