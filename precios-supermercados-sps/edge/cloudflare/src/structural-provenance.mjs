@@ -6,13 +6,17 @@ import {
   importEd25519PublicKeySpki,
   sha256Hex,
 } from "./core.mjs";
+import { STRUCTURAL_SPS_CONTEXT_POLICY } from "./worker-policy.mjs";
 
 export const STRUCTURAL_PROVENANCE_SCHEMA_VERSION = "1";
 export const STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION = "2";
+export const STRUCTURAL_PROVENANCE_SESSION_CONTEXT_SCHEMA_VERSION = "3";
 export const STRUCTURAL_SIGNATURE_DOMAIN = "precios-sps/structural-receipt-signature/v1\0";
 export const STRUCTURAL_DIGEST_DOMAIN = "precios-sps/structural-receipt/v1\0";
 export const STRUCTURAL_CONTEXT_SIGNATURE_DOMAIN = "precios-sps/structural-receipt-signature/v2\0";
 export const STRUCTURAL_CONTEXT_DIGEST_DOMAIN = "precios-sps/structural-receipt/v2\0";
+export const STRUCTURAL_SESSION_CONTEXT_SIGNATURE_DOMAIN = "precios-sps/structural-receipt-signature/v3\0";
+export const STRUCTURAL_SESSION_CONTEXT_DIGEST_DOMAIN = "precios-sps/structural-receipt/v3\0";
 
 const encoder = new TextEncoder();
 const SHA1_RE = /^[0-9a-f]{40}$/u;
@@ -30,9 +34,7 @@ function fail(code) {
 }
 
 function text(value, code, maximum = 512) {
-  if (typeof value !== "string" || value.length === 0 || value.trim() !== value || value.length > maximum || /\s/u.test(value)) {
-    fail(code);
-  }
+  if (typeof value !== "string" || value.length === 0 || value.trim() !== value || value.length > maximum || /\s/u.test(value)) fail(code);
   return value;
 }
 
@@ -83,10 +85,9 @@ function normalizeLocationContext(value) {
   const contextPlacement = text(value.contextPlacement, "structural_receipt_context_placement_invalid", 16);
   if (!CONTEXT_PLACEMENTS.has(contextPlacement)) fail("structural_receipt_context_placement_invalid");
   const contextWireKey = text(value.contextWireKey, "structural_receipt_context_wire_key_invalid", 160);
-  if (!Array.isArray(value.contextValuePath) || value.contextValuePath.length !== 0) {
-    fail("structural_receipt_context_value_path_invalid");
-  }
-  return Object.freeze({
+  if (!Array.isArray(value.contextValuePath) || value.contextValuePath.length !== 0) fail("structural_receipt_context_value_path_invalid");
+
+  const result = {
     binding_evidence: bindingEvidence,
     binding_source_key: bindingSourceKey,
     context_fingerprint: contextFingerprint,
@@ -95,7 +96,33 @@ function normalizeLocationContext(value) {
     context_wire_key: contextWireKey,
     location_id: "la_colonia_sps",
     wire_request_fingerprint: sha256(value.wireRequestFingerprint, "structural_receipt_wire_request_fingerprint_invalid"),
-  });
+  };
+
+  if (value.sessionContextComplete === true) {
+    if (bindingEvidence !== STRUCTURAL_SPS_CONTEXT_POLICY.bindingEvidence) {
+      fail("structural_receipt_session_binding_evidence_mismatch");
+    }
+    const segment = sha256(value.vtexsegmentFingerprint, "structural_receipt_vtexsegment_fingerprint_invalid");
+    const session = sha256(value.vtexsessionFingerprint, "structural_receipt_vtexsession_fingerprint_invalid");
+    if (segment !== STRUCTURAL_SPS_CONTEXT_POLICY.expectedSessionFingerprints.vtexsegment) {
+      fail("structural_receipt_vtexsegment_fingerprint_mismatch");
+    }
+    if (session !== STRUCTURAL_SPS_CONTEXT_POLICY.expectedSessionFingerprints.vtexsession) {
+      fail("structural_receipt_vtexsession_fingerprint_mismatch");
+    }
+    Object.assign(result, {
+      session_context_complete: true,
+      vtexsegment_fingerprint: segment,
+      vtexsession_fingerprint: session,
+    });
+  } else if (
+    Object.hasOwn(value, "sessionContextComplete")
+    || Object.hasOwn(value, "vtexsegmentFingerprint")
+    || Object.hasOwn(value, "vtexsessionFingerprint")
+  ) {
+    fail("structural_receipt_session_context_incomplete");
+  }
+  return Object.freeze(result);
 }
 
 export function buildStructuralReceiptPayload(input) {
@@ -150,7 +177,11 @@ export function buildStructuralReceiptPayload(input) {
     response_completed_at_utc: completedText,
     response_status: input.responseStatus,
     run_id: text(input.runId, "structural_receipt_run_id_invalid"),
-    schema_version: locationContext ? STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION : STRUCTURAL_PROVENANCE_SCHEMA_VERSION,
+    schema_version: locationContext?.session_context_complete === true
+      ? STRUCTURAL_PROVENANCE_SESSION_CONTEXT_SCHEMA_VERSION
+      : locationContext
+        ? STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION
+        : STRUCTURAL_PROVENANCE_SCHEMA_VERSION,
     signing_algorithm: input.signingAlgorithm,
     signing_key_id: text(input.signingKeyId, "structural_receipt_signing_key_id_invalid"),
     target_host: input.targetHost,
@@ -162,6 +193,9 @@ export function buildStructuralReceiptPayload(input) {
 }
 
 function domains(payload) {
+  if (payload?.schema_version === STRUCTURAL_PROVENANCE_SESSION_CONTEXT_SCHEMA_VERSION) {
+    return [STRUCTURAL_SESSION_CONTEXT_SIGNATURE_DOMAIN, STRUCTURAL_SESSION_CONTEXT_DIGEST_DOMAIN];
+  }
   if (payload?.schema_version === STRUCTURAL_PROVENANCE_CONTEXT_SCHEMA_VERSION) {
     return [STRUCTURAL_CONTEXT_SIGNATURE_DOMAIN, STRUCTURAL_CONTEXT_DIGEST_DOMAIN];
   }
