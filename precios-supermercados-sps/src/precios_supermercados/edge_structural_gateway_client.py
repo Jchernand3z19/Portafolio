@@ -1,10 +1,9 @@
-"""Cliente Python fail-closed para ``/v1/structural-execute``.
+"""Cliente fail-closed para ``/v1/structural-execute``.
 
-El contrato v1 continúa disponible para evidencia estructural histórica. Cuando
-se adjunta ``StructuralEdgeLocationContext``, el request exige un receipt v2 cuyo
-material firmado coincide exactamente con el binding/contexto SPS solicitado.
-El raw ``regionId`` sólo viaja al collector autenticado y nunca se devuelve como
-evidencia pública.
+v1 mantiene compatibilidad histórica; v2 exige provenance ligada al ``regionId``;
+v3 exige además las señales de sesión VTEX confirmadas para SPS. Los valores raw
+sólo viajan hacia el collector autenticado y nunca se aceptan de vuelta como
+provenance pública.
 """
 
 from __future__ import annotations
@@ -49,6 +48,11 @@ _LOCATION_FIELDS = {
     "context_wire_key",
     "context_value_path",
     "wire_request_fingerprint",
+}
+_SESSION_FIELDS = {
+    "session_context_complete",
+    "vtexsegment_fingerprint",
+    "vtexsession_fingerprint",
 }
 
 
@@ -149,19 +153,29 @@ def _parse_receipt_payload(value: object) -> StructuralReceiptPayload:
     if not isinstance(value, Mapping):
         _fail("structural_receipt_payload_shape_invalid")
     all_names = {item.name for item in fields(StructuralReceiptPayload)}
-    v1_names = all_names - _LOCATION_FIELDS
+    base_names = all_names - _LOCATION_FIELDS - _SESSION_FIELDS
     schema = value.get("schema_version")
-    expected = all_names if schema == "2" else v1_names if schema == "1" else set()
+    if schema == "1":
+        expected = base_names
+    elif schema == "2":
+        expected = base_names | _LOCATION_FIELDS
+    elif schema == "3":
+        expected = all_names
+    else:
+        expected = set()
     if not expected or set(value) != expected:
         _fail("structural_receipt_payload_shape_invalid")
+
     payload = dict(value)
     payload["physical_started_at_utc"] = _timestamp(
-        payload.get("physical_started_at_utc"), "structural_receipt_physical_started_at_invalid"
+        payload.get("physical_started_at_utc"),
+        "structural_receipt_physical_started_at_invalid",
     )
     payload["response_completed_at_utc"] = _timestamp(
-        payload.get("response_completed_at_utc"), "structural_receipt_response_completed_at_invalid"
+        payload.get("response_completed_at_utc"),
+        "structural_receipt_response_completed_at_invalid",
     )
-    if schema == "2":
+    if schema in {"2", "3"}:
         path = payload.get("context_value_path")
         if not isinstance(path, list) or any(not isinstance(item, str) for item in path):
             _fail("structural_receipt_context_value_path_invalid")
@@ -200,8 +214,16 @@ class StructuralEdgeRequestContext:
         if not _RUN_ID.fullmatch(run_id):
             _fail("run_id_invalid")
         object.__setattr__(self, "run_id", run_id)
-        object.__setattr__(self, "approved_commit_sha", _sha1(self.approved_commit_sha, "approved_commit_sha_invalid"))
-        object.__setattr__(self, "request_digest", _sha256(self.request_digest, "request_digest_invalid"))
+        object.__setattr__(
+            self,
+            "approved_commit_sha",
+            _sha1(self.approved_commit_sha, "approved_commit_sha_invalid"),
+        )
+        object.__setattr__(
+            self,
+            "request_digest",
+            _sha256(self.request_digest, "request_digest_invalid"),
+        )
         if self.request_kind not in _REQUEST_KINDS:
             _fail("request_kind_invalid")
 
@@ -227,7 +249,10 @@ class StructuralEdgeExecutionRequest:
     def __post_init__(self) -> None:
         if not isinstance(self.context, StructuralEdgeRequestContext):
             _fail("request_context_invalid")
-        if self.location_context is not None and not isinstance(self.location_context, StructuralEdgeLocationContext):
+        if self.location_context is not None and not isinstance(
+            self.location_context,
+            StructuralEdgeLocationContext,
+        ):
             _fail("location_context_invalid")
         origin = _validated_origin(self.origin_url)
         if origin.request_kind != self.context.request_kind:
@@ -271,7 +296,9 @@ class StructuralEdgeGatewayEvidence:
     production_authority: bool = False
 
 
-StructuralEdgeExecutionResult: TypeAlias = StructuralEdgeGatewayEvidence | StructuralEdgeGatewayWait | StructuralEdgeGatewayDenied
+StructuralEdgeExecutionResult: TypeAlias = (
+    StructuralEdgeGatewayEvidence | StructuralEdgeGatewayWait | StructuralEdgeGatewayDenied
+)
 
 
 class StructuralEdgeGatewayClient:
@@ -298,7 +325,12 @@ class StructuralEdgeGatewayClient:
             _fail("worker_error_response_invalid")
         return response
 
-    def execute(self, request: StructuralEdgeExecutionRequest, *, bearer_token: str) -> StructuralEdgeExecutionResult:
+    def execute(
+        self,
+        request: StructuralEdgeExecutionRequest,
+        *,
+        bearer_token: str,
+    ) -> StructuralEdgeExecutionResult:
         if not isinstance(request, StructuralEdgeExecutionRequest):
             _fail("execution_request_invalid")
         try:
@@ -323,7 +355,11 @@ class StructuralEdgeGatewayClient:
 
     @staticmethod
     def _wait(root: Mapping[str, object]) -> StructuralEdgeGatewayWait:
-        source = _exact_keys(root, {"ok", "decision", "reason", "notBeforeMs", "inFlightReservationId"}, "wait_response_shape_invalid")
+        source = _exact_keys(
+            root,
+            {"ok", "decision", "reason", "notBeforeMs", "inFlightReservationId"},
+            "wait_response_shape_invalid",
+        )
         reason = _opaque(source.get("reason"), "wait_reason_invalid")
         in_flight = source.get("inFlightReservationId")
         if in_flight is not None:
@@ -336,14 +372,33 @@ class StructuralEdgeGatewayClient:
 
     @staticmethod
     def _denied(root: Mapping[str, object]) -> StructuralEdgeGatewayDenied:
-        source = _exact_keys(root, {"ok", "decision", "reason"}, "deny_response_shape_invalid")
-        return StructuralEdgeGatewayDenied(reason=_opaque(source.get("reason"), "deny_reason_invalid"))
-
-    @staticmethod
-    def _completed(root: Mapping[str, object], request: StructuralEdgeExecutionRequest) -> StructuralEdgeGatewayEvidence:
         source = _exact_keys(
             root,
-            {"ok", "decision", "replayed", "responseStatus", "rawBodyB64Url", "receiptPayload", "signatureB64Url", "signingKeyId", "evidenceId"},
+            {"ok", "decision", "reason"},
+            "deny_response_shape_invalid",
+        )
+        return StructuralEdgeGatewayDenied(
+            reason=_opaque(source.get("reason"), "deny_reason_invalid")
+        )
+
+    @staticmethod
+    def _completed(
+        root: Mapping[str, object],
+        request: StructuralEdgeExecutionRequest,
+    ) -> StructuralEdgeGatewayEvidence:
+        source = _exact_keys(
+            root,
+            {
+                "ok",
+                "decision",
+                "replayed",
+                "responseStatus",
+                "rawBodyB64Url",
+                "receiptPayload",
+                "signatureB64Url",
+                "signingKeyId",
+                "evidenceId",
+            },
             "completed_response_shape_invalid",
         )
         decision = source.get("decision")
@@ -352,20 +407,45 @@ class StructuralEdgeGatewayClient:
             _fail("completed_replayed_invalid")
         if replayed is not (decision == "REPLAY_COMPLETED"):
             _fail("completed_replay_decision_mismatch")
-        status = _int(source.get("responseStatus"), "completed_status_invalid", minimum=100, maximum=599)
+        status = _int(
+            source.get("responseStatus"),
+            "completed_status_invalid",
+            minimum=100,
+            maximum=599,
+        )
         if status != 200:
             _fail("completed_status_invalid")
-        raw_body = _canonical_b64url_decode(source.get("rawBodyB64Url"), "completed_body_invalid")
+        raw_body = _canonical_b64url_decode(
+            source.get("rawBodyB64Url"),
+            "completed_body_invalid",
+        )
         if len(raw_body) > MAX_RAW_BODY_BYTES:
             _fail("completed_body_above_limit")
-        signature = _text(source.get("signatureB64Url"), "completed_signature_invalid", maximum=1024)
-        if len(_canonical_b64url_decode(signature, "completed_signature_invalid", maximum=1024)) != 64:
+        signature = _text(
+            source.get("signatureB64Url"),
+            "completed_signature_invalid",
+            maximum=1024,
+        )
+        if len(
+            _canonical_b64url_decode(
+                signature,
+                "completed_signature_invalid",
+                maximum=1024,
+            )
+        ) != 64:
             _fail("completed_signature_length_invalid")
-        signing_key_id = _opaque(source.get("signingKeyId"), "completed_signing_key_id_invalid")
-        evidence_id = _sha256(source.get("evidenceId"), "completed_evidence_id_invalid")
+        signing_key_id = _opaque(
+            source.get("signingKeyId"),
+            "completed_signing_key_id_invalid",
+        )
+        evidence_id = _sha256(
+            source.get("evidenceId"),
+            "completed_evidence_id_invalid",
+        )
         payload = _parse_receipt_payload(source.get("receiptPayload"))
         if payload.signing_key_id != signing_key_id:
             _fail("completed_signing_key_mismatch")
+
         context = request.context
         for attr, expected in (
             ("authorization_id", context.authorization_id),
@@ -379,6 +459,7 @@ class StructuralEdgeGatewayClient:
         ):
             if getattr(payload, attr) != expected:
                 _fail(f"completed_{attr}_mismatch")
+
         origin = _validated_origin(request.origin_url)
         if payload.canonical_request_sha256 != origin.canonical_request_sha256:
             _fail("completed_canonical_request_mismatch")
@@ -398,6 +479,12 @@ class StructuralEdgeGatewayClient:
         else:
             if not payload.location_context_bound:
                 _fail("completed_location_context_missing")
+            if requested_location.session_context_complete:
+                if not payload.session_context_bound:
+                    _fail("completed_session_context_missing")
+            elif payload.session_context_bound:
+                _fail("completed_unrequested_session_context")
+
             expected_location = requested_location.public_dict()
             for attr, expected in (
                 ("location_id", expected_location["location_id"]),
@@ -407,13 +494,30 @@ class StructuralEdgeGatewayClient:
                 ("context_placement", expected_location["placement"]),
                 ("context_wire_key", expected_location["wire_key"]),
                 ("context_value_path", tuple(expected_location["value_path"])),
-                ("wire_request_fingerprint", expected_location["wire_request_fingerprint"]),
+                (
+                    "wire_request_fingerprint",
+                    expected_location["wire_request_fingerprint"],
+                ),
             ):
                 if getattr(payload, attr) != expected:
                     _fail(f"completed_{attr}_mismatch")
 
+            if requested_location.session_context_complete:
+                session = requested_location.session_context
+                assert session is not None
+                expected_signals = dict(session.signal_fingerprints)
+                if payload.session_context_complete is not True:
+                    _fail("completed_session_context_incomplete")
+                if payload.vtexsegment_fingerprint != expected_signals["vtexsegment"]:
+                    _fail("completed_vtexsegment_fingerprint_mismatch")
+                if payload.vtexsession_fingerprint != expected_signals["vtexsession"]:
+                    _fail("completed_vtexsession_fingerprint_mismatch")
+
         try:
-            receipt = SignedStructuralReceipt(payload=payload, signature_b64url=signature)
+            receipt = SignedStructuralReceipt(
+                payload=payload,
+                signature_b64url=signature,
+            )
         except StructuralProvenanceError as exc:
             raise StructuralEdgeGatewayClientError(f"signed_receipt_{exc.code}") from exc
         if receipt.digest != evidence_id:
