@@ -1,10 +1,9 @@
-"""Contrato efímero de las señales débiles de sesión observadas al seleccionar SPS.
+"""Contrato efímero de las señales de contexto observadas al seleccionar SPS.
 
-La radiografía canónica confirmó como cambios de ciudad ``vtexsegment`` y
-``vtexsession`` además del ``request:regionid`` fuerte. Este módulo no convierte
-esas cookies en identidad por sí mismas; exige que una futura ejecución que salga
-del BrowserContext reproduzca **todas** las señales observadas, sin persistir sus
-valores raw.
+La radiografía canónica confirmó un ``request:regionid`` fuerte y dos cambios
+débiles de cookie, ``vtexsegment`` y ``vtexsession``. Los fingerprints aquí son
+la frontera canónica offline; los valores raw sólo existen en memoria durante una
+futura sesión autorizada y nunca se persisten.
 """
 
 from __future__ import annotations
@@ -19,6 +18,10 @@ SPS_BINDING_EVIDENCE = (
     "location_binding_radiography:sha256:"
     "80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95"
 )
+SPS_REGION_CONTEXT_FINGERPRINT = (
+    "d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7"
+)
+SPS_SOURCE_LOCATION_KEY = f"request:regionid:sha256:{SPS_REGION_CONTEXT_FINGERPRINT}"
 SPS_SESSION_SIGNAL_FINGERPRINTS = MappingProxyType(
     {
         "vtexsegment": "475c2feb7ffafa1c3bdd668c5c864b94602e14d3aa26e710226c64dd4a4b65d3",
@@ -111,7 +114,9 @@ class VerifiedSpsSessionContext:
         }
 
     def cookie_header(self) -> str:
-        return "; ".join(f"{key}={self._raw_values[key]}" for key in sorted(self._raw_values))
+        return "; ".join(
+            f"{key}={self._raw_values[key]}" for key in sorted(self._raw_values)
+        )
 
 
 def verify_sps_session_context(
@@ -119,7 +124,7 @@ def verify_sps_session_context(
     *,
     binding_evidence: str = SPS_BINDING_EVIDENCE,
 ) -> VerifiedSpsSessionContext:
-    """Verifica los valores post-ciudad en memoria contra la radiografía canónica."""
+    """Verifica valores post-ciudad en memoria contra la radiografía canónica."""
 
     if not isinstance(cookies, Mapping):
         _fail("sps_session_cookies_mapping_required")
