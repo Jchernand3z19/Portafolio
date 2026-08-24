@@ -5,6 +5,14 @@ export const STRUCTURAL_GRAPHQL_QUERY_SHA256_BY_KIND = Object.freeze({
   category_tree: "0a9265b63af869850fac217238fc82aaa3b9fa396ca77f35ee98679e4bb066cb",
 });
 
+export const STRUCTURAL_SPS_CONTEXT_POLICY = Object.freeze({
+  bindingEvidence: "location_binding_radiography:sha256:80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95",
+  expectedSessionFingerprints: Object.freeze({
+    vtexsegment: "475c2feb7ffafa1c3bdd668c5c864b94602e14d3aa26e710226c64dd4a4b65d3",
+    vtexsession: "a25a19b8bc35038143f7aa0dc6b711f4a86107e3db8e2df09e91b225d6089b1e",
+  }),
+});
+
 export const GITHUB_OIDC_JWKS_URL = "https://token.actions.githubusercontent.com/.well-known/jwks";
 export const GITHUB_OIDC_AUDIENCE = "urn:precios-sps:cloudflare:collector:v1";
 
