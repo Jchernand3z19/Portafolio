@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping, NoReturn
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlsplit
 
 from precios_supermercados.la_colonia_edge_request import ValidatedLaColoniaEdgeRequest
 from precios_supermercados.scrapers.la_colonia_sps_facet_context import (
@@ -64,6 +64,21 @@ def _wire_fingerprint(method: str, url: str, headers: Mapping[str, str]) -> str:
         allow_nan=False,
     )
     return hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+
+
+def _append_query_parameter_preserving_origin(url: str, key: str, value: str) -> str:
+    """Añade un par RFC3986 sin reserializar los parámetros GraphQL existentes."""
+
+    parsed = urlsplit(url)
+    if parsed.fragment:
+        _fail("catalog_wire_fragment_forbidden")
+    pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    if any(existing.casefold() == key.casefold() for existing, _ in pairs):
+        _fail("catalog_region_query_key_already_present")
+    separator = "&" if parsed.query else "?"
+    encoded_key = quote(key, safe="-._~")
+    encoded_value = quote(value, safe="-._~")
+    return f"{url}{separator}{encoded_key}={encoded_value}"
 
 
 def _binding_from_proof(proof: VerifiedSpsStructuralContext) -> ConfirmedSpsFacetBinding:
@@ -299,13 +314,10 @@ def prepare_sps_catalog_wire_request(
     url = request.source_url
     headers: dict[str, str] = {}
     if proof.context_placement is RequestContextPlacement.QUERY:
-        parsed = urlsplit(url)
-        pairs = parse_qsl(parsed.query, keep_blank_values=True)
-        if any(key.casefold() == proof.context_wire_key.casefold() for key, _ in pairs):
-            _fail("catalog_region_query_key_already_present")
-        query = urlencode([*pairs, (proof.context_wire_key, raw)])
-        url = urlunsplit(
-            (parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment)
+        url = _append_query_parameter_preserving_origin(
+            url,
+            proof.context_wire_key,
+            raw,
         )
     elif proof.context_placement is RequestContextPlacement.HEADER:
         headers[proof.context_wire_key] = raw
