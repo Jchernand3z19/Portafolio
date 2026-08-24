@@ -108,17 +108,15 @@ def test_oidc_request_url_agrega_audience_fijo() -> None:
     assert "urn%3Aprecios-sps%3Acloudflare%3Acollector%3Av1" in result
 
 
-def test_workflow_abre_solo_ventana_transitoria_por_push_main() -> None:
+def test_workflow_preparado_permanece_globalmente_bloqueado() -> None:
     raw = WORKFLOW.read_text(encoding="utf-8")
     assert "context-bound-facet-entrypoint:" in raw
-    assert "live-crawl:\n" in raw
-    assert "if: ${{ false }}" in raw
-    assert "if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}" in raw
+    assert raw.count("if: ${{ false }}") >= 2
     assert "environment: la-colonia-live" in raw
     assert "id-token: write" in raw
     assert "CLOUDFLARE_EDGE_GATEWAY_URL" in raw
     assert "CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL" in raw
-    assert "ejecutar_facets_context_bound_la_colonia_autorizado.py" in raw
-    assert "la-colonia-context-bound-facets-authorization.json" in raw
+    assert "ejecutar_facets_context_bound_la_colonia.py" in raw
+    assert "--authorization-id \"${{ inputs.facet_authorization_id }}\"" in raw
     assert "schedule:" not in raw
     assert "issue_comment:" not in raw

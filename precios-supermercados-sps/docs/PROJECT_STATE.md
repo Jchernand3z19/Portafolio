@@ -7,8 +7,8 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)** contra:
 
 ```text
-main_observed = 75413dbe27bd563e803d5ff8282b3c79ba591c7e
-last_technical_pr = #269
+main_observed = cdc031dc140fb0250521e7b5b99fa412c5d7e5e4
+last_technical_pr = #271
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -17,14 +17,14 @@ technical_binding_confirmed = true
 extraction_enabled = false
 production_authority = false
 catalog_accepted = false
-ACTIVE_AUTHORIZATION_IDS = [SPS-context-and-root-facets-003]
+ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-Los PRs `#254`–`#269` cerraron las fronteras offline conocidas de la fase: contexto SPS estructural, catálogo context-bound, materialización raw evidence-bound, storage físico simplificado, entrypoint futuro de facets, provenance segura para los placements soportados y reauditoría histórica reproducible.
+Los PRs `#254`–`#269` cerraron las fronteras offline conocidas de Fase 0: contexto SPS estructural, catálogo context-bound, materialización raw evidence-bound, storage físico simplificado, entrypoint de facets fail-closed, provenance segura para los placements soportados y reauditoría histórica reproducible.
 
-El usuario otorgó el **2026-08-24T20:46:11Z** una autorización humana nueva para continuar con lo pendiente después de que se le indicó explícitamente que el siguiente paso era la observación mínima live de facets SPS. Esa autorización se materializa transitoriamente como `SPS-context-and-root-facets-003` y queda limitada al alcance descrito en la sección **Autorización live transitoria actual**.
+Los PRs `#270`–`#271` materializaron una autorización humana transitoria para la observación mínima de facets y añadieron observabilidad GitHub temporal para identificar su run. La ventana terminó **sin realizar tráfico a La Colonia** porque el preflight de configuración Cloudflare falló antes de OIDC, navegador o red. La autorización `SPS-context-and-root-facets-003` queda cerrada y no se reutiliza.
 
-La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo fuera del alcance transitorio actual **requiere autorización humana explícita vigente** para ese alcance exacto.
+La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo requiere una autorización humana explícita vigente para el alcance exacto solicitado.
 
 ## Binding técnico de San Pedro Sula
 
@@ -38,8 +38,6 @@ confidence = strong
 technical_binding_observed = true
 store_selection_observed = false
 ```
-
-El cambio decisivo ocurrió `after_city`. La evidencia sanitizada conserva dos cambios débiles de sesión (`vtexsegment`, `vtexsession`) y un cambio fuerte de `request:regionid`.
 
 Llave canónica sanitizada:
 
@@ -86,129 +84,102 @@ extraction_enabled = false
 
 ### `la_colonia_online`
 
-Continúa siendo un **contexto fuente raw**, no una ubicación comercial. El extractor histórico sigue produciendo `location_id=la_colonia_online`, `location_status=unknown`, evidencia fuente explícita y confianza nula. Nunca se reinterpreta retrospectivamente como SPS.
+Continúa siendo un **contexto fuente raw**, no una ubicación comercial. El extractor histórico produce `location_id=la_colonia_online`, `location_status=unknown`, evidencia fuente explícita y confianza nula. Nunca se reinterpreta retrospectivamente como SPS.
 
-## Frontera RawProduct -> SPS — cerrada offline
+## Fronteras offline cerradas
 
-El PR `#261` añadió una frontera separada para promover un producto raw a `la_colonia_sps` únicamente cuando la misma página posee evidencia SPS context-bound verificable.
+### RawProduct -> SPS
 
-Cadena permitida:
+El PR `#261` permite promover a `la_colonia_sps / CONFIRMED` únicamente una página con receipt de catálogo v3 firmado, binding SPS canónico, mismo run/traversal/partición, fingerprints reconciliados y `itemId` exactos contra `RawPageEvidence`. La materialización no abre red y conserva:
 
 ```text
-ContextBoundVerifiedCatalogPageObservation
--> receipt de catálogo v3 firmado
--> binding source/evidence SPS canónicos
--> mismo run + traversal + partition
--> mismos context/wire fingerprints
--> parse offline de la misma página
--> reconciliación exacta de itemId contra RawPageEvidence
--> la_colonia_sps / CONFIRMED
+production_authority = false
+catalog_accepted = false
+extraction_enabled = false
 ```
 
-Invariantes:
+### Facets context-bound
 
-- sólo se acepta una observación context-bound real;
-- receipt v3 firmado y `location_context_bound=true` son obligatorios;
-- source key/evidence deben coincidir exactamente con `LA_COLONIA_SPS`;
-- no se realiza una nueva solicitud para materializar raw;
-- item IDs, run, traversal, partición y fingerprints deben reconciliar exactamente;
-- duplicados, páginas incompletas, parser rechazado o identidad divergente fallan cerrado;
-- el raw histórico debe llegar todavía como `la_colonia_online / UNKNOWN`;
-- sólo después de reconciliar se promueve a `la_colonia_sps / CONFIRMED`, confianza `1` y evidencia sanitizada;
-- la materialización comercial usa sólo traversal `primary`;
-- `production_authority=false`, `catalog_accepted=false` y `extraction_enabled=false` se preservan.
-
-## Facets estructurales context-bound — autorización transitoria preparada
-
-Los PRs `#263`–`#265` dejaron compuesto el entrypoint y la autorización actual abre únicamente una ejecución transitoria mediante un marker versionado que se valida antes de OIDC, navegador o red.
-
-Plan exacto:
+Los PRs `#263`–`#266` dejaron preparado el contrato exacto:
 
 ```text
-root_total
-category_tree
+requests = [root_total, category_tree]
 max_requests = 2
 concurrency = 1
 max_retries = 0
+same_browser_context = required
+artifact = sanitized only
 ```
 
-Cadena preparada:
+El valor raw de `regionId` sólo puede existir transitoriamente en memoria. `header` y `query` tienen provenance durable segura; cualquier placement distinto abre una nueva frontera evidence-bound en vez de inferirse.
+
+### Catálogo context-bound
+
+La cadena técnica exige contexto SPS derivado por página, receipts v3, verificación criptográfica, primary + reconciliation canónicos, provenance física reconciliable y readiness del mismo plan/discovery. Readiness técnica no concede autoridad comercial.
+
+## Intento live autorizado de facets — cerrado sin tráfico
+
+Autorización humana recibida:
 
 ```text
-push exacto a main con marker autorizado
--> checkout inmutable del mismo SHA
--> validación estricta del marker
--> gate humano
--> environment controlado
--> OIDC audience fija
--> transporte Cloudflare allowlisted
--> BrowserContext que establece SPS
--> observación efímera de regionId
--> SpsStructuralFacetPlan
--> root_total
--> category_tree
--> receipts contextuales firmados
--> artefacto sanitizado
+authorization_id = SPS-context-and-root-facets-003
+authorized_at = 2026-08-24T20:46:11Z
+purpose = attest actual regionId placement under SPS
+requests = [root_total, category_tree]
+max_requests = 2
+concurrency = 1
+max_retries = 0
+catalog_crawl = not authorized
+commercial_persistence = not authorized
 ```
 
-Invariantes:
-
-- sólo el workflow live canónico sobre `refs/heads/main` puede ejecutar la ventana transitoria;
-- el marker exige exactamente `SPS-context-and-root-facets-003`, dos requests, concurrencia `1`, cero retries y flags productivos/comerciales en `false`;
-- el live crawl general permanece `if: false`;
-- no existen retries ocultos ni redirects implícitos;
-- sólo se permiten los endpoints/rutas edge contratados;
-- el mismo BrowserContext que establece SPS debe conservar la sesión VTEX durante la observación;
-- el valor raw de `regionId` sólo puede existir transitoriamente en memoria;
-- receipts legacy, cambio de contexto, secuencia distinta de `root_total -> category_tree` o request adicional fallan cerrado;
-- ninguna observación estructural concede autoridad comercial;
-- el marker y la apertura por `push` se retiran inmediatamente después de consumir esta autorización.
-
-## Catálogo context-bound — cerrado offline
-
-Los PRs `#254`–`#257` cerraron la cadena técnica:
+Ejecución asociada al merge de PR `#270`:
 
 ```text
-VerifiedStructuralDiscovery
-+ receipts estructurales contextuales
-+ SpsStructuralFacetPlan
--> VerifiedSpsStructuralContext
--> contexto SPS derivado por página
--> /v1/catalog-execute
--> receipt catálogo v3
--> verificación criptográfica + body estricto
--> primary + reconciliation canónicos
--> provenance físico reconciliable
--> readiness técnico context-bound
+workflow = La Colonia - Recorrido live manual
+run = 32777363742
+job = 97591389839
+head_sha = 7a0df3c3971a4021862855166e527827035a3ea2
+result = failure
+error_code = env_cloudflare_edge_gateway_url_invalid
+artifact_id = 9538444504
+artifact_name = la-colonia-context-bound-facets-32777363742
+artifact_digest = sha256:c87469499adba4b1fca34a109500c625ee69281f6065f2de3f87269caa4bb511
 ```
 
-Cada página exige contexto derivado del proof SPS y rechaza downgrade/legacy, reutilización de IDs o divergencias de fingerprints. Primary y reconciliation permanecen ligados al mismo discovery/plan.
-
-### Placement y provenance
-
-El PR `#266` cerró offline la provenance segura para los dos placements explícitamente soportados:
-
-- `header`: reconciliación donde el URL físico no incorpora el valor sensible;
-- `query`: verificación transitoria del URL físico y salida durable redactada basada en hashes, sin persistir `url.full`, `fetch_url` ni el valor raw de ubicación.
-
-El finalizador selecciona una ruta sólo a partir del placement realmente atestiguado. Si la observación autorizada revela otra forma, se abrirá una nueva frontera evidence-bound; no se adivina ahora.
-
-## Readiness de catálogo
-
-La evaluación técnica exige simultáneamente contexto estructural SPS verificado, collection context-bound, manifest físico del mismo plan/discovery, mismo location/context fingerprint y page set/cobertura exactos.
-
-Aun con la cadena técnica completa, los blockers productivos permanecen:
+Los logs demostraron que en el Environment `la-colonia-live` estaban vacías:
 
 ```text
-trusted_collector_provenance_unavailable
-production_authority_not_established
+CLOUDFLARE_EDGE_GATEWAY_URL
+CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
 ```
 
-Por diseño, esta capa no puede devolver `catalog_accepted=true` ni `production_authority=true` por sí sola.
+El runner emitió `env_cloudflare_edge_gateway_url_invalid` y terminó antes de solicitar OIDC, iniciar navegador, inicializar el gateway edge o contactar La Colonia. El job `live-crawl` quedó `skipped`. El artifact sanitizado contiene únicamente el status de fallo y `raw_values_exposed=false`.
+
+La autorización `SPS-context-and-root-facets-003` queda cerrada después de ese intento operacional y no se reutiliza. Una ejecución futura requiere primero cerrar la configuración productiva de Cloudflare y luego obtener una autorización humana nueva para tráfico live.
+
+## Cloudflare — dependencia externa actual
+
+La sonda controlada no-La-Colonia ya produjo evidencia física histórica. Eso no equivale a un despliegue productivo.
+
+El repositorio contiene el Worker productivo preparado en `edge/cloudflare/`, pero **no existe evidencia vigente de que `precios-sps-provenance` esté desplegado y conectado al Environment `la-colonia-live`**. El intento `32777363742` confirmó además que las dos variables necesarias para el entrypoint estaban ausentes.
+
+Antes del siguiente intento live deben existir, con provenance verificable:
+
+```text
+1. Worker productivo Cloudflare desplegado con su Durable Object.
+2. EDGE_RECEIPT_PRIVATE_KEY_PKCS8_B64URL alojada únicamente en Cloudflare.
+3. EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL correspondiente.
+4. EDGE_COLLECTOR_CODE_SHA256 coherente con el código desplegado.
+5. GitHub Environment la-colonia-live con:
+   - CLOUDFLARE_EDGE_GATEWAY_URL
+   - CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
+6. Preflight de identidad/release/clave en verde.
+```
+
+La configuración/deploy real de Cloudflare requiere credenciales de la cuenta y puede crear o modificar infraestructura externa; no se deriva de una autorización read-only del supermercado.
 
 ## Google Sheets y persistencia
-
-El PR `#259` aplicó el criterio de `production-data-engineering`: una entidad lógica sólo se materializa cuando existe una diferencia real de grain, lifecycle, ownership/seguridad, acceso o consumidor.
 
 El workbook físico mantiene exactamente seis tabs gestionados:
 
@@ -221,29 +192,13 @@ fact_scrape_runs
 fact_quality_events
 ```
 
-Se retiraron mediante preflight + read-back los tabs vacíos `Sheet1`, `dim_products` y `map_source_products`. Los dos últimos permanecen como contratos lógicos diferidos para una futura fase cross-source.
-
-Read-back confirmado:
-
-- configuración de La Colonia preservada;
-- SPS/TGU preservadas;
-- `la_colonia_sps.extraction_enabled=false`;
-- current/history/runs/quality sin filas comerciales reales todavía;
-- no quedan tabs físicos diferidos ni pestaña vacía por defecto.
+`dim_products` y `map_source_products` permanecen como contratos lógicos diferidos. No existen ofertas comerciales reales persistidas todavía. `la_colonia_sps.extraction_enabled=false` permanece.
 
 No se escriben ofertas SPS en current/history antes de aceptación y autoridad reales. Runs fallidos, rechazados o no autoritativos no alteran estado comercial. Hashes/fingerprints prueban igualdad, no autoridad.
 
-## Reauditoría histórica de Fase 0 — cerrada
+## Reauditoría histórica de Fase 0
 
-El PR `#268` reemplazó la dependencia autorreferente del snapshot v1 por decisiones v2 ligadas a:
-
-- un `reviewed_main` que debe seguir siendo ancestro del main auditado;
-- tip SHA exacto por rama revisada;
-- número exacto de patches únicos;
-- fallo cerrado ante drift, desaparición o reaparición con PR abierto;
-- retiro automático de una excepción cuando la rama ya quedó merged/subsumed.
-
-La reauditoría final real contra `main=adcaefaeccbaf443c52e09895c096b79e6b1dba2` se ejecutó dentro del PR `#269` sin tráfico externo:
+La reauditoría final real dentro del PR `#269` cerró con:
 
 ```text
 workflow = Precios Supermercados SPS - Pruebas base
@@ -255,57 +210,54 @@ MERGED_OR_SUBSUMED = 213
 CLOSED_SUPERSEDED = 59
 OPEN_CURRENT = 0
 UNIQUE_UNMERGED = 0
-reviewed_main = d584622a50ecb9ed6090cb1b098a5bc13e2b34d1
-decisions_no_longer_needed = 0
 artifact_id = 9537023081
-artifact_name = precios-sps-phase0-final-branch-reaudit-32773357812
 artifact_digest = sha256:a058ed4c039ed3d22fe0bff452ed18dadcbd36ce2c8104d982d89bc763c29663
 ```
 
-No quedaron ramas históricas con patches únicos sin decisión versionada ni ramas históricas abiertas que contradigan el cierre.
+## CI observado
 
-## CI
-
-Última validación completa observada del cierre offline:
+Ventana transitoria de autorización, PR `#270`:
 
 ```text
-workflow = Precios Supermercados SPS - Pruebas base
-run = 32773357812
+run = 32776963711
 result = success
-pytest = 1705 passed
+pytest = 1709 passed
 pip check = clean
 compileall SyntaxWarning = none
 ```
 
-La ventana transitoria debe volver a pasar la suite completa en PR antes de fusionarse; el tráfico live sólo ocurre después, en el `push` del marker a `main`.
-
-## Fronteras offline restantes
+Observador GitHub temporal, PR `#271`:
 
 ```text
-NONE
+run = 32777793715
+result = success
+pytest = 1711 passed
+pip check = clean
+compileall SyntaxWarning = none
 ```
 
-A este corte no existe deuda de implementación conocida que pueda cerrar el placement real sin volver a observar el sitio. La selección del placement de `regionId` es evidencia live faltante, no una tarea que deba resolverse por inferencia.
-
-## Autorización live transitoria actual
-
-La autorización vigente cubre exclusivamente una observación pública read-only de facets bajo SPS:
+El observador confirmó sobre SHA `7a0df3c3971a4021862855166e527827035a3ea2`:
 
 ```text
-authorization_id = SPS-context-and-root-facets-003
-authorized_at = 2026-08-24T20:46:11Z
-purpose = attest actual regionId placement under SPS
-requests = [root_total, category_tree]
-max_requests = 2
-concurrency = 1
-max_retries = 0
-same_browser_context = required
-artifact = sanitized only
-catalog_crawl = not authorized
-commercial_persistence = not authorized
+32777363736 = Precios Supermercados SPS - Pruebas base = success
+32777363742 = La Colonia - Recorrido live manual = failure
+```
+
+## Fronteras pendientes
+
+```text
+OFFLINE APPLICATION CODE = none known
+EXTERNAL PLATFORM CONFIGURATION = Cloudflare product worker + la-colonia-live vars
+LIVE EVIDENCE = actual regionId placement still unobserved
+```
+
+No se debe pedir ni ejecutar una nueva autorización live hasta que la infraestructura Cloudflare productiva y las variables del Environment hayan sido configuradas y verificadas sin tráfico a La Colonia.
+
+Mientras tanto deben permanecer:
+
+```text
 production_authority = false
 catalog_accepted = false
 extraction_enabled = false
+ACTIVE_AUTHORIZATION_IDS = []
 ```
-
-Esta autorización se considera consumida al terminar su run, tenga éxito técnico o falle después de iniciar la ventana live. No se reutiliza para smoke, staged, full crawl, persistencia ni otra observación.
