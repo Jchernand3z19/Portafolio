@@ -160,19 +160,19 @@ CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
 
 El runner emitió `env_cloudflare_edge_gateway_url_invalid` y terminó antes de solicitar OIDC, iniciar navegador, inicializar el gateway edge o contactar La Colonia. El job `live-crawl` quedó `skipped`. El artifact sanitizado contiene únicamente el status de fallo y `raw_values_exposed=false`.
 
-La autorización `SPS-context-and-root-facets-003` queda cerrada después de ese intento operacional y no se reutiliza. Una ejecución futura requiere primero cerrar la configuración productiva de Cloudflare y luego obtener una autorización humana nueva para tráfico live.
+La autorización `SPS-context-and-root-facets-003` queda cerrada después de ese intento operacional y no se reutiliza. Una ejecución futura requiere una autorización humana nueva para tráfico live. El despliegue productivo de Cloudflare sólo es prerequisito si se elige la ruta productiva edge; ya no se asume automáticamente como prerequisito de una prueba read-only/no autoritativa.
 
-## Cloudflare — dependencia externa actual
+## Cloudflare — ruta productiva, no bloqueo universal del MVP
 
 La sonda controlada no-La-Colonia ya produjo evidencia física histórica. Eso no equivale a un despliegue productivo.
 
-El repositorio contiene el Worker productivo preparado en `edge/cloudflare/`, pero **no existe evidencia vigente de que `precios-sps-provenance` esté desplegado y conectado al Environment `la-colonia-live`**. El intento `32777363742` confirmó además que las dos variables necesarias para el entrypoint estaban ausentes.
+El repositorio contiene el Worker productivo preparado en `edge/cloudflare/`, pero **no existe evidencia vigente de que `precios-sps-provenance` esté desplegado y conectado al Environment `la-colonia-live`**. El intento `32777363742` confirmó además que las dos variables necesarias para ese entrypoint estaban ausentes.
 
 El PR `#274` añadió [`cloudflare-production-deploy-runbook.md`](cloudflare-production-deploy-runbook.md) para que el despliegue, read-back y configuración posterior del Environment se realicen de forma manual, versionada y fail-closed. Ese runbook no autoriza tráfico a La Colonia.
 
-El modelo actual `CloudflareDeploymentEvidence` valida forma, hashes, flags y coherencia contra el manifest, pero su propio módulo declara que el snapshot sigue siendo caller-controlled mientras no exista un adapter que lo obtenga y autentique contra la API real de Cloudflare. Antes de considerar el preflight productivo evidence-bound debe existir una frontera read-only que obtenga y normalice al menos deployment/version, contenido/identidad del script y Script Settings desde endpoints allowlisted de Cloudflare, con token efímero, límites de respuesta, sin redirects/retries ocultos y sin posibilidad de contactar La Colonia.
+El modelo actual `CloudflareDeploymentEvidence` valida forma, hashes, flags y coherencia contra el manifest, pero su propio módulo declara que el snapshot sigue siendo caller-controlled mientras no exista un adapter que lo obtenga y autentique contra la API real de Cloudflare. Esa deuda debe cerrarse **antes de declarar la ruta edge como productiva**, no necesariamente antes de obtener evidencia de prueba por una ruta read-only más simple.
 
-Antes del siguiente intento live deben existir, con provenance verificable:
+Si se decide usar la ruta productiva edge, antes del siguiente intento deben existir, con provenance verificable:
 
 ```text
 1. Worker productivo Cloudflare desplegado con su Durable Object.
@@ -276,16 +276,14 @@ El observador confirmó sobre SHA `7a0df3c3971a4021862855166e527827035a3ea2`:
 
 ```text
 MVP PRIORITY = first real/verifiable La Colonia SPS catalog
-OFFLINE APPLICATION CODE = stale sps_context_unconfirmed blocker + authenticated Cloudflare deployment/read-back adapter only if they truly block the chosen MVP path
-EXTERNAL PLATFORM CONFIGURATION = Cloudflare product worker + la-colonia-live vars only if required by the chosen MVP path
+OFFLINE APPLICATION CODE = choose/prepare the shortest safe trial path; stale productive preflight/read-back debt only blocks edge production
+EXTERNAL PLATFORM CONFIGURATION = Cloudflare product worker + la-colonia-live vars only if the edge production path is selected
 LIVE EVIDENCE = actual regionId placement still unobserved
 ```
 
-La deuda offline del preflight debe corregirse si ese assessment sigue formando parte del camino mínimo elegido: `SPS_TECHNICAL_CONTEXT=CONFIRMED` y `technical_binding_confirmed=true` no son compatibles con conservar `sps_context_unconfirmed` como blocker obligatorio. La corrección no debe eliminar `human_live_authorization_required` ni `production_authority_not_established`, ni convertir readiness técnica en autorización comercial.
+El siguiente trabajo técnico debe escoger y ejecutar el camino mínimo hacia el primer catálogo real, no continuar profundizando Cloudflare por inercia. Para una prueba read-only/no autoritativa, sólo deben bloquear seguridad básica, binding SPS verificable, límites de tráfico y una salida sanitizada; la infraestructura productiva se difiere si no es indispensable para esas propiedades.
 
-La atestación productiva de infraestructura debe dejar de depender de un `CloudflareDeploymentEvidence` caller-controlled **antes de declarar una ruta productiva**, pero no debe convertirse automáticamente en blocker de una prueba read-only/no autoritativa si el primer catálogo puede obtenerse de manera más simple conservando SPS verificable, límites de tráfico y separación explícita entre evidencia de prueba y datos aceptados.
-
-El siguiente trabajo técnico debe escoger y ejecutar el camino mínimo hacia el primer catálogo real, no continuar profundizando Cloudflare por inercia. Cualquier pieza productiva no indispensable para esa prueba se difiere.
+La deuda del preflight `sps_context_unconfirmed` y la atestación autenticada de Cloudflare deben corregirse antes de declarar la ruta edge como productiva. No deben convertirse automáticamente en blockers del primer catálogo de prueba.
 
 Mientras tanto deben permanecer:
 
