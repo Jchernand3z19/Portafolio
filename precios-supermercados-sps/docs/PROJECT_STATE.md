@@ -54,7 +54,7 @@ artifact_json = reports/discovery/la-colonia-location-binding-2026-08-24.json
 artifact_canonical_sha256 = 80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95
 ```
 
-La captura histórica deliberadamente **no conserva el placement** de `regionId` dentro del request. Por tanto el repositorio no puede afirmar todavía si el contexto real observado para el endpoint GraphQL relevante fue `header` o `query`. Esa ausencia no se completa por inferencia.
+La captura histórica deliberadamente **no conserva el placement** de `regionId` dentro del request. Por tanto el repositorio no puede afirmar todavía si el contexto real observado para el endpoint GraphQL relevante fue `header`, `query` o alguna forma distinta/anidada. Esa ausencia no se completa por inferencia. Las rutas preparadas para `header` y `query` no convierten una tercera forma hipotética en soportada: cualquier placement no contratado debe fallar cerrado hasta disponer de evidencia concreta.
 
 ## Ubicaciones
 
@@ -220,7 +220,7 @@ El PR `#266` eliminó la deuda offline de provenance para el caso `query` sin se
 - el builder run-level produce el mismo `EdgeProvenanceRunManifest` sin reintroducir el URL físico;
 - ambos caminos continúan con `production_authority=false`.
 
-El finalizador selecciona la ruta **únicamente a partir del placement ya atestiguado por el contexto SPS**. Como la evidencia histórica no preservó ese placement, todavía no se sabe cuál camino corresponde al sitio real. Esa elección depende de una observación live futura autorizada; ya no existe trabajo de implementación offline pendiente para hacer seguro el caso `query`.
+El finalizador usa el placement ya atestiguado por el contexto SPS y sólo admite los placements explícitamente soportados `header`/`query`; cualquier otro placement falla cerrado. Como la evidencia histórica no preservó ese dato, todavía no se sabe qué forma corresponde al sitio real. Esa selección depende de una observación live futura autorizada; no se inventa una tercera ruta sin evidencia de su forma exacta.
 
 ## Readiness de catálogo
 
@@ -288,20 +288,20 @@ compileall SyntaxWarning = none
 
 ## Fronteras offline restantes
 
-Las fronteras de implementación que podían cerrarse sin contactar al supermercado ya están cubiertas:
+Las fronteras genéricas que podían prepararse sin observar de nuevo el request real ya están cubiertas para el contrato soportado:
 
 - storage físico simplificado y read-back verificado;
 - `RawProduct -> la_colonia_sps` evidence-bound;
 - entrypoint futuro de facets compuesto y fail-closed;
 - transporte OIDC/Cloudflare acotado;
-- provenance segura tanto para `header` como para `query`;
+- provenance segura para los placements explícitamente soportados `header` y `query`;
 - CI base verde y compileall estricto.
 
 Queda una única actividad de cierre de Fase 0 que no requiere tráfico al supermercado:
 
 1. **Reauditoría y sincronización final**: volver a verificar ramas históricas, workflows, CI, documentación estable/mutable y ausencia de deuda offline conocida contra el `main` actual. Si el snapshot histórico requiere nuevos overrides explícitos, deben versionarse y quedar reproducibles antes de declarar cerrada la fase.
 
-La selección del placement real **no es una frontera offline**: depende de evidencia live nueva y no se resuelve por inferencia.
+La selección del placement real **no es una frontera offline**: depende de evidencia live nueva y no se resuelve por inferencia. Si esa observación revela un placement no soportado, se abrirá una frontera nueva ligada a esa evidencia en lugar de adivinar su contrato ahora.
 
 ## Próxima dependencia humana real
 
