@@ -129,7 +129,7 @@ El CLI de binding no expone `--standing-public-read-only`; exige un `--authoriza
 
 Los IDs históricos `LC-location-binding-331` a `337` relevantes siguen consumidos y no se reutilizan. La solicitud histórica `la-colonia-facet-discovery-001` tampoco concede permiso para una nueva ejecución.
 
-La **próxima observación live** permitida por el plan, cuando todo el trabajo offline previo haya terminado, debe ser mínima y exclusivamente de facets bajo SPS. **Requiere autorización humana explícita vigente** y nueva, con propósito, supermercado, alcance, máximo de requests, concurrencia, pacing, observables y exclusiones. No puede conceder por sí sola persistencia comercial, `production_authority` ni `catalog_accepted`.
+La **próxima observación live** permitida por el plan, cuando todo el trabajo offline previo haya terminado, debe ser mínima y exclusivamente de facets bajo SPS. Esta frontera requiere autorización humana explícita vigente y nueva, con propósito, supermercado, alcance, máximo de requests, concurrencia, pacing, observables y exclusiones. No puede conceder por sí sola persistencia comercial, `production_authority` ni `catalog_accepted`.
 
 Siguen fuera de cualquier autorización implícita: secretos, cuentas, billing, compras, checkout, mutaciones externas, infraestructura nueva con coste, persistencia comercial y decisiones manuales de mapping.
 
