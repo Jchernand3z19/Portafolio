@@ -225,7 +225,7 @@ def test_receipt_reutilizado_se_rechaza() -> None:
 def test_fingerprint_de_contexto_no_puede_cambiar_entre_paginas() -> None:
     plan, pages = _fixture()
     pages[1].page.verified_receipt.receipt.payload.context_fingerprint = "f" * 64
-    pages[1].trace_evidence.context_fingerprint = "f" * 64
+    object.__setattr__(pages[1].trace_evidence, "context_fingerprint", "f" * 64)
     with pytest.raises(ContextBoundQueryProvenanceRunError) as captured:
         build_context_bound_query_provenance_run_manifest(
             authenticated_plan=plan,
