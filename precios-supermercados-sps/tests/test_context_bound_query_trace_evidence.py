@@ -190,9 +190,9 @@ def test_query_trace_se_reconcilia_y_salida_no_retiene_url_ni_region_raw() -> No
     assert len(result.physical_evidence_id) == 64
 
     rendered = json.dumps(evidence.canonical_dict(), sort_keys=True, default=str)
-    # El request base ya es metadata pública del catálogo; lo sensible es el URL
-    # físico con regionId y el valor raw de contexto.
-    for forbidden in (RAW_REGION, FETCH_URL, "url.full", "fetch_url"):
+    # Los nombres de campos hash pueden contener `fetch_url`; lo que nunca puede
+    # persistir es el URL físico real ni el valor raw que lleva regionId.
+    for forbidden in (RAW_REGION, FETCH_URL, "url.full"):
         assert forbidden not in rendered
         assert forbidden not in repr(evidence)
         assert forbidden not in repr(result)
