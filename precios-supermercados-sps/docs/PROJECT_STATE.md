@@ -24,7 +24,7 @@ Los PRs `#254`–`#269` cerraron las fronteras offline conocidas de Fase 0: cont
 
 Los PRs `#270`–`#271` materializaron una autorización humana transitoria para la observación mínima de facets y añadieron observabilidad GitHub temporal para identificar su run. La ventana terminó **sin realizar tráfico a La Colonia** porque el preflight de configuración Cloudflare falló antes de OIDC, navegador o red. El PR `#272` retiró el marker, wrapper y observador transitorios, restauró el workflow live manual fail-closed y dejó `SPS-context-and-root-facets-003` cerrada y no reutilizable.
 
-El PR `#274` preparó un runbook productivo de Cloudflare, eliminó estado mutable obsoleto del README del edge y dejó explícito que el despliegue de infraestructura es una frontera separada de cualquier autorización live. Durante esa revisión se detectaron dos deudas offline adicionales: el preflight Cloudflare todavía conserva el blocker histórico `sps_context_unconfirmed` aunque este documento y la evidencia canónica ya tienen `SPS_TECHNICAL_CONTEXT=CONFIRMED`; además, `CloudflareDeploymentEvidence` continúa documentada en código como evidencia caller-controlled mientras no exista un adapter autenticado que haga read-back de la API real de Cloudflare. La declaración anterior `OFFLINE APPLICATION CODE = none known` queda por tanto invalidada y se corrige en este corte antes de modificar código.
+El PR `#274` preparó un runbook productivo de Cloudflare, eliminó estado mutable obsoleto del README del edge y dejó explícito que el despliegue de infraestructura es una frontera separada de cualquier autorización live. Durante esa revisión se detectaron dos deudas offline adicionales: el preflight Cloudflare todavía conserva el blocker histórico `sps_context_unconfirmed` aunque este documento y la evidencia canónica ya tienen `SPS_TECHNICAL_CONTEXT=CONFIRMED`; además, `CloudflareDeploymentEvidence` continúa documentada en código como evidencia caller-controlled mientras no exista un adapter autenticado que haga read-back de la API real de Cloudflare. Esas deudas pertenecen a la futura ruta edge productiva; ya no se consideran bloqueadores automáticos del primer catálogo de prueba.
 
 Durante la revisión de dirección del proyecto se detectó además que el proceso estaba optimizando seguridad/arquitectura como si cada prueba fuera ya una operación productiva. `AGENTS.md` ahora incorpora una política explícita **MVP primero**: ninguna nueva capa, adapter, verifier, preflight, workflow, tabla, documento o runbook puede crearse por previsión; debe desbloquear directamente extracción, binding SPS, validación, persistencia segura o una obligación de seguridad que no tenga una solución más simple. El objetivo inmediato vuelve a ser producir el primer catálogo real/verificable de La Colonia para SPS. PRs, conteo de tests y cantidad de capas dejan de tratarse como métricas de progreso.
 
@@ -276,8 +276,9 @@ El observador confirmó sobre SHA `7a0df3c3971a4021862855166e527827035a3ea2`:
 
 ```text
 MVP PRIORITY = first real/verifiable La Colonia SPS catalog
-OFFLINE APPLICATION CODE = choose/prepare the shortest safe trial path; stale productive preflight/read-back debt only blocks edge production
-EXTERNAL PLATFORM CONFIGURATION = Cloudflare product worker + la-colonia-live vars only if the edge production path is selected
+OFFLINE APPLICATION CODE = choose/prepare the shortest safe trial path
+PRODUCTIVE EDGE DEBT = stale sps_context_unconfirmed blocker + authenticated Cloudflare deployment/read-back adapter
+EXTERNAL PLATFORM CONFIGURATION = Cloudflare product worker + la-colonia-live vars only for edge production
 LIVE EVIDENCE = actual regionId placement still unobserved
 ```
 
