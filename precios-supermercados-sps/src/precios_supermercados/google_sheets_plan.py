@@ -1,8 +1,11 @@
-"""Plan offline para materializar las tablas comunes en Google Sheets.
+"""Plan offline para materializar las tablas activas en Google Sheets.
 
 El resultado representa un único payload para ``spreadsheets.batchUpdate``.
 Google Sheets documenta que las subsolicitudes de ese endpoint se aplican juntas
 de forma atómica. Este módulo no autentica, no hace red y no conoce credenciales.
+
+El modelo lógico puede contener contratos diferidos; este planner sólo toca el
+contrato físico activo definido por ``ACTIVE_STORAGE_TABLE_SPECS``.
 """
 
 from __future__ import annotations
@@ -12,7 +15,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping
 
-from .tabular_persistence import TABLE_SPECS, TableSpec
+from .storage_contract import ACTIVE_STORAGE_TABLE_SPECS
+from .tabular_persistence import TableSpec
 from .tabular_store import InMemoryTabularStore, TabularStoreError
 
 
@@ -262,10 +266,11 @@ def build_atomic_workbook_plan(
     store: InMemoryTabularStore,
     metadata: SpreadsheetMetadata,
 ) -> AtomicWorkbookPlan:
-    """Materializa todas las tablas gestionadas en un único batch atómico.
+    """Materializa las tablas físicas activas en un único batch atómico.
 
-    Tabs ajenos al proyecto se preservan. Tabs gestionados se dimensionan al
-    snapshot actual, con encabezado congelado y filtro cuando existen datos.
+    Tabs ajenos o diferidos se preservan. Tabs activos se dimensionan al snapshot
+    actual, con encabezado congelado y filtro cuando existen datos. El hecho de
+    que una tabla lógica esté diferida nunca provoca su creación implícita.
     """
 
     if not isinstance(store, InMemoryTabularStore):
@@ -278,7 +283,7 @@ def build_atomic_workbook_plan(
     sheet_ids: dict[str, int] = {}
     row_counts: dict[str, int] = {}
 
-    for table_name, spec in TABLE_SPECS.items():
+    for table_name, spec in ACTIVE_STORAGE_TABLE_SPECS.items():
         try:
             rows = store.rows(table_name)
         except TabularStoreError as exc:
