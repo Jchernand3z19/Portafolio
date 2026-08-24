@@ -51,6 +51,7 @@ RECOVERY_WORKFLOW = "precios-supermercados-sps-la-colonia-dispatch-recovery.yml"
 LA_DIAGNOSTIC_WORKFLOW = "precios-supermercados-sps-la-colonia-diagnostic.yml"
 FACET_WORKFLOW = "precios-supermercados-sps-la-colonia-facet-discovery.yml"
 LIVE_WORKFLOW = "precios-supermercados-sps-la-colonia-live.yml"
+LIVE_MVP_JOB = "mvp-sample"
 LIVE_FACET_JOB = "context-bound-facet-entrypoint"
 LOCATION_BINDING_WORKFLOW = "precios-supermercados-sps-la-colonia-location-binding.yml"
 GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storage.yml"
@@ -109,7 +110,6 @@ BLOCKED_ENTRYPOINTS = {
     LA_DIAGNOSTIC_WORKFLOW,
     RECOVERY_WORKFLOW,
     FACET_WORKFLOW,
-    LIVE_WORKFLOW,
     LOCATION_BINDING_WORKFLOW,
 }
 
@@ -278,6 +278,52 @@ def test_privileged_and_mutating_entrypoints_are_globally_blocked():
     assert "github.request(" not in controller
 
 
+def test_mvp_sample_is_the_only_nonprivileged_live_catalog_path() -> None:
+    path = WORKFLOW_DIR / LIVE_WORKFLOW
+    workflow = load_workflow(path)
+    live_jobs = jobs(workflow)
+    assert set(live_jobs) == {LIVE_MVP_JOB, "live-crawl", LIVE_FACET_JOB}
+
+    sample = live_jobs[LIVE_MVP_JOB]
+    assert sample["if"] == (
+        "${{ inputs.mode == 'mvp_sample' && inputs.mvp_read_only_authorized == true }}"
+    )
+    assert sample["timeout-minutes"] == "15"
+    assert "environment" not in sample
+    assert "permissions" not in sample
+    assert sample["env"] == {
+        "PYTHONPATH": "${{ github.workspace }}/precios-supermercados-sps/src"
+    }
+    assert live_jobs["live-crawl"]["if"] == "${{ false }}"
+    assert live_jobs[LIVE_FACET_JOB]["if"] == "${{ false }}"
+
+    dispatch = workflow["on"]["workflow_dispatch"]
+    assert isinstance(dispatch, dict)
+    inputs = dispatch["inputs"]
+    assert inputs["mode"]["default"] == "mvp_sample"
+    assert inputs["mode"]["options"] == ["mvp_sample", "smoke", "staged", "full"]
+    assert inputs["mvp_sample_size"] == {
+        "description": "SKUs máximos conservados en la muestra MVP",
+        "required": "true",
+        "default": "10",
+        "type": "choice",
+        "options": ["5", "10"],
+    }
+    assert inputs["mvp_read_only_authorized"]["required"] == "true"
+    assert inputs["mvp_read_only_authorized"]["default"] == "false"
+    assert inputs["mvp_read_only_authorized"]["type"] == "boolean"
+
+    sample_raw = "\n".join(str(step) for step in job_steps(sample))
+    assert "scripts/probar_muestra_sps_la_colonia.py" in sample_raw
+    assert "--live-read-only" in sample_raw
+    assert "--sample-size" in sample_raw
+    assert "actions/upload-artifact@" in sample_raw
+    assert "CLOUDFLARE" not in sample_raw
+    assert "id-token" not in sample_raw
+    assert "secrets." not in sample_raw
+    assert "vars." not in sample_raw
+
+
 def test_location_binding_entrypoint_is_manual_and_fail_closed() -> None:
     path = WORKFLOW_DIR / LOCATION_BINDING_WORKFLOW
     workflow = load_workflow(path)
@@ -413,7 +459,7 @@ def test_context_bound_facet_job_has_exact_privilege_and_stays_inert() -> None:
     path = WORKFLOW_DIR / LIVE_WORKFLOW
     workflow = load_workflow(path)
     live_jobs = jobs(workflow)
-    assert set(live_jobs) == {"live-crawl", LIVE_FACET_JOB}
+    assert set(live_jobs) == {LIVE_MVP_JOB, "live-crawl", LIVE_FACET_JOB}
     facet = live_jobs[LIVE_FACET_JOB]
     assert facet["if"] == "${{ false }}"
     assert facet["environment"] == "la-colonia-live"
@@ -473,6 +519,11 @@ def test_network_capable_scripts_are_blocked_without_current_live_authority() ->
     for path, workflow in workflows():
         commands = "\n".join(str(step.get("run", "")) for step in steps(workflow))
         if any(command in commands for command in blocked_commands):
+            if path.name == LIVE_WORKFLOW:
+                live_jobs = jobs(workflow)
+                assert live_jobs["live-crawl"]["if"] == "${{ false }}"
+                assert live_jobs[LIVE_FACET_JOB]["if"] == "${{ false }}"
+                continue
             assert path.name in BLOCKED_ENTRYPOINTS
             assert all_jobs_blocked(workflow)
 

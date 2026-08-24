@@ -7,8 +7,8 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)** contra:
 
 ```text
-main_observed = 50d63081c3c2634f5f0d4a7649f018f922527d91
-last_technical_pr = #274
+main_observed = 9f6192725e81b1c862ff011d0efdc59756d2929b
+last_technical_pr = #275
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -26,7 +26,9 @@ Los PRs `#270`–`#271` materializaron una autorización humana transitoria para
 
 El PR `#274` preparó un runbook productivo de Cloudflare y dejó explícito que el despliegue de infraestructura es una frontera separada de cualquier autorización live. Las deudas restantes del preflight/read-back Cloudflare pertenecen a la futura ruta edge productiva; **no bloquean automáticamente el primer catálogo de prueba**.
 
-Durante la revisión de dirección del proyecto se detectó que el proceso estaba optimizando seguridad/arquitectura como si cada prueba fuera ya una operación productiva. `AGENTS.md` ahora incorpora una política explícita **MVP primero**: ninguna nueva capa, adapter, verifier, preflight, workflow, tabla, documento o runbook puede crearse por previsión; debe desbloquear directamente extracción, binding SPS, validación, persistencia segura o una obligación de seguridad que no tenga una solución más simple. El objetivo inmediato vuelve a ser producir el primer catálogo real/verificable de La Colonia para SPS. PRs, conteo de tests y cantidad de capas no son métricas de progreso.
+El PR `#275` corrigió la dirección del proyecto con una política explícita **MVP primero**. Una nueva clase, adapter, verifier, preflight, workflow, tabla, documento o runbook sólo se crea cuando elimina un blocker actual o protege una frontera que no tenga solución más simple. PRs, conteo de tests y cantidad de capas no son métricas de progreso.
+
+El PR `#276` prepara el primer camino funcional posterior a esa corrección: reutiliza los controles DOM y el parser existentes para seleccionar/verificar **San Pedro Sula en la misma sesión**, observar pasivamente el primer `productSearch` real del catálogo y conservar sólo 5/10 SKUs públicos como artifact de prueba. El job es manual, read-only, sin Cloudflare, secrets, vars, Environment, OIDC ni persistencia comercial; los caminos de crawl general y edge continúan bloqueados. Este mecanismo no se ejecuta automáticamente al fusionarse y necesita una autorización humana nueva para su dispatch live.
 
 La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** para el alcance exacto solicitado.
 
@@ -60,7 +62,7 @@ artifact_json = reports/discovery/la-colonia-location-binding-2026-08-24.json
 artifact_canonical_sha256 = 80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95
 ```
 
-La captura histórica deliberadamente **no preservó el placement** de `regionId` dentro del request. No se sabe todavía si el endpoint GraphQL relevante lo recibe como `header`, `query` u otra forma. Esa ausencia no se completa por inferencia.
+La captura histórica deliberadamente **no preservó el placement** de `regionId` dentro del request. No se sabe todavía si el endpoint GraphQL relevante lo recibe como `header`, `query` u otra forma. El MVP evita inventar ese dato: usa el request emitido por el propio navegador después de verificar SPS y no persiste headers, cookies, session ni `regionId` raw.
 
 ## Ubicaciones
 
@@ -94,36 +96,19 @@ Continúa siendo un **contexto fuente raw**, no una ubicación comercial. El ext
 
 ### RawProduct -> SPS
 
-El PR `#261` permite promover a `la_colonia_sps / CONFIRMED` únicamente una página con receipt de catálogo v3 firmado, binding SPS canónico, mismo run/traversal/partición, fingerprints reconciliados y `itemId` exactos contra `RawPageEvidence`. La materialización no abre red y conserva:
-
-```text
-production_authority = false
-catalog_accepted = false
-extraction_enabled = false
-```
+El PR `#261` permite promover a `la_colonia_sps / CONFIRMED` únicamente una página con receipt de catálogo v3 firmado, binding SPS canónico, mismo run/traversal/partición, fingerprints reconciliados y `itemId` exactos contra `RawPageEvidence`. Esa es la frontera productiva avanzada; el sample MVP no la usa para declarar autoridad y mantiene todos sus flags en `false`.
 
 ### Facets context-bound
 
-Los PRs `#263`–`#266` dejaron preparado el contrato exacto:
-
-```text
-requests = [root_total, category_tree]
-max_requests = 2
-concurrency = 1
-max_retries = 0
-same_browser_context = required
-artifact = sanitized only
-```
-
-El valor raw de `regionId` sólo puede existir transitoriamente en memoria. `header` y `query` tienen provenance durable segura; cualquier placement distinto abre una nueva frontera evidence-bound en vez de inferirse.
+Los PRs `#263`–`#266` dejaron preparado el contrato productivo de facets. Ese camino continúa disponible, pero no bloquea el sample MVP.
 
 ### Catálogo context-bound
 
-La cadena técnica productiva exige contexto SPS derivado por página, receipts v3, verificación criptográfica, primary + reconciliation canónicos, provenance física reconciliable y readiness del mismo plan/discovery. Esas garantías continúan disponibles para producción, pero no todas son requisito del primer sample de prueba.
+La cadena técnica productiva exige contexto SPS derivado por página, receipts v3, verificación criptográfica, primary + reconciliation canónicos, provenance física reconciliable y readiness del mismo plan/discovery. Esas garantías continúan diferidas hasta la etapa de hardening productivo.
 
 ## Intento live autorizado de facets — cerrado sin tráfico
 
-Autorización humana recibida:
+Autorización histórica consumida:
 
 ```text
 authorization_id = SPS-context-and-root-facets-003
@@ -137,30 +122,19 @@ catalog_crawl = not authorized
 commercial_persistence = not authorized
 ```
 
-Ejecución asociada al merge de PR `#270`:
+Ejecución asociada:
 
 ```text
 workflow = La Colonia - Recorrido live manual
 run = 32777363742
 job = 97591389839
-head_sha = 7a0df3c3971a4021862855166e527827035a3ea2
 result = failure
 error_code = env_cloudflare_edge_gateway_url_invalid
 artifact_id = 9538444504
-artifact_name = la-colonia-context-bound-facets-32777363742
 artifact_digest = sha256:c87469499adba4b1fca34a109500c625ee69281f6065f2de3f87269caa4bb511
 ```
 
-Los logs demostraron que en el Environment `la-colonia-live` estaban vacías:
-
-```text
-CLOUDFLARE_EDGE_GATEWAY_URL
-CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL
-```
-
-El runner emitió `env_cloudflare_edge_gateway_url_invalid` y terminó antes de solicitar OIDC, iniciar navegador, inicializar el gateway edge o contactar La Colonia. La autorización quedó cerrada y no se reutiliza.
-
-Una ejecución futura requiere una autorización humana nueva para tráfico live. Cloudflare sólo es prerequisito si se elige la ruta productiva edge; ya no se asume automáticamente como prerequisito de una prueba read-only/no autoritativa.
+Ese run terminó antes de OIDC, navegador o tráfico a La Colonia. La autorización quedó cerrada y no se reutiliza.
 
 ## Cloudflare — diferido para ruta productiva salvo necesidad demostrada
 
@@ -174,7 +148,7 @@ authenticated deployment/read-back adapter pendiente
 Worker productivo + variables la-colonia-live no configurados/demostrados
 ```
 
-Estas deudas deben resolverse antes de declarar la ruta edge como productiva. No se seguirá profundizando esa ruta durante el MVP salvo que el camino mínimo hacia el sample real demuestre que una de ellas es indispensable.
+Estas deudas deben resolverse antes de declarar la ruta edge como productiva. No se seguirá profundizando esa ruta durante el MVP salvo que evidencia real demuestre que es indispensable.
 
 ## Google Sheets y persistencia
 
@@ -191,7 +165,7 @@ fact_quality_events
 
 `dim_products` y `map_source_products` permanecen como contratos lógicos diferidos. No existen ofertas comerciales reales persistidas todavía. `la_colonia_sps.extraction_enabled=false` permanece.
 
-No se escriben ofertas SPS en current/history antes de aceptación y autoridad reales. Un sample de prueba puede conservarse como artifact/evidencia no autoritativa sin mutar current/history.
+No se escriben ofertas SPS en current/history antes de aceptación y autoridad reales. La muestra MVP se conserva únicamente como artifact/evidencia no autoritativa.
 
 ## Reauditoría histórica de Fase 0
 
@@ -200,7 +174,6 @@ La reauditoría final real dentro del PR `#269` cerró con:
 ```text
 workflow = Precios Supermercados SPS - Pruebas base
 run = 32773357812
-job = phase0-final-historical-reaudit
 result = success
 branches_total = 272
 MERGED_OR_SUBSUMED = 213
@@ -233,26 +206,45 @@ pip check = clean
 compileall SyntaxWarning = none
 ```
 
+Gobernanza MVP + primera implementación de muestra, evidencia previa al último ajuste del PR `#276`:
+
+```text
+run = 32790406105
+result = success
+pytest = 1711 passed
+pip check = clean
+compileall SyntaxWarning = none
+```
+
 ## Fronteras pendientes
 
 ```text
-NEXT VISIBLE MILESTONE = real, read-only, non-authoritative La Colonia SPS catalog sample
-MVP PATH = source -> SPS context -> bounded extraction -> validation -> test artifact
+NEXT VISIBLE MILESTONE = ejecutar y revisar artifact real de La Colonia SPS MVP
+MVP PATH = source -> SPS context -> browser-native productSearch -> validation -> test artifact
+MVP ENTRYPOINT = prepared, manual, read-only, not yet executed
 PRODUCTIVE EDGE DEBT = deferred unless MVP demonstrates necessity
-LIVE EVIDENCE = actual regionId placement still unobserved
 ```
 
-Para el sample MVP sólo bloquean:
+Para ejecutar el sample sólo queda una frontera humana real:
 
 ```text
-1. autorización humana explícita vigente para esa observación live;
-2. demostrar SPS en la misma ejecución sin inventar ubicación;
-3. tráfico read-only acotado, concurrency/pacing seguros y stop conditions;
-4. validar que el payload contiene productos/precios coherentes;
-5. conservar salida como evidencia de prueba, no como estado comercial aceptado.
+autorización explícita vigente para abrir La Colonia en navegador,
+seleccionar/verificar San Pedro Sula, navegar una vez al catálogo,
+observar el primer productSearch de supermercado y conservar como máximo 10 SKUs públicos.
 ```
 
-El próximo resultado que cuenta como avance visible es ese sample real. Hasta alcanzarlo no se abrirán capas nuevas salvo un bloqueo directo y demostrado.
+La ejecución:
+
+- usa un único BrowserContext y acciones secuenciales;
+- añade una pausa mínima de 1.5 s antes de navegar al catálogo;
+- no reintenta requests comerciales;
+- se detiene ante 403/429, CAPTCHA, login o navegación fuera de `www.lacolonia.com`;
+- no hace full crawl;
+- no escribe Google Sheets;
+- no conserva request URL, headers, cookies, session, token ni `regionId` raw;
+- deja `production_authority=false`, `catalog_accepted=false` y `extraction_enabled=false`.
+
+Después de revisar ese sample, el siguiente paso será ampliar únicamente lo necesario para cubrir el catálogo completo y validar paginación/duplicados antes de activar persistencia real.
 
 Mientras tanto permanecen:
 
