@@ -81,6 +81,10 @@ def _collector(
     complete: bool = True,
 ) -> ContextBoundVerifiedCatalogEdgeCollector:
     observations = [_observation(0), _observation(1)]
+    if placement is RequestContextPlacement.QUERY:
+        for observation in observations:
+            observation.page.verified_receipt.receipt.payload.context_placement = "query"
+            observation.page.verified_receipt.receipt.payload.context_wire_key = "regionId"
     if not complete:
         observations.pop()
     plan = SimpleNamespace(
@@ -199,35 +203,62 @@ def test_header_reconcilia_en_orden_y_resultado_no_retiene_trazas_raw(monkeypatc
     assert finalizer.finalized is True
 
 
-def test_query_falla_antes_de_token_y_observability(monkeypatch) -> None:
+def test_query_usa_candidatos_y_builder_redactado_sin_reconcile_legacy(monkeypatch) -> None:
     collector = _collector(placement=RequestContextPlacement.QUERY)
-    _patch_collection(monkeypatch, collector)
+    collection = _patch_collection(monkeypatch, collector)
     verifier = _verifier()
     token_calls = 0
-    reconcile_calls = 0
+    candidate_calls: list[tuple[object, str]] = []
+    redaction_calls: list[tuple[object, object]] = []
+    manifest = _manifest()
+    captured: dict[str, object] = {}
 
     def token_provider() -> str:
         nonlocal token_calls
         token_calls += 1
         return "observability-token"
 
-    def reconcile(self, page, *, bearer_token):
-        nonlocal reconcile_calls
-        reconcile_calls += 1
-        return _reconciled(page, 0)
+    def candidates(self, page, *, bearer_token):
+        candidate_calls.append((page, bearer_token))
+        return (SimpleNamespace(marker=f"candidate-{len(candidate_calls)}"),)
 
-    monkeypatch.setattr(CloudflareObservabilityVerifierClient, "reconcile_page", reconcile)
+    def legacy(*_args, **_kwargs):
+        raise AssertionError("placement query no debe usar reconcile_page legacy")
+
+    def redact(observation, raw_candidates):
+        redaction_calls.append((observation, raw_candidates))
+        return SimpleNamespace(
+            page=observation.page,
+            platform_evidence_reconciled=True,
+            production_authority=False,
+        )
+
+    def query_builder(*, authenticated_plan, reconciled_pages):
+        captured["authenticated_plan"] = authenticated_plan
+        captured["reconciled_pages"] = reconciled_pages
+        return manifest
+
+    monkeypatch.setattr(CloudflareObservabilityVerifierClient, "trace_candidates", candidates)
+    monkeypatch.setattr(CloudflareObservabilityVerifierClient, "reconcile_page", legacy)
+    monkeypatch.setattr(module, "reconcile_context_bound_query_trace", redact)
+    monkeypatch.setattr(module, "build_context_bound_query_provenance_run_manifest", query_builder)
+
     finalizer = module.ContextBoundCatalogProvenanceFinalizer(
         verifier,
         bearer_token_provider=token_provider,
     )
+    result = finalizer.finalize(collector)
 
-    with pytest.raises(module.ContextBoundCatalogFinalizationError) as captured:
-        finalizer.finalize(collector)
-    assert captured.value.code == "catalog_context_query_observability_redaction_required"
-    assert token_calls == 0
-    assert reconcile_calls == 0
-    assert finalizer.finalized is False
+    assert result.collection is collection
+    assert result.manifest is manifest
+    assert result.production_authority is False
+    assert token_calls == 1
+    assert [page for page, _ in candidate_calls] == [item.page for item in collector.observations]
+    assert {token for _, token in candidate_calls} == {"observability-token"}
+    assert [item for item, _ in redaction_calls] == list(collector.observations)
+    assert captured["authenticated_plan"] is collector.authenticated_plan
+    assert len(captured["reconciled_pages"]) == 2
+    assert finalizer.finalized is True
 
 
 def test_collector_incompleto_falla_antes_de_token(monkeypatch) -> None:

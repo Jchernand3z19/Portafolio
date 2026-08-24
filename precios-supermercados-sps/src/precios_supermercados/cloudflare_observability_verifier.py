@@ -5,6 +5,10 @@ inyectarse explícitamente y el token se recibe por llamada, nunca se persiste.
 El resultado continúa con ``production_authority=False``: usar una API real no
 basta hasta demostrar separación de credenciales/identidad y validar la forma
 real de la telemetría desplegada.
+
+La obtención de candidatos queda separada de la reconciliación legacy para que una
+ruta context-bound pueda consumir ``url.full`` sólo transitoriamente y redactarlo
+antes de construir provenance durable.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from precios_supermercados.cloudflare_observability_adapter import (
     parse_cloudflare_trace_discovery_response,
 )
 from precios_supermercados.cloudflare_trace_evidence import (
+    CloudflareOriginTraceEvidence,
     CloudflareTraceEvidenceError,
     PlatformReconciledEdgePage,
     reconcile_cloudflare_origin_trace,
@@ -118,18 +123,20 @@ class CloudflareObservabilityVerifierClient:
             _fail("observability_transport_response_invalid")
         return response
 
-    def reconcile_page(
+    def trace_candidates(
         self,
         page: CryptographicallyVerifiedEdgeCatalogPage,
         *,
         bearer_token: str,
-    ) -> PlatformReconciledEdgePage:
-        """Obtiene la telemetría mínima necesaria y exige una única coincidencia."""
+    ) -> tuple[CloudflareOriginTraceEvidence, ...]:
+        """Obtiene candidatos raw acotados; no los convierte en evidencia durable."""
 
         if not isinstance(page, CryptographicallyVerifiedEdgeCatalogPage):
             _fail("crypto_page_invalid")
         if page.cryptographic_signature_verified is not True:
             _fail("crypto_page_signature_unverified")
+        if page.production_authority is not False:
+            _fail("crypto_page_authority_forbidden")
         token = _bearer(bearer_token)
         receipt_payload = page.verified_receipt.receipt.payload
         start = receipt_payload.physical_started_at_utc - QUERY_WINDOW_MARGIN
@@ -154,7 +161,7 @@ class CloudflareObservabilityVerifierClient:
         if len(trace_ids) > MAX_DETAIL_QUERIES:
             _fail("trace_count_above_limit")
 
-        candidates = []
+        candidates: list[CloudflareOriginTraceEvidence] = []
         for trace_id in trace_ids:
             try:
                 detail_query = build_cloudflare_trace_detail_query(
@@ -171,7 +178,17 @@ class CloudflareObservabilityVerifierClient:
                 )
             except CloudflareObservabilityAdapterError as exc:
                 raise CloudflareObservabilityVerifierError(f"detail_{exc.code}") from exc
+        return tuple(candidates)
 
+    def reconcile_page(
+        self,
+        page: CryptographicallyVerifiedEdgeCatalogPage,
+        *,
+        bearer_token: str,
+    ) -> PlatformReconciledEdgePage:
+        """Ruta legacy/header: obtiene candidatos y exige una única coincidencia."""
+
+        candidates = self.trace_candidates(page, bearer_token=bearer_token)
         try:
             return reconcile_cloudflare_origin_trace(page, candidates)
         except CloudflareTraceEvidenceError as exc:
