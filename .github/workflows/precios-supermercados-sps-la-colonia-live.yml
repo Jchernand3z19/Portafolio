@@ -154,12 +154,12 @@ jobs:
               "continuation_statement": "ok comenza a trabajar",
               "active": True,
               "termination_condition": "first_successful_downloadable_full_sps_catalog",
-              "attempt_sequence": 9,
-              "trigger_pr_number": 306,
+              "attempt_sequence": 10,
+              "trigger_pr_number": 307,
               "supermarket_id": "la_colonia",
               "location_id": "la_colonia_sps",
               "city": "San Pedro Sula",
-              "mode": "operational_city_hybrid_category_brand_productSearchV3",
+              "mode": "operational_city_brand_buckets_productSearchV3",
               "radiography_execution": False,
               "location_verification": "structural_exact_city_control",
               "page_size": 50,
@@ -182,8 +182,7 @@ jobs:
                   "login_required",
                   "host_mismatch",
                   "city_selection_not_verified",
-                  "catalog_facets_not_usable",
-                  "category_brand_fallback_not_usable",
+                  "brand_values_missing",
                   "brand_partition_exceeds_search_window",
                   "partition_frontier_below_root_total",
                   "partition_request_budget_exceeded",
@@ -207,8 +206,8 @@ jobs:
           head_commit = event.get("head_commit") or {}
           message = str(head_commit.get("message") or "")
           expected_prefix = (
-              "Merge pull request #306 from "
-              "Jchernand3z19/fix/precios-sps-hybrid-partitions-attempt-9"
+              "Merge pull request #307 from "
+              "Jchernand3z19/fix/precios-sps-brand-buckets-attempt-10"
           )
           if not message.startswith(expected_prefix):
               raise SystemExit("mvp_live_merge_identity_mismatch")
