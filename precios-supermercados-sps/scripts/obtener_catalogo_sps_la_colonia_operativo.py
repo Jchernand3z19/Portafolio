@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """Obtiene el catálogo SPS completo sin volver a ejecutar la radiografía.
 
-El flujo operativo selecciona San Pedro Sula mediante el contrato DOM ya aprendido.
-Para evitar la ventana VTEX de ~2,500 productos agrupa múltiples valores de marca
-en pocas particiones disjuntas. VTEX permite repetir la misma clave selectedFacets
-con valores distintos; cada partición se valida contra recordsFiltered antes de
-continuar sus páginas.
+Las cantidades de facets se usan sólo para empacar marcas en buckets conservadores.
+El total raíz y el total real de cada bucket se toman de productSearchV3, que es la
+fuente autoritativa para paginación. Así una diferencia pequeña entre facets y
+Search no aborta una descarga válida.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -27,31 +29,21 @@ from precios_supermercados.scrapers.la_colonia_location import (  # noqa: E402
     ensure_operational_city,
 )
 
-CAPTURE_STRATEGY = "operational_city_same_context_brand_buckets_productSearchV3"
-PARTITION_STRATEGY = "brand_buckets"
+core = frontier.base
+full = core.full
+CAPTURE_STRATEGY = "operational_city_authoritative_brand_buckets_productSearchV3"
+PARTITION_STRATEGY = "brand_buckets_productSearch_authoritative_totals"
 LOCATION_VERIFICATION_METHOD = "structural_exact_city_control"
-
-
-def _operational_verify(page: Any, context: Any, collector: Any) -> None:
-    """Selecciona y verifica SPS sin ejecutar radiografía ni fingerprints."""
-
-    del context, collector
-    try:
-        ensure_operational_city(page, max_dom_reresolutions=1)
-    except LocationInitializationError as exc:
-        raise frontier.base.full.FullCatalogError(exc.reason) from exc
+BUCKET_ESTIMATE_CAPACITY = 2300
 
 
 def _build_brand_buckets(
     values: Sequence[Mapping[str, Any]],
     *,
-    search_window: int = frontier.base.SEARCH_WINDOW_MAX_PRODUCTS,
-    max_partitions: int = frontier.base.MAX_PLANNED_PRODUCT_REQUESTS,
+    estimate_capacity: int = BUCKET_ESTIMATE_CAPACITY,
 ) -> tuple[frontier.FrontierPartition, ...]:
-    """Empaca marcas en bloques cuya suma nunca excede la ventana VTEX."""
-
-    if search_window <= 0 or max_partitions <= 0:
-        raise ValueError("invalid_brand_bucket_limits")
+    if estimate_capacity <= 0 or estimate_capacity > core.SEARCH_WINDOW_MAX_PRODUCTS:
+        raise ValueError("invalid_brand_bucket_capacity")
 
     by_value: dict[str, int] = {}
     for item in values:
@@ -62,7 +54,7 @@ def _build_brand_buckets(
             raise ValueError("invalid_brand_identity")
         if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
             raise ValueError("invalid_brand_quantity")
-        if quantity > search_window:
+        if quantity > core.SEARCH_WINDOW_MAX_PRODUCTS:
             raise ValueError("brand_partition_exceeds_search_window")
         previous = by_value.get(value)
         if previous is not None and previous != quantity:
@@ -72,14 +64,12 @@ def _build_brand_buckets(
     if not by_value:
         raise ValueError("brand_partitions_missing")
 
-    # Best-fit decreasing minimiza el número de buckets sin cambiar la cobertura.
     buckets: list[dict[str, Any]] = []
-    ordered = sorted(by_value.items(), key=lambda item: (-item[1], item[0]))
-    for value, quantity in ordered:
+    for value, quantity in sorted(by_value.items(), key=lambda item: (-item[1], item[0])):
         candidates = [
             (index, int(bucket["quantity"]))
             for index, bucket in enumerate(buckets)
-            if int(bucket["quantity"]) + quantity <= search_window
+            if int(bucket["quantity"]) + quantity <= estimate_capacity
         ]
         if candidates:
             index = max(candidates, key=lambda item: item[1])[0]
@@ -87,8 +77,9 @@ def _build_brand_buckets(
             buckets[index]["quantity"] += quantity
         else:
             buckets.append({"values": [value], "quantity": quantity})
-            if len(buckets) > max_partitions:
-                raise ValueError("partition_limit_exceeded")
+
+    if len(buckets) > core.MAX_PLANNED_PRODUCT_REQUESTS:
+        raise ValueError("partition_limit_exceeded")
 
     return tuple(
         frontier.FrontierPartition(
@@ -99,15 +90,352 @@ def _build_brand_buckets(
     )
 
 
-def _mark_operational_metadata(artifact: dict[str, Any]) -> dict[str, Any]:
-    artifact["capture_strategy"] = CAPTURE_STRATEGY
-    artifact["partition_strategy"] = PARTITION_STRATEGY
-    artifact["radiography_executed"] = False
-    artifact["location_verification_method"] = LOCATION_VERIFICATION_METHOD
-    artifact["region_binding_fingerprint_verified"] = False
-    artifact["binding_source_key_verified"] = False
-    artifact["brand_bucket_capacity"] = frontier.base.SEARCH_WINDOW_MAX_PRODUCTS
-    return artifact
+def _process_page(
+    *,
+    payload: Mapping[str, Any],
+    request_url: str,
+    extractor: Any,
+    run_id: str,
+    page_size: int,
+    unique_products: set[str],
+    unique_skus: set[tuple[str, str]],
+    all_products: list[dict[str, Any]],
+    diagnostic: dict[str, Any],
+) -> None:
+    try:
+        result = extractor.parse_payload(
+            payload,
+            scrape_run_id=run_id,
+            source_url=request_url,
+            page_size=page_size,
+        )
+    except core.StructureChangedError as exc:
+        raise full.FullCatalogError(
+            "product_payload_not_parseable", diagnostic=diagnostic
+        ) from exc
+    if not result.accepted:
+        raise full.FullCatalogError("page_validation_failed", diagnostic=diagnostic)
+
+    for parsed in result.products:
+        product = full.passive._public_product(parsed)
+        product_id = str(product.get("product_id") or "")
+        if product_id:
+            unique_products.add(product_id)
+        identity = (
+            str(product.get("source_key_type") or ""),
+            str(product.get("source_key") or ""),
+        )
+        if identity in unique_skus:
+            diagnostic["duplicate_skus_across_pages"] += 1
+            continue
+        unique_skus.add(identity)
+        all_products.append(product)
+        if product.get("current_price") is not None:
+            diagnostic["skus_with_price"] += 1
+    diagnostic["pages_completed"] += 1
+    diagnostic["skus_extracted"] = len(unique_skus)
+
+
+def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:  # pragma: no cover
+        raise full.FullCatalogError("playwright_not_installed") from exc
+
+    diagnostic: dict[str, Any] = {
+        "location_verified_same_run": False,
+        "region_binding_fingerprint_verified": False,
+        "binding_source_key_verified": False,
+        "pages_attempted": 0,
+        "pages_completed": 0,
+        "catalog_products_reported": 0,
+        "skus_extracted": 0,
+        "skus_with_price": 0,
+        "duplicate_skus_across_pages": 0,
+        "blocked_http_status_observed": None,
+        "partitions_detected": 0,
+        "partitions_completed": 0,
+        "partition_quantity_estimate_sum": 0,
+        "partition_observed_total_sum": 0,
+        "planned_product_requests": 0,
+        "product_requests_completed": 0,
+        "partition_total_adjustments": 0,
+    }
+    run_id = f"sps_operational_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    unique_products: set[str] = set()
+    unique_skus: set[tuple[str, str]] = set()
+    all_products: list[dict[str, Any]] = []
+
+    with sync_playwright() as pw:
+        browser, _ = full.launch_compatible_chromium(pw)
+        try:
+            context = browser.new_context(service_workers="block")
+            page = context.new_page()
+            home = page.goto(
+                full.radiography.TARGET_URL,
+                wait_until="domcontentloaded",
+                timeout=20_000,
+            )
+            if home is not None and int(home.status) in {403, 429}:
+                diagnostic["blocked_http_status_observed"] = int(home.status)
+                raise full.FullCatalogError(f"http_{home.status}", diagnostic=diagnostic)
+            if full.passive._blocked_surface(page):
+                raise full.FullCatalogError("blocked_or_login_surface", diagnostic=diagnostic)
+            page.wait_for_timeout(250)
+
+            try:
+                ensure_operational_city(page, max_dom_reresolutions=1)
+            except LocationInitializationError as exc:
+                raise full.FullCatalogError(exc.reason, diagnostic=diagnostic) from exc
+            diagnostic["location_verified_same_run"] = True
+
+            # productSearchV3, no facets.recordsFiltered, define el total autoritativo.
+            root_url = core._product_url(
+                selected_facets=[dict(core.ROOT_FACET)], page=1, page_size=page_size
+            )
+            root_response = context.request.get(
+                root_url,
+                timeout=core.PRODUCT_REQUEST_TIMEOUT_MS,
+                fail_on_status_code=False,
+            )
+            root_payload = core._read_json_response(
+                root_response, diagnostic, kind="root_product_search"
+            )
+            root_total, _ = core._read_shape(root_payload)
+            if root_total <= 0:
+                raise full.FullCatalogError("catalog_root_total_invalid", diagnostic=diagnostic)
+            diagnostic["catalog_products_reported"] = root_total
+            diagnostic["product_requests_completed"] += 1
+
+            tree_response = context.request.get(
+                core._category_tree_url(),
+                timeout=core.FACET_REQUEST_TIMEOUT_MS,
+                fail_on_status_code=False,
+            )
+            tree_payload = core._read_json_response(
+                tree_response, diagnostic, kind="brand_facets"
+            )
+            data = tree_payload.get("data")
+            if not isinstance(data, Mapping):
+                raise full.FullCatalogError("brand_facets_data_missing", diagnostic=diagnostic)
+            try:
+                normalized = core.LaColoniaFacetDiscoveryAdapter._normalize_tree(data)
+                if normalized.get("sampling") is not False:
+                    raise ValueError("brand_facets_sampling_detected")
+                brand_values = brand._brand_values(normalized)
+                partitions = _build_brand_buckets(brand_values)
+            except Exception as exc:
+                diagnostic["frontier_error"] = str(exc)[:120]
+                raise full.FullCatalogError("brand_buckets_not_usable", diagnostic=diagnostic) from exc
+
+            diagnostic["partitions_detected"] = len(partitions)
+            diagnostic["partition_quantity_estimate_sum"] = sum(
+                partition.quantity for partition in partitions
+            )
+            diagnostic["planned_product_requests"] = sum(
+                math.ceil(partition.quantity / page_size) for partition in partitions
+            ) + 1
+            if diagnostic["planned_product_requests"] > core.MAX_PLANNED_PRODUCT_REQUESTS:
+                raise full.FullCatalogError(
+                    "partition_request_budget_exceeded", diagnostic=diagnostic
+                )
+
+            extractor = core.LaColoniaExtractor()
+            for partition_index, partition in enumerate(partitions, start=1):
+                facets = core._partition_facets(partition.path)
+
+                first_url = core._product_url(
+                    selected_facets=facets, page=1, page_size=page_size
+                )
+                diagnostic["pages_attempted"] += 1
+                first_response = context.request.get(
+                    first_url,
+                    timeout=core.PRODUCT_REQUEST_TIMEOUT_MS,
+                    fail_on_status_code=False,
+                )
+                first_payload = core._read_json_response(
+                    first_response, diagnostic, kind="product_search"
+                )
+                actual_total, products_returned = core._read_shape(first_payload)
+                diagnostic["product_requests_completed"] += 1
+                if actual_total <= 0 or actual_total > core.SEARCH_WINDOW_MAX_PRODUCTS:
+                    diagnostic["partition_observed_total"] = actual_total
+                    raise full.FullCatalogError(
+                        "brand_bucket_outside_search_window", diagnostic=diagnostic
+                    )
+                if actual_total != partition.quantity:
+                    diagnostic["partition_total_adjustments"] += 1
+                diagnostic["partition_observed_total_sum"] += actual_total
+
+                expected_first = min(page_size, actual_total)
+                if products_returned != expected_first:
+                    diagnostic["expected_products_on_page"] = expected_first
+                    diagnostic["observed_products_on_page"] = products_returned
+                    raise full.FullCatalogError(
+                        "partial_or_unexpected_product_page", diagnostic=diagnostic
+                    )
+                _process_page(
+                    payload=first_payload,
+                    request_url=first_url,
+                    extractor=extractor,
+                    run_id=run_id,
+                    page_size=page_size,
+                    unique_products=unique_products,
+                    unique_skus=unique_skus,
+                    all_products=all_products,
+                    diagnostic=diagnostic,
+                )
+
+                pages = max(math.ceil(actual_total / page_size), 1)
+                for partition_page in range(2, pages + 1):
+                    if diagnostic["product_requests_completed"] >= core.MAX_PLANNED_PRODUCT_REQUESTS:
+                        raise full.FullCatalogError(
+                            "partition_request_budget_exceeded", diagnostic=diagnostic
+                        )
+                    if delay_seconds > 0:
+                        time.sleep(delay_seconds)
+                    request_url = core._product_url(
+                        selected_facets=facets,
+                        page=partition_page,
+                        page_size=page_size,
+                    )
+                    diagnostic["pages_attempted"] += 1
+                    response = context.request.get(
+                        request_url,
+                        timeout=core.PRODUCT_REQUEST_TIMEOUT_MS,
+                        fail_on_status_code=False,
+                    )
+                    payload = core._read_json_response(
+                        response, diagnostic, kind="product_search"
+                    )
+                    observed_total, products_returned = core._read_shape(payload)
+                    diagnostic["product_requests_completed"] += 1
+                    if observed_total != actual_total:
+                        diagnostic["partition_expected_total"] = actual_total
+                        diagnostic["partition_observed_total"] = observed_total
+                        raise full.FullCatalogError(
+                            "partition_total_changed_mid_run", diagnostic=diagnostic
+                        )
+                    expected_on_page = min(
+                        page_size,
+                        max(actual_total - ((partition_page - 1) * page_size), 0),
+                    )
+                    if products_returned != expected_on_page:
+                        diagnostic["expected_products_on_page"] = expected_on_page
+                        diagnostic["observed_products_on_page"] = products_returned
+                        raise full.FullCatalogError(
+                            "partial_or_unexpected_product_page", diagnostic=diagnostic
+                        )
+                    _process_page(
+                        payload=payload,
+                        request_url=request_url,
+                        extractor=extractor,
+                        run_id=run_id,
+                        page_size=page_size,
+                        unique_products=unique_products,
+                        unique_skus=unique_skus,
+                        all_products=all_products,
+                        diagnostic=diagnostic,
+                    )
+
+                diagnostic["partitions_completed"] += 1
+                if delay_seconds > 0 and partition_index < len(partitions):
+                    time.sleep(delay_seconds)
+
+            diagnostic["unique_products_extracted"] = len(unique_products)
+            if diagnostic["partitions_completed"] != diagnostic["partitions_detected"]:
+                raise full.FullCatalogError(
+                    "partition_coverage_incomplete", diagnostic=diagnostic
+                )
+            if len(unique_products) != root_total:
+                raise full.FullCatalogError(
+                    "unique_product_coverage_mismatch", diagnostic=diagnostic
+                )
+
+            artifact = {
+                "schema_version": "5",
+                "result": "success",
+                "catalog_type": "la_colonia_sps_full_read_only",
+                "supermarket_id": "la_colonia",
+                "location_id": full.passive.MVP_LOCATION_ID,
+                "city": full.passive.TARGET_CITY,
+                "capture_strategy": CAPTURE_STRATEGY,
+                "partition_strategy": PARTITION_STRATEGY,
+                "location_verified_same_run": True,
+                "location_verification_method": LOCATION_VERIFICATION_METHOD,
+                "region_binding_fingerprint_verified": False,
+                "binding_source_key_verified": False,
+                "radiography_executed": False,
+                "page_size": page_size,
+                "brand_bucket_estimate_capacity": BUCKET_ESTIMATE_CAPACITY,
+                "catalog_products_reported": root_total,
+                "unique_products_extracted": len(unique_products),
+                "catalog_product_coverage": len(unique_products) / root_total,
+                "partitions_detected": diagnostic["partitions_detected"],
+                "partitions_completed": diagnostic["partitions_completed"],
+                "partition_quantity_estimate_sum": diagnostic[
+                    "partition_quantity_estimate_sum"
+                ],
+                "partition_observed_total_sum": diagnostic[
+                    "partition_observed_total_sum"
+                ],
+                "partition_total_adjustments": diagnostic[
+                    "partition_total_adjustments"
+                ],
+                "planned_product_requests": diagnostic["planned_product_requests"],
+                "product_requests_completed": diagnostic[
+                    "product_requests_completed"
+                ],
+                "skus_extracted": len(unique_skus),
+                "skus_with_price": diagnostic["skus_with_price"],
+                "skus_without_price": len(unique_skus) - diagnostic["skus_with_price"],
+                "duplicate_skus_across_partitions": diagnostic[
+                    "duplicate_skus_across_pages"
+                ],
+                "catalog_complete": True,
+                "validation_passed": True,
+                "observed_at_utc": full._utc_text(),
+                "products": all_products,
+                "raw_context_persisted": False,
+                "commercial_persistence": False,
+                "production_authority": False,
+                "catalog_accepted": False,
+                "extraction_enabled": False,
+            }
+            full.passive._validate_artifact_shape(artifact)
+            return artifact
+        finally:
+            browser.close()
+
+
+def _failure_artifact(exc: Any) -> dict[str, Any]:
+    failure = full._safe_failure(exc.reason, exc.diagnostic)
+    failure["capture_strategy"] = CAPTURE_STRATEGY
+    failure["partition_strategy"] = PARTITION_STRATEGY
+    failure["radiography_executed"] = False
+    failure["location_verification_method"] = LOCATION_VERIFICATION_METHOD
+    failure["region_binding_fingerprint_verified"] = False
+    failure["binding_source_key_verified"] = False
+    failure["brand_bucket_estimate_capacity"] = BUCKET_ESTIMATE_CAPACITY
+    for key in (
+        "partitions_detected",
+        "partitions_completed",
+        "partition_quantity_estimate_sum",
+        "partition_observed_total_sum",
+        "partition_total_adjustments",
+        "planned_product_requests",
+        "product_requests_completed",
+        "unique_products_extracted",
+        "partition_expected_total",
+        "partition_observed_total",
+        "expected_products_on_page",
+        "observed_products_on_page",
+    ):
+        if key in exc.diagnostic:
+            failure[key] = int(exc.diagnostic[key])
+    if "frontier_error" in exc.diagnostic:
+        failure["frontier_error"] = str(exc.diagnostic["frontier_error"])
+    return failure
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -127,7 +455,6 @@ def main(argv: list[str] | None = None) -> int:
         default=ROOT / "run-artifacts" / "full-catalog.csv",
     )
     args = parser.parse_args(argv)
-
     if not args.live_read_only:
         parser.error("el catálogo live requiere --live-read-only")
     if not args.allow_full_catalog:
@@ -135,48 +462,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.delay_seconds < 1.0:
         parser.error("--delay-seconds debe ser al menos 1.0")
 
-    old_values = frontier._category_values
-    old_builder = frontier._build_frontier
-    target = frontier.base.full
-    old_verify = target._verify_sps_binding
-    frontier._category_values = brand._brand_values
-    frontier._build_frontier = _build_brand_buckets
-    target._verify_sps_binding = _operational_verify
-
     try:
-        artifact = frontier._run_partitioned_catalog(
+        artifact = _run_catalog(
             page_size=args.page_size,
             delay_seconds=args.delay_seconds,
         )
-        _mark_operational_metadata(artifact)
-        target.passive._validate_artifact_shape(artifact)
-        target._write_json(artifact, args.output)
-        target._write_csv(list(artifact["products"]), args.csv_output)
-    except target.FullCatalogError as exc:
-        failure = target._safe_failure(exc.reason, exc.diagnostic)
-        _mark_operational_metadata(failure)
-        for key in (
-            "partitions_detected",
-            "partitions_completed",
-            "partition_quantity_sum",
-            "planned_product_requests",
-            "unique_products_extracted",
-            "partition_expected_total",
-            "partition_observed_total",
-            "expected_products_on_page",
-            "observed_products_on_page",
-        ):
-            if key in exc.diagnostic:
-                failure[key] = int(exc.diagnostic[key])
-        if "frontier_error" in exc.diagnostic:
-            failure["frontier_error"] = str(exc.diagnostic["frontier_error"])
-        target._write_json(failure, args.output)
+        full._write_json(artifact, args.output)
+        full._write_csv(list(artifact["products"]), args.csv_output)
+    except full.FullCatalogError as exc:
+        full._write_json(_failure_artifact(exc), args.output)
         print(f"sps_operational_catalog_stopped:{exc.reason}", file=sys.stderr)
         return 3
-    finally:
-        frontier._category_values = old_values
-        frontier._build_frontier = old_builder
-        target._verify_sps_binding = old_verify
 
     print(
         json.dumps(
@@ -185,6 +481,7 @@ def main(argv: list[str] | None = None) -> int:
                 "catalog_products_reported": artifact["catalog_products_reported"],
                 "unique_products_extracted": artifact["unique_products_extracted"],
                 "partitions_completed": artifact["partitions_completed"],
+                "product_requests_completed": artifact["product_requests_completed"],
                 "skus_extracted": artifact["skus_extracted"],
                 "skus_with_price": artifact["skus_with_price"],
                 "catalog_complete": artifact["catalog_complete"],
