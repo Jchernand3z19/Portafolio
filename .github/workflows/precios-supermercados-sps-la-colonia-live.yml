@@ -105,7 +105,7 @@ concurrency:
 jobs:
   mvp-sample:
     # Dispatch manual conserva el runner pasivo. El push sólo opera si el marker
-    # condition-bound vigente coincide exactamente con la instrucción humana.
+    # de autorización vigente coincide exactamente con la instrucción humana.
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'mvp_sample' && inputs.mvp_read_only_authorized == true) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -147,26 +147,28 @@ jobs:
           from pathlib import Path
 
           expected = {
-              "schema_version": "precios-sps-la-colonia-mvp-live-request/v2",
-              "authorization_mode": "condition_bound_until_first_downloadable_sample",
-              "authorized_at_utc": "2026-08-25T14:41:06Z",
+              "schema_version": "precios-sps-la-colonia-full-catalog-request/v1",
+              "authorization_mode": "one_time_full_catalog_after_staged_validation",
+              "authorized_at_utc": "2026-08-25T21:13:44Z",
               "authorization_source": "human_user_explicit_chat_instruction",
-              "authorization_statement": "no me estes pidiendo autorizacion trabaja hasta que podamos descargar esto",
+              "authorization_statement": "podes trabajar en obtener todo el catalogo",
               "active": True,
-              "termination_condition": "first_successful_downloadable_sps_sample",
-              "attempt_sequence": 9,
-              "trigger_pr_number": 297,
+              "termination_condition": "first_successful_downloadable_full_sps_catalog",
+              "attempt_sequence": 1,
+              "trigger_pr_number": 298,
               "supermarket_id": "la_colonia",
               "location_id": "la_colonia_sps",
               "city": "San Pedro Sula",
-              "mode": "mvp_sample_radiography_productSearchV3",
-              "sample_size": 10,
+              "mode": "staged_then_full_catalog_radiography_productSearchV3",
+              "page_size": 50,
+              "staged_pages": 3,
+              "max_catalog_pages": 250,
+              "delay_seconds": 1.5,
               "live_read_only": True,
               "same_browser_context": True,
               "max_city_control_reresolutions_per_attempt": 1,
-              "max_explicit_product_data_requests_per_attempt": 1,
               "commercial_retries_per_attempt": 0,
-              "full_crawl": False,
+              "full_crawl": True,
               "google_sheets_writes": False,
               "commercial_persistence": False,
               "catalog_accepted": False,
@@ -178,6 +180,9 @@ jobs:
                   "captcha",
                   "login_required",
                   "host_mismatch",
+                  "catalog_total_changed_during_run",
+                  "duplicate_sku_across_pages",
+                  "partial_or_unexpected_product_page",
                   "excessive_load_risk",
               ],
           }
@@ -195,8 +200,8 @@ jobs:
           head_commit = event.get("head_commit") or {}
           message = str(head_commit.get("message") or "")
           expected_prefix = (
-              "Merge pull request #297 from "
-              "Jchernand3z19/fix/precios-sps-radiography-region-recovery-attempt-9"
+              "Merge pull request #298 from "
+              "Jchernand3z19/feature/precios-sps-full-catalog-radiography"
           )
           if not message.startswith(expected_prefix):
               raise SystemExit("mvp_live_merge_identity_mismatch")
@@ -209,7 +214,7 @@ jobs:
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("sample_size=10\n")
-              output.write("capture_mode=radiography_productSearchV3\n")
+              output.write("capture_mode=full_catalog_radiography\n")
           PY
 
       - name: Configurar Python
@@ -222,7 +227,7 @@ jobs:
       - name: Instalar dependencias verificadas
         run: python -m pip install -r requirements.txt
 
-      - name: Obtener muestra SPS no autoritativa
+      - name: Obtener datos SPS autorizados
         id: sample
         shell: bash
         env:
@@ -235,6 +240,16 @@ jobs:
               --live-read-only \
               --sample-size "$INPUT_MVP_SAMPLE_SIZE" \
               --output run-artifacts/mvp-sample.json
+          elif [[ "$CAPTURE_MODE" == "full_catalog_radiography" ]]; then
+            python scripts/obtener_catalogo_sps_la_colonia_radiografia.py \
+              --live-read-only \
+              --allow-full-catalog \
+              --page-size 50 \
+              --staged-pages 3 \
+              --max-catalog-pages 250 \
+              --delay-seconds 1.5 \
+              --output run-artifacts/full-catalog.json \
+              --csv-output run-artifacts/full-catalog.csv
           else
             python scripts/probar_muestra_sps_la_colonia_radiografia.py \
               --live-read-only \
@@ -246,22 +261,22 @@ jobs:
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Publicar sólo la muestra de prueba
+      - name: Publicar datos de la ejecución
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: la-colonia-sps-mvp-sample-${{ github.run_id }}
-          path: precios-supermercados-sps/run-artifacts/mvp-sample.json
+          name: la-colonia-sps-data-${{ github.run_id }}
+          path: precios-supermercados-sps/run-artifacts/
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Reflejar resultado de la muestra
+      - name: Reflejar resultado de la ejecución
         if: always()
         shell: bash
         run: |
           exit_code="${{ steps.sample.outputs.exit_code }}"
           if [[ -z "$exit_code" ]]; then
-            echo "El runner MVP no produjo código de salida." >&2
+            echo "El runner SPS no produjo código de salida." >&2
             exit 1
           fi
           exit "$exit_code"
