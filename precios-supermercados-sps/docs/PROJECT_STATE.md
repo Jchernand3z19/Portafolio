@@ -7,8 +7,8 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 Estado verificado al **2026-08-24 America/Tegucigalpa / 2026-08-25 UTC** contra:
 
 ```text
-main_observed = 11e149699f7f944446d30c13a634d7e49b06d372
-last_technical_pr = #279
+main_observed = 73513c4eda9abe0d88e7923ed331508a4cf0a40c
+last_technical_pr = #280
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -20,7 +20,7 @@ catalog_accepted = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-`ACTIVE_AUTHORIZATION_IDS` permanece vacío porque esta autorización MVP no recibió un ID humano explícito y no se inventan IDs. Sí existe una autorización humana explícita vigente, recibida a `2026-08-25T02:05:35Z`, materializada de forma one-shot en el PR `#279` y limitada al scope exacto descrito más abajo.
+No existe autorización live activa. La autorización humana explícita recibida a `2026-08-25T02:05:35Z` fue consumida por el run `32800883695` y no se reutiliza. No se inventa un Authorization ID para esa autorización porque el usuario no proporcionó uno.
 
 Los PRs `#254`–`#269` cerraron las fronteras offline conocidas de Fase 0: contexto SPS estructural, catálogo context-bound, materialización raw evidence-bound, storage físico simplificado, entrypoint de facets fail-closed, provenance segura para los placements soportados y reauditoría histórica reproducible.
 
@@ -36,9 +36,11 @@ El PR `#277` materializó una única autorización humana explícita recibida a 
 
 El PR `#278` corrigió únicamente ese blocker observado: la forma histórica `query=supermercado/category-1` sigue teniendo prioridad, pero deja de ser requisito exclusivo; entre los `productSearch` emitidos pasivamente durante la navegación al catálogo se elige el candidato más fuerte por señales públicas (`recordsFiltered`, rango solicitado y cantidad devuelta). Además, aun ante fallo se genera evidencia sanitizada con contadores no sensibles. El PR retiró el trigger y marker one-shot consumidos y devolvió el workflow a modo manual. **No añadió un request comercial explícito ni reintentos de tráfico.**
 
-El PR `#279` materializa una **nueva** autorización humana explícita recibida a `2026-08-25T02:05:35Z` para repetir una sola vez la muestra MVP read-only con la captura pasiva robustecida de `#278`. Usa un marker distinto (`request_sequence=2`) y una identidad de merge distinta; la autorización de `#277` no se reutiliza.
+El PR `#279` materializó una **segunda** autorización humana explícita recibida a `2026-08-25T02:05:35Z` para repetir una sola vez la muestra MVP read-only con la captura pasiva robustecida. El run `32800883695` consumió esa autorización. La ubicación SPS volvió a verificarse en la misma ejecución y se observaron 9 respuestas GraphQL del host permitido, pero ninguna respuesta presentó un payload `data.productSearch`. No hubo 403/429 y los jobs de full crawl y facets quedaron skipped.
 
-La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico posterior a esta segunda muestra **requiere autorización humana explícita vigente** para su alcance concreto; esta autorización one-shot no cubre una ejecución posterior.
+El PR `#280` cierra esa autorización consumida: retira el marker y trigger one-shot, restaura el workflow manual fail-closed y sincroniza este estado. La evidencia nueva cambia el diagnóstico del blocker: ya no es una firma de routing demasiado estricta; durante dos entradas reales al catálogo no se ha observado `productSearch` en el navegador, y la segunda ejecución confirma que sí hubo actividad GraphQL pero con otra forma/operación.
+
+La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico posterior **requiere autorización humana explícita vigente** para su alcance concreto.
 
 ## Binding técnico de San Pedro Sula
 
@@ -70,7 +72,7 @@ artifact_json = reports/discovery/la-colonia-location-binding-2026-08-24.json
 artifact_canonical_sha256 = 80f2e4d333043a38954603c9c72086d241ac9b5a1cc1f10b71a9fde772588d95
 ```
 
-La captura histórica deliberadamente **no preservó el placement** de `regionId` dentro del request. No se sabe todavía si el endpoint GraphQL relevante lo recibe como `header`, `query` u otra forma. El MVP evita inventar ese dato: usa el request emitido por el propio navegador después de verificar SPS y no persiste headers, cookies, session ni `regionId` raw.
+La captura histórica deliberadamente **no preservó el placement** de `regionId` dentro del request. El reporte sí demuestra una señal fuerte `request/regionId` cuyo fingerprint canónico es `d7732e...`; no se conoce todavía si el valor se transporta por header, query u otra parte. El MVP no inventa ese placement ni persiste `regionId` raw.
 
 ## Ubicaciones
 
@@ -173,9 +175,9 @@ error_code = catalog_product_search_response_not_observed
 artifact = none
 ```
 
-El run sí consumió tráfico dentro del alcance autorizado. No hubo 403/429 reportado, no hubo bypass anti-bot y no se amplió el alcance. El runner anterior sólo escribía artifact al producir una muestra exitosa, por lo que este fallo no dejó JSON durable; los logs de Actions son la evidencia disponible. La autorización queda **consumida y cerrada** y el marker one-shot se retiró en `#278`.
+El run sí consumió tráfico dentro del alcance autorizado. No hubo 403/429 reportado, no hubo bypass anti-bot y no se amplió el alcance. La autorización quedó **consumida y cerrada**.
 
-## Segundo sample MVP live — autorización vigente one-shot
+## Segundo sample MVP live — autorización consumida
 
 Nueva autorización humana explícita recibida en chat:
 
@@ -193,7 +195,31 @@ catalog_accepted = false
 extraction_enabled = false
 ```
 
-El trigger de `#279` sólo acepta el marker exacto y el merge exacto del propio PR. Hasta que ese merge ocurra no existe tráfico nuevo. Una vez se ejecute, esta autorización quedará consumida independientemente del resultado y el marker/trigger deberán retirarse en el siguiente cierre offline.
+Ejecución asociada:
+
+```text
+workflow = La Colonia - Recorrido live manual
+run = 32800883695
+job = 97661305983
+merge = 73513c4eda9abe0d88e7923ed331508a4cf0a40c
+preflight = success
+location_verified_same_run = true
+graphql_responses_seen = 9
+product_search_payloads_seen = 0
+catalog_candidates_seen = 0
+blocked_http_status_observed = null
+live_crawl job = skipped
+context_bound_facet job = skipped
+result = failure
+error_code = catalog_product_search_response_not_observed
+artifact_id = 9546438971
+artifact_name = la-colonia-sps-mvp-sample-32800883695
+artifact_zip_sha256 = 4452576636671a17a0d704b16364e43c148d59eb11da968c90f6f7638389aac1
+```
+
+La segunda ejecución confirma que el selector SPS funciona y que el navegador sí recibe GraphQL después de la navegación, pero ninguna de las 9 respuestas observadas contiene la forma `data.productSearch` que entiende el extractor. No existe evidencia de bloqueo 403/429. El artifact sólo conserva contadores operativos y flags no autoritativos; no contiene URL, headers, cookies, session, token ni `regionId` raw.
+
+Esta autorización quedó **consumida y cerrada**. `#280` retira el trigger/marker que la materializó.
 
 ## Cloudflare — diferido para ruta productiva salvo necesidad demostrada
 
@@ -305,33 +331,39 @@ compileall SyntaxWarning = none
 suite = complete
 ```
 
+Segunda autorización one-shot, PR `#279`:
+
+```text
+run = 32800708081
+result = success
+pip check = clean
+compileall SyntaxWarning = none
+suite = complete
+```
+
 ## Fronteras pendientes
 
 ```text
 NEXT VISIBLE MILESTONE = obtener y revisar hasta 10 productos reales de La Colonia SPS
-MVP PATH = source -> SPS context -> browser-native productSearch -> validation -> test artifact
-MVP ENTRYPOINT = authorized for one one-shot retry via PR #279; not yet consumed
+MVP PATH = source -> SPS context -> product data -> validation -> test artifact
+CURRENT OBSERVED BLOCKER = browser catalogue navigation emitted 9 GraphQL responses but zero data.productSearch payloads
+MVP ENTRYPOINT = no active live authorization; passive productSearch retry alone is not justified
 PRODUCTIVE EDGE DEBT = deferred unless MVP demonstrates necessity
 ```
 
-El primer intento demostró que el browser path y la selección SPS llegan al sitio; el blocker concreto fue la detección demasiado estricta de la respuesta de catálogo. `#278` corrigió ese punto sin añadir requests. La nueva autorización explícita de `2026-08-25T02:05:35Z` cubre únicamente una repetición de la misma muestra read-only de hasta 10 productos mediante `#279`.
+Dos muestras reales ya demostraron que insistir únicamente en esperar `productSearch` pasivo no elimina el blocker. Antes de solicitar otro tráfico se debe cerrar offline el siguiente cambio mínimo: reutilizar el binding técnico SPS ya demostrado para preparar un único fallback de consulta pública controlada, o una alternativa igualmente acotada, que sólo pueda ejecutarse cuando la sesión del mismo run demuestre el contexto SPS esperado. No se hará otra ejecución live sólo para repetir el mismo mecanismo pasivo.
 
-La ejecución preparada:
+Cualquier fallback futuro debe mantener:
 
-- usa un único BrowserContext y acciones secuenciales;
-- añade una pausa mínima de 1.5 s antes de navegar al catálogo;
-- no reintenta requests comerciales;
-- observa pasivamente los `productSearch` generados durante la entrada al catálogo y prioriza la firma histórica si aparece;
-- si hay varias respuestas candidatas, selecciona por señales públicas sin persistir variables ni URL;
-- ante éxito conserva como máximo 10 SKUs públicos;
-- ante fallo conserva sólo razón y contadores sanitizados;
-- se detiene ante 403/429, CAPTCHA, login o navegación fuera de `www.lacolonia.com`;
-- no hace full crawl;
-- no escribe Google Sheets;
-- no conserva request URL, headers, cookies, session, token ni `regionId` raw;
-- deja `production_authority=false`, `catalog_accepted=false` y `extraction_enabled=false`.
-
-Después de obtener el sample, el siguiente paso será revisar la evidencia y ampliar únicamente lo necesario para cubrir el catálogo y validar paginación/duplicados antes de activar persistencia real.
+- un único BrowserContext y verificación SPS en la misma ejecución;
+- máximo una consulta comercial explícita si se autoriza expresamente;
+- máximo 10 productos conservados;
+- sin retries comerciales;
+- stop ante 403/429, CAPTCHA, login o navegación fuera del host permitido;
+- sin full crawl;
+- sin escritura a Google Sheets;
+- sin persistir request URL, headers, cookies, session, token ni `regionId` raw;
+- `production_authority=false`, `catalog_accepted=false` y `extraction_enabled=false`.
 
 Mientras tanto permanecen:
 
