@@ -23,8 +23,14 @@ SPEC.loader.exec_module(module)
 FIXED_TIME = datetime(2026, 8, 24, 23, 0, tzinfo=timezone.utc)
 
 
+def _payload(*, total: int = 9291):
+    value = json.loads((FIXTURES / "product_search_page.json").read_text(encoding="utf-8"))
+    value["data"]["productSearch"]["recordsFiltered"] = total
+    return value
+
+
 def _result():
-    payload = json.loads((FIXTURES / "product_search_page.json").read_text(encoding="utf-8"))
+    payload = _payload()
     extractor = LaColoniaExtractor(clock=lambda: FIXED_TIME)
     return extractor.parse_payload(
         payload,
@@ -47,7 +53,12 @@ def _walk_keys(value):
 def _fake_response(variables: dict[str, object]):
     url = (
         "https://www.lacolonia.com/_v/segment/graphql/v1?"
-        + urlencode({"variables": json.dumps(variables, separators=(",", ":"))})
+        + urlencode(
+            {
+                "operationName": "productSearchV3",
+                "variables": json.dumps(variables, separators=(",", ":")),
+            }
+        )
     )
     request = SimpleNamespace(url=url, post_data_json=None)
     return SimpleNamespace(url=url, request=request)
@@ -113,8 +124,8 @@ def test_sample_artifact_does_not_persist_request_or_session_context() -> None:
     assert "raw_values" not in keys
 
 
-def test_only_catalog_product_search_shape_is_eligible_for_capture() -> None:
-    catalog = _fake_response(
+def test_historical_catalog_signature_remains_preferred_but_not_required() -> None:
+    historical = _fake_response(
         {
             "query": "supermercado",
             "selectedFacets": [{"key": "category-1", "value": "supermercado"}],
@@ -122,17 +133,106 @@ def test_only_catalog_product_search_shape_is_eligible_for_capture() -> None:
             "to": 9,
         }
     )
-    unrelated = _fake_response(
+    changed_routing = _fake_response(
         {
-            "query": "otra-categoria",
-            "selectedFacets": [{"key": "category-1", "value": "otra-categoria"}],
+            "query": "",
+            "selectedFacets": [{"key": "department", "value": "mercado"}],
             "from": 0,
             "to": 9,
         }
     )
 
-    assert module._is_catalog_product_search_response(catalog) is True
-    assert module._is_catalog_product_search_response(unrelated) is False
+    assert module._historical_catalog_signature(historical) is True
+    assert module._historical_catalog_signature(changed_routing) is False
+    assert module._catalog_candidate_rank(historical, _payload())[0] == 1
+    assert module._catalog_candidate_rank(changed_routing, _payload())[0] == 0
+
+
+def test_fallback_rank_prefers_larger_product_search_after_catalog_navigation() -> None:
+    current_shape = _fake_response(
+        {
+            "query": "",
+            "selectedFacets": [{"key": "department", "value": "mercado"}],
+            "from": 0,
+            "to": 9,
+        }
+    )
+    recommendation = _fake_response(
+        {
+            "query": "",
+            "selectedFacets": [],
+            "from": 0,
+            "to": 4,
+        }
+    )
+
+    catalog_rank = module._catalog_candidate_rank(current_shape, _payload(total=9291))
+    recommendation_rank = module._catalog_candidate_rank(
+        recommendation, _payload(total=25)
+    )
+
+    assert catalog_rank[0] == 0
+    assert catalog_rank > recommendation_rank
+    assert catalog_rank[1] == 9291
+
+
+def test_failure_artifact_is_sanitized_and_keeps_only_operational_counts() -> None:
+    artifact = module.build_failure_artifact(
+        reason="catalog_product_search_response_not_observed",
+        diagnostic={
+            "location_verified_same_run": True,
+            "graphql_responses_seen": 4,
+            "product_search_payloads_seen": 2,
+            "catalog_candidates_seen": 2,
+            "blocked_http_status_observed": None,
+            "request_url": "must-not-leak",
+            "regionid": "must-not-leak",
+        },
+        observed_at_utc=FIXED_TIME,
+    )
+
+    assert artifact["result"] == "stopped"
+    assert artifact["reason"] == "catalog_product_search_response_not_observed"
+    assert artifact["location_verified_same_run"] is True
+    assert artifact["graphql_responses_seen"] == 4
+    assert artifact["product_search_payloads_seen"] == 2
+    assert artifact["catalog_candidates_seen"] == 2
+    assert artifact["blocked_http_status_observed"] is None
+    assert artifact["production_authority"] is False
+    assert artifact["catalog_accepted"] is False
+    assert artifact["raw_context_persisted"] is False
+    keys = set(_walk_keys(artifact))
+    assert "request_url" not in keys
+    assert "regionid" not in keys
+
+
+def test_live_failure_writes_sanitized_artifact_for_next_offline_diagnosis(
+    monkeypatch, tmp_path: Path
+) -> None:
+    def fail(**_):
+        raise module.MvpSampleError(
+            "catalog_product_search_response_not_observed",
+            diagnostic={
+                "location_verified_same_run": True,
+                "graphql_responses_seen": 3,
+                "product_search_payloads_seen": 0,
+                "catalog_candidates_seen": 0,
+            },
+        )
+
+    monkeypatch.setattr(module, "_run_live_sample", fail)
+    output = tmp_path / "sample.json"
+
+    exit_code = module.main(
+        ["--live-read-only", "--sample-size", "5", "--output", str(output)]
+    )
+
+    assert exit_code == 3
+    artifact = json.loads(output.read_text(encoding="utf-8"))
+    assert artifact["result"] == "stopped"
+    assert artifact["graphql_responses_seen"] == 3
+    assert artifact["location_verified_same_run"] is True
+    assert artifact["production_authority"] is False
 
 
 def test_live_fuse_is_required_before_browser_path(monkeypatch) -> None:

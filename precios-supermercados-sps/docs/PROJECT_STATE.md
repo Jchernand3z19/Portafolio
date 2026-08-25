@@ -4,11 +4,11 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-24 (America/Tegucigalpa / UTC)** contra:
+Estado verificado al **2026-08-24 America/Tegucigalpa / 2026-08-25 UTC** contra:
 
 ```text
-main_observed = 9f6192725e81b1c862ff011d0efdc59756d2929b
-last_technical_pr = #275
+main_observed = 2565666e1c7a059ddf30d5427a9ca60a2e7c4901
+last_technical_pr = #278
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -28,7 +28,11 @@ El PR `#274` preparó un runbook productivo de Cloudflare y dejó explícito que
 
 El PR `#275` corrigió la dirección del proyecto con una política explícita **MVP primero**. Una nueva clase, adapter, verifier, preflight, workflow, tabla, documento o runbook sólo se crea cuando elimina un blocker actual o protege una frontera que no tenga solución más simple. PRs, conteo de tests y cantidad de capas no son métricas de progreso.
 
-El PR `#276` prepara el primer camino funcional posterior a esa corrección: reutiliza los controles DOM y el parser existentes para seleccionar/verificar **San Pedro Sula en la misma sesión**, observar pasivamente el primer `productSearch` real del catálogo y conservar sólo 5/10 SKUs públicos como artifact de prueba. El job es manual, read-only, sin Cloudflare, secrets, vars, Environment, OIDC ni persistencia comercial; los caminos de crawl general y edge continúan bloqueados. Este mecanismo no se ejecuta automáticamente al fusionarse y necesita una autorización humana nueva para su dispatch live.
+El PR `#276` creó el primer camino funcional MVP: reutiliza los controles DOM y el parser existentes para seleccionar/verificar **San Pedro Sula en la misma sesión**, observar pasivamente `productSearch` durante la entrada al catálogo y conservar sólo 5/10 SKUs públicos como artifact de prueba. El job es read-only, sin Cloudflare, secrets, vars, Environment, OIDC ni persistencia comercial; los caminos de crawl general y edge continúan bloqueados.
+
+El PR `#277` materializó una única autorización humana explícita recibida a `2026-08-25T01:20:22Z` mediante un trigger one-shot ligado al merge del propio PR. Esa autorización sí alcanzó La Colonia y quedó consumida. El run asociado verificó el preflight, abrió el sitio, seleccionó/verificó SPS y navegó al catálogo, pero no observó una respuesta que cumpliera la firma histórica estricta de `productSearch`; por ello terminó fail-closed y no produjo muestra comercial.
+
+El PR `#278` corrige únicamente ese blocker observado: la forma histórica `query=supermercado/category-1` sigue teniendo prioridad, pero deja de ser requisito exclusivo; entre los `productSearch` emitidos pasivamente durante la navegación al catálogo se elige el candidato más fuerte por señales públicas (`recordsFiltered`, rango solicitado y cantidad devuelta). Además, aun ante fallo se genera evidencia sanitizada con contadores no sensibles. El PR retira el trigger y marker one-shot ya consumidos y devuelve el workflow a modo manual. **No añade un request comercial explícito ni reintenta tráfico.**
 
 La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico nuevo **requiere autorización humana explícita vigente** para el alcance exacto solicitado.
 
@@ -136,6 +140,37 @@ artifact_digest = sha256:c87469499adba4b1fca34a109500c625ee69281f6065f2de3f87269
 
 Ese run terminó antes de OIDC, navegador o tráfico a La Colonia. La autorización quedó cerrada y no se reutiliza.
 
+## Primer sample MVP live — autorización consumida
+
+Autorización humana explícita recibida en chat:
+
+```text
+authorized_at_utc = 2026-08-25T01:20:22Z
+statement = si
+scope = open homepage + select/verify San Pedro Sula + open /supermercado once + observe productSearch + retain max 10 public products
+full_crawl = not authorized
+commercial_persistence = not authorized
+production_authority = false
+```
+
+Ejecución asociada:
+
+```text
+workflow = La Colonia - Recorrido live manual
+run = 32798014154
+job = 97653180423
+merge = 2565666e1c7a059ddf30d5427a9ca60a2e7c4901
+preflight = success
+location/browser path = executed
+live_crawl job = skipped
+context_bound_facet job = skipped
+result = failure
+error_code = catalog_product_search_response_not_observed
+artifact = none
+```
+
+El run sí consumió tráfico dentro del alcance autorizado. No hubo 403/429 reportado, no hubo bypass anti-bot y no se amplió el alcance. El runner anterior sólo escribía artifact al producir una muestra exitosa, por lo que este fallo no dejó JSON durable; los logs de Actions son la evidencia disponible. La autorización queda **consumida y cerrada** y el marker one-shot se retira en `#278`.
+
 ## Cloudflare — diferido para ruta productiva salvo necesidad demostrada
 
 El repositorio contiene el Worker productivo preparado en `edge/cloudflare/`, pero no existe evidencia vigente de despliegue/conexión productiva. El PR `#274` dejó el runbook correspondiente.
@@ -206,12 +241,22 @@ pip check = clean
 compileall SyntaxWarning = none
 ```
 
-Gobernanza MVP + primera implementación de muestra, evidencia previa al último ajuste del PR `#276`:
+Primera implementación de muestra MVP, PR `#276`:
 
 ```text
-run = 32790406105
+run = 32790812120
 result = success
-pytest = 1711 passed
+pytest = 1712 passed
+pip check = clean
+compileall SyntaxWarning = none
+```
+
+Trigger one-shot autorizado, PR `#277`:
+
+```text
+run = 32797751724
+result = success
+pytest = 1712 passed
 pip check = clean
 compileall SyntaxWarning = none
 ```
@@ -219,32 +264,30 @@ compileall SyntaxWarning = none
 ## Fronteras pendientes
 
 ```text
-NEXT VISIBLE MILESTONE = ejecutar y revisar artifact real de La Colonia SPS MVP
+NEXT VISIBLE MILESTONE = obtener y revisar hasta 10 productos reales de La Colonia SPS
 MVP PATH = source -> SPS context -> browser-native productSearch -> validation -> test artifact
-MVP ENTRYPOINT = prepared, manual, read-only, not yet executed
+MVP ENTRYPOINT = prepared offline with passive fallback; live retry not authorized yet
 PRODUCTIVE EDGE DEBT = deferred unless MVP demonstrates necessity
 ```
 
-Para ejecutar el sample sólo queda una frontera humana real:
+El primer intento ya demostró que el browser path y la selección SPS llegan al sitio; el blocker concreto fue la detección demasiado estricta de la respuesta de catálogo. `#278` corrige ese punto sin añadir requests. Para volver a ejecutar La Colonia hace falta una **nueva autorización humana explícita** para repetir el mismo sample read-only de hasta 10 productos; la autorización anterior no se reutiliza.
 
-```text
-autorización explícita vigente para abrir La Colonia en navegador,
-seleccionar/verificar San Pedro Sula, navegar una vez al catálogo,
-observar el primer productSearch de supermercado y conservar como máximo 10 SKUs públicos.
-```
-
-La ejecución:
+La ejecución preparada:
 
 - usa un único BrowserContext y acciones secuenciales;
 - añade una pausa mínima de 1.5 s antes de navegar al catálogo;
 - no reintenta requests comerciales;
+- observa pasivamente los `productSearch` generados durante la entrada al catálogo y prioriza la firma histórica si aparece;
+- si hay varias respuestas candidatas, selecciona por señales públicas sin persistir variables ni URL;
+- ante éxito conserva como máximo 10 SKUs públicos;
+- ante fallo conserva sólo razón y contadores sanitizados;
 - se detiene ante 403/429, CAPTCHA, login o navegación fuera de `www.lacolonia.com`;
 - no hace full crawl;
 - no escribe Google Sheets;
 - no conserva request URL, headers, cookies, session, token ni `regionId` raw;
 - deja `production_authority=false`, `catalog_accepted=false` y `extraction_enabled=false`.
 
-Después de revisar ese sample, el siguiente paso será ampliar únicamente lo necesario para cubrir el catálogo completo y validar paginación/duplicados antes de activar persistencia real.
+Después de obtener el sample, el siguiente paso será ampliar únicamente lo necesario para cubrir el catálogo y validar paginación/duplicados antes de activar persistencia real.
 
 Mientras tanto permanecen:
 

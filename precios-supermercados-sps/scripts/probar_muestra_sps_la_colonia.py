@@ -44,6 +44,7 @@ TARGET_CITY = "San Pedro Sula"
 MVP_LOCATION_ID = "la_colonia_sps"
 ALLOWED_SAMPLE_SIZES = (5, 10)
 CAPTURE_TIMEOUT_SECONDS = 15.0
+CANDIDATE_SETTLE_SECONDS = 1.5
 CITY_VERIFY_TIMEOUT_SECONDS = 5.0
 MINIMUM_ACTION_DELAY_MS = 1_500
 
@@ -73,7 +74,17 @@ _BLOCK_PAGE_MARKERS = (
 
 
 class MvpSampleError(RuntimeError):
-    """Detención controlada del sample MVP."""
+    """Detención controlada del sample MVP con diagnóstico durable sanitizado."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        diagnostic: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.diagnostic = dict(diagnostic or {})
 
 
 def _utc_now() -> datetime:
@@ -97,8 +108,22 @@ def _product_search_payload(value: Any) -> bool:
     )
 
 
+def _product_search_shape(value: Mapping[str, Any]) -> tuple[int, int] | None:
+    """Devuelve (total, productos) sin conservar payload ni contexto de request."""
+
+    if not _product_search_payload(value):
+        return None
+    search = value["data"]["productSearch"]
+    products = search.get("products") or []
+    try:
+        total = int(search.get("recordsFiltered", len(products)))
+    except (TypeError, ValueError):
+        total = len(products)
+    return max(total, len(products)), len(products)
+
+
 def _request_variables(request: Any) -> Mapping[str, Any]:
-    """Lee variables sólo en memoria para distinguir el catálogo de otros widgets."""
+    """Lee variables sólo en memoria para distinguir candidatos; nunca se persisten."""
 
     try:
         payload = request.post_data_json
@@ -123,14 +148,10 @@ def _request_variables(request: Any) -> Mapping[str, Any]:
     return decoded if isinstance(decoded, Mapping) else {}
 
 
-def _is_catalog_product_search_response(response: Any) -> bool:
+def _historical_catalog_signature(response: Any) -> bool:
+    """Reconoce la forma histórica sin exigirla al sitio actual."""
+
     try:
-        parts = urlsplit(str(response.url))
-        if (
-            (parts.hostname or "").casefold() != TARGET_HOST
-            or parts.path != "/_v/segment/graphql/v1"
-        ):
-            return False
         variables = _request_variables(response.request)
     except Exception:
         return False
@@ -144,6 +165,47 @@ def _is_catalog_product_search_response(response: Any) -> bool:
         and str(facet.get("key") or "").casefold() == "category-1"
         and str(facet.get("value") or "").casefold() == "supermercado"
         for facet in facets
+    )
+
+
+def _catalog_candidate_rank(
+    response: Any,
+    payload: Mapping[str, Any],
+) -> tuple[int, int, int, int]:
+    """Ordena respuestas productSearch observadas durante la navegación al catálogo.
+
+    La forma exacta `query=supermercado/category-1` observada históricamente recibe
+    prioridad. Si VTEX cambia únicamente las variables de routing, el fallback usa
+    señales públicas del payload y del rango solicitado, prefiriendo la búsqueda
+    con mayor `recordsFiltered`. No se persiste ninguna variable ni URL de request.
+    """
+
+    shape = _product_search_shape(payload)
+    if shape is None:
+        return (0, 0, 0, 0)
+    total, product_count = shape
+    variables = _request_variables(response.request)
+    try:
+        start = int(variables.get("from", 0))
+    except (TypeError, ValueError):
+        start = 0
+    try:
+        end = int(variables.get("to", start + product_count - 1))
+    except (TypeError, ValueError):
+        end = start + product_count - 1
+    requested_span = max(end - start + 1, 0)
+    historical = 1 if _historical_catalog_signature(response) else 0
+    return (historical, total, requested_span, product_count)
+
+
+def _is_graphql_response(response: Any) -> bool:
+    try:
+        parts = urlsplit(str(response.url))
+    except Exception:
+        return False
+    return (
+        (parts.hostname or "").casefold() == TARGET_HOST
+        and parts.path == "/_v/segment/graphql/v1"
     )
 
 
@@ -170,7 +232,9 @@ def _public_product(product: Any) -> dict[str, Any]:
 def _validate_artifact_shape(value: Any) -> None:
     if isinstance(value, Mapping):
         for key, nested in value.items():
-            normalized = "".join(ch for ch in str(key).casefold() if ch.isalnum() or ch == "_")
+            normalized = "".join(
+                ch for ch in str(key).casefold() if ch.isalnum() or ch == "_"
+            )
             if normalized in _FORBIDDEN_ARTIFACT_KEYS:
                 raise MvpSampleError(f"artifact_forbidden_key:{key}")
             _validate_artifact_shape(nested)
@@ -233,6 +297,55 @@ def build_sample_artifact(
     return artifact
 
 
+def build_failure_artifact(
+    *,
+    reason: str,
+    diagnostic: Mapping[str, Any] | None = None,
+    observed_at_utc: datetime | None = None,
+) -> dict[str, Any]:
+    """Conserva sólo contadores sanitizados cuando el sample no produce productos."""
+
+    observed_at = observed_at_utc or _utc_now()
+    safe_diagnostic = {
+        "location_verified_same_run": bool(
+            (diagnostic or {}).get("location_verified_same_run", False)
+        ),
+        "graphql_responses_seen": int((diagnostic or {}).get("graphql_responses_seen", 0)),
+        "product_search_payloads_seen": int(
+            (diagnostic or {}).get("product_search_payloads_seen", 0)
+        ),
+        "catalog_candidates_seen": int(
+            (diagnostic or {}).get("catalog_candidates_seen", 0)
+        ),
+        "blocked_http_status_observed": (
+            int((diagnostic or {})["blocked_http_status_observed"])
+            if (diagnostic or {}).get("blocked_http_status_observed") in {403, 429}
+            else None
+        ),
+    }
+    artifact = {
+        "schema_version": "1",
+        "sample_type": "la_colonia_sps_mvp_read_only",
+        "sample_only": True,
+        "result": "stopped",
+        "reason": reason,
+        "supermarket_id": "la_colonia",
+        "location_id": MVP_LOCATION_ID,
+        "city": TARGET_CITY,
+        "observed_at_utc": observed_at.astimezone(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
+        **safe_diagnostic,
+        "production_authority": False,
+        "catalog_accepted": False,
+        "commercial_persistence": False,
+        "extraction_enabled": False,
+        "raw_context_persisted": False,
+    }
+    _validate_artifact_shape(artifact)
+    return artifact
+
+
 def _blocked_surface(page: Any) -> bool:
     try:
         current = urlsplit(str(page.url))
@@ -269,8 +382,16 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
     except ImportError as exc:  # pragma: no cover - dependencia fijada en requirements
         raise MvpSampleError("playwright_not_installed") from exc
 
-    captured: list[tuple[str, Mapping[str, Any]]] = []
-    blocked_statuses: list[int] = []
+    captured: list[
+        tuple[tuple[int, int, int, int], str, Mapping[str, Any]]
+    ] = []
+    diagnostic: dict[str, Any] = {
+        "location_verified_same_run": False,
+        "graphql_responses_seen": 0,
+        "product_search_payloads_seen": 0,
+        "catalog_candidates_seen": 0,
+        "blocked_http_status_observed": None,
+    }
 
     with sync_playwright() as pw:
         browser, _ = launch_compatible_chromium(pw)
@@ -284,31 +405,40 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
                 timeout=30_000,
             )
             if home_response is not None and home_response.status in {403, 429}:
-                raise MvpSampleError(f"http_{home_response.status}")
+                diagnostic["blocked_http_status_observed"] = int(home_response.status)
+                raise MvpSampleError(
+                    f"http_{home_response.status}", diagnostic=diagnostic
+                )
             if _blocked_surface(page):
-                raise MvpSampleError("blocked_or_login_surface")
+                raise MvpSampleError("blocked_or_login_surface", diagnostic=diagnostic)
 
             open_location_selector(page)
             control = resolve_exact_city_control(page, TARGET_CITY)
             activate_city_control(control, TARGET_CITY)
             _wait_for_city(page)
+            diagnostic["location_verified_same_run"] = True
             page.wait_for_timeout(MINIMUM_ACTION_DELAY_MS)
 
             def observe(response: Any) -> None:
-                if captured:
-                    return
                 try:
                     parts = urlsplit(str(response.url))
                     if (parts.hostname or "").casefold() != TARGET_HOST:
                         return
                     if int(response.status) in {403, 429}:
-                        blocked_statuses.append(int(response.status))
+                        diagnostic["blocked_http_status_observed"] = int(response.status)
                         return
-                    if not _is_catalog_product_search_response(response):
+                    if not _is_graphql_response(response):
                         return
+                    diagnostic["graphql_responses_seen"] += 1
                     payload = response.json()
-                    if _product_search_payload(payload):
-                        captured.append((str(response.url), payload))
+                    if not isinstance(payload, Mapping) or not _product_search_payload(payload):
+                        return
+                    diagnostic["product_search_payloads_seen"] += 1
+                    rank = _catalog_candidate_rank(response, payload)
+                    if rank == (0, 0, 0, 0):
+                        return
+                    diagnostic["catalog_candidates_seen"] += 1
+                    captured.append((rank, str(response.url), payload))
                 except Exception:
                     return
 
@@ -319,20 +449,40 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
                 timeout=30_000,
             )
             if catalog_response is not None and catalog_response.status in {403, 429}:
-                raise MvpSampleError(f"http_{catalog_response.status}")
+                diagnostic["blocked_http_status_observed"] = int(catalog_response.status)
+                raise MvpSampleError(
+                    f"http_{catalog_response.status}", diagnostic=diagnostic
+                )
 
             deadline = time.monotonic() + CAPTURE_TIMEOUT_SECONDS
-            while not captured and time.monotonic() < deadline:
-                if blocked_statuses:
-                    raise MvpSampleError(f"http_{blocked_statuses[0]}")
+            first_candidate_at: float | None = None
+            while time.monotonic() < deadline:
+                if diagnostic["blocked_http_status_observed"] in {403, 429}:
+                    raise MvpSampleError(
+                        f"http_{diagnostic['blocked_http_status_observed']}",
+                        diagnostic=diagnostic,
+                    )
                 if _blocked_surface(page):
-                    raise MvpSampleError("blocked_or_login_surface")
+                    raise MvpSampleError(
+                        "blocked_or_login_surface", diagnostic=diagnostic
+                    )
+                if captured and first_candidate_at is None:
+                    first_candidate_at = time.monotonic()
+                if first_candidate_at is not None:
+                    if captured and max(item[0][0] for item in captured) == 1:
+                        break
+                    if time.monotonic() - first_candidate_at >= CANDIDATE_SETTLE_SECONDS:
+                        break
                 page.wait_for_timeout(250)
             if not captured:
-                raise MvpSampleError("catalog_product_search_response_not_observed")
+                raise MvpSampleError(
+                    "catalog_product_search_response_not_observed",
+                    diagnostic=diagnostic,
+                )
 
             _wait_for_city(page)
-            source_url, payload = captured[0]
+            diagnostic["location_verified_same_run"] = True
+            _, source_url, payload = max(captured, key=lambda item: item[0])
             observed_at = _utc_now()
             search = payload["data"]["productSearch"]
             products = search.get("products") or []
@@ -345,7 +495,9 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
                     page_size=page_size,
                 )
             except StructureChangedError as exc:
-                raise MvpSampleError("product_payload_not_parseable") from exc
+                raise MvpSampleError(
+                    "product_payload_not_parseable", diagnostic=diagnostic
+                ) from exc
             return build_sample_artifact(
                 extraction_result=result,
                 sample_size=sample_size,
@@ -390,7 +542,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         artifact = _run_live_sample(sample_size=args.sample_size)
         _write_artifact(artifact, args.output)
-    except (MvpSampleError, DiagnosticSafetyError, LocationControlResolutionError) as exc:
+    except MvpSampleError as exc:
+        failure = build_failure_artifact(
+            reason=exc.reason,
+            diagnostic=exc.diagnostic,
+        )
+        _write_artifact(failure, args.output)
+        print(f"mvp_sample_stopped:{type(exc).__name__}:{exc}", file=sys.stderr)
+        return 3
+    except (DiagnosticSafetyError, LocationControlResolutionError) as exc:
+        failure = build_failure_artifact(reason=str(exc))
+        _write_artifact(failure, args.output)
         print(f"mvp_sample_stopped:{type(exc).__name__}:{exc}", file=sys.stderr)
         return 3
 
