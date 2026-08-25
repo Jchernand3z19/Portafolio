@@ -4,12 +4,11 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-24 America/Tegucigalpa / 2026-08-25 UTC** después del cierre de `#284`:
+Estado verificado al **2026-08-25 UTC** contra el merge live de `#286`:
 
 ```text
-main_observed = 67f42150b61e27610dd2ae516470100c15699e9c
-last_live_pr = #283
-last_cleanup_pr = #284
+main_observed = 3428d19b6e37442d906f65390dec9933fe0e5ba6
+last_live_pr = #286
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -21,9 +20,9 @@ catalog_accepted = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-**No existe autorización live activa.** La autorización humana explícita recibida a `2026-08-25T04:30:59Z` fue consumida por el run `32809740940` y no se reutiliza. No se inventa un Authorization ID porque el usuario no proporcionó uno.
+**No existe autorización live activa.** La autorización humana explícita recibida a `2026-08-25T13:59:21Z` fue consumida por el run `32857812255` y no se reutiliza. No se inventa un Authorization ID porque el usuario no proporcionó uno.
 
-La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico posterior requiere autorización humana explícita vigente para su alcance concreto.
+La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico posterior **requiere autorización humana explícita vigente** para su alcance concreto.
 
 ## Objetivo MVP vigente
 
@@ -33,8 +32,6 @@ MVP PATH = source -> SPS context -> product data -> validation -> test artifact
 PERSISTENCE = todavía deshabilitada
 FULL CRAWL = todavía no autorizado
 ```
-
-El camino productivo/edge, Cloudflare, receipts y hardening adicional permanecen diferidos mientras no sean necesarios para producir y validar el primer catálogo real.
 
 ## Binding técnico SPS confirmado
 
@@ -51,9 +48,7 @@ store_selection_observed = false
 source_location_key = request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 ```
 
-El valor raw de `regionId` no se persiste. El fingerprint sólo permite comprobar igualdad con el contexto SPS ya demostrado; no concede autoridad comercial.
-
-La misma radiografía mostró además que la cookie `vtexsegment` cambia después de seleccionar la ciudad. El valor raw de esa cookie tampoco se persiste.
+El valor raw de `regionId` no se persiste. El fingerprint sólo comprueba igualdad con el contexto SPS ya demostrado; no concede autoridad comercial. La radiografía histórica mostró además que `vtexsegment` cambia después de seleccionar ciudad; su valor raw tampoco se persiste.
 
 ## Evidencia live MVP acumulada
 
@@ -62,7 +57,6 @@ La misma radiografía mostró además que la cookie `vtexsegment` cambia despué
 ```text
 authorized_at_utc = 2026-08-25T01:20:22Z
 run = 32798014154
-job = 97653180423
 result = failure
 SPS selection = verified
 catalog navigation = executed
@@ -70,26 +64,18 @@ error_code = catalog_product_search_response_not_observed
 artifact = none
 ```
 
-La entrada al catálogo no produjo una respuesta que cumpliera la firma histórica estricta de `productSearch`.
-
 ### Segundo sample — autorización consumida
 
 ```text
 authorized_at_utc = 2026-08-25T02:05:35Z
 run = 32800883695
-job = 97661305983
-merge = 73513c4eda9abe0d88e7923ed331508a4cf0a40c
-result = failure
 location_verified_same_run = true
 graphql_responses_seen = 9
 product_search_payloads_seen = 0
-catalog_candidates_seen = 0
 blocked_http_status_observed = null
 artifact_id = 9546438971
 artifact_zip_sha256 = 4452576636671a17a0d704b16364e43c148d59eb11da968c90f6f7638389aac1
 ```
-
-Esta ejecución demostró que esperar más por el `productSearch` pasivo no es un camino suficiente: hubo actividad GraphQL real pero ninguna respuesta `data.productSearch`.
 
 ### Tercer sample bound — autorización consumida
 
@@ -99,34 +85,53 @@ run = 32807247386
 job = 97679646582
 merge = e8afbcd129e2d3deb037fe853eab7f8fc6e00412
 preflight = success
-home_navigation = executed
-city_control = resolved
 city_activation = failed before verification
 catalog_navigation = not reached
 explicit_product_search_requests = 0
-live_crawl job = skipped
-context_bound_facet job = skipped
 result = failure
 error = Playwright TimeoutError during city click after DOM detach
 artifact = none
 ```
 
-El botón exacto de San Pedro Sula fue reemplazado por un re-render mientras Playwright intentaba hacer click. `#282` corrigió offline ese blocker mediante como máximo una re-resolución del mismo control, sin añadir retries comerciales.
+`#282` corrigió offline ese blocker mediante como máximo una re-resolución del mismo control de San Pedro Sula, sin añadir retries comerciales.
 
 ### Cuarto sample bound resiliente — autorización consumida
+
+```text
+authorized_at_utc = 2026-08-25T04:30:59Z
+run = 32809740940
+job = 97686681957
+merge = b7b27c576550bb354c0014b4883307944bd21247
+location_verified_same_run = true
+graphql_responses_seen = 9
+product_search_payloads_seen = 0
+blocked_http_status_observed = null
+region_binding_fingerprint_verified = true
+region_context_replayable_placements = 0
+region_context_body_only_observed = true
+explicit_product_search_requests = 0
+result = failure
+error_code = sps_region_binding_observed_but_not_replayable
+artifact_id = 9549381649
+artifact_zip_sha256 = f3ed5bbd0d726c194d448b7bdca5a91def36f2170b834bc27d01ebd40f0556c2
+```
+
+Este run confirmó SPS y el fingerprint canónico de `regionId` en la misma sesión, pero el valor apareció únicamente dentro del body de una request observada. No se inventó un placement header/query.
+
+### Quinto sample shared-segment — autorización consumida
 
 Autorización humana explícita:
 
 ```text
-authorized_at_utc = 2026-08-25T04:30:59Z
+authorized_at_utc = 2026-08-25T13:59:21Z
 statement = si
-request_sequence = 4
-trigger_pr_number = 283
-scope = open homepage + select/verify SPS + max 1 DOM re-resolution + open catalog once + passive observation + max 1 explicit productSearchV3 + retain max 10 products
-max_city_control_reresolutions = 1
+request_sequence = 5
+trigger_pr_number = 286
+scope = SPS same BrowserContext + max 1 DOM re-resolution + passive observation + verify canonical region binding + verify vtexsegment transition if body-only + max 1 explicit productSearchV3 + retain max 10 products
 max_explicit_product_search_requests = 1
 commercial_retries = 0
 full_crawl = not authorized
+google_sheets_writes = not authorized
 commercial_persistence = not authorized
 ```
 
@@ -134,9 +139,9 @@ Ejecución:
 
 ```text
 workflow = La Colonia - Recorrido live manual
-run = 32809740940
-job = 97686681957
-merge = b7b27c576550bb354c0014b4883307944bd21247
+run = 32857812255
+job = 97834000946
+merge = 3428d19b6e37442d906f65390dec9933fe0e5ba6
 preflight = success
 location_verified_same_run = true
 graphql_responses_seen = 9
@@ -147,66 +152,39 @@ region_binding_fingerprint_verified = true
 region_context_replayable_placements = 0
 region_context_body_only_observed = true
 explicit_product_search_requests = 0
-live_crawl job = skipped
-context_bound_facet job = skipped
+raw_context_persisted = false
 result = failure
-error_code = sps_region_binding_observed_but_not_replayable
-artifact_id = 9549381649
-artifact_name = la-colonia-sps-mvp-sample-32809740940
-artifact_zip_sha256 = f3ed5bbd0d726c194d448b7bdca5a91def36f2170b834bc27d01ebd40f0556c2
+error_code = sps_region_binding_body_only_without_segment_cookie_transition
+artifact_id = 9566896451
+artifact_name = la-colonia-sps-mvp-sample-32857812255
+artifact_zip_sha256 = 6ec05ad88da14c53f9241388018dafaaffe6d3905f876e8fa131429c0a46f520
 ```
 
-Este run cerró dos dudas importantes sin ampliar tráfico: **San Pedro Sula sí quedó verificado en la misma sesión** y el valor efímero de `regionId` observado después de seleccionar SPS **sí coincidió exactamente con el fingerprint canónico**. La coincidencia apareció únicamente dentro del body de una request observada; no apareció en header ni query, por lo que el runner no inventó un placement para el GET de `productSearchV3`.
+El artifact sanitizado confirma que San Pedro Sula quedó verificado y que el fingerprint canónico de `regionId` volvió a coincidir en la misma ejecución. El fallback se detuvo porque el tracker basado en headers de requests no pudo demostrar una transición de `vtexsegment`. **No se emitió el GET explícito** (`explicit_product_search_requests=0`), no hubo 403/429, no se ejecutó full crawl y no se escribió en Google Sheets.
 
-No se emitió el GET explícito autorizado (`explicit_product_search_requests=0`), no hubo 403/429 y no se persistió URL, header, cookie, sesión, token ni `regionId` raw. La autorización quedó **consumida y cerrada** porque sí hubo tráfico live al supermercado.
+La autorización de `2026-08-25T13:59:21Z` queda consumida y cerrada porque sí hubo tráfico live.
 
-## Fallback offline preparado tras el cuarto sample
-
-El análisis offline encontró una vía más corta que no requiere transformar el `regionId` body-only en un header/query inventado:
-
-1. El esquema oficial vigente `vtex.search-graphql` declara `productSearch` con `@cacheControl(scope: SEGMENT)` y `@withSegment`; por contrato, la consulta está segmentada por el contexto de sesión.
-2. La documentación oficial de Playwright establece que `BrowserContext.request` usa el **mismo cookie jar** del `BrowserContext`.
-3. Nuestra radiografía histórica ya demostró que `vtexsegment` cambia después de seleccionar San Pedro Sula.
-4. El cuarto run demostró además, en esa misma sesión, que el `regionId` efímero coincide exactamente con el fingerprint SPS canónico.
-
-Referencias públicas de contrato:
+## Blocker actual y siguiente trabajo offline
 
 ```text
-https://github.com/vtex-apps/search-graphql/blob/master/graphql/schema.graphql
-https://playwright.dev/python/docs/api/class-apirequestcontext
+CURRENT BLOCKER = request-header observation did not prove vtexsegment transition
+KNOWN = SPS verified + canonical region fingerprint matched + body-only region context
+KNOWN = BrowserContext owns the session cookie jar used by BrowserContext.request
+NEXT OFFLINE CHECK = compare only fingerprints of vtexsegment from context.cookies() before/after SPS activation
 ```
 
-Por ello el wrapper resiliente queda preparado para un único fallback adicional **sin copiar `regionId` raw**:
+La siguiente corrección debe permanecer fail-closed y no necesita tráfico para implementarse: capturar únicamente el fingerprint efímero de `vtexsegment` mediante `BrowserContext.cookies()` antes de seleccionar SPS y después de verificar SPS. Si la cookie falta o el fingerprint no cambia, no se permite el GET. Los valores raw no se escriben en logs, artifacts ni estado durable.
 
-```text
-require location_verified_same_run = true
-require region_binding_fingerprint_verified = true
-require region_context_body_only_observed = true when no header/query placement exists
-require same-run vtexsegment transition = true
-then use the existing BrowserContext.request GET productSearchV3
-explicit_product_search_requests <= 1
-raw cookie persisted = false
-raw regionId persisted = false
-```
-
-La transición de `vtexsegment` se valida sólo mediante fingerprints efímeros en memoria. Si no puede demostrarse el cambio de cookie, el runner termina fail-closed con `sps_region_binding_body_only_without_segment_cookie_transition`. Un placement explícito previamente demostrado en header/query sigue teniendo prioridad sobre este fallback.
-
-Este cambio es únicamente preparación offline. No concede autorización para ejecutarlo.
-
-## Fuente de productos conocida
-
-La radiografía técnica histórica confirmó el endpoint público VTEX:
+El endpoint público conocido sigue siendo:
 
 ```text
 https://www.lacolonia.com/_v/segment/graphql/v1
 operation = productSearchV3
 ```
 
-El constructor existente solicita `hideUnavailableItems=false`, `skusFilter=ALL`, página acotada y los campos necesarios para IDs, nombre, marca, categorías, presentación, imagen, precio actual, precio regular informado, seller, unidad, multiplicador y cantidad publicada.
+El constructor solicita `hideUnavailableItems=false`, `skusFilter=ALL` y los campos necesarios para IDs, nombre, marca, categorías, presentación, imagen, precio actual, precio regular informado, seller, unidad, multiplicador y cantidad publicada.
 
-Una muestra histórica sin binding SPS produjo 10 productos/10 SKU con precio y confirmó la forma del parser. Esa evidencia sirve offline, pero no se reetiqueta como SPS.
-
-Como alternativa futura, VTEX también documenta Intelligent Search API v1 con regionalización explícita mediante `regionId` query parameter. No se incorpora todavía porque exigiría resolver de forma segura el account host y sería una ruta nueva; el fallback de cookie compartida reutiliza el endpoint y parser ya demostrados.
+Una muestra histórica sin binding SPS produjo 10 productos/10 SKU con precio y confirma la forma del parser, pero no se reetiqueta como SPS.
 
 ## Persistencia
 
@@ -221,7 +199,7 @@ fact_scrape_runs
 fact_quality_events
 ```
 
-No existen ofertas SPS reales persistidas todavía. `current/history` no cambian con muestras fallidas o no aceptadas. Permanecen:
+No existen ofertas SPS reales persistidas todavía. Permanecen:
 
 ```text
 production_authority = false
@@ -233,6 +211,4 @@ ACTIVE_AUTHORIZATION_IDS = []
 
 ## Próxima frontera humana
 
-El trabajo offline para el blocker body-only ya tiene una solución mínima preparada y debe cerrar CI/revisión antes de tocar nuevamente La Colonia.
-
-Después de ese cierre, cualquier nueva ejecución requiere una autorización humana explícita vigente y separada. El siguiente scope útil seguirá limitado a una sola muestra de hasta 10 productos, un único GET `productSearchV3`, cero retries comerciales, sin full crawl y sin Google Sheets. La autorización de `2026-08-25T04:30:59Z` no se reutiliza.
+Primero se agota y valida el ajuste offline del fingerprint de cookie desde `BrowserContext.cookies()` con pruebas fail-closed. Si después de eso hace falta tráfico nuevo, se solicitará una autorización humana explícita nueva y específica. La autorización de `2026-08-25T13:59:21Z` no se reutiliza.
