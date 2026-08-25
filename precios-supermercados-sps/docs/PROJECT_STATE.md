@@ -38,7 +38,7 @@ El PR `#278` corrigió únicamente ese blocker observado: la forma histórica `q
 
 El PR `#279` materializa una **nueva** autorización humana explícita recibida a `2026-08-25T02:05:35Z` para repetir una sola vez la muestra MVP read-only con la captura pasiva robustecida de `#278`. Usa un marker distinto (`request_sequence=2`) y una identidad de merge distinta; la autorización de `#277` no se reutiliza.
 
-La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico posterior a esta segunda muestra requerirá otra autorización humana explícita si el alcance no está ya cubierto.
+La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico posterior a esta segunda muestra **requiere autorización humana explícita vigente** para su alcance concreto; esta autorización one-shot no cubre una ejecución posterior.
 
 ## Binding técnico de San Pedro Sula
 
