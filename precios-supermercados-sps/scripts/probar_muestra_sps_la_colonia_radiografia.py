@@ -35,7 +35,6 @@ from precios_supermercados.location_binding_radiography import (  # noqa: E402
     report_dict,
 )
 from precios_supermercados.scrapers.la_colonia_graphql import (  # noqa: E402
-    GRAPHQL_ENDPOINT,
     build_product_search_url,
 )
 
@@ -194,7 +193,6 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
                 raise passive.MvpSampleError("radiography_sps_binding_not_verified", diagnostic=diagnostic)
             diagnostic["binding_source_key_verified"] = True
 
-            # Recuperar el mismo raw regionId que originó el fingerprint, sólo en memoria.
             request_channel = after_city.channels.get("request", {})
             ephemeral_region = _matching_region(request_channel)
             if ephemeral_region is None and after_store is not None:
@@ -203,8 +201,6 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
                 raise passive.MvpSampleError("radiography_region_raw_not_recovered", diagnostic=diagnostic)
             diagnostic["region_binding_fingerprint_verified"] = True
 
-            # La consulta conocida funciona. No se altera la sesión ni se inventa contexto:
-            # BrowserContext.request comparte el jar de cookies del navegador activo.
             request_url = build_product_search_url(page=1, page_size=sample_size)
             diagnostic["explicit_product_search_requests"] = 1
             response = context.request.get(
@@ -222,7 +218,7 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
                 payload = response.json()
             except Exception as exc:
                 raise passive.MvpSampleError("graphql_not_json", diagnostic=diagnostic) from exc
-            if not passive._is_product_search_payload(payload):
+            if not passive._product_search_payload(payload):
                 raise passive.MvpSampleError("graphql_product_search_not_observed", diagnostic=diagnostic)
 
             result = bound._parse_payload(payload, sample_size=sample_size)
