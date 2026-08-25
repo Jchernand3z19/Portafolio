@@ -160,7 +160,7 @@ def test_v1_payload_is_adapted_to_existing_commercial_parser() -> None:
     assert product.raw_values["current_price"] == "30"
     assert product.raw_values["reported_regular_price"] == "35"
     assert product.raw_values["is_promotion"] is True
-    assert product.raw_values["availability"] == "available"
+    assert product.raw_values["availability"] == "in_stock"
 
 
 def test_failure_artifact_never_contains_raw_context() -> None:
