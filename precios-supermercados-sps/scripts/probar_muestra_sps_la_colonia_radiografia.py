@@ -3,9 +3,10 @@
 
 La captura de ubicación usa el mismo RequestContextCollector, los mismos stages y
 el mismo análisis que produjo la evidencia canónica de San Pedro Sula. Una vez
-verificado el fingerprint fuerte de regionId, y sin cerrar ni reemplazar el
+verificado el source key fuerte de regionId, y sin cerrar ni reemplazar el
 BrowserContext, se hace un único GET productSearchV3 ya validado previamente.
-El regionId raw sólo vive en memoria y nunca se persiste.
+No se recupera ni persiste el regionId raw: el propio source key ya contiene el
+fingerprint exacto de la señal observada en esa misma ejecución.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -39,6 +40,7 @@ from precios_supermercados.scrapers.la_colonia_graphql import (  # noqa: E402
 )
 
 EXPLICIT_REQUEST_TIMEOUT_MS = 15_000
+INITIAL_CLICK_TIMEOUT_MS = 3_000
 FORCED_CLICK_TIMEOUT_MS = 5_000
 EXPECTED_SOURCE_KEY = (
     "request:regionid:sha256:"
@@ -46,52 +48,33 @@ EXPECTED_SOURCE_KEY = (
 )
 
 
-def _matching_region(value: Any) -> str | None:
-    """Devuelve sólo el valor raw cuyo fingerprint coincide con SPS."""
-
-    if isinstance(value, str):
-        return value if bound._stable_fingerprint(value) == bound.SPS_REGION_FINGERPRINT else None
-    if isinstance(value, Mapping):
-        for key, nested in value.items():
-            if bound._is_region_key(str(key)):
-                match = _matching_region(nested)
-                if match is not None:
-                    return match
-            match = _matching_region(nested)
-            if match is not None:
-                return match
-    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        for nested in value:
-            match = _matching_region(nested)
-            if match is not None:
-                return match
-    return None
-
-
 def _is_timeout(exc: BaseException) -> bool:
     return exc.__class__.__name__ == "TimeoutError"
 
 
 def _activate_exact_city_with_single_recovery(control: Any, city_name: str) -> bool:
-    """Conserva la activación de la radiografía y recupera una sola vez el control.
+    """Activa SPS exacta con una sola recuperación y sin esperar 30s por overlay."""
 
-    VTEX puede dejar un botón exacto visible pero cubierto transitoriamente por el
-    contenedor scrollable del modal. Se intenta primero el click original. Sólo si
-    Playwright agota ese click, se comprueba si la ciudad ya cambió, se re-resuelve
-    una única vez el mismo nombre exacto y se fuerza ese locator exacto. La
-    verificación estructural posterior sigue siendo obligatoria.
-    """
-
-    try:
-        return radiography.activate_city_control(control, city_name)
-    except Exception as exc:
-        if not _is_timeout(exc):
-            raise
-
+    if control.state == radiography.CITY_STATE_SELECTED:
+        return False
     try:
         page = control.locator.page
     except Exception as exc:
         raise passive.MvpSampleError("sps_city_control_context_unavailable") from exc
+
+    try:
+        parent = control.locator.locator("xpath=ancestor::select[1]")
+    except Exception:
+        parent = None
+    try:
+        if parent is not None and parent.count() == 1:
+            parent.select_option(label=city_name)
+        else:
+            control.locator.click(timeout=INITIAL_CLICK_TIMEOUT_MS)
+        return True
+    except Exception as exc:
+        if not _is_timeout(exc):
+            raise
 
     try:
         passive._wait_for_city(page)
@@ -245,13 +228,6 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
             if source_key != EXPECTED_SOURCE_KEY:
                 raise passive.MvpSampleError("radiography_sps_binding_not_verified", diagnostic=diagnostic)
             diagnostic["binding_source_key_verified"] = True
-
-            request_channel = after_city.channels.get("request", {})
-            ephemeral_region = _matching_region(request_channel)
-            if ephemeral_region is None and after_store is not None:
-                ephemeral_region = _matching_region(after_store.channels.get("request", {}))
-            if ephemeral_region is None:
-                raise passive.MvpSampleError("radiography_region_raw_not_recovered", diagnostic=diagnostic)
             diagnostic["region_binding_fingerprint_verified"] = True
 
             request_url = build_product_search_url(page=1, page_size=sample_size)
