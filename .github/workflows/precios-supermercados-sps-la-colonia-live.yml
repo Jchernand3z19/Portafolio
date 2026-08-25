@@ -89,6 +89,11 @@ on:
         required: false
         default: ""
         type: string
+  push:
+    branches:
+      - main
+    paths:
+      - precios-supermercados-sps/.automation/la-colonia-mvp-live-request.json
 
 permissions:
   contents: read
@@ -99,9 +104,9 @@ concurrency:
 
 jobs:
   mvp-sample:
-    # Único camino live habilitable durante el MVP. La condición exige una
-    # confirmación manual en el mismo dispatch; no se ejecuta por push ni schedule.
-    if: ${{ inputs.mode == 'mvp_sample' && inputs.mvp_read_only_authorized == true }}
+    # Dispatch manual conserva el runner pasivo. El push sólo opera si el marker
+    # condition-bound vigente coincide exactamente con la instrucción humana.
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'mvp_sample' && inputs.mvp_read_only_authorized == true) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -119,6 +124,94 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Validar autorización live vigente
+        id: authorization
+        shell: bash
+        env:
+          INPUT_MVP_SAMPLE_SIZE: ${{ inputs.mvp_sample_size }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            case "$INPUT_MVP_SAMPLE_SIZE" in
+              "5"|"10") ;;
+              *) echo "sample_size manual inválido" >&2; exit 2 ;;
+            esac
+            echo "sample_size=$INPUT_MVP_SAMPLE_SIZE" >> "$GITHUB_OUTPUT"
+            echo "capture_mode=passive" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          expected = {
+              "schema_version": "precios-sps-la-colonia-mvp-live-request/v2",
+              "authorization_mode": "condition_bound_until_first_downloadable_sample",
+              "authorized_at_utc": "2026-08-25T14:41:06Z",
+              "authorization_source": "human_user_explicit_chat_instruction",
+              "authorization_statement": "no me estes pidiendo autorizacion trabaja hasta que podamos descargar esto",
+              "active": True,
+              "termination_condition": "first_successful_downloadable_sps_sample",
+              "attempt_sequence": 1,
+              "trigger_pr_number": 289,
+              "supermarket_id": "la_colonia",
+              "location_id": "la_colonia_sps",
+              "city": "San Pedro Sula",
+              "mode": "mvp_sample_shared_segment_cookie",
+              "sample_size": 10,
+              "live_read_only": True,
+              "same_browser_context": True,
+              "max_city_control_reresolutions_per_attempt": 1,
+              "max_explicit_product_search_requests_per_attempt": 1,
+              "commercial_retries_per_attempt": 0,
+              "full_crawl": False,
+              "google_sheets_writes": False,
+              "commercial_persistence": False,
+              "catalog_accepted": False,
+              "production_authority": False,
+              "extraction_enabled": False,
+              "stop_conditions": [
+                  "persistent_403",
+                  "http_429",
+                  "captcha",
+                  "login_required",
+                  "host_mismatch",
+                  "excessive_load_risk",
+              ],
+          }
+          request_path = Path(".automation/la-colonia-mvp-live-request.json")
+          request = json.loads(request_path.read_text(encoding="utf-8"))
+          if request != expected:
+              raise SystemExit("mvp_live_request_mismatch")
+
+          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+          if event.get("ref") != "refs/heads/main":
+              raise SystemExit("mvp_live_push_not_main")
+          repository = event.get("repository") or {}
+          if repository.get("full_name") != "Jchernand3z19/Portafolio":
+              raise SystemExit("mvp_live_repository_mismatch")
+          head_commit = event.get("head_commit") or {}
+          message = str(head_commit.get("message") or "")
+          expected_prefix = (
+              "Merge pull request #289 from "
+              "Jchernand3z19/feature/precios-sps-standing-live-until-download"
+          )
+          if not message.startswith(expected_prefix):
+              raise SystemExit("mvp_live_merge_identity_mismatch")
+
+          # Sentinels históricos consumidos: nunca conceden autoridad a este run.
+          # historical schema sentinel: precios-sps-la-colonia-mvp-live-request/v1
+          # 2026-08-25T01:20:22Z / PR #277
+          # Merge pull request #277 from
+          # Jchernand3z19/feature/precios-sps-mvp-live-trigger
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("sample_size=10\n")
+              output.write("capture_mode=shared_segment_cookie_snapshot\n")
+          PY
+
       - name: Configurar Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -133,13 +226,22 @@ jobs:
         id: sample
         shell: bash
         env:
-          INPUT_MVP_SAMPLE_SIZE: ${{ inputs.mvp_sample_size }}
+          INPUT_MVP_SAMPLE_SIZE: ${{ steps.authorization.outputs.sample_size }}
+          CAPTURE_MODE: ${{ steps.authorization.outputs.capture_mode }}
         run: |
           set +e
-          python scripts/probar_muestra_sps_la_colonia.py \
-            --live-read-only \
-            --sample-size "$INPUT_MVP_SAMPLE_SIZE" \
-            --output run-artifacts/mvp-sample.json
+          if [[ "$CAPTURE_MODE" == "passive" ]]; then
+            python scripts/probar_muestra_sps_la_colonia.py \
+              --live-read-only \
+              --sample-size "$INPUT_MVP_SAMPLE_SIZE" \
+              --output run-artifacts/mvp-sample.json
+          else
+            python scripts/probar_muestra_sps_la_colonia_resilient.py \
+              --live-read-only \
+              --allow-single-explicit-product-search \
+              --sample-size "$INPUT_MVP_SAMPLE_SIZE" \
+              --output run-artifacts/mvp-sample.json
+          fi
           exit_code=$?
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           exit 0
