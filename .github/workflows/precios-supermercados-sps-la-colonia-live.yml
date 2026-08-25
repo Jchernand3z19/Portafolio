@@ -207,6 +207,8 @@ jobs:
           # 2026-08-25T02:05:35Z / PR #279
           # 2026-08-25T03:50:45Z / PR #281
           # 2026-08-25T04:30:59Z / PR #283
+          # Merge pull request #277 from
+          # Jchernand3z19/feature/precios-sps-mvp-live-trigger
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("sample_size=10\n")
