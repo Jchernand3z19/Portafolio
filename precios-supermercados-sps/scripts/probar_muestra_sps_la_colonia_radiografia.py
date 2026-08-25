@@ -39,6 +39,7 @@ from precios_supermercados.scrapers.la_colonia_graphql import (  # noqa: E402
 )
 
 EXPLICIT_REQUEST_TIMEOUT_MS = 15_000
+FORCED_CLICK_TIMEOUT_MS = 5_000
 EXPECTED_SOURCE_KEY = (
     "request:regionid:sha256:"
     "d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7"
@@ -65,6 +66,59 @@ def _matching_region(value: Any) -> str | None:
             if match is not None:
                 return match
     return None
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    return exc.__class__.__name__ == "TimeoutError"
+
+
+def _activate_exact_city_with_single_recovery(control: Any, city_name: str) -> bool:
+    """Conserva la activación de la radiografía y recupera una sola vez el control.
+
+    VTEX puede dejar un botón exacto visible pero cubierto transitoriamente por el
+    contenedor scrollable del modal. Se intenta primero el click original. Sólo si
+    Playwright agota ese click, se comprueba si la ciudad ya cambió, se re-resuelve
+    una única vez el mismo nombre exacto y se fuerza ese locator exacto. La
+    verificación estructural posterior sigue siendo obligatoria.
+    """
+
+    try:
+        return radiography.activate_city_control(control, city_name)
+    except Exception as exc:
+        if not _is_timeout(exc):
+            raise
+
+    try:
+        page = control.locator.page
+    except Exception as exc:
+        raise passive.MvpSampleError("sps_city_control_context_unavailable") from exc
+
+    try:
+        passive._wait_for_city(page)
+        return True
+    except passive.MvpSampleError:
+        pass
+
+    refreshed = radiography.resolve_exact_city_control(page, city_name)
+    if refreshed.state == radiography.CITY_STATE_SELECTED:
+        return True
+
+    try:
+        parent = refreshed.locator.locator("xpath=ancestor::select[1]")
+    except Exception:
+        parent = None
+    if parent is not None and parent.count() == 1:
+        parent.select_option(label=city_name)
+    else:
+        try:
+            refreshed.locator.click(force=True, timeout=FORCED_CLICK_TIMEOUT_MS)
+        except Exception as exc:
+            if _is_timeout(exc):
+                raise passive.MvpSampleError("sps_city_control_activation_timeout") from exc
+            raise
+
+    passive._wait_for_city(page)
+    return True
 
 
 def _failure_artifact(reason: str, diagnostic: Mapping[str, Any]) -> dict[str, Any]:
@@ -154,7 +208,7 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
             collector.reset()
             city_action_performed = False
             if city_control.state != radiography.CITY_STATE_SELECTED:
-                city_action_performed = radiography.activate_city_control(
+                city_action_performed = _activate_exact_city_with_single_recovery(
                     city_control, passive.TARGET_CITY
                 )
             if city_action_performed:
@@ -162,8 +216,7 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
             elif city_control.state == radiography.CITY_STATE_SELECTED:
                 page.wait_for_timeout(100)
 
-            if city_control.state is not None:
-                radiography._verify_structural_city_selection(page, passive.TARGET_CITY)
+            radiography._verify_structural_city_selection(page, passive.TARGET_CITY)
             diagnostic["location_verified_same_run"] = True
 
             after_city = radiography._stage(page, context, collector, "after_city")
@@ -227,6 +280,10 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
             raise
         except (DiagnosticSafetyError, LocationControlResolutionError, radiography.LocationBindingCaptureError) as exc:
             raise passive.MvpSampleError(str(exc), diagnostic=diagnostic) from exc
+        except Exception as exc:
+            if _is_timeout(exc):
+                raise passive.MvpSampleError("playwright_timeout", diagnostic=diagnostic) from exc
+            raise
         finally:
             browser.close()
 
