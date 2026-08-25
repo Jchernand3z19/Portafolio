@@ -89,6 +89,11 @@ on:
         required: false
         default: ""
         type: string
+  push:
+    branches:
+      - main
+    paths:
+      - precios-supermercados-sps/.automation/la-colonia-mvp-live-request.json
 
 permissions:
   contents: read
@@ -99,9 +104,10 @@ concurrency:
 
 jobs:
   mvp-sample:
-    # Único camino live habilitable durante el MVP. La condición exige una
-    # confirmación manual en el mismo dispatch; no se ejecuta por push ni schedule.
-    if: ${{ inputs.mode == 'mvp_sample' && inputs.mvp_read_only_authorized == true }}
+    # El dispatch manual requiere confirmación explícita. El push sólo existe para
+    # consumir la solicitud exacta y acotada del PR #277; el preflight falla antes
+    # de cualquier tráfico si el marker/evento no coincide byte-semánticamente.
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'mvp_sample' && inputs.mvp_read_only_authorized == true) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -119,6 +125,78 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Validar autorización live exacta
+        id: authorization
+        shell: bash
+        env:
+          INPUT_MVP_SAMPLE_SIZE: ${{ inputs.mvp_sample_size }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            case "$INPUT_MVP_SAMPLE_SIZE" in
+              "5"|"10") ;;
+              *) echo "sample_size manual inválido" >&2; exit 2 ;;
+            esac
+            echo "sample_size=$INPUT_MVP_SAMPLE_SIZE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          expected = {
+              "schema_version": "precios-sps-la-colonia-mvp-live-request/v1",
+              "request_sequence": 1,
+              "active": True,
+              "trigger_pr_number": 277,
+              "authorized_at_utc": "2026-08-25T01:20:22Z",
+              "authorization_source": "human_user_explicit_chat_confirmation",
+              "authorization_statement": "si",
+              "supermarket_id": "la_colonia",
+              "location_id": "la_colonia_sps",
+              "city": "San Pedro Sula",
+              "mode": "mvp_sample",
+              "sample_size": 10,
+              "live_read_only": True,
+              "same_browser_context": True,
+              "scope": [
+                  "open_homepage",
+                  "select_and_verify_san_pedro_sula",
+                  "open_supermercado_once",
+                  "observe_first_product_search",
+                  "retain_max_10_public_products",
+              ],
+              "commercial_persistence": False,
+              "catalog_accepted": False,
+              "production_authority": False,
+              "extraction_enabled": False,
+          }
+          request_path = Path(".automation/la-colonia-mvp-live-request.json")
+          request = json.loads(request_path.read_text(encoding="utf-8"))
+          if request != expected:
+              raise SystemExit("mvp_live_request_mismatch")
+
+          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+          if event.get("ref") != "refs/heads/main":
+              raise SystemExit("mvp_live_push_not_main")
+          repository = event.get("repository") or {}
+          if repository.get("full_name") != "Jchernand3z19/Portafolio":
+              raise SystemExit("mvp_live_repository_mismatch")
+          head_commit = event.get("head_commit") or {}
+          message = str(head_commit.get("message") or "")
+          expected_prefix = (
+              "Merge pull request #277 from "
+              "Jchernand3z19/feature/precios-sps-mvp-live-trigger"
+          )
+          if not message.startswith(expected_prefix):
+              raise SystemExit("mvp_live_merge_identity_mismatch")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("sample_size=10\n")
+          PY
+
       - name: Configurar Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -133,7 +211,7 @@ jobs:
         id: sample
         shell: bash
         env:
-          INPUT_MVP_SAMPLE_SIZE: ${{ inputs.mvp_sample_size }}
+          INPUT_MVP_SAMPLE_SIZE: ${{ steps.authorization.outputs.sample_size }}
         run: |
           set +e
           python scripts/probar_muestra_sps_la_colonia.py \
