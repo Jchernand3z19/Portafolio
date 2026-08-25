@@ -11,12 +11,13 @@ persiste en el artifact.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import sys
 import time
 from pathlib import Path
 from typing import Any, Mapping, Sequence
-from urllib.parse import parse_qsl, urlencode, urlsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -43,6 +44,7 @@ INTELLIGENT_SEARCH_V1_ENDPOINT = (
 EXPLICIT_REQUEST_TIMEOUT_MS = 15_000
 PASSIVE_OBSERVE_SECONDS = 3.0
 _CHANNEL_KEYS = frozenset({"sc", "saleschannel", "channel"})
+_SEGMENT_COOKIE_NAMES = frozenset({"vtexsegment", "vtex_segment"})
 
 
 def _canonical_key(value: str) -> str:
@@ -65,11 +67,74 @@ def _normalize_channel(value: Any) -> str | None:
     return None
 
 
-def _mapping_region_values(value: Any) -> list[Any]:
-    return bound._nested_region_values(value)
+def _json_value(value: Any) -> Any:
+    """Decodifica una capa JSON/URL-encoded sin inventar contexto."""
+
+    if not isinstance(value, str):
+        return value
+    candidates = [value.strip()]
+    try:
+        decoded = unquote(value).strip()
+    except Exception:
+        decoded = value.strip()
+    if decoded not in candidates:
+        candidates.append(decoded)
+    for candidate in candidates:
+        if not candidate or candidate[0] not in "[{\"":
+            continue
+        try:
+            parsed = json.loads(candidate)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if parsed != value:
+            return parsed
+    return value
 
 
-def _mapping_channel_values(value: Any) -> list[str]:
+def _decode_segment_cookie(value: str) -> Any:
+    """Prueba sólo representaciones locales del cookie; no hace requests adicionales."""
+
+    direct = _json_value(value)
+    if direct is not value:
+        return direct
+    compact = unquote(value).strip()
+    for decoder in (base64.urlsafe_b64decode, base64.b64decode):
+        try:
+            padded = compact + "=" * (-len(compact) % 4)
+            raw = decoder(padded.encode("ascii"))
+            text = raw.decode("utf-8")
+        except Exception:
+            continue
+        parsed = _json_value(text)
+        if parsed is not text:
+            return parsed
+    return value
+
+
+def _mapping_region_values(value: Any, *, depth: int = 0) -> list[Any]:
+    if depth > 8:
+        return []
+    decoded = _json_value(value)
+    if decoded is not value:
+        return _mapping_region_values(decoded, depth=depth + 1)
+    found: list[Any] = []
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if bound._is_region_key(str(key)):
+                found.append(nested)
+            found.extend(_mapping_region_values(nested, depth=depth + 1))
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for nested in value:
+            found.extend(_mapping_region_values(nested, depth=depth + 1))
+    return found
+
+
+def _mapping_channel_values(value: Any, *, depth: int = 0) -> list[str]:
+    if depth > 8:
+        return []
+    decoded = _json_value(value)
+    if decoded is not value:
+        return _mapping_channel_values(decoded, depth=depth + 1)
     found: list[str] = []
     if isinstance(value, Mapping):
         for key, nested in value.items():
@@ -77,11 +142,34 @@ def _mapping_channel_values(value: Any) -> list[str]:
                 normalized = _normalize_channel(nested)
                 if normalized is not None:
                     found.append(normalized)
-            found.extend(_mapping_channel_values(nested))
+            found.extend(_mapping_channel_values(nested, depth=depth + 1))
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         for nested in value:
-            found.extend(_mapping_channel_values(nested))
+            found.extend(_mapping_channel_values(nested, depth=depth + 1))
     return found
+
+
+def _request_payload(request: Any) -> Any:
+    try:
+        payload = request.post_data_json
+    except Exception:
+        payload = None
+    if payload is not None:
+        return payload
+    try:
+        raw = request.post_data
+    except Exception:
+        raw = None
+    if not raw:
+        return None
+    decoded = _json_value(raw)
+    if decoded is not raw:
+        return decoded
+    try:
+        form = dict(parse_qsl(str(raw), keep_blank_values=True))
+    except Exception:
+        return raw
+    return form or raw
 
 
 class ExplicitV1ContextTracker:
@@ -92,6 +180,7 @@ class ExplicitV1ContextTracker:
         self.active = False
         self.fingerprint_verified = False
         self._ephemeral_region_id: str | None = None
+        self._region_observed_after_activation = False
         self._channels_before_activation: list[str] = []
         self._channels_after_activation: list[str] = []
 
@@ -99,14 +188,16 @@ class ExplicitV1ContextTracker:
         return (
             "ExplicitV1ContextTracker("
             f"active={self.active}, fingerprint_verified={self.fingerprint_verified}, "
+            f"region_after_activation={self._region_observed_after_activation}, "
             f"channel_candidates={len(self._all_channels())}, "
             f"region_available={self._ephemeral_region_id is not None})"
         )
 
     def reset_and_enable(self) -> None:
+        # No descartar una coincidencia canónica observada al cargar el mismo
+        # BrowserContext. Si la página ya abrió en SPS, esa señal sigue siendo la
+        # identidad fuerte y luego se exige verificación visual SPS en el mismo run.
         self.active = True
-        self.fingerprint_verified = False
-        self._ephemeral_region_id = None
         self._channels_after_activation.clear()
 
     def _remember_channel(self, value: Any) -> None:
@@ -120,12 +211,24 @@ class ExplicitV1ContextTracker:
             target.append(normalized)
 
     def _remember_region(self, value: Any) -> None:
-        if not self.active or not isinstance(value, str):
+        if not isinstance(value, str):
             return
-        if bound._stable_fingerprint(value) != self.expected_fingerprint:
+        try:
+            matched = bound._stable_fingerprint(value) == self.expected_fingerprint
+        except (TypeError, ValueError):
+            return
+        if not matched:
             return
         self.fingerprint_verified = True
         self._ephemeral_region_id = value
+        if self.active:
+            self._region_observed_after_activation = True
+
+    def _observe_payload(self, payload: Any) -> None:
+        for value in _mapping_region_values(payload):
+            self._remember_region(value)
+        for value in _mapping_channel_values(payload):
+            self._remember_channel(value)
 
     def observe_request(self, request: Any) -> None:
         try:
@@ -137,6 +240,7 @@ class ExplicitV1ContextTracker:
                     self._remember_channel(value)
                 if bound._is_region_key(key):
                     self._remember_region(value)
+                self._observe_payload(value)
         except Exception:
             pass
 
@@ -150,15 +254,65 @@ class ExplicitV1ContextTracker:
                     self._remember_channel(value)
                 if bound._is_region_key(str(key)):
                     self._remember_region(value)
+                if _canonical_key(str(key)) == "cookie":
+                    for cookie in str(value).split(";"):
+                        name, separator, cookie_value = cookie.strip().partition("=")
+                        if separator and _canonical_key(name) in {
+                            _canonical_key(item) for item in _SEGMENT_COOKIE_NAMES
+                        }:
+                            self._observe_payload(_decode_segment_cookie(cookie_value))
+
+        self._observe_payload(_request_payload(request))
+
+    def observe_response(self, response: Any) -> None:
+        try:
+            parts = urlsplit(str(response.url))
+            if (parts.hostname or "").casefold() != passive.TARGET_HOST:
+                return
+            content_type = str((response.headers or {}).get("content-type") or "").casefold()
+            if "json" not in content_type:
+                return
+            payload = response.json()
+        except Exception:
+            return
+        self._observe_payload(payload)
+
+    def snapshot_page_context(self, page: Any, context: Any) -> None:
+        """Lee señales ya cargadas en navegador sin generar tráfico adicional."""
 
         try:
-            payload = request.post_data_json
+            snapshot = page.evaluate(
+                """() => {
+                    const runtime = globalThis.__RUNTIME__ || {};
+                    const local = Object.fromEntries(Object.entries(localStorage));
+                    const session = Object.fromEntries(Object.entries(sessionStorage));
+                    return {
+                        runtimeSegment: runtime.segment || null,
+                        runtimeQuery: runtime.query || null,
+                        localStorage: local,
+                        sessionStorage: session,
+                    };
+                }"""
+            )
         except Exception:
-            payload = None
-        for value in _mapping_region_values(payload):
-            self._remember_region(value)
-        for value in _mapping_channel_values(payload):
-            self._remember_channel(value)
+            snapshot = None
+        self._observe_payload(snapshot)
+
+        try:
+            cookies = context.cookies()
+        except Exception:
+            cookies = []
+        for cookie in cookies:
+            if not isinstance(cookie, Mapping):
+                continue
+            name = str(cookie.get("name") or "")
+            value = cookie.get("value")
+            if _canonical_key(name) not in {
+                _canonical_key(item) for item in _SEGMENT_COOKIE_NAMES
+            }:
+                continue
+            if isinstance(value, str) and value:
+                self._observe_payload(_decode_segment_cookie(value))
 
     def _all_channels(self) -> tuple[str, ...]:
         values: list[str] = []
@@ -173,6 +327,10 @@ class ExplicitV1ContextTracker:
     @property
     def channel_observed(self) -> bool:
         return bool(self._all_channels())
+
+    @property
+    def region_observed_after_activation(self) -> bool:
+        return self._region_observed_after_activation
 
     def explicit_context(self) -> tuple[str, str]:
         if not self.fingerprint_verified or self._ephemeral_region_id is None:
@@ -245,6 +403,9 @@ def _failure_artifact(reason: str, diagnostic: Mapping[str, Any]) -> dict[str, A
             "region_binding_fingerprint_verified": bool(
                 diagnostic.get("region_binding_fingerprint_verified", False)
             ),
+            "region_observed_after_activation": bool(
+                diagnostic.get("region_observed_after_activation", False)
+            ),
             "sales_channel_observed_same_run": bool(
                 diagnostic.get("sales_channel_observed_same_run", False)
             ),
@@ -290,6 +451,7 @@ def _run_live_v1_sample(*, sample_size: int) -> dict[str, Any]:
         "catalog_candidates_seen": 0,
         "blocked_http_status_observed": None,
         "region_binding_fingerprint_verified": False,
+        "region_observed_after_activation": False,
         "sales_channel_observed_same_run": False,
         "explicit_product_data_requests": 0,
     }
@@ -301,6 +463,7 @@ def _run_live_v1_sample(*, sample_size: int) -> dict[str, Any]:
             context = browser.new_context(service_workers="block")
             page = context.new_page()
             page.on("request", tracker.observe_request)
+            page.on("response", tracker.observe_response)
 
             home_response = page.goto(
                 passive.TARGET_HOME,
@@ -316,6 +479,7 @@ def _run_live_v1_sample(*, sample_size: int) -> dict[str, Any]:
                 raise passive.MvpSampleError(
                     "blocked_or_login_surface", diagnostic=diagnostic
                 )
+            tracker.snapshot_page_context(page, context)
 
             open_location_selector(page)
             control = resolve_exact_city_control(page, passive.TARGET_CITY)
@@ -330,6 +494,7 @@ def _run_live_v1_sample(*, sample_size: int) -> dict[str, Any]:
             passive._wait_for_city(page)
             diagnostic["location_verified_same_run"] = True
             page.wait_for_timeout(passive.MINIMUM_ACTION_DELAY_MS)
+            tracker.snapshot_page_context(page, context)
 
             catalog_response = page.goto(
                 passive.CATALOG_URL,
@@ -351,9 +516,11 @@ def _run_live_v1_sample(*, sample_size: int) -> dict[str, Any]:
                 page.wait_for_timeout(250)
 
             passive._wait_for_city(page)
+            tracker.snapshot_page_context(page, context)
+            diagnostic["region_binding_fingerprint_verified"] = tracker.fingerprint_verified
+            diagnostic["region_observed_after_activation"] = tracker.region_observed_after_activation
+            diagnostic["sales_channel_observed_same_run"] = tracker.channel_observed
             region_id, sales_channel = tracker.explicit_context()
-            diagnostic["region_binding_fingerprint_verified"] = True
-            diagnostic["sales_channel_observed_same_run"] = True
 
             request_url = _build_v1_url(
                 region_id=region_id,
