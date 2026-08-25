@@ -104,8 +104,6 @@ concurrency:
 
 jobs:
   mvp-sample:
-    # Dispatch manual conserva el runner pasivo. El push sólo opera si el marker
-    # de autorización vigente coincide exactamente con la instrucción humana.
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'mvp_sample' && inputs.mvp_read_only_authorized == true) || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -154,15 +152,14 @@ jobs:
               "authorization_statement": "podes trabajar en obtener todo el catalogo",
               "active": True,
               "termination_condition": "first_successful_downloadable_full_sps_catalog",
-              "attempt_sequence": 2,
-              "trigger_pr_number": 299,
+              "attempt_sequence": 3,
+              "trigger_pr_number": 300,
               "supermarket_id": "la_colonia",
               "location_id": "la_colonia_sps",
               "city": "San Pedro Sula",
-              "mode": "staged_then_full_catalog_radiography_productSearchV3",
+              "mode": "category_partitioned_full_catalog_radiography_productSearchV3",
               "page_size": 50,
-              "staged_pages": 3,
-              "max_catalog_pages": 250,
+              "max_planned_product_requests": 400,
               "delay_seconds": 1.5,
               "live_read_only": True,
               "same_browser_context": True,
@@ -180,9 +177,12 @@ jobs:
                   "captcha",
                   "login_required",
                   "host_mismatch",
-                  "catalog_total_changed_during_run",
-                  "duplicate_sku_across_pages",
+                  "category_tree_sampling_detected",
+                  "category_partition_exceeds_search_window",
+                  "partition_request_budget_exceeded",
+                  "partition_total_mismatch",
                   "partial_or_unexpected_product_page",
+                  "unique_product_coverage_mismatch",
                   "excessive_load_risk",
               ],
           }
@@ -200,8 +200,8 @@ jobs:
           head_commit = event.get("head_commit") or {}
           message = str(head_commit.get("message") or "")
           expected_prefix = (
-              "Merge pull request #299 from "
-              "Jchernand3z19/fix/precios-sps-full-catalog-navigation-race-attempt-2"
+              "Merge pull request #300 from "
+              "Jchernand3z19/fix/precios-sps-full-catalog-category-partitions-attempt-3"
           )
           if not message.startswith(expected_prefix):
               raise SystemExit("mvp_live_merge_identity_mismatch")
@@ -214,7 +214,7 @@ jobs:
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("sample_size=10\n")
-              output.write("capture_mode=full_catalog_radiography\n")
+              output.write("capture_mode=full_catalog_partitioned\n")
           PY
 
       - name: Configurar Python
@@ -240,13 +240,11 @@ jobs:
               --live-read-only \
               --sample-size "$INPUT_MVP_SAMPLE_SIZE" \
               --output run-artifacts/mvp-sample.json
-          elif [[ "$CAPTURE_MODE" == "full_catalog_radiography" ]]; then
-            python scripts/obtener_catalogo_sps_la_colonia_radiografia_v2.py \
+          elif [[ "$CAPTURE_MODE" == "full_catalog_partitioned" ]]; then
+            python scripts/obtener_catalogo_sps_la_colonia_particionado.py \
               --live-read-only \
               --allow-full-catalog \
               --page-size 50 \
-              --staged-pages 3 \
-              --max-catalog-pages 250 \
               --delay-seconds 1.5 \
               --output run-artifacts/full-catalog.json \
               --csv-output run-artifacts/full-catalog.csv
@@ -282,7 +280,6 @@ jobs:
           exit "$exit_code"
 
   live-crawl:
-    # El recorrido comercial/general permanece congelado durante el MVP.
     if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -331,27 +328,13 @@ jobs:
             --output-dir run-artifacts
           )
 
-          if [[ "$INPUT_MAX_PAGES" != "0" ]]; then
-            args+=(--max-pages "$INPUT_MAX_PAGES")
-          fi
-          if [[ "$INPUT_MAX_PRODUCTS" != "0" ]]; then
-            args+=(--max-products "$INPUT_MAX_PRODUCTS")
-          fi
-          if [[ -n "$INPUT_MAX_MISSING_PRICE_RATIO" ]]; then
-            args+=(--max-missing-price-ratio "$INPUT_MAX_MISSING_PRICE_RATIO")
-          fi
-          if [[ -n "$INPUT_MAX_DUPLICATE_SKU_RATIO" ]]; then
-            args+=(--max-duplicate-sku-ratio "$INPUT_MAX_DUPLICATE_SKU_RATIO")
-          fi
-          if [[ -n "$INPUT_MAX_TOTAL_CHANGE_RATIO" ]]; then
-            args+=(--max-total-change-ratio "$INPUT_MAX_TOTAL_CHANGE_RATIO")
-          fi
-          if [[ -n "$INPUT_MAX_DUPLICATE_PRODUCT_RATIO" ]]; then
-            args+=(--max-duplicate-product-ratio "$INPUT_MAX_DUPLICATE_PRODUCT_RATIO")
-          fi
-          if [[ "$INPUT_ALLOW_FULL" == "true" ]]; then
-            args+=(--allow-full)
-          fi
+          if [[ "$INPUT_MAX_PAGES" != "0" ]]; then args+=(--max-pages "$INPUT_MAX_PAGES"); fi
+          if [[ "$INPUT_MAX_PRODUCTS" != "0" ]]; then args+=(--max-products "$INPUT_MAX_PRODUCTS"); fi
+          if [[ -n "$INPUT_MAX_MISSING_PRICE_RATIO" ]]; then args+=(--max-missing-price-ratio "$INPUT_MAX_MISSING_PRICE_RATIO"); fi
+          if [[ -n "$INPUT_MAX_DUPLICATE_SKU_RATIO" ]]; then args+=(--max-duplicate-sku-ratio "$INPUT_MAX_DUPLICATE_SKU_RATIO"); fi
+          if [[ -n "$INPUT_MAX_TOTAL_CHANGE_RATIO" ]]; then args+=(--max-total-change-ratio "$INPUT_MAX_TOTAL_CHANGE_RATIO"); fi
+          if [[ -n "$INPUT_MAX_DUPLICATE_PRODUCT_RATIO" ]]; then args+=(--max-duplicate-product-ratio "$INPUT_MAX_DUPLICATE_PRODUCT_RATIO"); fi
+          if [[ "$INPUT_ALLOW_FULL" == "true" ]]; then args+=(--allow-full); fi
 
           python scripts/probar_la_colonia.py "${args[@]}"
           exit_code=$?
@@ -389,14 +372,10 @@ jobs:
         shell: bash
         run: |
           exit_code="${{ steps.crawl.outputs.exit_code }}"
-          if [[ -z "$exit_code" ]]; then
-            echo "El runner no produjo código de salida." >&2
-            exit 1
-          fi
+          if [[ -z "$exit_code" ]]; then echo "El runner no produjo código de salida." >&2; exit 1; fi
           exit "$exit_code"
 
   context-bound-facet-entrypoint:
-    # Ruta edge productiva diferida; continúa completamente cerrada durante MVP.
     if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
