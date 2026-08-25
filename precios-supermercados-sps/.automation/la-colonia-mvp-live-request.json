@@ -2,6 +2,7 @@
   "schema_version": "precios-sps-la-colonia-mvp-live-request/v1",
   "request_sequence": 1,
   "active": true,
+  "trigger_pr_number": 277,
   "authorized_at_utc": "2026-08-25T01:20:22Z",
   "authorization_source": "human_user_explicit_chat_confirmation",
   "authorization_statement": "si",
