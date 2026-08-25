@@ -21,6 +21,7 @@ import probar_muestra_sps_la_colonia_bound as bound  # noqa: E402
 import probar_muestra_sps_la_colonia_resilient as resilient  # noqa: E402
 
 SESSION_COOKIE_NAME = "vtexsession"
+ORIGINAL_REGION_TRACKER = bound.RegionContextTracker
 
 
 def _cookie_fingerprint_from_context(context: Any, cookie_name: str) -> str | None:
@@ -134,7 +135,7 @@ class SharedBrowserSessionTracker(resilient.SharedSegmentCookieTracker):
 
     def replay_context(self) -> tuple[dict[str, str], tuple[tuple[str, str], ...]]:
         try:
-            return bound.RegionContextTracker.replay_context(self)
+            return ORIGINAL_REGION_TRACKER.replay_context(self)
         except bound.passive.MvpSampleError as exc:
             if str(exc) != "sps_region_binding_observed_but_not_replayable":
                 raise
