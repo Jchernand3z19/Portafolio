@@ -22,6 +22,8 @@ ACTIVE_AUTHORIZATION_IDS = []
 
 **No existe autorización live activa.** La autorización humana explícita recibida a `2026-08-25T03:50:45Z` fue consumida por el run `32807247386` y no se reutiliza. No se inventa un Authorization ID porque el usuario no proporcionó uno.
 
+La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico posterior requiere una autorización humana explícita vigente para su alcance concreto.
+
 ## Objetivo MVP vigente
 
 ```text
