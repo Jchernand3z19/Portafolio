@@ -154,8 +154,8 @@ jobs:
               "authorization_statement": "no me estes pidiendo autorizacion trabaja hasta que podamos descargar esto",
               "active": True,
               "termination_condition": "first_successful_downloadable_sps_sample",
-              "attempt_sequence": 3,
-              "trigger_pr_number": 291,
+              "attempt_sequence": 4,
+              "trigger_pr_number": 292,
               "supermarket_id": "la_colonia",
               "location_id": "la_colonia_sps",
               "city": "San Pedro Sula",
@@ -195,8 +195,8 @@ jobs:
           head_commit = event.get("head_commit") or {}
           message = str(head_commit.get("message") or "")
           expected_prefix = (
-              "Merge pull request #291 from "
-              "Jchernand3z19/fix/precios-sps-vtexsession-context-attempt-3"
+              "Merge pull request #292 from "
+              "Jchernand3z19/fix/precios-sps-session-original-tracker-attempt-4"
           )
           if not message.startswith(expected_prefix):
               raise SystemExit("mvp_live_merge_identity_mismatch")
@@ -328,11 +328,11 @@ jobs:
           if [[ -n "$INPUT_MAX_DUPLICATE_SKU_RATIO" ]]; then
             args+=(--max-duplicate-sku-ratio "$INPUT_MAX_DUPLICATE_SKU_RATIO")
           fi
-          if [[ -n "$INPUT_MAX_DUPLICATE_PRODUCT_RATIO" ]]; then
-            args+=(--max-duplicate-product-ratio "$INPUT_MAX_DUPLICATE_PRODUCT_RATIO")
-          fi
           if [[ -n "$INPUT_MAX_TOTAL_CHANGE_RATIO" ]]; then
             args+=(--max-total-change-ratio "$INPUT_MAX_TOTAL_CHANGE_RATIO")
+          fi
+          if [[ -n "$INPUT_MAX_DUPLICATE_PRODUCT_RATIO" ]]; then
+            args+=(--max-duplicate-product-ratio "$INPUT_MAX_DUPLICATE_PRODUCT_RATIO")
           fi
           if [[ "$INPUT_ALLOW_FULL" == "true" ]]; then
             args+=(--allow-full)
