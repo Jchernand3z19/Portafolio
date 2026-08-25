@@ -4,11 +4,11 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-24 America/Tegucigalpa / 2026-08-25 UTC** contra el merge de `#281`:
+Estado verificado al **2026-08-24 America/Tegucigalpa / 2026-08-25 UTC** después del run live de `#283`:
 
 ```text
-main_observed = e8afbcd129e2d3deb037fe853eab7f8fc6e00412
-last_technical_pr = #282
+main_observed = b7b27c576550bb354c0014b4883307944bd21247
+last_live_pr = #283
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -20,7 +20,7 @@ catalog_accepted = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-**No existe autorización live activa.** La autorización humana explícita recibida a `2026-08-25T03:50:45Z` fue consumida por el run `32807247386` y no se reutiliza. No se inventa un Authorization ID porque el usuario no proporcionó uno.
+**No existe autorización live activa.** La autorización humana explícita recibida a `2026-08-25T04:30:59Z` fue consumida por el run `32809740940` y no se reutiliza. No se inventa un Authorization ID porque el usuario no proporcionó uno.
 
 La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico posterior requiere autorización humana explícita vigente para su alcance concreto.
 
@@ -90,24 +90,8 @@ Esta ejecución demostró que esperar más por el `productSearch` pasivo no es u
 
 ### Tercer sample bound — autorización consumida
 
-Autorización humana explícita:
-
 ```text
 authorized_at_utc = 2026-08-25T03:50:45Z
-statement = si
-request_sequence = 3
-trigger_pr_number = 281
-scope = open homepage + select/verify SPS + open catalog once + passive observation + max 1 explicit productSearchV3 + retain max 10 products
-max_explicit_product_search_requests = 1
-commercial_retries = 0
-full_crawl = not authorized
-commercial_persistence = not authorized
-```
-
-Ejecución:
-
-```text
-workflow = La Colonia - Recorrido live manual
 run = 32807247386
 job = 97679646582
 merge = e8afbcd129e2d3deb037fe853eab7f8fc6e00412
@@ -124,25 +108,64 @@ error = Playwright TimeoutError during city click after DOM detach
 artifact = none
 ```
 
-El log muestra que el botón exacto de San Pedro Sula fue localizado, estaba visible/habilitado/estable y, al intentar el click, **el nodo fue reemplazado por un re-render del DOM**. Playwright continuó esperando sobre el locator hasta agotar 30 segundos. El runner bound no alcanzó `/supermercado` ni ejecutó el GET explícito autorizado, por lo que todavía no existe una muestra de productos de este intento.
+El botón exacto de San Pedro Sula fue reemplazado por un re-render mientras Playwright intentaba hacer click. `#282` corrigió offline ese blocker mediante como máximo una re-resolución del mismo control, sin añadir retries comerciales.
 
-La autorización queda **consumida independientemente de que el GET comercial no se alcanzara**, porque sí hubo tráfico live a La Colonia. No se reejecuta automáticamente.
+### Cuarto sample bound resiliente — autorización consumida
 
-## Corrección offline actual — PR #282
+Autorización humana explícita:
 
-El fallo de `32807247386` reveló un blocker concreto en la interacción de ubicación, no en el fallback GraphQL. `#282` hace únicamente lo necesario para eliminarlo y cerrar la autorización consumida:
+```text
+authorized_at_utc = 2026-08-25T04:30:59Z
+statement = si
+request_sequence = 4
+trigger_pr_number = 283
+scope = open homepage + select/verify SPS + max 1 DOM re-resolution + open catalog once + passive observation + max 1 explicit productSearchV3 + retain max 10 products
+max_city_control_reresolutions = 1
+max_explicit_product_search_requests = 1
+commercial_retries = 0
+full_crawl = not authorized
+commercial_persistence = not authorized
+```
 
-- retira el marker y trigger one-shot de `#281`;
-- restaura el workflow live manual fail-closed;
-- restaura la auditoría de workflow sin autorización activa;
-- añade `probar_muestra_sps_la_colonia_resilient.py`, que reutiliza el runner bound existente;
-- si el primer click termina en `TimeoutError`, primero verifica si SPS ya quedó seleccionado;
-- sólo si no quedó seleccionado, re-resuelve **una vez** el mismo control exacto de San Pedro Sula y vuelve a intentar esa misma acción;
-- un segundo timeout termina fail-closed;
-- esta recuperación DOM no añade consultas `productSearchV3`, retries comerciales, páginas de catálogo ni persistencia;
-- pruebas offline cubren selección ya aplicada, una única re-resolución, segundo timeout y errores no retryables.
+Ejecución:
 
-El fallback comercial preparado continúa siendo el mismo: sólo después de confirmar SPS en la misma sesión, si no aparece `productSearch` pasivo y el `regionId` observado coincide exactamente con el fingerprint SPS canónico, puede realizar **como máximo un GET explícito `productSearchV3`** cuando exista una nueva autorización humana que lo cubra.
+```text
+workflow = La Colonia - Recorrido live manual
+run = 32809740940
+job = 97686681957
+merge = b7b27c576550bb354c0014b4883307944bd21247
+preflight = success
+location_verified_same_run = true
+graphql_responses_seen = 9
+product_search_payloads_seen = 0
+catalog_candidates_seen = 0
+blocked_http_status_observed = null
+region_binding_fingerprint_verified = true
+region_context_replayable_placements = 0
+region_context_body_only_observed = true
+explicit_product_search_requests = 0
+live_crawl job = skipped
+context_bound_facet job = skipped
+result = failure
+error_code = sps_region_binding_observed_but_not_replayable
+artifact_id = 9549381649
+artifact_name = la-colonia-sps-mvp-sample-32809740940
+artifact_zip_sha256 = f3ed5bbd0d726c194d448b7bdca5a91def36f2170b834bc27d01ebd40f0556c2
+```
+
+Este run cerró dos dudas importantes sin ampliar tráfico: **San Pedro Sula sí quedó verificado en la misma sesión** y el valor efímero de `regionId` observado después de seleccionar SPS **sí coincidió exactamente con el fingerprint canónico**. Sin embargo, la coincidencia apareció únicamente dentro del body de una request observada; no apareció en header ni query, por lo que el runner actual se negó correctamente a inventar un placement para el GET de `productSearchV3`.
+
+No se emitió el GET explícito autorizado (`explicit_product_search_requests=0`), no hubo 403/429 y no se persistió URL, header, cookie, sesión, token ni `regionId` raw. La autorización queda **consumida y cerrada** porque sí hubo tráfico live al supermercado.
+
+## Blocker actual
+
+```text
+CURRENT BLOCKER = SPS regionId exact match is body-only in same-run traffic
+KNOWN SAFE FACTS = location verified + canonical fingerprint match + no passive productSearch
+UNKNOWN = how the source expects the same SPS region context to be carried into the explicit productSearchV3 request
+```
+
+El siguiente trabajo debe ser offline primero. No se debe convertir un valor observado en body a header/query por intuición. La alternativa mínima es reutilizar evidencia y código existentes para modelar un replay body-bound sólo si puede demostrarse una transformación exacta y no ambigua hacia la operación pública de búsqueda; de lo contrario debe prepararse una captura sanitizada adicional que revele únicamente el **placement/shape**, nunca el valor raw.
 
 ## Fuente de productos conocida
 
@@ -182,21 +205,6 @@ ACTIVE_AUTHORIZATION_IDS = []
 
 ## Próxima frontera humana
 
-Después de que `#282` cierre con CI verde y sea fusionado, todo el trabajo offline inmediato para este blocker queda terminado. Para volver a tocar La Colonia se necesitará una **nueva autorización explícita**. El siguiente scope útil será el mismo objetivo de muestra, con esta precisión técnica:
+Antes de pedir otra autorización live debe agotarse el análisis offline del placement body-only observado en `32809740940` y preparar el cambio mínimo correspondiente con tests fail-closed.
 
-```text
-open homepage
-select/verify San Pedro Sula
-allow at most one bounded re-resolution of the same SPS city control if DOM rerenders
-open /supermercado once
-observe productSearch passively
-if absent and same-run SPS binding fingerprint matches, allow max 1 explicit productSearchV3 GET
-retain max 10 public products
-commercial retries = 0
-full crawl = false
-Google Sheets writes = false
-production_authority = false
-catalog_accepted = false
-```
-
-No se pedirá full crawl ni persistencia hasta obtener primero una muestra real y revisar sus campos/precios.
+Si después de ese trabajo todavía hace falta tráfico nuevo, se solicitará una autorización nueva y específica. La autorización de `2026-08-25T04:30:59Z` no se reutiliza.
