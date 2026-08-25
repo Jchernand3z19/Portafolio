@@ -1,1 +1,0 @@
-Solicitud transitoria one-shot para la autorización humana explícita recibida el 2026-08-25T03:50:45Z. Debe eliminarse junto con el trigger push después de consumirse, independientemente del resultado.
