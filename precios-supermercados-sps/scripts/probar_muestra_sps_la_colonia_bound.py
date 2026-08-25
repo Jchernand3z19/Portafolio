@@ -399,8 +399,10 @@ def _run_live_bound_sample(*, sample_size: int) -> dict[str, Any]:
                 capture_mode="single_explicit_bound_fallback",
                 explicit_requests=1,
             )
-        except passive.MvpSampleError:
-            raise
+        except passive.MvpSampleError as exc:
+            if exc.diagnostic:
+                raise
+            raise passive.MvpSampleError(str(exc), diagnostic=diagnostic) from exc
         except (DiagnosticSafetyError, LocationControlResolutionError) as exc:
             raise passive.MvpSampleError(str(exc), diagnostic=diagnostic) from exc
         finally:
