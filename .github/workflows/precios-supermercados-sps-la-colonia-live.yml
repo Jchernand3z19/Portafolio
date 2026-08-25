@@ -148,16 +148,20 @@ jobs:
               "schema_version": "precios-sps-la-colonia-full-catalog-request/v1",
               "authorization_mode": "one_time_full_catalog_after_staged_validation",
               "authorized_at_utc": "2026-08-25T21:13:44Z",
+              "continued_at_utc": "2026-08-25T22:31:45Z",
               "authorization_source": "human_user_explicit_chat_instruction",
               "authorization_statement": "podes trabajar en obtener todo el catalogo",
+              "continuation_statement": "ok comenza a trabajar",
               "active": True,
               "termination_condition": "first_successful_downloadable_full_sps_catalog",
-              "attempt_sequence": 6,
-              "trigger_pr_number": 303,
+              "attempt_sequence": 7,
+              "trigger_pr_number": 304,
               "supermarket_id": "la_colonia",
               "location_id": "la_colonia_sps",
               "city": "San Pedro Sula",
-              "mode": "brand_partitions_single_city_reresolution_productSearchV3",
+              "mode": "operational_city_brand_partitions_productSearchV3",
+              "radiography_execution": False,
+              "location_verification": "structural_exact_city_control",
               "page_size": 50,
               "max_planned_product_requests": 400,
               "delay_seconds": 1.5,
@@ -177,7 +181,7 @@ jobs:
                   "captcha",
                   "login_required",
                   "host_mismatch",
-                  "target_city_not_found_after_single_reresolution",
+                  "city_selection_not_verified",
                   "brand_values_missing",
                   "brand_partition_exceeds_search_window",
                   "partition_frontier_below_root_total",
@@ -202,8 +206,8 @@ jobs:
           head_commit = event.get("head_commit") or {}
           message = str(head_commit.get("message") or "")
           expected_prefix = (
-              "Merge pull request #303 from "
-              "Jchernand3z19/fix/precios-sps-brand-city-reresolution-attempt-6"
+              "Merge pull request #304 from "
+              "Jchernand3z19/fix/precios-sps-decouple-radiography-attempt-7"
           )
           if not message.startswith(expected_prefix):
               raise SystemExit("mvp_live_merge_identity_mismatch")
@@ -216,7 +220,7 @@ jobs:
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("sample_size=10\n")
-              output.write("capture_mode=full_catalog_brand_city_reresolution\n")
+              output.write("capture_mode=full_catalog_operational\n")
           PY
 
       - name: Configurar Python
@@ -242,8 +246,8 @@ jobs:
               --live-read-only \
               --sample-size "$INPUT_MVP_SAMPLE_SIZE" \
               --output run-artifacts/mvp-sample.json
-          elif [[ "$CAPTURE_MODE" == "full_catalog_brand_city_reresolution" ]]; then
-            python scripts/obtener_catalogo_sps_la_colonia_particionado_v4.py \
+          elif [[ "$CAPTURE_MODE" == "full_catalog_operational" ]]; then
+            python scripts/obtener_catalogo_sps_la_colonia_operativo.py \
               --live-read-only \
               --allow-full-catalog \
               --page-size 50 \
