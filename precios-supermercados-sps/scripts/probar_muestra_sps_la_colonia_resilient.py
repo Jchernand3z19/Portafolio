@@ -147,6 +147,14 @@ class SharedSegmentCookieTracker(bound.RegionContextTracker):
         super().observe_request(request)
 
     @property
+    def segment_cookie_baseline_observed(self) -> bool:
+        return self._inactive_segment_cookie_fingerprint is not None
+
+    @property
+    def segment_cookie_active_observed(self) -> bool:
+        return bool(self._active_segment_cookie_fingerprints)
+
+    @property
     def segment_cookie_transition_observed(self) -> bool:
         baseline = self._inactive_segment_cookie_fingerprint
         if baseline is None:
@@ -214,10 +222,26 @@ def activate_city_control_resilient(
             raise
 
 
+def _segment_diagnostics() -> dict[str, bool]:
+    tracker = SharedSegmentCookieTracker.current_instance
+    if tracker is None:
+        return {
+            "segment_cookie_baseline_observed": False,
+            "segment_cookie_active_observed": False,
+            "segment_cookie_transition_verified": False,
+        }
+    return {
+        "segment_cookie_baseline_observed": tracker.segment_cookie_baseline_observed,
+        "segment_cookie_active_observed": tracker.segment_cookie_active_observed,
+        "segment_cookie_transition_verified": tracker.segment_cookie_transition_observed,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     original_activate = bound.activate_city_control
     original_tracker = bound.RegionContextTracker
     original_success_artifact = bound._success_artifact
+    original_failure_artifact = bound._failure_artifact
 
     def _resilient(control: Any, city_name: str) -> bool:
         try:
@@ -253,9 +277,14 @@ def main(argv: list[str] | None = None) -> int:
         ):
             kwargs["capture_mode"] = "single_explicit_shared_segment_cookie"
         artifact = original_success_artifact(**kwargs)
-        if SharedSegmentCookieTracker.shared_fallback_used:
-            artifact["segment_cookie_transition_verified"] = True
-            bound.passive._validate_artifact_shape(artifact)
+        artifact.update(_segment_diagnostics())
+        bound.passive._validate_artifact_shape(artifact)
+        return artifact
+
+    def _failure_artifact(reason: str, diagnostic: Mapping[str, Any]) -> dict[str, Any]:
+        artifact = original_failure_artifact(reason, diagnostic)
+        artifact.update(_segment_diagnostics())
+        bound.passive._validate_artifact_shape(artifact)
         return artifact
 
     SharedSegmentCookieTracker.shared_fallback_used = False
@@ -263,12 +292,14 @@ def main(argv: list[str] | None = None) -> int:
     bound.activate_city_control = _resilient
     bound.RegionContextTracker = SharedSegmentCookieTracker
     bound._success_artifact = _success_artifact
+    bound._failure_artifact = _failure_artifact
     try:
         return bound.main(argv)
     finally:
         bound.activate_city_control = original_activate
         bound.RegionContextTracker = original_tracker
         bound._success_artifact = original_success_artifact
+        bound._failure_artifact = original_failure_artifact
         SharedSegmentCookieTracker.shared_fallback_used = False
         SharedSegmentCookieTracker.current_instance = None
 
