@@ -3,9 +3,10 @@
 
 La captura de ubicación usa el mismo RequestContextCollector, los mismos stages y
 el mismo análisis que produjo la evidencia canónica de San Pedro Sula. Una vez
-verificado el fingerprint fuerte de regionId, y sin cerrar ni reemplazar el
+verificado el source key fuerte de regionId, y sin cerrar ni reemplazar el
 BrowserContext, se hace un único GET productSearchV3 ya validado previamente.
-El regionId raw sólo vive en memoria y nunca se persiste.
+No se recupera ni persiste el regionId raw: el propio source key ya contiene el
+fingerprint exacto de la señal observada en esa misma ejecución.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -45,34 +46,6 @@ EXPECTED_SOURCE_KEY = (
     "request:regionid:sha256:"
     "d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7"
 )
-
-
-def _matching_region(value: Any) -> Any | None:
-    """Recupera el valor efímero exacto cuyo fingerprint ya fue validado como SPS."""
-
-    try:
-        if bound._stable_fingerprint(value) == bound.SPS_REGION_FINGERPRINT:
-            return value
-    except (TypeError, ValueError):
-        pass
-
-    if isinstance(value, Mapping):
-        for key, nested in value.items():
-            if bound._is_region_key(str(key)):
-                try:
-                    if bound._stable_fingerprint(nested) == bound.SPS_REGION_FINGERPRINT:
-                        return nested
-                except (TypeError, ValueError):
-                    pass
-            match = _matching_region(nested)
-            if match is not None:
-                return match
-    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        for nested in value:
-            match = _matching_region(nested)
-            if match is not None:
-                return match
-    return None
 
 
 def _is_timeout(exc: BaseException) -> bool:
@@ -255,13 +228,6 @@ def _run_live_sample(*, sample_size: int) -> dict[str, Any]:
             if source_key != EXPECTED_SOURCE_KEY:
                 raise passive.MvpSampleError("radiography_sps_binding_not_verified", diagnostic=diagnostic)
             diagnostic["binding_source_key_verified"] = True
-
-            request_channel = after_city.channels.get("request", {})
-            ephemeral_region = _matching_region(request_channel)
-            if ephemeral_region is None and after_store is not None:
-                ephemeral_region = _matching_region(after_store.channels.get("request", {}))
-            if ephemeral_region is None:
-                raise passive.MvpSampleError("radiography_region_raw_not_recovered", diagnostic=diagnostic)
             diagnostic["region_binding_fingerprint_verified"] = True
 
             request_url = build_product_search_url(page=1, page_size=sample_size)
