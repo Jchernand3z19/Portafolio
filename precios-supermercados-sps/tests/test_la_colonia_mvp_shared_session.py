@@ -166,3 +166,22 @@ def test_diagnostics_are_boolean_only() -> None:
     assert all(isinstance(value, bool) for value in diagnostics.values())
     assert "session-before" not in repr(diagnostics)
     assert "session-after" not in repr(diagnostics)
+
+
+def test_replay_uses_original_region_tracker_after_live_monkeypatch() -> None:
+    region = "opaque-sps-region"
+    context = CookieContext()
+    context.set_cookie("vtexsession", "session-before")
+    tracker = tracker_for(region)
+    tracker.reset_and_enable()
+    tracker.begin_city_activation(context)
+    context.set_cookie("vtexsession", "session-after")
+    tracker.snapshot_context(context)
+    tracker.observe_request(request(context, region=region))
+
+    original = module.bound.RegionContextTracker
+    module.bound.RegionContextTracker = module.SharedBrowserSessionTracker
+    try:
+        assert tracker.replay_context() == ({}, ())
+    finally:
+        module.bound.RegionContextTracker = original
