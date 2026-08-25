@@ -1,0 +1,9 @@
+{
+  "schema_version": "precios-sps-la-colonia-mvp-live-request/v1",
+  "request_sequence": 2,
+  "active": false,
+  "authorized_at_utc": "2026-08-25T02:05:35Z",
+  "authorization_source": "human_user_explicit_chat_confirmation",
+  "authorization_statement": "si",
+  "note": "awaiting_pr_binding"
+}
