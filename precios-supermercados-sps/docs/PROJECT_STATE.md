@@ -4,11 +4,13 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-25 UTC** contra el merge live de `#286`:
+Estado verificado al **2026-08-25 UTC** después del cierre de la quinta autorización y con el ajuste offline `#288` en revisión:
 
 ```text
-main_observed = 3428d19b6e37442d906f65390dec9933fe0e5ba6
+main_observed = 4860c5494d7df4565f6d3fdef9518f799d5712d7
 last_live_pr = #286
+last_cleanup_pr = #287
+offline_fix_pr = #288
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -160,22 +162,34 @@ artifact_name = la-colonia-sps-mvp-sample-32857812255
 artifact_zip_sha256 = 6ec05ad88da14c53f9241388018dafaaffe6d3905f876e8fa131429c0a46f520
 ```
 
-El artifact sanitizado confirma que San Pedro Sula quedó verificado y que el fingerprint canónico de `regionId` volvió a coincidir en la misma ejecución. El fallback se detuvo porque el tracker basado en headers de requests no pudo demostrar una transición de `vtexsegment`. **No se emitió el GET explícito** (`explicit_product_search_requests=0`), no hubo 403/429, no se ejecutó full crawl y no se escribió en Google Sheets.
+El artifact sanitizado confirma que San Pedro Sula quedó verificado y que el fingerprint canónico de `regionId` volvió a coincidir en la misma ejecución. El fallback se detuvo porque la observación de headers de requests no pudo demostrar una transición de `vtexsegment`. **No se emitió el GET explícito** (`explicit_product_search_requests=0`), no hubo 403/429, no se ejecutó full crawl y no se escribió en Google Sheets.
 
 La autorización de `2026-08-25T13:59:21Z` queda consumida y cerrada porque sí hubo tráfico live.
 
-## Blocker actual y siguiente trabajo offline
+## Corrección offline actual — PR #288
+
+El análisis del quinto run mostró que el problema no es el binding SPS, sino la forma de observar la cookie. `#288` mantiene el mismo enfoque fail-closed pero usa como señal primaria el cookie jar real del `BrowserContext` asociado a cada request:
 
 ```text
-CURRENT BLOCKER = request-header observation did not prove vtexsegment transition
-KNOWN = SPS verified + canonical region fingerprint matched + body-only region context
-KNOWN = BrowserContext owns the session cookie jar used by BrowserContext.request
-NEXT OFFLINE CHECK = compare only fingerprints of vtexsegment from context.cookies() before/after SPS activation
+before SPS activation:
+  observe latest vtexsegment fingerprint while tracker inactive
+
+after tracker activation:
+  observe vtexsegment fingerprints from request.frame.page.context.cookies()
+
+body-only fallback requires:
+  canonical SPS region fingerprint verified = true
+  preselection vtexsegment baseline exists = true
+  at least one active vtexsegment fingerprint differs from baseline = true
 ```
 
-La siguiente corrección debe permanecer fail-closed y no necesita tráfico para implementarse: capturar únicamente el fingerprint efímero de `vtexsegment` mediante `BrowserContext.cookies()` antes de seleccionar SPS y después de verificar SPS. Si la cookie falta o el fingerprint no cambia, no se permite el GET. Los valores raw no se escriben en logs, artifacts ni estado durable.
+Sólo se conservan SHA256 efímeros en memoria. El valor raw de `vtexsegment` no se guarda, no se imprime y no aparece en artifacts. Cookies con dominio ajeno a `lacolonia.com` se ignoran. Si no existe baseline previa o el fingerprint no cambia, el runner continúa deteniéndose con `sps_region_binding_body_only_without_segment_cookie_transition`.
 
-El endpoint público conocido sigue siendo:
+La señal histórica basada en header `Cookie` se conserva como evidencia secundaria compatible, pero ya no es la única forma de observar la sesión. Un placement explícito de `regionId` previamente demostrado en header/query sigue teniendo prioridad y no necesita este fallback.
+
+Este PR es **offline**: no ejecuta navegación a La Colonia ni concede autoridad para hacerla.
+
+## Fuente de productos conocida
 
 ```text
 https://www.lacolonia.com/_v/segment/graphql/v1
@@ -211,4 +225,4 @@ ACTIVE_AUTHORIZATION_IDS = []
 
 ## Próxima frontera humana
 
-Primero se agota y valida el ajuste offline del fingerprint de cookie desde `BrowserContext.cookies()` con pruebas fail-closed. Si después de eso hace falta tráfico nuevo, se solicitará una autorización humana explícita nueva y específica. La autorización de `2026-08-25T13:59:21Z` no se reutiliza.
+Primero `#288` debe cerrar CI/revisión y quedar fusionado. Después, si el ajuste permanece verde, el siguiente paso que puede producir información nueva vuelve a requerir tráfico live y por tanto una **nueva autorización humana explícita**. La autorización de `2026-08-25T13:59:21Z` no se reutiliza.

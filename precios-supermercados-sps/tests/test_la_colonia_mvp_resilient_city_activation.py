@@ -19,12 +19,39 @@ def _control(page: object) -> SimpleNamespace:
     return SimpleNamespace(locator=SimpleNamespace(page=page))
 
 
-def _request(*, cookie: str | None = None, payload=None) -> SimpleNamespace:
+class _CookieContext:
+    def __init__(self, cookies):
+        self._cookies = cookies
+
+    def cookies(self):
+        return list(self._cookies)
+
+
+def _request(
+    *,
+    cookie: str | None = None,
+    payload=None,
+    context_cookie: str | None = None,
+    context_cookie_domain: str = ".lacolonia.com",
+) -> SimpleNamespace:
     headers = {"cookie": cookie} if cookie is not None else {}
+    cookies = []
+    if context_cookie is not None:
+        cookies.append(
+            {
+                "name": "vtexsegment",
+                "value": context_cookie,
+                "domain": context_cookie_domain,
+            }
+        )
+    context = _CookieContext(cookies)
+    page = SimpleNamespace(context=context)
+    frame = SimpleNamespace(page=page)
     return SimpleNamespace(
         headers=headers,
         url="https://www.lacolonia.com/_v/segment/graphql/v1",
         post_data_json=payload,
+        frame=frame,
     )
 
 
@@ -138,21 +165,20 @@ def test_non_timeout_activation_error_is_not_retried() -> None:
         )
 
 
-def test_body_only_region_can_use_shared_cookie_after_verified_transition() -> None:
+def test_body_only_region_uses_context_cookie_snapshot_transition() -> None:
     region = "opaque-sps-region"
     tracker = module.SharedSegmentCookieTracker(
         expected_fingerprint=module.bound._stable_fingerprint(region)
     )
 
-    tracker.observe_request(_request(cookie="vtexsegment=segment-before; other=1"))
+    tracker.observe_request(_request(context_cookie="segment-before"))
     tracker.reset_and_enable()
     tracker.observe_request(
         _request(
-            cookie="vtexsegment=segment-before; other=1",
+            context_cookie="segment-after",
             payload={"variables": {"regionId": region}},
         )
     )
-    tracker.observe_request(_request(cookie="vtexsegment=segment-after; other=1"))
 
     headers, query = tracker.replay_context()
 
@@ -169,17 +195,39 @@ def test_body_only_region_can_use_shared_cookie_after_verified_transition() -> N
     assert region not in diagnostic_repr
 
 
-def test_body_only_region_without_segment_cookie_transition_stays_fail_closed() -> None:
+def test_header_cookie_transition_remains_compatible_secondary_evidence() -> None:
     region = "opaque-sps-region"
     tracker = module.SharedSegmentCookieTracker(
         expected_fingerprint=module.bound._stable_fingerprint(region)
     )
 
-    tracker.observe_request(_request(cookie="vtexsegment=same-segment"))
+    tracker.observe_request(_request(cookie="vtexsegment=segment-before; other=1"))
     tracker.reset_and_enable()
     tracker.observe_request(
         _request(
-            cookie="vtexsegment=same-segment",
+            cookie="vtexsegment=segment-after; other=1",
+            payload={"variables": {"regionId": region}},
+        )
+    )
+
+    headers, query = tracker.replay_context()
+
+    assert tracker.segment_cookie_transition_observed is True
+    assert headers == {}
+    assert query == ()
+
+
+def test_body_only_region_without_context_cookie_transition_stays_fail_closed() -> None:
+    region = "opaque-sps-region"
+    tracker = module.SharedSegmentCookieTracker(
+        expected_fingerprint=module.bound._stable_fingerprint(region)
+    )
+
+    tracker.observe_request(_request(context_cookie="same-segment"))
+    tracker.reset_and_enable()
+    tracker.observe_request(
+        _request(
+            context_cookie="same-segment",
             payload={"variables": {"regionId": region}},
         )
     )
@@ -194,13 +242,36 @@ def test_body_only_region_without_segment_cookie_transition_stays_fail_closed() 
     assert module.SharedSegmentCookieTracker.shared_fallback_used is False
 
 
+def test_body_only_region_without_preselection_cookie_baseline_stays_fail_closed() -> None:
+    region = "opaque-sps-region"
+    tracker = module.SharedSegmentCookieTracker(
+        expected_fingerprint=module.bound._stable_fingerprint(region)
+    )
+
+    tracker.reset_and_enable()
+    tracker.observe_request(
+        _request(
+            context_cookie="segment-after",
+            payload={"variables": {"regionId": region}},
+        )
+    )
+
+    with pytest.raises(
+        module.bound.passive.MvpSampleError,
+        match="sps_region_binding_body_only_without_segment_cookie_transition",
+    ):
+        tracker.replay_context()
+
+    assert tracker.segment_cookie_transition_observed is False
+
+
 def test_explicit_header_region_still_has_priority_over_cookie_fallback() -> None:
     region = "opaque-sps-region"
     tracker = module.SharedSegmentCookieTracker(
         expected_fingerprint=module.bound._stable_fingerprint(region)
     )
     tracker.reset_and_enable()
-    request = _request(cookie="vtexsegment=segment-after")
+    request = _request(context_cookie="segment-after")
     request.headers["x-vtex-region"] = region
     tracker.observe_request(request)
 
@@ -209,6 +280,19 @@ def test_explicit_header_region_still_has_priority_over_cookie_fallback() -> Non
     assert headers == {"x-vtex-region": region}
     assert query == ()
     assert module.SharedSegmentCookieTracker.shared_fallback_used is False
+
+
+def test_context_cookie_snapshot_ignores_unrelated_domains_and_never_returns_raw() -> None:
+    request = _request(
+        context_cookie="must-not-return",
+        context_cookie_domain="example.com",
+    )
+    assert module._segment_cookie_fingerprint_from_context(request) is None
+
+    target = _request(context_cookie="opaque", context_cookie_domain=".lacolonia.com")
+    fingerprint = module._segment_cookie_fingerprint_from_context(target)
+    assert fingerprint == module.bound._stable_fingerprint("opaque")
+    assert fingerprint != "opaque"
 
 
 def test_cookie_parser_is_case_insensitive_and_never_returns_other_cookie() -> None:

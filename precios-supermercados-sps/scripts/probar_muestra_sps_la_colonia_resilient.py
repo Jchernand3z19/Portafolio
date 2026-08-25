@@ -2,15 +2,16 @@
 """Entrypoint MVP bound con recuperación DOM y contexto de segmento compartido.
 
 El run 32807247386 mostró un re-render real del botón de San Pedro Sula mientras
-Playwright intentaba hacer click. El run 32809740940 confirmó después el binding SPS
-exacto, pero observó ``regionId`` únicamente dentro del body de una request. Este
-wrapper no inventa un header/query para ese valor: si no existe placement explícito,
-sólo deja continuar el único GET GraphQL cuando además demuestra una transición de
-la cookie ``vtexsegment`` en el mismo BrowserContext. ``context.request`` comparte
-el cookie jar del BrowserContext, por lo que el GET conserva el contexto de sesión
-sin copiar ni persistir cookies o ``regionId`` raw.
+Playwright intentaba hacer click. Los runs 32809740940 y 32857812255 confirmaron
+el binding SPS exacto con ``regionId`` sólo en body; el segundo mostró además que
+inferir la transición de ``vtexsegment`` únicamente desde headers de requests no es
+suficiente. Este wrapper tampoco inventa un header/query: observa sólo fingerprints
+efímeros de ``vtexsegment`` directamente desde el cookie jar del BrowserContext y
+exige una transición respecto al último estado observado antes de activar SPS.
 
-La recuperación DOM sigue limitada a una re-resolución del mismo control y la
+``context.request`` comparte ese mismo cookie jar, por lo que el único GET GraphQL
+puede conservar el contexto de sesión sin copiar ni persistir cookies o ``regionId``
+raw. La recuperación DOM sigue limitada a una re-resolución del mismo control y la
 consulta explícita sigue limitada por el runner bound original a un máximo de una.
 """
 
@@ -27,6 +28,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import probar_muestra_sps_la_colonia_bound as bound  # noqa: E402
 
 SEGMENT_COOKIE_NAME = "vtexsegment"
+TARGET_COOKIE_DOMAIN = "lacolonia.com"
 
 
 def _is_playwright_timeout(exc: BaseException) -> bool:
@@ -48,6 +50,33 @@ def _segment_cookie_value(headers: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _target_cookie_domain(value: Any) -> bool:
+    domain = str(value or "").strip().lstrip(".").casefold()
+    return domain == TARGET_COOKIE_DOMAIN or domain.endswith(f".{TARGET_COOKIE_DOMAIN}")
+
+
+def _segment_cookie_fingerprint_from_context(request: Any) -> str | None:
+    """Lee el cookie jar asociado a la request y devuelve sólo un fingerprint."""
+
+    try:
+        context = request.frame.page.context
+        cookies = context.cookies()
+    except Exception:
+        return None
+
+    for cookie in cookies:
+        if not isinstance(cookie, Mapping):
+            continue
+        if str(cookie.get("name") or "").casefold() != SEGMENT_COOKIE_NAME:
+            continue
+        if not _target_cookie_domain(cookie.get("domain")):
+            continue
+        value = cookie.get("value")
+        if isinstance(value, str) and value:
+            return bound._stable_fingerprint(value)
+    return None
+
+
 class SharedSegmentCookieTracker(bound.RegionContextTracker):
     """Autoriza cookie-jar compartido sólo tras transición observable de segmento."""
 
@@ -63,29 +92,41 @@ class SharedSegmentCookieTracker(bound.RegionContextTracker):
         self._active_segment_cookie_fingerprints.clear()
         type(self).shared_fallback_used = False
 
+    def _observe_segment_fingerprint(self, fingerprint: str | None) -> None:
+        if fingerprint is None:
+            return
+        if self.active:
+            if fingerprint not in self._active_segment_cookie_fingerprints:
+                self._active_segment_cookie_fingerprints.append(fingerprint)
+        else:
+            # Mientras la selección aún no se activa, conservar siempre la última
+            # fotografía disponible. Sólo es un SHA256, nunca el valor de cookie.
+            self._inactive_segment_cookie_fingerprint = fingerprint
+
     def observe_request(self, request: Any) -> None:
+        # La fuente primaria es el cookie jar real del BrowserContext, no el header
+        # serializado de una request concreta. El header se conserva sólo como señal
+        # secundaria compatible con evidencia previa.
+        self._observe_segment_fingerprint(
+            _segment_cookie_fingerprint_from_context(request)
+        )
         try:
             value = _segment_cookie_value(request.headers)
         except Exception:
             value = None
         if value is not None:
-            fingerprint = bound._stable_fingerprint(value)
-            if self.active:
-                if fingerprint not in self._active_segment_cookie_fingerprints:
-                    self._active_segment_cookie_fingerprints.append(fingerprint)
-            else:
-                self._inactive_segment_cookie_fingerprint = fingerprint
+            self._observe_segment_fingerprint(bound._stable_fingerprint(value))
         super().observe_request(request)
 
     @property
     def segment_cookie_transition_observed(self) -> bool:
-        active = self._active_segment_cookie_fingerprints
-        if not active:
-            return False
         baseline = self._inactive_segment_cookie_fingerprint
-        if baseline is not None and any(value != baseline for value in active):
-            return True
-        return len(active) >= 2
+        if baseline is None:
+            return False
+        return any(
+            fingerprint != baseline
+            for fingerprint in self._active_segment_cookie_fingerprints
+        )
 
     def replay_context(self) -> tuple[dict[str, str], tuple[tuple[str, str], ...]]:
         try:
