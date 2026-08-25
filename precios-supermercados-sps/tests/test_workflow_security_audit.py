@@ -58,6 +58,9 @@ GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storag
 GOOGLE_SHEETS_STORAGE_REQUEST = (
     "precios-supermercados-sps/.automation/google-sheets-storage-request.json"
 )
+LIVE_MVP_REQUEST = (
+    "precios-supermercados-sps/.automation/la-colonia-mvp-live-request.json"
+)
 PROBE_GATEWAY_SECRET = "CLOUDFLARE_PROBE_GATEWAY_URL"
 PROBE_OBSERVABILITY_SECRET = "CLOUDFLARE_PROBE_OBSERVABILITY_TOKEN"
 PROBE_PUBLIC_KEY_VAR = "CLOUDFLARE_PROBE_PUBLIC_KEY_SPKI_B64URL"
@@ -99,7 +102,7 @@ EXPECTED_TRIGGERS = {
     LA_DIAGNOSTIC_WORKFLOW: {"workflow_dispatch"},
     RECOVERY_WORKFLOW: {"workflow_run"},
     FACET_WORKFLOW: {"workflow_dispatch"},
-    LIVE_WORKFLOW: {"workflow_dispatch"},
+    LIVE_WORKFLOW: {"workflow_dispatch", "push"},
     LOCATION_BINDING_WORKFLOW: {"workflow_dispatch"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch", "push"},
     TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
@@ -286,7 +289,9 @@ def test_mvp_sample_is_the_only_nonprivileged_live_catalog_path() -> None:
 
     sample = live_jobs[LIVE_MVP_JOB]
     assert sample["if"] == (
-        "${{ inputs.mode == 'mvp_sample' && inputs.mvp_read_only_authorized == true }}"
+        "${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'mvp_sample' && "
+        "inputs.mvp_read_only_authorized == true) || (github.event_name == 'push' && "
+        "github.ref == 'refs/heads/main') }}"
     )
     assert sample["timeout-minutes"] == "15"
     assert "environment" not in sample
@@ -297,7 +302,8 @@ def test_mvp_sample_is_the_only_nonprivileged_live_catalog_path() -> None:
     assert live_jobs["live-crawl"]["if"] == "${{ false }}"
     assert live_jobs[LIVE_FACET_JOB]["if"] == "${{ false }}"
 
-    dispatch = workflow["on"]["workflow_dispatch"]
+    triggers = workflow["on"]
+    dispatch = triggers["workflow_dispatch"]
     assert isinstance(dispatch, dict)
     inputs = dispatch["inputs"]
     assert inputs["mode"]["default"] == "mvp_sample"
@@ -313,6 +319,11 @@ def test_mvp_sample_is_the_only_nonprivileged_live_catalog_path() -> None:
     assert inputs["mvp_read_only_authorized"]["default"] == "false"
     assert inputs["mvp_read_only_authorized"]["type"] == "boolean"
 
+    assert triggers["push"] == {
+        "branches": ["main"],
+        "paths": [LIVE_MVP_REQUEST],
+    }
+
     sample_raw = "\n".join(str(step) for step in job_steps(sample))
     assert "scripts/probar_muestra_sps_la_colonia.py" in sample_raw
     assert "--live-read-only" in sample_raw
@@ -322,6 +333,14 @@ def test_mvp_sample_is_the_only_nonprivileged_live_catalog_path() -> None:
     assert "id-token" not in sample_raw
     assert "secrets." not in sample_raw
     assert "vars." not in sample_raw
+    assert "GITHUB_EVENT_PATH" in sample_raw
+    assert "precios-sps-la-colonia-mvp-live-request/v1" in sample_raw
+    assert "trigger_pr_number" in sample_raw
+    assert "2026-08-25T01:20:22Z" in sample_raw
+    assert "Merge pull request #277 from" in sample_raw
+    assert "Jchernand3z19/feature/precios-sps-mvp-live-trigger" in sample_raw
+    assert "commercial_persistence" in sample_raw
+    assert "production_authority" in sample_raw
 
 
 def test_location_binding_entrypoint_is_manual_and_fail_closed() -> None:
@@ -511,6 +530,7 @@ def test_pull_request_target_never_checks_out_untrusted_pr_code():
 def test_network_capable_scripts_are_blocked_without_current_live_authority() -> None:
     blocked_commands = {
         "scripts/probar_la_colonia.py",
+        "scripts/probar_muestra_sps_la_colonia.py",
         "scripts/diagnosticar_ventanas_la_colonia.py",
         "scripts/descubrir_facets_la_colonia.py",
         "scripts/diagnosticar_binding_ubicacion_la_colonia.py",
@@ -523,6 +543,9 @@ def test_network_capable_scripts_are_blocked_without_current_live_authority() ->
                 live_jobs = jobs(workflow)
                 assert live_jobs["live-crawl"]["if"] == "${{ false }}"
                 assert live_jobs[LIVE_FACET_JOB]["if"] == "${{ false }}"
+                sample_raw = "\n".join(str(step) for step in job_steps(live_jobs[LIVE_MVP_JOB]))
+                assert "mvp_live_request_mismatch" in sample_raw
+                assert "mvp_live_merge_identity_mismatch" in sample_raw
                 continue
             assert path.name in BLOCKED_ENTRYPOINTS
             assert all_jobs_blocked(workflow)
