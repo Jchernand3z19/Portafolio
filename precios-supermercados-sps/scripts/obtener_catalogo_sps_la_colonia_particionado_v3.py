@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Recorre el catálogo SPS por marca usando la radiografía VTEX validada.
+"""Recorre el catálogo SPS por marca usando el contrato VTEX validado.
 
-Cada producto VTEX tiene una sola marca. Cuando una categoría supera la ventana
-máxima de búsqueda y no tiene hijos, la dimensión marca ofrece particiones
-disjuntas sin depender de profundidad adicional del árbol de categorías.
+Cada producto VTEX tiene una sola marca. La dimensión marca ofrece particiones
+disjuntas para evitar la ventana máxima de búsqueda. El límite de particiones
+queda alineado con el presupuesto global de peticiones; el control real de carga
+sigue siendo el cálculo de páginas antes de iniciar la descarga comercial.
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import obtener_catalogo_sps_la_colonia_particionado_v2 as frontier  # noqa: E402
+
+BRAND_PARTITION_LIMIT = frontier.base.MAX_PLANNED_PRODUCT_REQUESTS
 
 
 def _brand_values(normalized: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
@@ -59,7 +62,7 @@ def _build_brand_frontier(
     values: Sequence[Mapping[str, Any]],
     *,
     search_window: int = frontier.base.SEARCH_WINDOW_MAX_PRODUCTS,
-    max_partitions: int = frontier.MAX_PARTITIONS,
+    max_partitions: int = BRAND_PARTITION_LIMIT,
 ) -> tuple[frontier.FrontierPartition, ...]:
     if search_window <= 0 or max_partitions <= 0:
         raise ValueError("invalid_brand_limits")
