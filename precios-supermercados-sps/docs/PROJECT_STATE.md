@@ -4,11 +4,12 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-24 America/Tegucigalpa / 2026-08-25 UTC** después del run live de `#283`:
+Estado verificado al **2026-08-24 America/Tegucigalpa / 2026-08-25 UTC** después del cierre de `#284`:
 
 ```text
-main_observed = b7b27c576550bb354c0014b4883307944bd21247
+main_observed = 67f42150b61e27610dd2ae516470100c15699e9c
 last_live_pr = #283
+last_cleanup_pr = #284
 PHASE0_OFFLINE = CLOSED
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
@@ -51,6 +52,8 @@ source_location_key = request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65
 ```
 
 El valor raw de `regionId` no se persiste. El fingerprint sólo permite comprobar igualdad con el contexto SPS ya demostrado; no concede autoridad comercial.
+
+La misma radiografía mostró además que la cookie `vtexsegment` cambia después de seleccionar la ciudad. El valor raw de esa cookie tampoco se persiste.
 
 ## Evidencia live MVP acumulada
 
@@ -153,19 +156,42 @@ artifact_name = la-colonia-sps-mvp-sample-32809740940
 artifact_zip_sha256 = f3ed5bbd0d726c194d448b7bdca5a91def36f2170b834bc27d01ebd40f0556c2
 ```
 
-Este run cerró dos dudas importantes sin ampliar tráfico: **San Pedro Sula sí quedó verificado en la misma sesión** y el valor efímero de `regionId` observado después de seleccionar SPS **sí coincidió exactamente con el fingerprint canónico**. Sin embargo, la coincidencia apareció únicamente dentro del body de una request observada; no apareció en header ni query, por lo que el runner actual se negó correctamente a inventar un placement para el GET de `productSearchV3`.
+Este run cerró dos dudas importantes sin ampliar tráfico: **San Pedro Sula sí quedó verificado en la misma sesión** y el valor efímero de `regionId` observado después de seleccionar SPS **sí coincidió exactamente con el fingerprint canónico**. La coincidencia apareció únicamente dentro del body de una request observada; no apareció en header ni query, por lo que el runner no inventó un placement para el GET de `productSearchV3`.
 
-No se emitió el GET explícito autorizado (`explicit_product_search_requests=0`), no hubo 403/429 y no se persistió URL, header, cookie, sesión, token ni `regionId` raw. La autorización queda **consumida y cerrada** porque sí hubo tráfico live al supermercado.
+No se emitió el GET explícito autorizado (`explicit_product_search_requests=0`), no hubo 403/429 y no se persistió URL, header, cookie, sesión, token ni `regionId` raw. La autorización quedó **consumida y cerrada** porque sí hubo tráfico live al supermercado.
 
-## Blocker actual
+## Fallback offline preparado tras el cuarto sample
+
+El análisis offline encontró una vía más corta que no requiere transformar el `regionId` body-only en un header/query inventado:
+
+1. El esquema oficial vigente `vtex.search-graphql` declara `productSearch` con `@cacheControl(scope: SEGMENT)` y `@withSegment`; por contrato, la consulta está segmentada por el contexto de sesión.
+2. La documentación oficial de Playwright establece que `BrowserContext.request` usa el **mismo cookie jar** del `BrowserContext`.
+3. Nuestra radiografía histórica ya demostró que `vtexsegment` cambia después de seleccionar San Pedro Sula.
+4. El cuarto run demostró además, en esa misma sesión, que el `regionId` efímero coincide exactamente con el fingerprint SPS canónico.
+
+Referencias públicas de contrato:
 
 ```text
-CURRENT BLOCKER = SPS regionId exact match is body-only in same-run traffic
-KNOWN SAFE FACTS = location verified + canonical fingerprint match + no passive productSearch
-UNKNOWN = how the source expects the same SPS region context to be carried into the explicit productSearchV3 request
+https://github.com/vtex-apps/search-graphql/blob/master/graphql/schema.graphql
+https://playwright.dev/python/docs/api/class-apirequestcontext
 ```
 
-El siguiente trabajo debe ser offline primero. No se debe convertir un valor observado en body a header/query por intuición. La alternativa mínima es reutilizar evidencia y código existentes para modelar un replay body-bound sólo si puede demostrarse una transformación exacta y no ambigua hacia la operación pública de búsqueda; de lo contrario debe prepararse una captura sanitizada adicional que revele únicamente el **placement/shape**, nunca el valor raw.
+Por ello el wrapper resiliente queda preparado para un único fallback adicional **sin copiar `regionId` raw**:
+
+```text
+require location_verified_same_run = true
+require region_binding_fingerprint_verified = true
+require region_context_body_only_observed = true when no header/query placement exists
+require same-run vtexsegment transition = true
+then use the existing BrowserContext.request GET productSearchV3
+explicit_product_search_requests <= 1
+raw cookie persisted = false
+raw regionId persisted = false
+```
+
+La transición de `vtexsegment` se valida sólo mediante fingerprints efímeros en memoria. Si no puede demostrarse el cambio de cookie, el runner termina fail-closed con `sps_region_binding_body_only_without_segment_cookie_transition`. Un placement explícito previamente demostrado en header/query sigue teniendo prioridad sobre este fallback.
+
+Este cambio es únicamente preparación offline. No concede autorización para ejecutarlo.
 
 ## Fuente de productos conocida
 
@@ -179,6 +205,8 @@ operation = productSearchV3
 El constructor existente solicita `hideUnavailableItems=false`, `skusFilter=ALL`, página acotada y los campos necesarios para IDs, nombre, marca, categorías, presentación, imagen, precio actual, precio regular informado, seller, unidad, multiplicador y cantidad publicada.
 
 Una muestra histórica sin binding SPS produjo 10 productos/10 SKU con precio y confirmó la forma del parser. Esa evidencia sirve offline, pero no se reetiqueta como SPS.
+
+Como alternativa futura, VTEX también documenta Intelligent Search API v1 con regionalización explícita mediante `regionId` query parameter. No se incorpora todavía porque exigiría resolver de forma segura el account host y sería una ruta nueva; el fallback de cookie compartida reutiliza el endpoint y parser ya demostrados.
 
 ## Persistencia
 
@@ -205,6 +233,6 @@ ACTIVE_AUTHORIZATION_IDS = []
 
 ## Próxima frontera humana
 
-Antes de pedir otra autorización live debe agotarse el análisis offline del placement body-only observado en `32809740940` y preparar el cambio mínimo correspondiente con tests fail-closed.
+El trabajo offline para el blocker body-only ya tiene una solución mínima preparada y debe cerrar CI/revisión antes de tocar nuevamente La Colonia.
 
-Si después de ese trabajo todavía hace falta tráfico nuevo, se solicitará una autorización nueva y específica. La autorización de `2026-08-25T04:30:59Z` no se reutiliza.
+Después de ese cierre, cualquier nueva ejecución requiere una autorización humana explícita vigente y separada. El siguiente scope útil seguirá limitado a una sola muestra de hasta 10 productos, un único GET `productSearchV3`, cero retries comerciales, sin full crawl y sin Google Sheets. La autorización de `2026-08-25T04:30:59Z` no se reutiliza.
