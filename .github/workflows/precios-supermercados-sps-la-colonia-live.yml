@@ -88,6 +88,7 @@ on:
         description: Autorización humana explícita para facets SPS; hoy no existe ninguna activa
         required: false
         default: ""
+        type: string
 
 permissions:
   contents: read
