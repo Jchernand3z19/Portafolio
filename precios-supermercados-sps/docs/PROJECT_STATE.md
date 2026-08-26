@@ -57,7 +57,7 @@ production_authority = false
 extraction_enabled = false
 ```
 
-Esta autorización permite continuar los intentos técnicos necesarios dentro del mismo full crawl read-only hasta el primer catálogo completo descargable, siempre que el marker/workflow vigente siga cubriendo exactamente ese alcance. La evidencia histórica **no se interpreta como autorización abierta**; el alcance tampoco se amplía a persistencia comercial, Sheets, cron diario, autoridad productiva ni otra fuente.
+Esta autorización permite continuar los intentos técnicos necesarios dentro del mismo full crawl read-only hasta el primer catálogo completo descargable, siempre que el marker/workflow vigente siga cubriendo exactamente ese alcance. La evidencia histórica **no se interpreta como autorización abierta**; el alcance tampoco se amplía a persistencia comercial, Sheets, cron diario, autoridad productiva ni otra fuente. Cualquier tráfico fuera de este alcance **requiere autorización humana explícita vigente**.
 
 Los intentos siguen siendo finitos, secuenciales y fail-closed. Son stop conditions, entre otras, `403`, `429`, CAPTCHA/login, ciudad no verificada, host inesperado, presupuesto excedido, cambio de totals, overflow, cobertura incompleta o riesgo de carga excesiva. No se evaden controles anti-bot.
 
