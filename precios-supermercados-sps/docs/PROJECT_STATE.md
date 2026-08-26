@@ -4,53 +4,19 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-25 UTC** después del intento condition-bound #1 y con el intento #2 en `#290`:
+Estado verificado al **2026-08-26 UTC**, con `main` en el merge de `#309` y `#310` abierto para el intento full-catalog #13:
 
 ```text
-main_observed = 8fd30b527517399ff5d48d0f54867673ba62d46f
-standing_authorization_started_at_utc = 2026-08-25T14:41:06Z
-last_live_pr = #289
-last_live_run = 32862196684
-active_live_pr = #290
-active_attempt_sequence = 2
-PHASE0_OFFLINE = CLOSED
+main_observed = ba1c8e9c8d8af3a96965497930fcb8e627247a9b
+last_merged_pr = #309 — Evita URLs excesivas en buckets SPS
+active_live_pr = #310 — Recupera huecos de paginación en buckets SPS
+active_attempt_sequence = 13
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
 granularity = city
 technical_binding_confirmed = true
-extraction_enabled = false
-production_authority = false
-catalog_accepted = false
-ACTIVE_AUTHORIZATION_IDS = []
-```
-
-No se inventa un Authorization ID porque el usuario no proporcionó uno.
-
-La evidencia histórica puede reutilizarse offline, pero **no se interpreta como autorización abierta**. Cualquier tráfico fuera del alcance concreto descrito abajo **requiere autorización humana explícita vigente**.
-
-## Autorización live vigente — condition-bound
-
-Instrucción humana explícita recibida:
-
-```text
-authorized_at_utc = 2026-08-25T14:41:06Z
-statement = no me estes pidiendo autorizacion trabaja hasta que podamos descargar esto
-authorization_mode = condition_bound_until_first_downloadable_sample
-termination_condition = first_successful_downloadable_sps_sample
-```
-
-Esta instrucción no se interpreta como autonomía live permanente ni como autorización general para nuevas fases. Su alcance operativo vigente es únicamente continuar, sin volver a pedir confirmación entre intentos, el camino mínimo necesario para obtener la **primera muestra descargable** de La Colonia San Pedro Sula bajo estas fronteras:
-
-```text
-supermarket_id = la_colonia
-location_id = la_colonia_sps
-city = San Pedro Sula
-same_browser_context = true
-sample_size <= 10
-max_city_control_reresolutions_per_attempt = 1
-max_explicit_product_search_requests_per_attempt = 1
-commercial_retries_per_attempt = 0
-full_crawl = false
+full_crawl = true
+live_read_only = true
 google_sheets_writes = false
 commercial_persistence = false
 catalog_accepted = false
@@ -58,108 +24,161 @@ production_authority = false
 extraction_enabled = false
 ```
 
-Cada intento debe seguir siendo finito y fail-closed. La autorización se cierra cuando exista la primera muestra descargable o si aparece una frontera no cubierta: `persistent_403`, `http_429`, CAPTCHA, login obligatorio, host mismatch, riesgo de carga excesiva, credenciales/secretos nuevos, coste/billing, mutación externa o una fase distinta como full crawl/persistencia comercial.
+El README deliberadamente no replica SHAs/runs/flags mutables. Si este documento vuelve a quedar detrás de una frontera funcional importante, debe sincronizarse dentro de esa misma frontera cuando sea razonable.
 
-Mientras esa condición no ocurra, un fallo técnico dentro del mismo alcance no consume por sí solo la instrucción completa; debe corregirse offline y puede ejecutarse otro intento bounded sin pedir nuevamente al usuario. Cada intento usa un marker/PR distinto.
+## Autorización live vigente — catálogo completo read-only
 
-## Objetivo MVP vigente
+La muestra MVP ya no es la frontera vigente. Existe una instrucción humana explícita materializada en [`../.automation/la-colonia-mvp-live-request.json`](../.automation/la-colonia-mvp-live-request.json) para obtener **todo el catálogo de La Colonia San Pedro Sula**, seguida por una continuación explícita para comenzar el trabajo:
 
 ```text
-NEXT VISIBLE MILESTONE = obtener y revisar hasta 10 productos reales de La Colonia SPS
-MVP PATH = source -> SPS context -> product data -> validation -> downloadable test artifact
-PERSISTENCE = todavía deshabilitada
-FULL CRAWL = todavía no autorizado
+authorization_mode = one_time_full_catalog_after_staged_validation
+authorized_at_utc = 2026-08-25T21:13:44Z
+authorization_statement = podes trabajar en obtener todo el catalogo
+continued_at_utc = 2026-08-25T22:31:45Z
+continuation_statement = ok comenza a trabajar
+active = true
+termination_condition = first_successful_downloadable_full_sps_catalog
+supermarket_id = la_colonia
+location_id = la_colonia_sps
+city = San Pedro Sula
+page_size = 50
+max_planned_product_requests = 400
+delay_seconds = 1.5
+commercial_retries_per_attempt = 0
+full_crawl = true
+live_read_only = true
+google_sheets_writes = false
+commercial_persistence = false
+catalog_accepted = false
+production_authority = false
+extraction_enabled = false
 ```
 
-## Binding técnico SPS confirmado
+Esta autorización permite continuar los intentos técnicos necesarios dentro del mismo full crawl read-only hasta el primer catálogo completo descargable, siempre que el marker/workflow vigente siga cubriendo exactamente ese alcance. No se amplía a persistencia comercial, Sheets, cron diario, autoridad productiva ni otra fuente.
 
-La evidencia durable `reports/discovery/la-colonia-location-binding-2026-08-24.json` confirmó ciudad y binding técnico fuerte:
+Los intentos siguen siendo finitos, secuenciales y fail-closed. Son stop conditions, entre otras, `403`, `429`, CAPTCHA/login, ciudad no verificada, host inesperado, presupuesto excedido, cambio de totals, overflow, cobertura incompleta o riesgo de carga excesiva. No se evaden controles anti-bot.
+
+## De muestra MVP a full catalog
+
+La frontera de muestra fue superada y la autorización posterior cambió explícitamente el objetivo a catálogo completo. La ruta operativa actual es:
 
 ```text
-run = 32677568208
-visible_location = San pedro sula
-available_cities = [SAN PEDRO SULA, TEGUCIGALPA]
-granularity_candidate = city
-confidence = strong
-technical_binding_observed = true
-store_selection_observed = false
-source_location_key = request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+SOURCE
+-> SPS CONTEXT
+-> FULL CATALOG
+-> COMPLETENESS VALIDATION
+-> RAW
+-> NORMALIZED
+-> VALIDATED
+-> RUN ACCEPT/REJECT
+-> CURRENT
+-> HISTORY
+-> GOOGLE SHEETS
+-> DAILY AUTOMATION
+-> POWER BI
 ```
 
-El valor raw de `regionId` no se persiste. El fingerprint sólo comprueba igualdad con el contexto SPS ya demostrado; no concede autoridad comercial. Los valores raw de cookies tampoco se persisten.
+Todavía estamos en `FULL CATALOG -> COMPLETENESS VALIDATION`. Un CSV descargable no concede por sí mismo `catalog_accepted`, `production_authority` ni permiso de persistencia.
 
-## Evidencia live MVP acumulada
+## Estrategia full-catalog aprendida
+
+La evidencia live demostró que `productSearchV3` funciona con productos/precios reales y paginación, pero una única ventana de búsqueda VTEX deja de ser utilizable alrededor de **2,500 productos**. Por eso se probaron progresivamente categorías, frontera jerárquica, partición híbrida y marcas.
+
+La estrategia vigente usa **brand buckets**:
+
+- `facets` se usa para descubrir marcas y estimar cómo empacarlas;
+- los buckets se mantienen conservadoramente por debajo de la ventana VTEX;
+- `recordsFiltered` de `productSearchV3` es el total autoritativo del catálogo raíz y de cada bucket;
+- los `productId` se deduplican globalmente y cada bucket exige cobertura exacta;
+- `page_size = 50`, una solicitud a la vez y `delay_seconds = 1.5`;
+- presupuesto global máximo: `400` requests de producto;
+- ambos órdenes de consulta se validan contra el límite real codificado de URL antes de enviar tráfico.
+
+### Hitos de los intentos de full catalog
 
 ```text
-run 32798014154 -> SPS verificado; catálogo abierto; productSearch pasivo no observado
-run 32800883695 -> SPS verificado; 9 GraphQL; 0 productSearch; artifact 9546438971
-run 32807247386 -> re-render del botón SPS; 0 GET explícitos
-run 32809740940 -> SPS + fingerprint regionId canónico confirmados; regionId body-only; 0 GET explícitos
-run 32857812255 -> SPS + fingerprint regionId canónico confirmados; tracker de headers no demostró transición vtexsegment; 0 GET explícitos; artifact 9566896451
+#298 -> primer full crawl; confirmó la ventana VTEX al cruzar ~2,500 productos
+#300/#301 -> partición y frontera por categorías
+#302 -> partición por marca
+#306 -> partición híbrida
+#307 -> brand buckets para reducir cientos de marcas a pocos recorridos
+#308 -> productSearchV3/recordsFiltered pasa a ser total autoritativo por bucket
+#309 -> preflight por bytes corrige el HTTP 414 de URLs demasiado largas
+#310 -> recovery de bucket incompleto con orden inverso
 ```
 
-Las cinco autorizaciones one-shot anteriores están consumidas/cerradas y no se reutilizan.
+No se considera ninguna de estas estrategias aceptada por mera intención: gobierna la evidencia del último run.
 
-### Autorización condition-bound — intento #1
+## Último intento observado — #12 / PR #309
+
+Workflow:
 
 ```text
-trigger_pr = #289
-merge = 8fd30b527517399ff5d48d0f54867673ba62d46f
-run = 32862196684
-job = 97848677289
-preflight = success
+run = 32913876083
+artifact_id = 9587666151
+result = stopped
+reason = partial_or_unexpected_product_page
 location_verified_same_run = true
-graphql_responses_seen = 9
-product_search_payloads_seen = 0
-region_binding_fingerprint_verified = true
-region_context_body_only_observed = true
-region_context_replayable_placements = 0
-explicit_product_search_requests = 0
+catalog_products_reported = 9464
+partitions_detected = 62
+partitions_completed = 35
+planned_product_requests = 215
+product_requests_completed = 189
+pages_attempted = 188
+pages_completed = 187
+skus_extracted = 8636
+skus_with_price = 8636
 blocked_http_status_observed = null
-result = failure
-error_code = sps_region_binding_body_only_without_segment_cookie_transition
-artifact_id = 9568630621
-artifact_zip_sha256 = 1bc05277eea70b3b036b016ad60c7891f19b50ea6b87782a6e41d2ffe99c047d
+max_bucket_url_bytes = 3467
 ```
 
-No se alcanzó el GET explícito. No hubo 403/429, CAPTCHA, login ni otra stop condition. Por ello la autorización condition-bound sigue vigente.
+El HTTP 414 ya no fue el blocker. El run llegó a **8,636 SKU / 187 páginas completadas** y se detuvo correctamente porque una página final devolvió **47 productos cuando `recordsFiltered` implicaba 48**. No hubo 403/429 observado y no se aceptó silenciosamente la cardinalidad incorrecta.
 
-El análisis offline del intento #1 mostró que el snapshot del cookie jar aún dependía de que una request ocurriera antes de activar SPS. Eso podía dejar la baseline sin capturar aunque el `BrowserContext` ya tuviera `vtexsegment`.
+## PR #310 — frontera actual
 
-## Corrección offline del intento #2 — PR #290
+`#310` mantiene `OrderByNameASC` como pase principal. Si al terminar un bucket los `productId` únicos no igualan su `recordsFiltered`, hace recovery **sólo en ese bucket** con `OrderByNameDESC`.
 
-El wrapper ahora difiere la activación real del tracker hasta disponer del control exacto de San Pedro Sula y ejecuta:
+Contratos del cambio:
 
 ```text
-1. resolve exact SPS control
-2. snapshot BrowserContext.cookies() while tracker is still inactive
-3. persist only SHA256 fingerprint of vtexsegment as baseline
-4. enable region/segment tracker
-5. activate SPS with max 1 DOM re-resolution
-6. verify visible San Pedro Sula
-7. snapshot BrowserContext.cookies() again while tracker is active
-8. proceed with passive catalog observation
-9. if regionId remains body-only, allow shared-cookie fallback only when fingerprints differ
+primary_order = OrderByNameASC
+recovery_order = OrderByNameDESC
+recovery_only_when_bucket_unique_product_count_mismatches = true
+recovery_respects_global_request_budget = true
+primary_and_recovery_url_preflight = true
+duplicates_during_recovery_do_not_inflate_coverage = true
+bucket_acceptance = unique productIds == bucket recordsFiltered
+final_acceptance = global unique productIds == root recordsFiltered
+fail_closed_after_unsuccessful_recovery = true
 ```
 
-Esto no agrega tráfico comercial. El único `productSearchV3` explícito continúa limitado a uno por intento y sólo puede ocurrir después de verificar SPS, el fingerprint canónico de `regionId` y la transición de segmento requerida.
+El merge de `#310` no es rutinario: el workflow reconoce exactamente ese merge como el intento live #13. Antes del merge deben permanecer verdes CI/revisión, autorización/scope, pacing/budget, stop conditions, `google_sheets_writes=false`, `commercial_persistence=false`, `catalog_accepted=false`, `production_authority=false` y `extraction_enabled=false`.
 
-No se guarda ni imprime el valor raw de `vtexsegment`; sólo fingerprints efímeros. Cookies de dominios ajenos a `lacolonia.com` se ignoran.
+## Binding técnico SPS
 
-## Fuente de productos conocida
+La evidencia durable de ubicación confirmó que el contexto seleccionado es San Pedro Sula y el runner operativo vuelve a verificar la ciudad en el mismo run mediante el control estructural aprendido. No se persisten cookies, `regionId` raw, sesiones ni headers sensibles.
 
 ```text
-https://www.lacolonia.com/_v/segment/graphql/v1
-operation = productSearchV3
+location_id = la_colonia_sps
+city = San Pedro Sula
+location_verification_method = structural_exact_city_control
+technical_binding_confirmed = true
 ```
 
-El constructor solicita `hideUnavailableItems=false`, `skusFilter=ALL` y los campos necesarios para IDs, nombre, marca, categorías, presentación, imagen, precio actual, precio regular informado, seller, unidad, multiplicador y cantidad publicada.
+## Semántica de precios
 
-Una muestra histórica sin binding SPS produjo 10 productos/10 SKU con precio y confirma la forma del parser, pero no se reetiqueta como SPS.
+Se mantiene:
+
+```text
+current_price
+reported_regular_price
+```
+
+`reported_regular_price` es la referencia declarada por la tienda; no es baseline de ahorro real. El ahorro real compara el `current_price` del estado aceptado actual contra el `current_price` del periodo aceptado inmediatamente anterior. Sin histórico aceptado no se inventa ahorro.
 
 ## Persistencia
 
-El workbook físico mantiene exactamente seis tabs gestionados:
+Google Sheets sigue siendo el backend físico temporal con exactamente seis tabs gestionados:
 
 ```text
 cfg_supermarkets
@@ -170,16 +189,31 @@ fact_scrape_runs
 fact_quality_events
 ```
 
-No existen ofertas SPS reales persistidas todavía. Permanecen:
+`dim_products` y `map_source_products` siguen siendo contratos lógicos diferidos mientras exista una sola fuente y no haya un consumidor real que los requiera.
+
+**Todavía no existe escritura comercial de este catálogo a Google Sheets.** Permanecen:
 
 ```text
+google_sheets_writes = false
+commercial_persistence = false
 production_authority = false
 catalog_accepted = false
 extraction_enabled = false
-commercial_persistence = false
-ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-## Próximo paso
+Cuando exista un catálogo completo validado, la siguiente frontera debe reutilizar los adapters/batches/rehydration ya existentes y recorrer el camino mínimo seguro `evidence -> acceptance -> Raw/Normalized/Validated -> current/history -> Sheets`. No se habilita cron diario hasta demostrar aceptación, persistencia, replay y rechazo sin contaminación.
 
-`#290` debe cerrar CI/revisión y fusionarse sólo si permanece verde. Su merge materializa el intento bounded #2 bajo la misma autorización condition-bound. Si falla por otra causa técnica dentro del mismo alcance y no aparece una stop condition, se corrige offline y se continúa sin volver a pedir autorización.
+## Power BI y segunda fuente
+
+Power BI sigue siendo el dashboard único y debe consumir la proyección semántica existente; no debe absorber lógica paralela de limpieza/identidad/ahorro. No se conecta refresh productivo sin estado comercial aceptado y durable.
+
+No se inicia supermercado #2 hasta cerrar La Colonia end-to-end.
+
+## Próximo paso exacto
+
+1. terminar revisión de `#310` y confirmar CI/threads;
+2. fusionar `#310` con expected head SHA sólo si la autorización materializada sigue activa y el alcance sigue siendo exactamente full-catalog SPS read-only;
+3. observar el intento live #13 hasta estado terminal;
+4. inspeccionar su artifact JSON/CSV y demostrar cobertura completa o identificar el blocker exacto;
+5. si falla por una causa técnica dentro del mismo alcance autorizado, corregir únicamente esa causa y continuar;
+6. si consigue catálogo completo, neutralizar el trigger one-shot cuando corresponda, actualizar este documento y avanzar offline a aceptación/persistencia mínima segura sin conceder autoridad por accidente.
