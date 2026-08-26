@@ -4,13 +4,13 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 
 ## Corte
 
-Estado verificado al **2026-08-26 UTC**, con `main` en el merge de `#310` y `#311` abierto para el intento full-catalog #14:
+Estado verificado al **2026-08-26 UTC**:
 
 ```text
-main_observed = 6287cdcfbff66a13002536c68d39c88639c0d89e
-last_merged_pr = #310 — Recupera huecos de paginación en buckets SPS
-active_live_pr = #311 — Permite recovery después de páginas cortas SPS
-active_attempt_sequence = 14
+main_observed = aca038e9f0014d62efa5a1300779b74fa039ec78
+last_merged_pr = #311 — Permite recovery después de páginas cortas SPS
+active_live_pr = #312 — Permite recovery ante páginas vacías SPS
+active_attempt_sequence = 15
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
 granularity = city
@@ -25,11 +25,11 @@ extraction_enabled = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-`ACTIVE_AUTHORIZATION_IDS = []` significa que no existe un identificador opaco de autorización asignado por el usuario; no invalida la solicitud humana explícita materializada abajo. README deliberadamente no replica SHAs/runs/flags mutables.
+`ACTIVE_AUTHORIZATION_IDS = []` significa que no existe un identificador opaco de autorización asignado por el usuario; no invalida la solicitud humana explícita materializada abajo. La evidencia histórica **no se interpreta como autorización abierta** y cualquier tráfico fuera de este alcance **requiere autorización humana explícita vigente**.
 
 ## Autorización live vigente — catálogo completo read-only
 
-La muestra MVP ya no es la frontera vigente. [`../.automation/la-colonia-mvp-live-request.json`](../.automation/la-colonia-mvp-live-request.json) materializa la instrucción humana explícita para obtener **todo el catálogo de La Colonia San Pedro Sula**, seguida por la continuación explícita para comenzar:
+[`../.automation/la-colonia-mvp-live-request.json`](../.automation/la-colonia-mvp-live-request.json) materializa la instrucción humana explícita para obtener **todo el catálogo de La Colonia San Pedro Sula**:
 
 ```text
 authorization_mode = one_time_full_catalog_after_staged_validation
@@ -39,8 +39,8 @@ continued_at_utc = 2026-08-25T22:31:45Z
 continuation_statement = ok comenza a trabajar
 active = true
 termination_condition = first_successful_downloadable_full_sps_catalog
-attempt_sequence = 14
-trigger_pr_number = 311
+attempt_sequence = 15
+trigger_pr_number = 312
 supermarket_id = la_colonia
 location_id = la_colonia_sps
 city = San Pedro Sula
@@ -57,13 +57,9 @@ production_authority = false
 extraction_enabled = false
 ```
 
-Esta autorización permite continuar intentos técnicos dentro del mismo full crawl read-only hasta el primer catálogo completo descargable, mientras marker/workflow sigan cubriendo exactamente ese alcance. La evidencia histórica **no se interpreta como autorización abierta**. Cualquier tráfico fuera de este alcance **requiere autorización humana explícita vigente**. No se amplía a persistencia comercial, Sheets, cron diario, autoridad productiva ni otra fuente.
+La autorización permite intentos técnicos secuenciales dentro del mismo full crawl read-only hasta el primer catálogo completo descargable. Siguen siendo stop conditions `403`, `429`, CAPTCHA/login, ciudad no verificada, host inesperado, presupuesto excedido, cambios incompatibles de totals, overflow, cobertura incompleta o riesgo de carga excesiva. No se evaden controles anti-bot.
 
-Los intentos siguen siendo finitos, secuenciales y fail-closed. Son stop conditions, entre otras, `403`, `429`, CAPTCHA/login, ciudad no verificada, host inesperado, presupuesto excedido, cambio de totals, overflow, cobertura incompleta o riesgo de carga excesiva. No se evaden controles anti-bot.
-
-## De muestra MVP a full catalog
-
-La autorización posterior cambió explícitamente el objetivo a catálogo completo. La ruta operativa actual es:
+## Frontera del producto
 
 ```text
 SOURCE
@@ -78,25 +74,27 @@ SOURCE
 -> HISTORY
 -> GOOGLE SHEETS
 -> DAILY AUTOMATION
--> POWER BI
+-> PYTHON DASH / PLOTLY
 ```
 
-Seguimos en `FULL CATALOG -> COMPLETENESS VALIDATION`. Un CSV descargable no concede por sí mismo `catalog_accepted`, `production_authority` ni permiso de persistencia.
+Seguimos en `FULL CATALOG -> COMPLETENESS VALIDATION`. Un CSV descargable no concede por sí mismo `catalog_accepted`, `production_authority` ni permiso de persistencia. La capa de visualización final del proyecto será **Python Dash + Plotly**, no Power BI.
 
-## Estrategia full-catalog aprendida
+## Estrategia full-catalog vigente
 
-`productSearchV3` funciona con productos/precios reales y paginación, pero una sola búsqueda VTEX deja de ser utilizable alrededor de **2,500 productos**. Tras probar categorías, frontera jerárquica, partición híbrida y marcas, la estrategia vigente usa **brand buckets**:
+`productSearchV3` funciona con productos/precios reales y paginación, pero una sola búsqueda deja de ser utilizable alrededor de **2,500 productos**. La estrategia actual usa **brand buckets**:
 
-- `facets` sólo descubre marcas/estima buckets;
-- `recordsFiltered` de `productSearchV3` es el total autoritativo raíz y por bucket;
-- buckets conservadoramente bajo la ventana VTEX;
-- deduplicación global por `productId` y aceptación exacta por bucket;
-- `OrderByNameASC` primario y `OrderByNameDESC` sólo como recovery de bucket incompleto;
-- `page_size = 50`, una solicitud a la vez, `delay_seconds = 1.5`;
-- presupuesto global máximo `400` requests de producto;
-- preflight del tamaño real de URL para ASC y DESC.
+- `facets` sólo descubre marcas y estima buckets;
+- `recordsFiltered` de `productSearchV3` es total autoritativo raíz y por bucket;
+- deduplicación global por `productId`;
+- `OrderByNameASC` como recorrido primario;
+- `OrderByNameDESC` únicamente como recovery de un bucket incompleto;
+- `page_size = 50`, una solicitud a la vez y `delay_seconds = 1.5`;
+- presupuesto global máximo de 400 requests de producto;
+- preflight del tamaño de URL para ASC y DESC;
+- aceptación de bucket sólo si `unique productIds == bucket recordsFiltered`;
+- aceptación global sólo si `global unique productIds == root recordsFiltered`.
 
-### Hitos importantes
+### Hitos
 
 ```text
 #298 -> primer full crawl; confirmó ventana VTEX ~2,500
@@ -104,10 +102,11 @@ Seguimos en `FULL CATALOG -> COMPLETENESS VALIDATION`. Un CSV descargable no con
 #302 -> partición por marca
 #306 -> partición híbrida
 #307 -> brand buckets
-#308 -> recordsFiltered/productSearchV3 total autoritativo
+#308 -> recordsFiltered/productSearchV3 autoritativo
 #309 -> corrige HTTP 414 con preflight de URL
 #310 -> recovery de bucket incompleto en orden inverso
-#311 -> deja que una página corta parseable llegue a la validación/recovery de bucket
+#311 -> páginas cortas parseables pueden llegar al recovery de bucket
+#312 -> páginas vacías válidas pueden llegar al recovery sin aportar productos
 ```
 
 ## Intento #12 / PR #309
@@ -117,7 +116,6 @@ run = 32913876083
 artifact_id = 9587666151
 result = stopped
 reason = partial_or_unexpected_product_page
-location_verified_same_run = true
 catalog_products_reported = 9464
 partitions_detected = 62
 partitions_completed = 35
@@ -127,29 +125,31 @@ pages_attempted = 188
 pages_completed = 187
 skus_extracted = 8636
 skus_with_price = 8636
+last_expected_products_on_page = 48
+last_observed_products_on_page = 47
 blocked_http_status_observed = null
-max_bucket_url_bytes = 3467
 ```
 
-El HTTP 414 dejó de ser blocker. El run alcanzó **8,636 SKU / 187 páginas completas** y falló correctamente ante 47 productos observados frente a 48 esperados.
+## Intento #13 / PR #310
 
-## Intento #13 / PR #310 — blocker observado
+Valores corregidos directamente desde el artifact `9588488404`:
 
 ```text
 run = 32916820363
 artifact_id = 9588488404
 result = stopped
 reason = page_validation_failed
-location_verified_same_run = true
-catalog_products_reported = 9464
+catalog_products_reported = 9437
 partitions_detected = 62
 partitions_completed = 0
+partition_quantity_estimate_sum = 9437
+partition_observed_total_sum = 1918
 planned_product_requests = 215
-product_requests_completed = 2
-pages_attempted = 1
-pages_completed = 0
-skus_extracted = 49
-skus_with_price = 49
+product_requests_completed = 22
+pages_attempted = 21
+pages_completed = 20
+skus_extracted = 1000
+skus_with_price = 1000
 short_product_pages = 1
 last_expected_products_on_page = 50
 last_observed_products_on_page = 49
@@ -157,21 +157,38 @@ partition_recovery_passes = 0
 blocked_http_status_observed = null
 ```
 
-La evidencia aisló un fallo de control, no un nuevo problema de cobertura: el extractor base marca una página 49/50 como `quality:partial_product_page` y `accepted=false`; el runner operativo abortaba inmediatamente en `_process_page()`, antes de llegar al final del bucket donde `#310` compara `unique productIds` contra `recordsFiltered` y puede ejecutar recovery DESC. No hubo 403/429 ni errores estructurales; los 49 SKU fueron parseables y tenían precio.
+El blocker era de control: el extractor rechazaba una página 49/50 antes de que el runner alcanzara la comparación de cobertura del bucket y su recovery DESC. `#311` corrigió únicamente esa frontera.
 
-## PR #311 — frontera actual
-
-`#311` corrige únicamente ese bloqueo. El extractor base conserva intacta su semántica fail-closed. El nuevo entrypoint full-catalog acepta operativamente una página rechazada **sólo** cuando se cumplen simultáneamente:
+## Intento #14 / PR #311 — blocker observado
 
 ```text
-quality:partial_product_page presente
-structural_events == 0
-errors == 0
-skus_extracted > 0
-skus_with_price > 0
+run = 32917612034
+result = failure
+artifact = none
+location authorization step = success
+data acquisition step wrapper = completed with captured exit_code=1
+final reflected result = failure
+terminal_exception = EmptyResponseError
+message = La página controlada no devolvió productos
+blocked_http_status_observed = no evidence of 403/429 in logs
 ```
 
-Esto no acepta el bucket ni el catálogo: sólo permite contabilizar esos SKU y continuar hasta la cobertura autoritativa. Luego siguen vigentes:
+El intento avanzó durante varios minutos y encontró un nuevo caso real: `productSearchV3` mantuvo una forma válida con total positivo pero devolvió una página sin productos. `LaColoniaExtractor.parse_payload()` lanzó `EmptyResponseError` antes de que el runner pudiera completar el bucket, comparar `productId` únicos o ejecutar recovery inverso. Al ser una excepción no convertida a `FullCatalogError`, tampoco se produjo artifact JSON/CSV de fallo. No hay evidencia de CAPTCHA, login, 403 ni 429 en ese run.
+
+## PR #312 — frontera actual / intento #15
+
+`#312` modifica sólo el entrypoint full-catalog autorizado. Conserva el extractor base intacto y trata una página vacía como **hueco recuperable sin datos** únicamente cuando la respuesta es estructuralmente legible, `recordsFiltered > 0` y `products == []`.
+
+La página vacía:
+
+```text
+contributes_products = false
+contributes_skus = false
+accepted_as_catalog_coverage = false
+allows_bucket_traversal_to_continue = true
+```
+
+Después siguen siendo obligatorias todas las garantías:
 
 ```text
 primary_order = OrderByNameASC
@@ -186,7 +203,7 @@ fail_closed_after_unsuccessful_recovery = true
 commercial_retries_per_attempt = 0
 ```
 
-El merge de `#311` es el one-shot del intento #14. Antes de fusionar deben permanecer verdes CI/revisión, autorización/scope, pacing/budget, stop conditions y todos los flags de persistencia/autoridad en `false`.
+Si recovery no recupera exactamente el total autoritativo, el bucket y el catálogo siguen rechazados.
 
 ## Binding técnico SPS
 
@@ -203,11 +220,11 @@ El runner vuelve a verificar SPS en el mismo run. No se persisten cookies, `regi
 
 ## Semántica de precios
 
-Se mantiene `current_price` y `reported_regular_price`. `reported_regular_price` es la referencia declarada por la tienda, no baseline de ahorro real. El ahorro real compara el `current_price` aceptado actual contra el `current_price` aceptado inmediatamente anterior. Sin histórico aceptado no se inventa ahorro.
+Se mantiene `current_price` y `reported_regular_price`. `reported_regular_price` es la referencia declarada por la tienda, no baseline de ahorro real. El ahorro real comparará el `current_price` aceptado actual contra el `current_price` aceptado inmediatamente anterior. Sin histórico aceptado no se inventa ahorro.
 
-## Persistencia
+## Persistencia y visualización
 
-Google Sheets sigue con exactamente seis tabs físicos gestionados:
+Google Sheets sigue con seis tabs físicos gestionados:
 
 ```text
 cfg_supermarkets
@@ -218,7 +235,7 @@ fact_scrape_runs
 fact_quality_events
 ```
 
-`dim_products` y `map_source_products` siguen diferidos. **Todavía no existe escritura comercial del catálogo** y permanecen:
+`dim_products` y `map_source_products` siguen diferidos. Todavía no existe escritura comercial del catálogo:
 
 ```text
 google_sheets_writes = false
@@ -228,17 +245,13 @@ catalog_accepted = false
 extraction_enabled = false
 ```
 
-Tras un catálogo completo validado, reutilizar adapters/batches/rehydration existentes para el camino mínimo `evidence -> acceptance -> Raw/Normalized/Validated -> current/history -> Sheets`. No habilitar cron diario hasta demostrar aceptación, persistencia, replay y rechazo sin contaminación.
-
-## Power BI y segunda fuente
-
-Power BI sigue siendo el dashboard único y debe consumir la proyección semántica existente. No conectar refresh productivo sin estado comercial aceptado/durable. No iniciar supermercado #2 hasta cerrar La Colonia end-to-end.
+Tras un catálogo completo validado, el camino mínimo será `evidence -> acceptance -> Raw/Normalized/Validated -> current/history -> Sheets`. No habilitar cron diario hasta demostrar aceptación, persistencia, replay y rechazo sin contaminación. La visualización final será una aplicación web **Python Dash + Plotly** orientada a comparación e historial de precios. No iniciar supermercado #2 hasta cerrar La Colonia end-to-end.
 
 ## Próximo paso exacto
 
-1. cerrar revisión/CI de `#311`;
+1. cerrar CI/revisión de `#312`;
 2. fusionar con expected head SHA sólo si marker/workflow siguen cubriendo exactamente el full-catalog SPS read-only autorizado;
-3. observar el intento live #14 hasta estado terminal;
-4. inspeccionar artifact JSON/CSV y demostrar cobertura completa o aislar el blocker exacto;
-5. si falla técnicamente dentro del mismo alcance, corregir únicamente la causa observada y continuar;
-6. si logra catálogo completo, neutralizar el one-shot, sincronizar este documento y avanzar offline a aceptación/persistencia mínima segura sin conceder autoridad por accidente.
+3. observar el intento live #15 hasta estado terminal;
+4. inspeccionar siempre artifact JSON/CSV cuando exista y demostrar cobertura completa o aislar el siguiente blocker exacto;
+5. si falla técnicamente dentro del mismo alcance, corregir únicamente la causa observada y continuar secuencialmente;
+6. si logra catálogo completo, neutralizar el one-shot y avanzar offline a aceptación/normalización/persistencia mínima segura sin conceder autoridad por accidente.
