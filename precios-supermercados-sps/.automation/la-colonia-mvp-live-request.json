@@ -6,7 +6,7 @@
   "authorization_source": "human_user_explicit_chat_instruction",
   "authorization_statement": "podes trabajar en obtener todo el catalogo",
   "continuation_statement": "ok comenza a trabajar",
-  "active": true,
+  "active": false,
   "termination_condition": "first_successful_downloadable_full_sps_catalog",
   "attempt_sequence": 15,
   "trigger_pr_number": 312,

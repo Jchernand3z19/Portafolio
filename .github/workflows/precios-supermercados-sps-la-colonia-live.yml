@@ -152,7 +152,7 @@ jobs:
               "authorization_source": "human_user_explicit_chat_instruction",
               "authorization_statement": "podes trabajar en obtener todo el catalogo",
               "continuation_statement": "ok comenza a trabajar",
-              "active": True,
+              "active": False,
               "termination_condition": "first_successful_downloadable_full_sps_catalog",
               "attempt_sequence": 15,
               "trigger_pr_number": 312,
@@ -206,24 +206,17 @@ jobs:
           repository = event.get("repository") or {}
           if repository.get("full_name") != "Jchernand3z19/Portafolio":
               raise SystemExit("mvp_live_repository_mismatch")
-          head_commit = event.get("head_commit") or {}
-          message = str(head_commit.get("message") or "")
-          expected_prefix = (
-              "Merge pull request #312 from "
-              "Jchernand3z19/fix/precios-sps-empty-page-recovery-attempt-15"
-          )
-          if not message.startswith(expected_prefix):
-              raise SystemExit("mvp_live_merge_identity_mismatch")
 
-          # Sentinels históricos consumidos: nunca conceden autoridad a este run.
+          # El one-shot terminó en el run 32922877781. Este push sólo verifica
+          # que el marker consumido es exactamente el esperado y NO hace red.
+          # mvp_live_merge_identity_mismatch queda como sentinel histórico de seguridad.
           # historical schema sentinel: precios-sps-la-colonia-mvp-live-request/v1
           # 2026-08-25T01:20:22Z / PR #277
           # Merge pull request #277 from
           # Jchernand3z19/feature/precios-sps-mvp-live-trigger
-
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write("sample_size=10\n")
-              output.write("capture_mode=full_catalog_operational\n")
+              output.write("capture_mode=consumed_no_network\n")
           PY
 
       - name: Configurar Python
@@ -249,22 +242,14 @@ jobs:
               --live-read-only \
               --sample-size "$INPUT_MVP_SAMPLE_SIZE" \
               --output run-artifacts/mvp-sample.json
-          elif [[ "$CAPTURE_MODE" == "full_catalog_operational" ]]; then
-            python scripts/obtener_catalogo_sps_la_colonia_operativo_v2.py \
-              --live-read-only \
-              --allow-full-catalog \
-              --page-size 50 \
-              --delay-seconds 1.5 \
-              --output run-artifacts/full-catalog.json \
-              --csv-output run-artifacts/full-catalog.csv
+            exit_code=$?
+          elif [[ "$CAPTURE_MODE" == "consumed_no_network" ]]; then
+            echo "One-shot full catalog consumido; no se ejecuta tráfico live."
+            exit_code=0
           else
-            python scripts/probar_muestra_sps_la_colonia_radiografia.py \
-              --live-read-only \
-              --allow-single-explicit-product-data-request \
-              --sample-size "$INPUT_MVP_SAMPLE_SIZE" \
-              --output run-artifacts/mvp-sample.json
+            echo "capture_mode no autorizado" >&2
+            exit_code=2
           fi
-          exit_code=$?
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           exit 0
 

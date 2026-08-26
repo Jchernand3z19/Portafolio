@@ -7,14 +7,16 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 Estado verificado al **2026-08-26 UTC**:
 
 ```text
-main_observed = aca038e9f0014d62efa5a1300779b74fa039ec78
-last_merged_pr = #311 — Permite recovery después de páginas cortas SPS
-active_live_pr = #312 — Permite recovery ante páginas vacías SPS
-active_attempt_sequence = 15
+main_observed = 589b694fdc75fd97d47fcc5259062fb026cf7ee4
+last_merged_pr = #312 — Permite recovery ante páginas vacías SPS
+active_live_pr = none
+active_attempt_sequence = none
+last_successful_full_catalog_attempt = 15
 SPS_TECHNICAL_CONTEXT = CONFIRMED
 location_id = la_colonia_sps
 granularity = city
 technical_binding_confirmed = true
+full_catalog_validation_passed = true
 full_crawl = true
 live_read_only = true
 google_sheets_writes = false
@@ -25,11 +27,11 @@ extraction_enabled = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-`ACTIVE_AUTHORIZATION_IDS = []` significa que no existe un identificador opaco de autorización asignado por el usuario; no invalida la solicitud humana explícita materializada abajo. La evidencia histórica **no se interpreta como autorización abierta** y cualquier tráfico fuera de este alcance **requiere autorización humana explícita vigente**.
+`ACTIVE_AUTHORIZATION_IDS = []` significa que no existe un identificador opaco de autorización asignado por el usuario. La evidencia histórica **no se interpreta como autorización abierta** y cualquier nuevo tráfico fuera de un alcance explícitamente autorizado **requiere autorización humana explícita vigente**.
 
-## Autorización live vigente — catálogo completo read-only
+## One-shot full catalog — consumido
 
-[`../.automation/la-colonia-mvp-live-request.json`](../.automation/la-colonia-mvp-live-request.json) materializa la instrucción humana explícita para obtener **todo el catálogo de La Colonia San Pedro Sula**:
+La autorización humana explícita para obtener el catálogo completo read-only de La Colonia San Pedro Sula cumplió su condición de terminación en el intento #15:
 
 ```text
 authorization_mode = one_time_full_catalog_after_staged_validation
@@ -37,35 +39,93 @@ authorized_at_utc = 2026-08-25T21:13:44Z
 authorization_statement = podes trabajar en obtener todo el catalogo
 continued_at_utc = 2026-08-25T22:31:45Z
 continuation_statement = ok comenza a trabajar
-active = true
+active = false
 termination_condition = first_successful_downloadable_full_sps_catalog
+termination_condition_met = true
 attempt_sequence = 15
 trigger_pr_number = 312
-supermarket_id = la_colonia
-location_id = la_colonia_sps
-city = San Pedro Sula
-page_size = 50
-max_planned_product_requests = 400
-delay_seconds = 1.5
-commercial_retries_per_attempt = 0
-full_crawl = true
-live_read_only = true
-google_sheets_writes = false
-commercial_persistence = false
-catalog_accepted = false
-production_authority = false
-extraction_enabled = false
 ```
 
-La autorización permite intentos técnicos secuenciales dentro del mismo full crawl read-only hasta el primer catálogo completo descargable. Siguen siendo stop conditions `403`, `429`, CAPTCHA/login, ciudad no verificada, host inesperado, presupuesto excedido, cambios incompatibles de totals, overflow, cobertura incompleta o riesgo de carga excesiva. No se evaden controles anti-bot.
+El marker queda inactivo. El workflow conserva el `push` del marker únicamente como verificación fail-closed del estado **consumido**: ese camino produce `capture_mode=consumed_no_network` y no ejecuta ningún request comercial ni full crawl. El workflow manual conserva sólo la muestra MVP read-only explícitamente autorizada por input; `live-crawl` y el entrypoint context-bound de facets siguen deshabilitados. No existe un segundo full crawl automático pendiente.
+
+## Primer catálogo completo descargable — intento #15
+
+```text
+run_id = 32922877781
+run_number = 60
+merge_sha = 589b694fdc75fd97d47fcc5259062fb026cf7ee4
+artifact_id = 9590684834
+artifact_name = la-colonia-sps-data-32922877781
+artifact_sha256 = 0427e88be27df89fd9fcb50ed600ef5c6aef64177bfba92b4af3d2e25756a892
+artifact_expires_at = 2026-09-09T02:40:58Z
+result = success
+catalog_complete = true
+validation_passed = true
+catalog_product_coverage = 1.0
+location_verified_same_run = true
+catalog_products_reported = 9437
+unique_products_extracted = 9437
+skus_extracted = 9439
+skus_with_price = 9439
+skus_without_price = 0
+partitions_detected = 62
+partitions_completed = 62
+partition_quantity_estimate_sum = 9437
+partition_observed_total_sum = 9437
+planned_product_requests = 215
+product_requests_completed = 252
+partition_recovery_passes = 2
+recovery_pages_completed = 37
+partition_products_recovered = 3
+recovery_duplicate_skus_ignored = 1844
+short_product_pages = 3
+oversized_product_pages = 0
+duplicate_skus_across_partitions = 0
+catalog_accepted = false
+commercial_persistence = false
+production_authority = false
+extraction_enabled = false
+raw_context_persisted = false
+```
+
+La diferencia `9,439 SKU` vs `9,437 productId` es válida: 9,435 productos tienen un SKU y 2 productos tienen dos SKU. Las 9,439 identidades `source_key` son únicas.
+
+Validación adicional del artifact descargado:
+
+```text
+full-catalog.json sha256 = 2780eeffa5ef62f2d1c8c2c8365e88da1ca0006622d2f7b1c3529f834c9b5e50
+full-catalog.csv sha256  = d73815eb6b704dd1c453d33bf3bde649a3a42d1c7c476f370726c2b806423552
+csv_rows = 9439
+csv_unique_source_keys = 9439
+csv_unique_product_ids = 9437
+current_price_present = 9439
+current_price_positive = 9439
+promotion_rows = 780
+promotion_rows_with_reported_regular_price = 780
+promotion_rows_regular_price_gt_current_price = 780
+```
+
+La extracción completa ya está demostrada. `catalog_accepted=false` permanece intencionalmente: **completitud técnica del catálogo no equivale todavía a aceptación comercial/persistible**.
+
+## Calidad observada que debe resolver la siguiente fase
+
+Antes de aceptar el run para `CURRENT/HISTORY`, la capa offline debe formalizar reglas para datos que no comprometen la completitud pero sí la semántica:
+
+```text
+presentation_missing = 763 / 9439
+availability_in_stock = 7081 / 9439
+availability_unknown = 2358 / 9439
+```
+
+No se deben inventar presentaciones ni disponibilidad. La aceptación debe decidir explícitamente qué campos son obligatorios, cuáles pueden ser `unknown`, cómo registrar quality events y qué condiciones rechazan el run completo frente a una fila individual.
 
 ## Frontera del producto
 
 ```text
 SOURCE
 -> SPS CONTEXT
--> FULL CATALOG
--> COMPLETENESS VALIDATION
+-> FULL CATALOG [DONE]
+-> COMPLETENESS VALIDATION [DONE]
 -> RAW
 -> NORMALIZED
 -> VALIDATED
@@ -77,22 +137,20 @@ SOURCE
 -> PYTHON DASH / PLOTLY
 ```
 
-Seguimos en `FULL CATALOG -> COMPLETENESS VALIDATION`. Un CSV descargable no concede por sí mismo `catalog_accepted`, `production_authority` ni permiso de persistencia. La capa de visualización final del proyecto será **Python Dash + Plotly**, no Power BI.
+La siguiente frontera es **offline**: `RAW -> NORMALIZED -> VALIDATED -> RUN ACCEPT/REJECT`. No requiere ni autoriza un nuevo crawl.
 
-## Estrategia full-catalog vigente
+## Estrategia full-catalog demostrada
 
-`productSearchV3` funciona con productos/precios reales y paginación, pero una sola búsqueda deja de ser utilizable alrededor de **2,500 productos**. La estrategia actual usa **brand buckets**:
+`productSearchV3` funciona con productos/precios reales y paginación, pero una sola búsqueda deja de ser utilizable alrededor de 2,500 productos. La estrategia demostrada usa brand buckets con:
 
-- `facets` sólo descubre marcas y estima buckets;
-- `recordsFiltered` de `productSearchV3` es total autoritativo raíz y por bucket;
+- `recordsFiltered` autoritativo raíz y por bucket;
 - deduplicación global por `productId`;
-- `OrderByNameASC` como recorrido primario;
-- `OrderByNameDESC` únicamente como recovery de un bucket incompleto;
+- `OrderByNameASC` primario;
+- `OrderByNameDESC` sólo como recovery de bucket incompleto;
 - `page_size = 50`, una solicitud a la vez y `delay_seconds = 1.5`;
-- presupuesto global máximo de 400 requests de producto;
-- preflight del tamaño de URL para ASC y DESC;
-- aceptación de bucket sólo si `unique productIds == bucket recordsFiltered`;
-- aceptación global sólo si `global unique productIds == root recordsFiltered`.
+- máximo 400 requests de producto;
+- preflight de URL ASC/DESC;
+- aceptación exacta por bucket y cobertura global exacta.
 
 ### Hitos
 
@@ -105,105 +163,39 @@ Seguimos en `FULL CATALOG -> COMPLETENESS VALIDATION`. Un CSV descargable no con
 #308 -> recordsFiltered/productSearchV3 autoritativo
 #309 -> corrige HTTP 414 con preflight de URL
 #310 -> recovery de bucket incompleto en orden inverso
-#311 -> páginas cortas parseables pueden llegar al recovery de bucket
+#311 -> páginas cortas parseables pueden llegar al recovery
 #312 -> páginas vacías válidas pueden llegar al recovery sin aportar productos
+attempt #15 -> primer catálogo completo validado y descargable
 ```
 
-## Intento #12 / PR #309
+## Intentos recientes previos
 
 ```text
-run = 32913876083
-artifact_id = 9587666151
+#12 run 32913876083 / artifact 9587666151
 result = stopped
 reason = partial_or_unexpected_product_page
 catalog_products_reported = 9464
-partitions_detected = 62
-partitions_completed = 35
-planned_product_requests = 215
-product_requests_completed = 189
-pages_attempted = 188
-pages_completed = 187
-skus_extracted = 8636
+partitions_completed = 35 / 62
 skus_with_price = 8636
-last_expected_products_on_page = 48
-last_observed_products_on_page = 47
-blocked_http_status_observed = null
-```
 
-## Intento #13 / PR #310
-
-Valores corregidos directamente desde el artifact `9588488404`:
-
-```text
-run = 32916820363
-artifact_id = 9588488404
+#13 run 32916820363 / artifact 9588488404
 result = stopped
 reason = page_validation_failed
 catalog_products_reported = 9437
-partitions_detected = 62
-partitions_completed = 0
-partition_quantity_estimate_sum = 9437
-partition_observed_total_sum = 1918
-planned_product_requests = 215
 product_requests_completed = 22
-pages_attempted = 21
 pages_completed = 20
-skus_extracted = 1000
 skus_with_price = 1000
-short_product_pages = 1
 last_expected_products_on_page = 50
 last_observed_products_on_page = 49
-partition_recovery_passes = 0
-blocked_http_status_observed = null
-```
 
-El blocker era de control: el extractor rechazaba una página 49/50 antes de que el runner alcanzara la comparación de cobertura del bucket y su recovery DESC. `#311` corrigió únicamente esa frontera.
-
-## Intento #14 / PR #311 — blocker observado
-
-```text
-run = 32917612034
+#14 run 32917612034
 result = failure
 artifact = none
-location authorization step = success
-data acquisition step wrapper = completed with captured exit_code=1
-final reflected result = failure
 terminal_exception = EmptyResponseError
 message = La página controlada no devolvió productos
-blocked_http_status_observed = no evidence of 403/429 in logs
 ```
 
-El intento avanzó durante varios minutos y encontró un nuevo caso real: `productSearchV3` mantuvo una forma válida con total positivo pero devolvió una página sin productos. `LaColoniaExtractor.parse_payload()` lanzó `EmptyResponseError` antes de que el runner pudiera completar el bucket, comparar `productId` únicos o ejecutar recovery inverso. Al ser una excepción no convertida a `FullCatalogError`, tampoco se produjo artifact JSON/CSV de fallo. No hay evidencia de CAPTCHA, login, 403 ni 429 en ese run.
-
-## PR #312 — frontera actual / intento #15
-
-`#312` modifica sólo el entrypoint full-catalog autorizado. Conserva el extractor base intacto y trata una página vacía como **hueco recuperable sin datos** únicamente cuando la respuesta es estructuralmente legible, `recordsFiltered > 0` y `products == []`.
-
-La página vacía:
-
-```text
-contributes_products = false
-contributes_skus = false
-accepted_as_catalog_coverage = false
-allows_bucket_traversal_to_continue = true
-```
-
-Después siguen siendo obligatorias todas las garantías:
-
-```text
-primary_order = OrderByNameASC
-recovery_order = OrderByNameDESC
-recovery_only_when_bucket_unique_product_count_mismatches = true
-recovery_respects_global_request_budget = true
-primary_and_recovery_url_preflight = true
-duplicates_during_recovery_do_not_inflate_coverage = true
-bucket_acceptance = unique productIds == bucket recordsFiltered
-final_acceptance = global unique productIds == root recordsFiltered
-fail_closed_after_unsuccessful_recovery = true
-commercial_retries_per_attempt = 0
-```
-
-Si recovery no recupera exactamente el total autoritativo, el bucket y el catálogo siguen rechazados.
+Los totales del catálogo pueden cambiar entre runs; toda aceptación de completitud usa el `recordsFiltered` raíz observado en el **mismo run**.
 
 ## Binding técnico SPS
 
@@ -216,7 +208,7 @@ source_location_key = request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65
 sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 ```
 
-El runner vuelve a verificar SPS en el mismo run. No se persisten cookies, `regionId` raw, sesión ni headers sensibles.
+No se persisten cookies, `regionId` raw, sesión ni headers sensibles.
 
 ## Semántica de precios
 
@@ -245,13 +237,12 @@ catalog_accepted = false
 extraction_enabled = false
 ```
 
-Tras un catálogo completo validado, el camino mínimo será `evidence -> acceptance -> Raw/Normalized/Validated -> current/history -> Sheets`. No habilitar cron diario hasta demostrar aceptación, persistencia, replay y rechazo sin contaminación. La visualización final será una aplicación web **Python Dash + Plotly** orientada a comparación e historial de precios. No iniciar supermercado #2 hasta cerrar La Colonia end-to-end.
+No habilitar cron diario hasta demostrar aceptación, persistencia, replay y rechazo sin contaminación. La visualización final será una aplicación web **Python Dash + Plotly** orientada a comparación e historial de precios. No iniciar supermercado #2 hasta cerrar La Colonia end-to-end.
 
 ## Próximo paso exacto
 
-1. cerrar CI/revisión de `#312`;
-2. fusionar con expected head SHA sólo si marker/workflow siguen cubriendo exactamente el full-catalog SPS read-only autorizado;
-3. observar el intento live #15 hasta estado terminal;
-4. inspeccionar siempre artifact JSON/CSV cuando exista y demostrar cobertura completa o aislar el siguiente blocker exacto;
-5. si falla técnicamente dentro del mismo alcance, corregir únicamente la causa observada y continuar secuencialmente;
-6. si logra catálogo completo, neutralizar el one-shot y avanzar offline a aceptación/normalización/persistencia mínima segura sin conceder autoridad por accidente.
+1. cerrar CI/revisión del PR de neutralización one-shot y fusionarlo sólo si está verde;
+2. sin nuevo tráfico live, usar el artifact exitoso #15 como fixture/evidencia para formalizar aceptación offline;
+3. implementar `Raw -> Normalized -> Validated -> Run Accept/Reject` con quality events explícitos;
+4. probar replay determinista y rechazo sin contaminación;
+5. sólo después diseñar/habilitar el camino mínimo hacia `CURRENT/HISTORY` y Google Sheets, sin conceder autoridad productiva accidentalmente.
