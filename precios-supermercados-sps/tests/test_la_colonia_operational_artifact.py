@@ -157,7 +157,7 @@ def test_invalid_reported_regular_price_rejects_artifact():
 def test_all_clean_rows_produce_success():
     artifact = deepcopy(_artifact())
     artifact["products"][1]["presentation"] = "1 Unidad"
-    artifact["products"][1]["availability"] = "out_of_stock"
+    artifact["products"][1]["availability"] = "in_stock"
 
     assessment = assess_operational_catalog_artifact(artifact)
 
