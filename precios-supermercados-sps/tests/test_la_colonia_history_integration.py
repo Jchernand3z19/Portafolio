@@ -27,6 +27,20 @@ def _payload() -> dict[str, object]:
     )
 
 
+def _bind_sps_after_verified_location_for_test(raw):
+    """Simula la frontera ya verificada que cambia contexto fuente por ubicación SPS."""
+
+    assert raw.location_id == "la_colonia_online"
+    assert raw.location_status is LocationStatus.UNKNOWN
+    return replace(
+        raw,
+        location_id="la_colonia_sps",
+        location_status=LocationStatus.CONFIRMED,
+        location_evidence="test:same_run_sps_location_verified",
+        location_confidence=Decimal("1"),
+    )
+
+
 def _first_raw(
     *,
     run_id: str,
@@ -51,13 +65,7 @@ def _first_raw(
         page_size=5,
     )
     assert result.products
-    raw = result.products[0]
-    return replace(
-        raw,
-        location_status=LocationStatus.CONFIRMED,
-        location_evidence="test:same_run_sps_location_verified",
-        location_confidence=Decimal("1"),
-    )
+    return _bind_sps_after_verified_location_for_test(result.products[0])
 
 
 def _validated(*, run_id: str, observed_at: datetime, price: str | None = None):
