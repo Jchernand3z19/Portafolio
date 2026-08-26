@@ -1,28 +1,28 @@
 # Arquitectura — Precios de Supermercados SPS
 
-Este documento describe la **arquitectura estable**. El estado operativo mutable, autorizaciones, evidencia productiva y último conteo de pruebas viven exclusivamente en [`PROJECT_STATE.md`](PROJECT_STATE.md).
+Este documento describe la **arquitectura estable**. El estado operativo mutable, autorizaciones y evidencia concreta viven en [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
 No uses PRs históricos, ramas o este documento para inferir autorización live.
 
-## 1. Objetivo y principios
+## 1. Objetivo
 
-Construir una plataforma que recolecte precios de varios supermercados, los normalice a un contrato común, valide calidad/completitud, historice sólo cambios comerciales relevantes y exponga datos confiables a Power BI.
+Construir una plataforma que recolecte precios e inventario observado de supermercados, normalice la información a un contrato común, valide identidad/calidad/completitud, conserve historia consultable y sirva una aplicación web **Python Dash + Plotly**.
 
-Alcance inicial: **San Pedro Sula**, un supermercado a la vez.
+Alcance inicial: **San Pedro Sula, un supermercado a la vez**. La Colonia debe quedar end-to-end antes de iniciar supermercado #2.
 
 Principios:
 
-1. la fuente manda; no se inventan atributos ni ubicación;
+1. la fuente manda; no se inventan atributos, disponibilidad ni ubicación;
 2. contexto fuente y ubicación comercial son conceptos distintos;
-3. granularidad (`city`, `store`, etc.) debe demostrarse;
-4. corrección técnica no equivale a autoridad productiva;
-5. toda ambigüedad crítica falla cerrada;
-6. nuevo periodo histórico sólo ante cambio relevante;
-7. todo run terminal se registra;
-8. un mismo esquema sirve a todos los supermercados;
-9. lógica comercial independiente del backend;
-10. logs, artifacts, hashes y telemetry no conceden autoridad;
-11. una entidad lógica no obliga a crear una tabla física: materializar exige grain, lifecycle, consumidor o frontera distinta demostrable.
+3. corrección técnica no equivale a autoridad productiva;
+4. toda ambigüedad crítica falla cerrada;
+5. identidad estable no depende de precio, disponibilidad ni fecha;
+6. todo run terminal se registra;
+7. un mismo esquema sirve a todos los supermercados;
+8. lógica comercial independiente del backend;
+9. BigQuery es el backend persistente seleccionado;
+10. Dash + Plotly es la capa de consumo seleccionada;
+11. una tabla nueva requiere grain, key, lifecycle y consumidor reales.
 
 ## 2. Flujo principal
 
@@ -31,349 +31,277 @@ Fuente
   ↓
 Extractor específico
   ↓
-RawProduct                         # RAW / source-faithful
+RawProduct
   ↓
-Normalización
+Normalización específica + reglas/overrides
   ↓
 NormalizedOffer
   ↓
 Validación + identidad + state_hash
   ↓
-ValidatedOffer                    # CLEAN / validated
+ValidatedOffer
   ↓
 Completitud / provenance / decisión autoritativa
   ↓
-Máquina current/history           # CURATED
+Motor backend-neutral de current/history + replay
   ↓
-TabularBatch común
+Proyección de observaciones persistibles
   ↓
-Adapter de persistencia
+BigQuery
+  ├─ productos
+  ├─ precios_historicos
+  ├─ inventario_historico
+  ├─ scrape_runs
+  └─ dimensiones/evidencia auxiliares
   ↓
-Google Sheets (fase inicial)
+Views de estado actual / variaciones
   ↓
-Proyección semántica              # SERVE
-  ↓
-Power BI
+Python Dash + Plotly
 ```
 
-BigQuery queda como evolución posterior cuando extracción, calidad, identidad, persistencia y operación diaria sean estables. Las responsabilidades RAW/CLEAN/CURATED/SERVE son contratos lógicos; no se fuerza una tabla por capa si el storage actual no la necesita.
+La lógica de dominio no depende de BigQuery. Los tests offline usan stores en memoria para demostrar transición, replay y rehidratación antes de cualquier escritura externa.
 
 ## 3. Contratos protegidos
 
 ### `RawProduct`
-Observación fiel a la fuente. Conserva sólo lo que el extractor pudo demostrar.
+Observación fiel a la fuente. Conserva únicamente lo que el extractor pudo demostrar.
 
 ### `NormalizedOffer`
 Forma común entre supermercados. Normalizar no significa completar información inexistente.
 
 ### `ValidatedOffer`
-Oferta normalizada que pasó validaciones y contiene `state_hash`, revisión y quality events.
+Oferta normalizada que pasó validaciones y contiene `state_hash`, estado de revisión y quality events.
 
-Los tres contratos son generales y no se cambian para acomodar una anomalía particular sin una necesidad demostrada y pruebas de compatibilidad.
+Estos contratos sólo cambian cuando exista una necesidad demostrada, compatibilidad y pruebas.
 
-## 4. Identidad de producto y oferta
-
-Se separan:
+## 4. Identidad
 
 ```text
-source_product_id = identidad del producto dentro de la fuente
-product_id        = identidad potencialmente comparable entre fuentes
+source_product_id = identidad estable dentro de la fuente
+product_id        = identidad comparable entre fuentes
 offer_id          = supermercado + ubicación comercial + producto fuente
 ```
 
-`source_product_id` y `offer_id` son deterministas y se recalculan en fronteras críticas.
+Precio, promoción, disponibilidad y fecha nunca forman parte de los IDs estables.
 
-Para identidad cross-supermercado, un GTIN-8/12/13/14 sólo se acepta si supera su check digit y se normaliza a GTIN-14. Si no existe una identidad fuerte usable, el producto queda bajo `prod_pending_*` y `pending_product_mapping` hasta revisión. El identificador pendiente también es determinista respecto a `source_product_id` y se revalida en la frontera lógica de mapping. Un mapping explícito puede reemplazar el `product_id` provisional sin alterar la identidad fuente.
+GTIN-8/12/13/14 sólo puede producir identidad cross-source cuando supera check digit y se normaliza a GTIN-14. Sin identidad fuerte se conserva `prod_pending_*`; la observación no se descarta.
 
-Precio, promoción, disponibilidad y fecha nunca forman parte de IDs estables.
+### Producto vs ciudad
 
-Mientras exista una sola fuente, conservar `product_id` dentro de current/history es suficiente para trazabilidad y evolución. Las tablas canónicas cross-source se materializan sólo cuando exista una segunda fuente o un consumidor que realmente necesite equivalencias.
-
-## 5. Presentación
-
-Las presentaciones se representan con componentes independientes:
+La identidad del producto **no pertenece a una ciudad**. Por eso `productos` conserva supermercado/identidad/descriptores, mientras precio e inventario llevan `location_id`.
 
 ```text
+productos.supermarket_id
+productos.source_product_id
+productos.product_id
+
+precios_historicos.supermarket_id
+precios_historicos.location_id
+precios_historicos.source_product_id
+precios_historicos.product_id
+
+inventario_historico.supermarket_id
+inventario_historico.location_id
+inventario_historico.source_product_id
+inventario_historico.product_id
+```
+
+`locations` resuelve `location_id -> supermarket_id -> city_id/city_name`. Así cada observación puede responder qué producto, de qué supermercado, en qué ciudad y cuándo sin duplicar ciudad dentro de la dimensión de producto.
+
+## 5. Producto y presentación
+
+Se conservan por separado valores fuente y normalizados:
+
+```text
+source_name / normalized_name
+source_brand / normalized_brand
+source_category / category / subcategory
+source_presentation / presentation_normalized
+```
+
+La presentación estructurada usa cuando sea demostrable:
+
+```text
+presentation_kind
 unit_count
 content_per_unit
 measurement_unit
+declared_content
+content_scope
 total_content
 ```
 
-No se colapsan multipacks. Una presentación `2 x 500 ml` sigue siendo dos unidades de 500 ml, aunque el total sea 1000 ml. Si la fuente no permite demostrar un componente, queda nulo y puede requerir revisión.
+No se colapsan multipacks ni se inventa el alcance de un contenido. Overrides revisados deben ligarse a una identidad/firma fuente para no aplicarse si el producto cambia.
 
-## 6. Ubicación: contexto fuente vs ubicación comercial
+## 6. Ubicación
 
-La arquitectura distingue explícitamente:
+Se distinguen:
 
-- **source location context**: contexto raw en que se obtuvo el payload;
-- **commercial location**: ciudad/tienda demostrada a la que puede atribuirse una oferta.
+- **source location context**: contexto raw del payload;
+- **commercial location**: ciudad/tienda demostrada a la que puede atribuirse una observación.
 
 Para La Colonia:
 
 ```text
-la_colonia_online = contexto fuente raw, no ciudad/tienda
-la_colonia_sps    = ubicación comercial candidata dentro del alcance
-la_colonia_tgu    = ubicación comercial conocida fuera del alcance inicial
+la_colonia_online = contexto fuente raw; no es ciudad ni tienda
+la_colonia_sps    = ubicación comercial San Pedro Sula con binding técnico confirmado
+la_colonia_tgu    = ubicación conocida fuera del alcance inicial
 ```
 
-`la_colonia_online` debe permanecer `location_status=unknown`; bajo ese mismo ID no puede promoverse a SPS mediante `confirmed` o `inferred`. La promoción de ubicación pertenece a una frontera de binding separada que debe producir una ubicación comercial distinta.
+Nunca se convierte `la_colonia_online` en SPS bajo el mismo ID. La promoción a ubicación comercial ocurre en una frontera separada y auditable.
 
-Una ubicación comercial no puede habilitarse si:
+## 7. Precio
 
-- su granularidad sigue `unknown`;
-- la fuente requiere selección y `technical_binding_confirmed=false`;
-- falta `source_location_key` cuando el binding lo requiere;
-- está fuera de alcance o no disponible.
-
-### Radiografía de binding
-
-La radiografía preparada compara:
+Nombres canónicos explícitos:
 
 ```text
-before
--> after_city
--> after_store (si existe selector de tienda)
+current_price          = precio efectivo observado
+reported_regular_price = precio regular/tachado declarado por la tienda cuando existe
+is_promotion           = señal promocional observada
+previous_price         = derivado de observaciones históricas
 ```
 
-Busca señales fuertes como `regionId`, `salesChannel`, `binding`, `store`, `storeId` o `pickupPoint`. Cambios opacos de `vtex_session`/`vtex_segment` no bastan por sí solos. Valores sensibles/opacos se representan mediante fingerprints sanitizados.
+No existe un contrato ambiguo llamado sólo `precio`/`price`.
 
-Una radiografía sólo puede proponer una transición. No activa extracción automáticamente.
+El ahorro real usa el precio histórico aceptado anterior, nunca `reported_regular_price` como sustituto de baseline.
 
-## 7. Extractores
+## 8. Inventario observado
 
-Cada supermercado tiene su adapter específico, pero todos producen los contratos comunes.
-
-El extractor puede capturar:
-
-- identificadores fuente;
-- precio actual;
-- precio regular/referencia declarado;
-- disponibilidad;
-- marca/categoría/presentación cuando se demuestran;
-- contexto/evidencia de ubicación;
-- metadata de trazabilidad.
-
-No le corresponde:
-
-- decidir ahorro real;
-- mutar current/history;
-- inventar ubicación;
-- conceder `catalog_accepted` o `production_authority`;
-- decidir persistencia productiva.
-
-## 8. Completitud de catálogo
-
-Deduplicar no demuestra completitud. La capa de catálogo valida árbol/facets, membresía, totales, ventanas, gaps, truncamiento, repeticiones, ownership, unión producto/SKU y reconciliación de páginas contra el plan canónico.
-
-Una ejecución puede ser técnicamente completa y continuar sin autoridad productiva.
-
-## 9. Frontera Cloudflare / provenance
-
-La arquitectura seleccionada usa:
+La disponibilidad debe conservar evidencia suficiente para distinguir estados sin inferencias silenciosas. La proyección persistible debe incluir como mínimo:
 
 ```text
-GitHub Actions autorizado
--> GitHub OIDC
--> Cloudflare Worker
--> Durable Object
--> request físico allowlisted
--> respuesta + hash
--> receipt Ed25519
--> verificador Python independiente
--> Workers Observability
--> manifest / readiness
+available_quantity_observed
+availability
+availability_evidence
+seller_id
+observed_at_utc
+scrape_run_id
 ```
 
-Propiedades:
+Una cantidad de VTEX se describe como cantidad **observada/reportada por la fuente**. No se declara inventario físico exacto ni ventas derivadas salvo evidencia adicional.
 
-- identidad OIDC cerrada al repo/ref/workflow/environment/run esperado;
-- caller no elige libremente destino físico;
-- host/path/método/query restringidos;
-- presupuesto, pacing, single-flight, replay y fencing en Durable Object;
-- cero retries ocultos en las rutas cerradas;
-- receipt ligado a request/run/release/respuesta;
-- clave privada sólo en Cloudflare;
-- verificador separado usa clave pública confiable;
-- evidencia de sonda nunca se convierte en autoridad de catálogo.
+`unknown` no se convierte automáticamente a `out_of_stock`.
 
-### Observability
+## 9. Current/history backend-neutral
 
-El contrato descubre trace IDs y consulta detalle mediante `view: events`, revalidando custom span, relación padre-hijo y fetch físico. Si la plataforma no expone el trace/evidencia requerida, la reconciliación falla cerrada y el bloqueo operativo se registra en `PROJECT_STATE.md`; no se relaja el contrato para fabricar un PASS.
+El motor común protege transición atómica, replay idempotente, continuidad de identidad/moneda/ubicación, cronología monotónica y rechazo de reutilización conflictiva de `scrape_run_id`. La ausencia de un producto no implica baja.
 
-La verificación de Observability no necesita contactar La Colonia ni convierte evidencia de sonda en autoridad de catálogo.
+Estas estructuras validan el comportamiento comercial y permiten rehidratar/reconciliar procesos. BigQuery no copia ciegamente el layout físico del backend temporal anterior.
 
-## 10. Current/history y replay
+## 10. BigQuery — contrato físico objetivo
 
-Sólo una decisión comercial aceptada y autoritativa puede mutar current/history.
+BigQuery es el backend persistente seleccionado desde la primera carga durable del catálogo.
 
-Invariantes:
-
-- `running` es transitorio;
-- replay terminal idéntico es idempotente/reconciliable;
-- divergencia bajo el mismo run falla;
-- continuidad de identidad/ubicación/moneda;
-- cronología cerrada;
-- ausencia no implica baja;
-- snapshot defensivo de evidencia mutable;
-- transición atómica;
-- mismo `state_hash` mantiene el periodo;
-- cambio de `state_hash` cierra exactamente uno y abre uno nuevo.
-
-Un fingerprint de replay demuestra igualdad, no autoridad.
-
-## 11. Precio regular vs ahorro real
+Tablas mínimas:
 
 ```text
-current_price              = precio observado que paga el cliente
-reported_regular_price     = referencia declarada por la tienda
-historical_previous_price  = current_price aceptado inmediatamente anterior
+supermarkets
+locations
+productos
+precios_historicos
+inventario_historico
+scrape_runs
+quality_events
+normalization_overrides
+product_mapping
 ```
 
-La reducción real es:
+### Grain
+
+- `supermarkets`: una fila por supermercado;
+- `locations`: una fila por ubicación comercial;
+- `productos`: una fila por producto/SKU fuente estable dentro del supermercado, con `product_id` canónico asociado;
+- `precios_historicos`: una observación de precio por producto + ubicación + run/instante;
+- `inventario_historico`: una observación de inventario/disponibilidad por producto + ubicación + seller + run/instante;
+- `scrape_runs`: una fila por ejecución terminal;
+- `quality_events`: una fila por evento auditable;
+- `normalization_overrides`: una fila por corrección manual/versionada aplicable a una identidad fuente;
+- `product_mapping`: relación auditable producto fuente -> producto canónico.
+
+### Historia observacional
+
+Para Dash y análisis temporal, `precios_historicos` e `inventario_historico` conservan observaciones por ejecución exitosa incluso cuando el valor no cambie. Esto preserva cobertura temporal y permite distinguir “sin cambio” de “no hubo observación”.
+
+Los cambios, precio anterior y estado actual se derivan mediante SQL/views con ventanas.
+
+### Particionamiento inicial
 
 ```text
-max(historical_previous_price - current_price, 0)
+precios_historicos     PARTITION BY DATE(observed_at_utc)
+inventario_historico   PARTITION BY DATE(observed_at_utc)
+scrape_runs            PARTITION BY DATE(started_at_utc)
+quality_events         PARTITION BY DATE(observed_at_utc)
 ```
 
-`reported_regular_price` e `is_promotion` no demuestran ahorro. Sin baseline aceptado no se inventa una reducción.
+Precio/inventario se clusterizan por claves consultadas con frecuencia, comenzando por `supermarket_id`, `location_id` e identidad de producto. El contrato exacto se fija en código/tests antes del adapter real.
 
-## 12. Modelo tabular: lógico vs físico
+## 11. Google Sheets legado
 
-El contrato lógico conserva las identidades necesarias para una futura comparación cross-source, pero Google Sheets materializa sólo las estructuras justificadas en la fase actual.
+Google Sheets fue una arquitectura temporal anterior y queda **supersedida** por BigQuery.
 
-### Contrato físico activo
+El código/tests de Sheets puede permanecer transitoriamente mientras se migra sin romper la suite, pero no forma parte del camino objetivo, no recibe nueva funcionalidad, no debe persistir el catálogo y sus workflows/markers deben neutralizarse o retirarse antes de la primera persistencia real.
 
-```text
-cfg_supermarkets
-cfg_locations
-fact_offers_current
-fact_offer_history
-fact_scrape_runs
-fact_quality_events
-```
+No se solicitan nuevas credenciales de Sheets.
 
-Grain:
+## 12. Product mapping
 
-- `cfg_supermarkets`: una fila por supermercado;
-- `cfg_locations`: una fila por ubicación comercial;
-- `fact_offers_current`: una fila por `offer_id` con el estado aceptado más reciente;
-- `fact_offer_history`: una fila por periodo histórico de una oferta;
-- `fact_scrape_runs`: una fila por run terminal;
-- `fact_quality_events`: una fila por evento de calidad.
+Durante La Colonia, `product_id` ya se conserva junto a la identidad fuente. `product_mapping` formaliza la relación y será esencial cuando exista un segundo supermercado.
 
-No se separan marca, categoría, presentación, precio o disponibilidad en tablas propias porque comparten el grain/lifecycle de la oferta en esta etapa.
+No iniciar el segundo supermercado sólo para justificar la tabla.
 
-### Contratos lógicos diferidos
+## 13. Normalization overrides
 
-```text
-dim_products
-map_source_products
-```
+Git/versionado sigue siendo la fuente confiable de reglas y correcciones durante el MVP. BigQuery puede materializar `normalization_overrides` para auditoría/operación, pero una edición manual en BigQuery no se convierte silenciosamente en la única fuente de verdad sin un flujo explícito de sincronización.
 
-`dim_products` define el futuro producto canónico cross-source y `map_source_products` la futura relación fuente -> producto/revisión. Las funciones y validaciones de identidad pueden existir y probarse ahora, pero estas tablas no son tabs físicos activos hasta que exista una segunda fuente o un consumidor real que requiera equivalencias.
+## 14. Runs y quality events
 
-Current/history siguen conservando `source_product_id` y `product_id`; por tanto la materialización futura puede reconstruirse/backfillearse sin inventar observaciones.
+Todo run terminal se registra aunque no cambie precio/inventario. Runs rechazados/fallidos no contaminan observaciones comerciales aceptadas. Hashes y fingerprints demuestran igualdad, no autoridad.
 
-Nunca se crea una tabla por supermercado.
+## 15. Cloudflare / provenance
 
-## 13. Rehidratación durable
+La ruta edge existente conserva allowlists, OIDC, presupuesto/pacing, single-flight, replay/fencing, receipts y Observability. Su existencia no concede autoridad comercial ni autorización live.
 
-La persistencia debe permitir reconstruir un runner nuevo y revalidar IDs, `state_hash`, review status, runs de apertura/current, cronología, cierre de periodos, gaps/overlaps y correspondencia current/history.
-
-`raw_values` no se conserva en el snapshot tabular durable cuando no participa en identidad/hash/transición. La evidencia raw necesaria para auditoría/reconstrucción vive en la frontera de provenance apropiada, no mezclada con el modelo curado.
-
-## 14. Batch comercial
-
-Antes del backend se construye un batch completo:
-
-```text
-estado persistido
--> rehidratación
--> preflight comercial
--> transición current/history
--> registros de run/calidad
--> snapshot tabular activo
--> adapter
-```
-
-Un run aceptado puede materializar configuración, current/history, run y quality events. Un run no aceptado sólo registra lo permitido por su estado y nunca muta current/history.
-
-El store backend-neutral conserva los contratos lógicos necesarios para pruebas/evolución. El adapter de Google Sheets rechaza un batch que intente escribir una tabla diferida, evitando que una capacidad lógica futura se convierta accidentalmente en estado durable prematuro.
-
-## 15. Google Sheets
-
-Google Sheets es el backend temporal estructurado de la primera fase.
-
-Capas:
-
-1. **plan**: snapshot activo -> operación de workbook;
-2. **transport**: autenticación y endpoints/scopes cerrados;
-3. **adapter**: read-modify-write del snapshot físico activo;
-4. **bootstrap**: validación/aplicación controlada de configuración.
-
-La materialización usa una operación `spreadsheets.batchUpdate` planificada y preserva pestañas ajenas o diferidas. Texto fuente se escribe como string explícito para evitar fórmulas accidentales. El planner reserva al menos una fila visible no congelada cuando una tabla sólo contiene encabezado, porque Google Sheets no permite congelar todas las filas visibles.
-
-El workflow de storage implementa un único escritor mediante `concurrency`, separa preflight sin secretos, ejecución autenticada y publicación de resultado sanitizado. La existencia/configuración física del workbook se comprueba por la ruta `check -> apply-config -> check`; el resultado productivo concreto vive en `PROJECT_STATE.md`.
-
-La limpieza o retiro de tabs que dejan de pertenecer al contrato activo es una migración explícita: se verifica que no contengan datos que deban conservarse, se ejecuta de forma acotada y se confirma por read-back. No se oculta dentro de una escritura comercial.
-
-La infraestructura de storage no concede por sí misma autoridad comercial: current/history sólo reciben datos cuando las fronteras de ubicación, completitud y aceptación autoritativa están cerradas.
+La evidencia live ya obtenida puede reutilizarse offline. Una observación nueva de La Colonia requiere autorización humana vigente.
 
 ## 16. Automatización diaria
 
-Sólo se activa después de cerrar:
+Sólo se habilita después de demostrar binding de ubicación, extracción/completitud estable, normalización/validación, persistencia BigQuery idempotente/recuperable, semántica de inventario suficiente y manejo de runs rechazados sin contaminación.
 
-1. binding de ubicación;
-2. validación live estable;
-3. completitud y autoridad del catálogo;
-4. persistencia productiva.
+Los fallos no borran el último estado confiable.
 
-```text
-schedule
--> extractor
--> calidad/completitud
--> decisión autoritativa
--> transición current/history
--> persistencia
--> run log
--> dataset BI
-```
+## 17. Dash + Plotly
 
-Los fallos estructurales no borran el último snapshot confiable.
+La aplicación web será el consumidor principal. Debe evolucionar sobre datos persistidos y validados para mostrar búsqueda, precio actual/anterior, variaciones, historial Plotly, promociones/caídas reales, disponibilidad/cantidad observada cuando sea confiable, filtros, última actualización y comparación entre supermercados cuando exista una segunda fuente.
 
-## 17. Power BI
-
-Power BI consume la proyección semántica común sobre datos aceptados. No scrapea, no decide autoridad y no redefine el cálculo de ahorro real.
+Power BI queda como código legado; no se añade nueva funcionalidad a esa ruta.
 
 ## 18. GitHub y CI
 
-GitHub es la fuente de código, documentación y gobernanza. Todo workflow SPS se audita por triggers exactos, mínimo privilegio, acciones fijadas por SHA, checkout seguro, secretos/variables allowlisted y bloqueo de entrypoints live.
-
-Las actions oficiales deben usar generaciones compatibles con el runtime soportado por GitHub y conservar pins SHA completos verificados. CI instala dependencias directas fijadas, ejecuta `pip check`, compila `src/scripts` y corre la suite completa.
-
-La suite Python ejecuta también la suite Node canónica declarada en `edge/cloudflare/package.json`; no se mantiene una segunda lista manual de tests Node.
-
-```bash
-python -m pip check
-python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
-pytest precios-supermercados-sps/tests
-```
-
-El conteo vigente se publica sólo en `PROJECT_STATE.md`.
-
-## 19. Orden arquitectónico
+Todo cambio sigue:
 
 ```text
-CORRECTNESS
--> INFRASTRUCTURE PREFLIGHTS
--> LOCATION BINDING
--> LIVE VALIDATION
--> AUTHORITATIVE ACCEPTANCE
--> PERSISTENCE
--> DAILY AUTOMATION
--> ANALYTICS
--> NEXT SUPERMARKET
+audit main/PRs
+-> rama
+-> cambio mínimo
+-> suite completa
+-> PR
+-> diff + CI + reviews/threads
+-> merge con expected head SHA
 ```
 
-No se salta una frontera para aparentar avance. Un bloqueo explícito es preferible a datos incorrectamente etiquetados o no autoritativos.
+Los workflows mantienen mínimo privilegio, pins SHA completos y entrypoints live fail-closed.
+
+## 19. Orden actual
+
+```text
+CATÁLOGO LA COLONIA [DONE]
+-> NORMALIZACIÓN PRODUCTOS [DONE]
+-> CURRENT/HISTORY + REPLAY OFFLINE [DONE]
+-> BIGQUERY CONTRACT
+-> BIGQUERY ADAPTER / BOOTSTRAP
+-> FIRST DURABLE LOAD
+-> INVENTORY FIRST-CLASS
+-> DAILY AUTOMATION
+-> DASH + PLOTLY
+-> SUPERMARKET #2
+```
