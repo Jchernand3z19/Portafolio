@@ -22,7 +22,10 @@ commercial_persistence = false
 catalog_accepted = false
 production_authority = false
 extraction_enabled = false
+ACTIVE_AUTHORIZATION_IDS = []
 ```
+
+`ACTIVE_AUTHORIZATION_IDS = []` conserva la semántica histórica de que no existe un identificador opaco de autorización asignado por el usuario; no invalida la solicitud humana explícita materializada abajo.
 
 El README deliberadamente no replica SHAs/runs/flags mutables. Si este documento vuelve a quedar detrás de una frontera funcional importante, debe sincronizarse dentro de esa misma frontera cuando sea razonable.
 
@@ -54,7 +57,7 @@ production_authority = false
 extraction_enabled = false
 ```
 
-Esta autorización permite continuar los intentos técnicos necesarios dentro del mismo full crawl read-only hasta el primer catálogo completo descargable, siempre que el marker/workflow vigente siga cubriendo exactamente ese alcance. **No se interpreta como autorización abierta** ni se amplía a persistencia comercial, Sheets, cron diario, autoridad productiva ni otra fuente.
+Esta autorización permite continuar los intentos técnicos necesarios dentro del mismo full crawl read-only hasta el primer catálogo completo descargable, siempre que el marker/workflow vigente siga cubriendo exactamente ese alcance. La evidencia histórica **no se interpreta como autorización abierta**; el alcance tampoco se amplía a persistencia comercial, Sheets, cron diario, autoridad productiva ni otra fuente.
 
 Los intentos siguen siendo finitos, secuenciales y fail-closed. Son stop conditions, entre otras, `403`, `429`, CAPTCHA/login, ciudad no verificada, host inesperado, presupuesto excedido, cambio de totals, overflow, cobertura incompleta o riesgo de carga excesiva. No se evaden controles anti-bot.
 
