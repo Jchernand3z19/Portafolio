@@ -54,7 +54,7 @@ production_authority = false
 extraction_enabled = false
 ```
 
-Esta autorización permite continuar los intentos técnicos necesarios dentro del mismo full crawl read-only hasta el primer catálogo completo descargable, siempre que el marker/workflow vigente siga cubriendo exactamente ese alcance. No se amplía a persistencia comercial, Sheets, cron diario, autoridad productiva ni otra fuente.
+Esta autorización permite continuar los intentos técnicos necesarios dentro del mismo full crawl read-only hasta el primer catálogo completo descargable, siempre que el marker/workflow vigente siga cubriendo exactamente ese alcance. **No se interpreta como autorización abierta** ni se amplía a persistencia comercial, Sheets, cron diario, autoridad productiva ni otra fuente.
 
 Los intentos siguen siendo finitos, secuenciales y fail-closed. Son stop conditions, entre otras, `403`, `429`, CAPTCHA/login, ciudad no verificada, host inesperado, presupuesto excedido, cambio de totals, overflow, cobertura incompleta o riesgo de carga excesiva. No se evaden controles anti-bot.
 
@@ -156,13 +156,15 @@ El merge de `#310` no es rutinario: el workflow reconoce exactamente ese merge c
 
 ## Binding técnico SPS
 
-La evidencia durable de ubicación confirmó que el contexto seleccionado es San Pedro Sula y el runner operativo vuelve a verificar la ciudad en el mismo run mediante el control estructural aprendido. No se persisten cookies, `regionId` raw, sesiones ni headers sensibles.
+La evidencia durable de ubicación confirmó que el contexto seleccionado es San Pedro Sula y el runner operativo vuelve a verificar la ciudad en el mismo run mediante el control estructural aprendido. No se persisten cookies, `regionId` raw, sesiones ni headers sensibles. El fingerprint siguiente es sólo el SHA-256 canónico de comparación ya versionado; no contiene el valor raw.
 
 ```text
 location_id = la_colonia_sps
 city = San Pedro Sula
 location_verification_method = structural_exact_city_control
 technical_binding_confirmed = true
+source_location_key = request:regionid:sha256:d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 ```
 
 ## Semántica de precios
