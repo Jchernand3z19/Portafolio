@@ -1,186 +1,312 @@
 # Modelo común de datos y almacenamiento
 
-Este documento define el modelo lógico estable. El estado operativo mutable vive en [`PROJECT_STATE.md`](PROJECT_STATE.md).
+Este documento define el modelo lógico/físico objetivo. El estado operativo mutable vive en [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
-La primera fase usa Google Sheets como almacenamiento temporal estructurado. La lógica comercial permanece backend-neutral para permitir una migración posterior a BigQuery sin cambiar las reglas de negocio.
+**BigQuery es el backend persistente seleccionado.** Google Sheets queda como legado de una arquitectura anterior y no forma parte del camino objetivo.
 
-El diseño sigue el principio general `SOURCE -> RAW -> CLEAN -> CURATED -> SERVE`, pero **capa lógica no equivale automáticamente a tabla física**. Una tabla sólo se materializa cuando existe una diferencia real de grain, key, lifecycle, ownership/seguridad, patrón de acceso o consumidor. No se crean tablas por anticipación.
-
-## 1. Flujo de dominio
+## 1. Claves e identidades
 
 ```text
-SOURCE
--> RawProduct                         # RAW/source-faithful
--> NormalizedOffer
--> ValidatedOffer                    # CLEAN/validated
--> decisión comercial ACCEPT/REJECT
--> CurrentCommercialOffer / OfferHistoryPeriod  # CURATED
--> TabularBatch
--> backend durable
--> Power BI                          # SERVE
+supermarket_id    = supermercado
+location_id       = ubicación comercial (ciudad/tienda según granularidad demostrada)
+source_product_id = producto estable dentro de la fuente
+product_id        = identidad comparable entre fuentes
+offer_id          = supermercado + ubicación + source_product_id
+scrape_run_id     = ejecución
 ```
 
-`RawProduct` conserva lo observado; `NormalizedOffer` lo lleva al contrato común sin inventar datos; `ValidatedOffer` sella `state_hash`, revisión y quality events. Terminar técnicamente una extracción no equivale a aceptar sus datos para estado comercial.
+Precio, promoción, disponibilidad y timestamps no forman parte de identidades estables.
 
-### Reglas por capa
-
-- **RAW**: source-faithful; unknown permanece unknown; una corrección nunca reescribe silenciosamente lo observado.
-- **CLEAN**: tipos, normalización, identidad fuente y validaciones explícitas; los fallos quedan rechazados/pendientes, no convertidos en defaults plausibles.
-- **CURATED**: sólo entradas aceptadas pueden cambiar current/history; debe conservarse lineage suficiente hacia run, fuente y evidencia.
-- **SERVE**: Power BI consume semántica curada; no es el lugar donde se decide ubicación, aceptación, identidad o limpieza crítica.
-
-## 2. Identidad
+## 2. Relaciones principales
 
 ```text
-source_product_id = producto dentro de una fuente/supermercado
-product_id        = identidad potencialmente comparable entre fuentes
-offer_id          = supermercado + ubicación comercial + producto fuente
+supermarkets 1 ─── N locations
+supermarkets 1 ─── N productos
+productos    1 ─── N precios_historicos
+locations    1 ─── N precios_historicos
+productos    1 ─── N inventario_historico
+locations    1 ─── N inventario_historico
+scrape_runs  1 ─── N precios_historicos
+scrape_runs  1 ─── N inventario_historico
+scrape_runs  1 ─── N quality_events
+productos    N ─── 1 product_id canónico mediante product_mapping
 ```
 
-Precio, promoción, disponibilidad y fecha no participan en IDs estables. `source_product_id` y `offer_id` son deterministas y se recalculan en fronteras críticas y durante rehidratación.
+La ciudad no se guarda como atributo del producto. Se resuelve mediante `location_id` en observaciones de precio/inventario.
 
-Mientras exista una sola fuente, `product_id` puede permanecer dentro del contrato de oferta sin obligar a materializar un catálogo maestro independiente. Separar lógicamente identidad fuente e identidad potencialmente canónica evita bloquear el futuro; materializar MDM antes de tener una necesidad cross-source sólo añade estado duplicado y reconciliaciones prematuras.
+## 3. `supermarkets`
 
-### GTIN y mapping
+**Grain:** una fila por supermercado.
 
-Un barcode sólo se usa como identidad común si es GTIN-8/12/13/14 válido por check digit. Se normaliza a GTIN-14:
+Campos mínimos:
 
 ```text
-GTIN válido     -> product_id = prod_gtin_<gtin14>
-GTIN no usable  -> product_id = prod_pending_<hash>
+supermarket_id STRING NOT NULL
+supermarket_name STRING NOT NULL
+country_code STRING NOT NULL
+location_selection_mode STRING NOT NULL
+is_active BOOL NOT NULL
 ```
 
-Un producto provisional conserva `pending_product_mapping`. Su `prod_pending_*` es determinista respecto a `source_product_id` y la frontera lógica lo recalcula antes de clasificar el mapping como pendiente. Un prefijo reservado que no reconcilia falla cerrado.
+Clave lógica: `supermarket_id`.
 
-`dim_products` y `map_source_products` continúan definidos como **contratos lógicos diferidos**. Se materializan cuando exista al menos una segunda fuente o un consumidor real que requiera equivalencia cross-source. Hasta entonces no forman parte del backend físico activo y una semejanza de nombre nunca crea equivalencia por sí sola.
+## 4. `locations`
 
-## 3. Ubicación
-
-Se separan dos conceptos:
-
-- **contexto fuente raw**: identifica el contexto en que se obtuvo el payload, pero no afirma ciudad/tienda comercial;
-- **ubicación comercial**: ciudad/tienda demostrada y apta para etiquetar una oferta.
-
-Para La Colonia:
+**Grain:** una fila por ubicación comercial.
 
 ```text
-la_colonia_online = contexto fuente raw; location_status=unknown
-la_colonia_sps    = ubicación comercial candidata; in_scope=true
-la_colonia_tgu    = ubicación comercial conocida; in_scope=false
+location_id STRING NOT NULL
+supermarket_id STRING NOT NULL
+city_id STRING NOT NULL
+city_name STRING NOT NULL
+granularity STRING NOT NULL
+source_location_key STRING
+is_available BOOL NOT NULL
+in_scope BOOL NOT NULL
+technical_binding_confirmed BOOL NOT NULL
+evidence STRING
 ```
 
-`la_colonia_online` no puede promoverse bajo el mismo ID a `confirmed` o `inferred`. La frontera de binding debe producir una ubicación comercial distinta y verificable.
+Clave lógica: `location_id`.
 
-La configuración comercial conserva granularidad, binding técnico, `source_location_key`, alcance y `extraction_enabled`. No se persisten ofertas comerciales de una ubicación que no esté habilitada.
-
-## 4. Presentación
-
-Los componentes normalizados se mantienen separados:
+Ejemplo conceptual:
 
 ```text
-unit_count
-content_per_unit
-measurement_unit
-total_content
+la_colonia_sps -> la_colonia -> sps -> San Pedro Sula -> city
 ```
 
-No se colapsan multipacks. `2 x 500 ml` se conserva como 2 unidades de 500 ml y total 1000 ml. Si la fuente no demuestra un componente, queda nulo y puede requerir revisión.
+## 5. `productos`
 
-## 5. Estado e histórico
+**Grain:** una fila por producto/SKU fuente estable dentro de un supermercado.
 
-`state_hash` incluye el estado comercial relevante: precio actual, precio regular reportado, promoción, disponibilidad y atributos normalizados relevantes.
+La tabla conserva tanto la identidad fuente como la identidad canónica asociada. Esto permite trabajar correctamente con una sola fuente y llegar preparado a comparación cross-supermercado sin mezclar ciudad/precio/inventario dentro del producto.
+
+Campos objetivo:
 
 ```text
-mismo state_hash -> confirmar current y mantener periodo abierto
-state_hash distinto -> cerrar periodo anterior, abrir uno nuevo, actualizar current
+source_product_id STRING NOT NULL
+supermarket_id STRING NOT NULL
+product_id STRING NOT NULL
+source_key_type STRING NOT NULL
+source_key STRING NOT NULL
+source_catalog_product_id STRING
+source_item_id STRING
+source_sku STRING
+ean STRING
+canonical_gtin STRING
+source_name STRING NOT NULL
+normalized_name STRING NOT NULL
+source_brand STRING
+normalized_brand STRING
+source_category STRING
+category STRING
+subcategory STRING
+source_presentation STRING
+presentation_normalized STRING NOT NULL
+presentation_kind STRING
+unit_count INT64
+content_per_unit NUMERIC
+measurement_unit STRING
+declared_content NUMERIC
+content_scope STRING
+total_content NUMERIC
+normalization_status STRING NOT NULL
+normalization_method STRING NOT NULL
+product_url STRING
+image_url STRING
+first_seen_at_utc TIMESTAMP
+last_seen_at_utc TIMESTAMP
+last_scrape_run_id STRING
 ```
 
-Una ausencia en el payload no implica `not_listed`, `out_of_stock` ni eliminación.
+Clave lógica: `source_product_id`.
 
-No se crea un snapshot histórico completo por cada ejecución cuando nada cambió. `fact_scrape_runs` demuestra que el proceso corrió; `fact_offer_history` representa periodos comerciales, no un log diario duplicado.
+Reglas:
 
-## 6. Precio regular y reducción real
+- `source_*` preserva la evidencia original;
+- los campos normalizados nunca borran silenciosamente el valor fuente;
+- `presentation_normalized` del snapshot actual de La Colonia tiene cobertura 9,439/9,439;
+- un nuevo formato ambiguo puede quedar pendiente en una observación futura sin inventar contenido.
+
+## 6. `precios_historicos`
+
+**Grain:** una observación de precio por producto fuente + ubicación + run/instante.
 
 ```text
-current_price
-reported_regular_price
-previous_accepted_current_price
+price_observation_id STRING NOT NULL
+supermarket_id STRING NOT NULL
+location_id STRING NOT NULL
+source_product_id STRING NOT NULL
+product_id STRING NOT NULL
+currency STRING NOT NULL
+current_price NUMERIC NOT NULL
+reported_regular_price NUMERIC
+is_promotion BOOL NOT NULL
+promotion_evidence STRING
+observed_at_utc TIMESTAMP NOT NULL
+scrape_run_id STRING NOT NULL
+extractor_version STRING
+schema_version STRING
 ```
 
-`reported_regular_price` es una referencia declarada por la tienda. La reducción real usa únicamente:
+No existe una columna genérica `precio`/`price`.
+
+`current_price` es el precio efectivo observado. `reported_regular_price` es la referencia regular/tachada declarada por la tienda cuando existe. `previous_price` se deriva del histórico y no se persiste como alias.
+
+### Historia diaria
+
+Se conserva una observación por run comercial exitoso aunque el precio no cambie. Esto permite diferenciar:
 
 ```text
-max(previous_accepted_current_price - current_price, 0)
+precio igual observado hoy
+vs
+no hubo observación hoy
 ```
 
-Sin baseline aceptado no se inventa ahorro.
+Partición: `DATE(observed_at_utc)`.
 
-## 7. Runs y replay
+Clustering inicial: `supermarket_id`, `location_id`, `source_product_id`.
 
-Estados: `running`, `success`, `warning`, `rejected`, `failed`, `abandoned`.
+## 7. `inventario_historico`
 
-Sólo una decisión aceptada y autoritativa puede mutar current/history. `running` es transitorio. Un replay terminal se reconoce únicamente cuando decisión, evidencia y payload coinciden; divergencia bajo el mismo `scrape_run_id` falla cerrado. Un fingerprint demuestra igualdad, no autoridad.
-
-## 8. Contrato físico activo
-
-Google Sheets materializa **seis tablas activas**:
+**Grain:** una observación de disponibilidad/cantidad por producto fuente + ubicación + seller + run/instante.
 
 ```text
-cfg_supermarkets
-cfg_locations
-fact_offers_current
-fact_offer_history
-fact_scrape_runs
-fact_quality_events
+inventory_observation_id STRING NOT NULL
+supermarket_id STRING NOT NULL
+location_id STRING NOT NULL
+source_product_id STRING NOT NULL
+product_id STRING NOT NULL
+seller_id STRING
+available_quantity_observed NUMERIC
+availability STRING NOT NULL
+availability_evidence STRING
+quantity_is_exact BOOL
+observed_at_utc TIMESTAMP NOT NULL
+scrape_run_id STRING NOT NULL
+extractor_version STRING
+schema_version STRING
 ```
 
-### Grain y responsabilidad
+`available_quantity_observed` significa cantidad reportada/observada por la fuente. No equivale automáticamente a inventario físico exacto ni ventas.
 
-- `cfg_supermarkets`: **una fila por supermercado**; configuración de fuente y modo de ubicación.
-- `cfg_locations`: **una fila por ubicación comercial**; alcance, granularidad, binding y habilitación.
-- `fact_offers_current`: **una fila por `offer_id`**; último estado comercial aceptado conocido.
-- `fact_offer_history`: **una fila por periodo histórico de una oferta**; abre/cierra sólo ante transición comercial real.
-- `fact_scrape_runs`: **una fila por run terminal**; registra cada ejecución independientemente de si hubo cambios.
-- `fact_quality_events`: **una fila por evento de calidad**; problemas/advertencias auditables asociados a run/oferta cuando aplica.
+Partición: `DATE(observed_at_utc)`.
 
-No se crea una tabla por supermercado. Tampoco se separan marca, categoría, presentación, precio o disponibilidad en tablas distintas cuando comparten el grain y lifecycle de la oferta; hacerlo en esta fase sería sobre-normalización sin beneficio operativo.
+Clustering inicial: `supermarket_id`, `location_id`, `source_product_id`.
 
-## 9. Contratos lógicos diferidos
+## 8. `scrape_runs`
+
+**Grain:** una fila por ejecución terminal.
+
+Campos objetivo mínimos:
 
 ```text
-dim_products
-map_source_products
+scrape_run_id STRING NOT NULL
+supermarket_id STRING NOT NULL
+location_id STRING NOT NULL
+run_status STRING NOT NULL
+catalog_accepted BOOL NOT NULL
+started_at_utc TIMESTAMP NOT NULL
+finished_at_utc TIMESTAMP NOT NULL
+catalog_products_reported INT64
+unique_products_observed INT64
+skus_observed INT64
+skus_with_price INT64
+requests_completed INT64
+catalog_coverage NUMERIC
+warnings_count INT64
+errors_count INT64
+extractor_version STRING
+schema_version STRING
+run_evidence_id STRING
 ```
 
-- `dim_products`: futuro catálogo canónico cross-source, una fila por `product_id` aceptado.
-- `map_source_products`: futura relación una fila por `source_product_id` hacia identidad canónica/revisión.
+Todo run terminal se registra. Un run rechazado/fallido no crea observaciones comerciales aceptadas.
 
-Las funciones de identidad/mapping pueden existir y probarse antes de su materialización. Eso preserva capacidad futura sin obligar al backend temporal a mantener tablas sin consumidor actual.
+Partición: `DATE(started_at_utc)`.
 
-Criterios mínimos para activar estas tablas: una segunda fuente real, un consumidor que necesite producto canónico cross-source, reglas de matching/revisión definidas y estrategia de backfill/reconciliación demostrable.
+## 9. `quality_events`
 
-## 10. Batch comercial y atomicidad
+**Grain:** una fila por evento de calidad.
 
-La frontera comercial construye un `TabularBatch` completo antes de escribir. En la fase física actual puede incluir configuración, current/history, run y quality events. `source_product_id` y `product_id` permanecen dentro de current/history, por lo que diferir las tablas cross-source no pierde la identidad necesaria para reconstrucción futura.
+```text
+quality_event_id STRING NOT NULL
+scrape_run_id STRING NOT NULL
+supermarket_id STRING NOT NULL
+location_id STRING NOT NULL
+source_product_id STRING
+category STRING NOT NULL
+severity STRING NOT NULL
+event_code STRING NOT NULL
+observed_at_utc TIMESTAMP NOT NULL
+```
 
-Un run no aceptado no materializa current/history. `InMemoryTabularStore` conserva el modelo lógico backend-neutral y puede seguir probando contratos diferidos; el adapter Google Sheets rechaza explícitamente un batch que intente escribir una tabla diferida para evitar una falsa sensación de durabilidad.
+Partición: `DATE(observed_at_utc)`.
 
-## 11. Rehidratación durable
+## 10. `normalization_overrides`
 
-Un runner nuevo debe poder reconstruir current/history y revalidar IDs, `state_hash`, precios, ubicación, runs de apertura/cierre, versiones, review metadata, cronología, gaps y overlaps. `raw_values` voluminoso no forma parte del snapshot tabular durable cuando no participa en identidad/hash/transición; la evidencia raw necesaria para auditoría/rebuild debe conservarse en la frontera de provenance adecuada, no mezclarse silenciosamente con Gold/curated.
+**Grain:** una corrección versionada para una identidad/campo fuente.
 
-## 12. Google Sheets
+```text
+override_id STRING NOT NULL
+supermarket_id STRING NOT NULL
+source_product_id STRING NOT NULL
+source_signature STRING NOT NULL
+field_name STRING NOT NULL
+source_value STRING
+override_value STRING NOT NULL
+reason STRING
+active BOOL NOT NULL
+created_at_utc TIMESTAMP
+updated_at_utc TIMESTAMP
+```
 
-El adapter lee sólo las tablas físicas activas, reconstruye el store, valida esquema/PK, aplica el batch localmente y materializa el snapshot mediante un único plan de workbook.
+Durante el MVP, Git/versionado conserva la autoridad de las correcciones. La tabla BigQuery sirve para auditoría/operación; no se aceptan ediciones silenciosas que diverjan de la fuente versionada.
 
-Pestañas ajenas y contratos diferidos se preservan pero no se interpretan como parte del snapshot activo. Una migración/limpieza de tabs físicos es una operación explícita, con preflight y read-back; no queda escondida dentro de una escritura comercial.
+## 11. `product_mapping`
 
-La ruta de bootstrap reserva una fila visible adicional para tablas que sólo tienen encabezado, usa `spreadsheets.batchUpdate` para la materialización y se valida operativamente mediante `check -> apply-config -> check`. El resultado productivo concreto del workbook se documenta en `PROJECT_STATE.md`, no en este modelo estable.
+**Grain:** relación entre producto fuente y producto canónico.
 
-La existencia del workbook o de sus tablas no autoriza a escribir ofertas comerciales: la mutación de current/history sigue subordinada a ubicación, completitud y autoridad upstream.
+```text
+source_product_id STRING NOT NULL
+supermarket_id STRING NOT NULL
+product_id STRING NOT NULL
+mapping_status STRING NOT NULL
+mapping_method STRING NOT NULL
+canonical_gtin STRING
+review_reason STRING
+last_observed_at_utc TIMESTAMP
+last_scrape_run_id STRING
+```
 
-## 13. Power BI y BigQuery
+Cuando exista supermercado #2, múltiples `source_product_id` pueden apuntar al mismo `product_id` si la equivalencia está demostrada.
 
-Power BI consume datos aceptados/persistidos y no decide identidad, ubicación, completitud ni autoridad.
+## 12. Views derivadas
 
-BigQuery puede incorporarse cuando el flujo sea estable. No se copiará mecánicamente el layout de Google Sheets: el modelo físico futuro se decidirá por grain, volumen, consultas, particionamiento, clustering, costos y capacidades del warehouse, manteniendo el significado de identidad, current/history, runs, quality, UTC, lineage y autoridad upstream.
+### `vw_precios_actuales`
+Última observación por supermercado + ubicación + producto fuente.
+
+### `vw_inventario_actual`
+Última observación de inventario por supermercado + ubicación + producto fuente/seller.
+
+### `vw_ofertas_actuales`
+Join de `productos`, `locations`, precio actual e inventario actual para Dash.
+
+### Precio anterior / variación
+Se deriva con funciones de ventana (`LAG`) sobre `precios_historicos`; `reported_regular_price` nunca sustituye al precio anterior.
+
+## 13. Current/history del motor vs tablas BigQuery
+
+El motor Python backend-neutral mantiene semántica de transición, `state_hash`, replay y rehidratación. Sus periodos no obligan a usar una tabla física SCD como único histórico analítico.
+
+BigQuery conserva observaciones temporales para Dash/análisis. Las vistas derivan estado actual y cambios. Ambas capas deben reconciliarse en pruebas para evitar divergencia semántica.
+
+## 14. Google Sheets legado
+
+Las tablas/tabs del adapter Sheets existente son legado y no definen el nuevo contrato físico. No se escribirá el catálogo en Google Sheets ni se añadirán nuevas dependencias sobre ese backend.
+
+La retirada del legado se hará de forma controlada después de que el contrato/adapter BigQuery esté probado.
+
+## 15. Consumidor
+
+Python Dash + Plotly consume views BigQuery y no redefine identidad, ahorro real ni disponibilidad. El dashboard no scrapea ni concede autoridad.
