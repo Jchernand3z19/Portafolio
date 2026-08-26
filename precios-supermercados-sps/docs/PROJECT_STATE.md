@@ -7,8 +7,9 @@ Este documento es la **fuente canónica del estado operativo mutable**. La arqui
 Estado verificado al **2026-08-26 UTC**:
 
 ```text
-main_observed = 589b694fdc75fd97d47fcc5259062fb026cf7ee4
-last_merged_pr = #312 — Permite recovery ante páginas vacías SPS
+main_observed = b484edf02e1aee0bfa816a41e32884219a275c00
+last_merged_pr = #313 — Cierra one-shot del catálogo completo SPS
+active_offline_pr = #314 — Formaliza aceptación técnica offline del catálogo SPS
 active_live_pr = none
 active_attempt_sequence = none
 last_successful_full_catalog_attempt = 15
@@ -47,6 +48,19 @@ trigger_pr_number = 312
 ```
 
 El marker queda inactivo. El workflow conserva el `push` del marker únicamente como verificación fail-closed del estado **consumido**: ese camino produce `capture_mode=consumed_no_network` y no ejecuta ningún request comercial ni full crawl. El workflow manual conserva sólo la muestra MVP read-only explícitamente autorizada por input; `live-crawl` y el entrypoint context-bound de facets siguen deshabilitados. No existe un segundo full crawl automático pendiente.
+
+El cierre quedó verificado después del merge de `#313`:
+
+```text
+closure_merge_sha = b484edf02e1aee0bfa816a41e32884219a275c00
+closure_verification_run = 32926533667
+capture_mode = consumed_no_network
+commercial_requests_executed = 0
+full_catalog_executed = false
+artifact_uploaded = false
+live_crawl_job = skipped
+context_bound_facet_job = skipped
+```
 
 ## Primer catálogo completo descargable — intento #15
 
@@ -107,17 +121,44 @@ promotion_rows_regular_price_gt_current_price = 780
 
 La extracción completa ya está demostrada. `catalog_accepted=false` permanece intencionalmente: **completitud técnica del catálogo no equivale todavía a aceptación comercial/persistible**.
 
-## Calidad observada que debe resolver la siguiente fase
+## Calidad observada y semántica de disponibilidad
 
-Antes de aceptar el run para `CURRENT/HISTORY`, la capa offline debe formalizar reglas para datos que no comprometen la completitud pero sí la semántica:
+El artifact #15 contiene:
 
 ```text
 presentation_missing = 763 / 9439
 availability_in_stock = 7081 / 9439
 availability_unknown = 2358 / 9439
+current_price_positive = 9439 / 9439
 ```
 
-No se deben inventar presentaciones ni disponibilidad. La aceptación debe decidir explícitamente qué campos son obligatorios, cuáles pueden ser `unknown`, cómo registrar quality events y qué condiciones rechazan el run completo frente a una fila individual.
+La implementación fuente distingue internamente `price_positive_quantity_positive`, `price_positive_quantity_zero`, `price_absent_quantity_zero` e `insufficient_evidence`, pero el artifact sanitizado #15 no conservó `availability_evidence` ni `available_quantity`. Por tanto, los 2,358 `unknown` **no pueden reclasificarse de forma fiable offline a partir de ese artifact**.
+
+La vista pública sin binding SPS tampoco se usa como autoridad de disponibilidad: durante la revisión apareció al menos un SKU que el run SPS marcó `in_stock` mientras una vista pública lo presentaba como agotado. Esto demuestra que contexto/caché puede diferir. La regla actual es fail-closed:
+
+```text
+unknown_is_not_out_of_stock_by_inference = true
+unknown_is_quality_warning = true
+presentation_missing_is_quality_warning = true
+public_unbound_page_can_relabel_sps = false
+```
+
+No se inventan presentaciones ni disponibilidad. Una futura captura autorizada debe conservar evidencia sanitizada suficiente para explicar cada estado sin persistir cookies, `regionId`, sesión, headers ni request URLs sensibles.
+
+## Aceptación técnica offline — PR #314
+
+La nueva capa `la_colonia_operational_artifact.py` evalúa artifacts ya descargados y no hace red. Separa blockers de warnings:
+
+```text
+blockers = cobertura/contexto/identidad/precio/contadores/flags de autoridad inconsistentes
+warnings = presentación faltante / availability unknown / promoción sin regular comparable
+technical_catalog_complete = blockers == []
+ready_for_normalization = technical_catalog_complete
+catalog_accepted = false
+production_authority = false
+```
+
+El CLI `scripts/evaluar_catalogo_sps_la_colonia_offline.py` sólo lee un JSON local y devuelve el assessment sanitizado. Esta capa no muta `CURRENT/HISTORY`, no escribe Sheets y no convierte evidencia técnica en autoridad productiva.
 
 ## Frontera del producto
 
@@ -126,6 +167,7 @@ SOURCE
 -> SPS CONTEXT
 -> FULL CATALOG [DONE]
 -> COMPLETENESS VALIDATION [DONE]
+-> TECHNICAL ARTIFACT ASSESSMENT [IN PROGRESS]
 -> RAW
 -> NORMALIZED
 -> VALIDATED
@@ -137,7 +179,7 @@ SOURCE
 -> PYTHON DASH / PLOTLY
 ```
 
-La siguiente frontera es **offline**: `RAW -> NORMALIZED -> VALIDATED -> RUN ACCEPT/REJECT`. No requiere ni autoriza un nuevo crawl.
+La frontera actual es **offline**. No requiere ni autoriza un nuevo crawl.
 
 ## Estrategia full-catalog demostrada
 
@@ -166,6 +208,8 @@ La siguiente frontera es **offline**: `RAW -> NORMALIZED -> VALIDATED -> RUN ACC
 #311 -> páginas cortas parseables pueden llegar al recovery
 #312 -> páginas vacías válidas pueden llegar al recovery sin aportar productos
 attempt #15 -> primer catálogo completo validado y descargable
+#313 -> one-shot consumido y verificado sin tráfico
+#314 -> aceptación técnica offline del artifact
 ```
 
 ## Intentos recientes previos
@@ -241,8 +285,8 @@ No habilitar cron diario hasta demostrar aceptación, persistencia, replay y rec
 
 ## Próximo paso exacto
 
-1. cerrar CI/revisión del PR de neutralización one-shot y fusionarlo sólo si está verde;
-2. sin nuevo tráfico live, usar el artifact exitoso #15 como fixture/evidencia para formalizar aceptación offline;
-3. implementar `Raw -> Normalized -> Validated -> Run Accept/Reject` con quality events explícitos;
-4. probar replay determinista y rechazo sin contaminación;
-5. sólo después diseñar/habilitar el camino mínimo hacia `CURRENT/HISTORY` y Google Sheets, sin conceder autoridad productiva accidentalmente.
+1. cerrar CI/revisión de `#314` y validar el assessment contra el artifact real #15;
+2. conservar en futuras evidencias sanitizadas `availability_evidence`/cantidad observable suficiente, sin persistir contexto sensible;
+3. diseñar el bridge seguro desde artifact sanitizado a la capa común `Normalized/Validated` sin inventar `source_url` ni disponibilidad;
+4. formalizar `RunStatus` y quality events que alimentarán `fact_scrape_runs`/`fact_quality_events`;
+5. probar `CURRENT/HISTORY` y replay completamente offline antes de cualquier persistencia real.
