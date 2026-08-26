@@ -14,6 +14,7 @@ from precios_supermercados.enums import ChangeType, LocationStatus, RunStatus
 from precios_supermercados.la_colonia_offer_normalization import (
     normalize_and_validate_la_colonia_raw_product,
 )
+from precios_supermercados.models import RawProduct, ValidatedOffer
 from precios_supermercados.scrapers.la_colonia import LaColoniaExtractor
 
 
@@ -27,7 +28,7 @@ def _payload() -> dict[str, object]:
     )
 
 
-def _bind_sps_after_verified_location_for_test(raw):
+def _bind_sps_after_verified_location_for_test(raw: RawProduct) -> RawProduct:
     """Simula la frontera ya verificada que cambia contexto fuente por ubicación SPS."""
 
     assert raw.location_id == "la_colonia_online"
@@ -46,7 +47,7 @@ def _first_raw(
     run_id: str,
     observed_at: datetime,
     price: str | None = None,
-):
+) -> RawProduct:
     payload = _payload()
     if price is not None:
         products = payload["data"]["productSearch"]["products"]
@@ -68,7 +69,9 @@ def _first_raw(
     return _bind_sps_after_verified_location_for_test(result.products[0])
 
 
-def _validated(*, run_id: str, observed_at: datetime, price: str | None = None):
+def _validated(
+    *, run_id: str, observed_at: datetime, price: str | None = None
+) -> ValidatedOffer:
     raw = _first_raw(run_id=run_id, observed_at=observed_at, price=price)
     return normalize_and_validate_la_colonia_raw_product(
         raw,
