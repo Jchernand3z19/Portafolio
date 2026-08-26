@@ -46,7 +46,7 @@ attempt_sequence = 15
 trigger_pr_number = 312
 ```
 
-El marker queda inactivo y el workflow deja de escuchar `push` del marker. El workflow manual conserva únicamente la muestra MVP read-only explícitamente autorizada por input; `live-crawl` y el entrypoint context-bound de facets siguen deshabilitados. No existe un segundo full crawl automático pendiente.
+El marker queda inactivo. El workflow conserva el `push` del marker únicamente como verificación fail-closed del estado **consumido**: ese camino produce `capture_mode=consumed_no_network` y no ejecuta ningún request comercial ni full crawl. El workflow manual conserva sólo la muestra MVP read-only explícitamente autorizada por input; `live-crawl` y el entrypoint context-bound de facets siguen deshabilitados. No existe un segundo full crawl automático pendiente.
 
 ## Primer catálogo completo descargable — intento #15
 
