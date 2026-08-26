@@ -154,8 +154,8 @@ jobs:
               "continuation_statement": "ok comenza a trabajar",
               "active": True,
               "termination_condition": "first_successful_downloadable_full_sps_catalog",
-              "attempt_sequence": 14,
-              "trigger_pr_number": 311,
+              "attempt_sequence": 15,
+              "trigger_pr_number": 312,
               "supermarket_id": "la_colonia",
               "location_id": "la_colonia_sps",
               "city": "San Pedro Sula",
@@ -209,8 +209,8 @@ jobs:
           head_commit = event.get("head_commit") or {}
           message = str(head_commit.get("message") or "")
           expected_prefix = (
-              "Merge pull request #311 from "
-              "Jchernand3z19/fix/precios-sps-short-page-recovery-attempt-14"
+              "Merge pull request #312 from "
+              "Jchernand3z19/fix/precios-sps-empty-page-recovery-attempt-15"
           )
           if not message.startswith(expected_prefix):
               raise SystemExit("mvp_live_merge_identity_mismatch")
