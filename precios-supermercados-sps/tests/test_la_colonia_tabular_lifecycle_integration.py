@@ -23,6 +23,7 @@ from precios_supermercados.la_colonia_offer_normalization import (
     normalize_and_validate_la_colonia_raw_product,
 )
 from precios_supermercados.locations import (
+    DEFAULT_LOCATION_CATALOG,
     LA_COLONIA_SPS,
     LA_COLONIA_SUPERMARKET,
     LocationCatalog,
@@ -165,6 +166,14 @@ def _restore(store: InMemoryTabularStore) -> InMemoryCommercialState:
         store.rows(FACT_SCRAPE_RUNS.name),
     )
     return restored.state
+
+
+def test_simulated_catalog_does_not_enable_production_location_catalog() -> None:
+    simulated = _test_catalog()
+
+    assert DEFAULT_LOCATION_CATALOG.location(LOCATION_ID).extraction_enabled is False
+    assert simulated.location(LOCATION_ID).extraction_enabled is True
+    assert simulated.location(LOCATION_ID).technical_binding_confirmed is True
 
 
 def test_la_colonia_first_tabular_load_preserves_source_and_normalized_offer() -> None:
