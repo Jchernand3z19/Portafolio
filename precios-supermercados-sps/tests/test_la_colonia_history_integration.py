@@ -112,7 +112,7 @@ def test_la_colonia_identical_second_observation_confirms_without_duplicate_hist
     history = store.history(first.offer.offer_id)
     assert len(history) == 1
     assert history[0].change_type is ChangeType.INITIAL
-    assert history[0].first_observed_at_utc == BASE_TIME
+    assert history[0].valid_from_utc == BASE_TIME
     assert history[0].last_observed_at_utc == second_time
     assert history[0].last_confirmed_by_scrape_run_id == "fixture-run-2"
     assert history[0].valid_to_utc is None
