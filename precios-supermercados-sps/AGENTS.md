@@ -11,35 +11,13 @@ Antes de modificar, inspecciona `main`, PRs abiertos, CI y código. [`docs/PROJE
 
 Si `PROJECT_STATE.md` contradice evidencia más nueva en `main`, corrige primero el documento mediante PR; no reviertas código nuevo por seguir un corte viejo.
 
-## MVP primero — control explícito contra sobrearquitectura
+## MVP primero — control contra sobrearquitectura
 
-El objetivo inmediato del proyecto es producir un **primer catálogo real y verificable de La Colonia para San Pedro Sula**, con productos/precios utilizables. La calidad técnica sigue siendo obligatoria, pero la arquitectura no es un fin en sí misma.
+El objetivo es cerrar La Colonia San Pedro Sula end-to-end antes de comenzar otro supermercado. Progreso significa datos utilizables y confiables más cerca de existir, no cantidad de PRs, tests o capas.
 
-Antes de crear una clase, adapter, verifier, preflight, workflow, tabla, documento, runbook o capa nueva, responde de forma concreta:
+Antes de crear una clase, adapter, verifier, workflow, tabla o documento nuevo, comprueba que resuelve un blocker actual, que no existe ya una pieza reutilizable y que la nueva frontera es realmente necesaria. Prefiere una implementación específica y clara para La Colonia cuando una plataforma genérica no tenga consumidor actual.
 
-1. ¿bloquea hoy obtener datos reales, demostrar que pertenecen a SPS, validarlos o guardarlos de forma segura?;
-2. ¿existe ya una pieza reutilizable que resuelva el problema?;
-3. ¿puede resolverse dentro de una pieza existente sin perder una frontera de seguridad real?;
-4. ¿la nueva abstracción tiene al menos dos consumidores actuales o una obligación de seguridad que no puede satisfacerse de forma más simple?
-
-Si las respuestas no justifican la nueva capa, **no la crees; difiérela**.
-
-Reglas de ejecución para la fase de prueba/MVP:
-
-- prioriza el camino más corto `fuente -> contexto SPS -> extracción -> validación -> salida utilizable`;
-- una prueba read-only y acotada no necesita adoptar por anticipado todas las garantías de la futura operación productiva; debe mantener únicamente los controles necesarios para seguridad, ubicación correcta, límites de tráfico y no persistir datos comerciales como autoritativos antes de su aceptación;
-- Cloudflare/OIDC/receipts/Observability y otras garantías productivas sólo bloquean una prueba si son necesarias para ejecutar esa prueba de forma segura o para demostrar una propiedad que la prueba necesita demostrar;
-- no conviertas una mejora futura de provenance, observability, hardening, genericidad o multi-supermercado en blocker del primer catálogo si el riesgo puede aislarse manteniendo el resultado como evidencia de prueba/no autoritativa;
-- no crear abstracciones para escenarios hipotéticos, segunda fuente, escala futura o reutilización futura sin consumidor actual;
-- no crear un documento nuevo si `PROJECT_STATE.md`, `arquitectura.md`, `decisiones-tecnicas.md`, un README existente o comentarios cercanos al código pueden alojar la información suficiente;
-- no crear un PR sólo para actualizar un conteo de tests, SHA o texto de estado si esa actualización puede viajar con el cambio funcional que produjo el nuevo estado;
-- separar un PR documental previo únicamente cuando el estado canónico incorrecto cambiaría materialmente la decisión técnica siguiente;
-- el número de PRs, tests, capas o documentos **no es una métrica de progreso**. Progreso significa blockers reales eliminados y datos utilizables más cerca de existir;
-- cada PR debe indicar qué blocker actual elimina o qué resultado observable acerca. Si no puede hacerlo, probablemente debe combinarse, diferirse o descartarse;
-- después de un fallo de prueba, corrige primero la causa directa. No abras una cadena nueva de hardening salvo que el fallo revele un riesgo real reproducible;
-- durante el MVP, prefiere una implementación específica y clara para La Colonia sobre una plataforma genérica prematura, siempre que no viole contratos protegidos ni cree deuda irreversible.
-
-La simplificación **no** permite evadir controles del sitio, exceder presupuestos de tráfico, inventar ubicación SPS, exponer secretos/datos personales ni convertir evidencia de prueba en autoridad comercial. Esas fronteras siguen protegidas.
+La simplificación no permite evadir controles del sitio, exceder presupuesto de tráfico, inventar ubicación SPS, exponer secretos/datos personales ni convertir evidencia técnica en autoridad comercial.
 
 ## Contratos protegidos
 
@@ -47,10 +25,12 @@ La simplificación **no** permite evadir controles del sitio, exceder presupuest
 
 Reglas comerciales protegidas:
 
-- `reported_regular_price` es sólo dato declarado por la tienda;
-- el ahorro real compara `current_price` actual contra el `current_price` del periodo aceptado inmediatamente anterior;
+- `current_price` es el precio efectivo observado;
+- `reported_regular_price` es sólo el precio regular/tachado declarado por la tienda cuando existe evidencia separada;
+- `previous_price` es derivado del histórico y nunca es alias de `reported_regular_price`;
+- el ahorro real compara el `current_price` actual contra el `current_price` aceptado inmediatamente anterior;
 - sin baseline confiable no se inventa ahorro;
-- Power BI consume esta semántica desde la proyección común.
+- `is_promotion` conserva la señal promocional observada.
 
 ## Identidad de producto
 
@@ -62,43 +42,33 @@ product_id        = identidad comparable entre fuentes
 offer_id          = supermercado + ubicación comercial + producto fuente
 ```
 
-- precio/promoción/disponibilidad/fecha no forman parte de IDs estables;
+- precio, promoción, disponibilidad y fecha no forman parte de IDs estables;
 - `source_product_id` y `offer_id` se recalculan en fronteras críticas;
-- GTIN sólo puede crear identidad cross-supermercado si supera check digit y se normaliza a GTIN-14;
-- si no existe identidad fuerte, conserva `prod_pending_*` + `pending_product_mapping`;
-- no elimines una observación sólo porque el mapping esté pendiente;
-- no colapses multipacks: conserva `unit_count`, contenido por unidad y total.
+- GTIN sólo crea identidad cross-supermercado si supera check digit y se normaliza a GTIN-14;
+- si no existe identidad fuerte, conserva `prod_pending_*` + mapping pendiente;
+- no elimines una observación porque el mapping esté pendiente;
+- no colapses multipacks: conserva unidades, contenido por unidad y total sólo cuando el alcance esté demostrado.
 
-`dim_products` y `map_source_products` son contratos lógicos para identidad canónica cross-source. No deben materializarse físicamente sólo por previsión: se activan cuando exista una segunda fuente o un consumidor real que requiera equivalencias. `dim_products` no debe adquirir columnas específicas de supermercado, ubicación, precio o run; `map_source_products` conserva la relación fuente -> producto y la cola de revisión cuando esa capacidad se active.
+Durante la primera fuente, `productos` puede conservar la identidad fuente y el `product_id` asociado. `product_mapping` formaliza la equivalencia fuente -> producto canónico y cobra especial importancia al incorporar un segundo supermercado. La identidad del producto no depende de ciudad; la ciudad pertenece a la observación de precio/inventario mediante `location_id`.
 
 ## Autonomía técnica y tráfico live
 
-La instrucción de autonomía del usuario autoriza continuar el desarrollo técnico del proyecto sin pedir aprobación para trabajo local/GitHub/offline: auditoría, diseño, código, tests, documentación, PRs, CI, merge y preparación de mecanismos fail-closed.
+La autonomía del usuario permite continuar desarrollo local/GitHub/offline: auditoría, diseño, código, tests, documentación, PRs, CI y merge.
 
-**Esa autonomía no se convierte por inferencia en una autorización permanente de tráfico live.** Antes de una observación nueva contra un supermercado verifica la autorización humana vigente y su alcance concreto.
+**No crea autorización permanente de tráfico live.** Antes de cualquier observación nueva contra un supermercado verifica autorización humana vigente y su alcance.
 
 Reglas:
 
-- una autorización histórica consumida/cerrada no se reutiliza;
-- no inventes Authorization IDs ni amplíes un marker a una fase distinta;
-- binding, facet discovery, smoke de catálogo y full crawl son observaciones distintas salvo que la instrucción humana las cubra expresamente;
-- la evidencia live ya obtenida puede reutilizarse offline sin repetir tráfico;
-- si el alcance live requerido no está autorizado, continúa todo lo posible offline y detente únicamente en esa frontera real.
+- una autorización histórica consumida no se reutiliza;
+- no inventes Authorization IDs ni amplíes un marker;
+- evidencia live ya obtenida puede reutilizarse offline;
+- si falta autorización live, continúa todo lo posible offline y detente sólo en esa frontera real;
+- con autorización read-only, conserva concurrencia/pacing/presupuesto acotados y detente ante 403 persistente, 429, CAPTCHA, login obligatorio o riesgo de carga excesiva;
+- no evadas controles anti-bot.
 
-Cuando exista autorización explícita para tráfico público read-only, conserva `concurrency=1` cuando aplique, pacing razonable, presupuesto/deadline acotados y stop ante 403 persistente, 429, CAPTCHA, login obligatorio, datos personales obligatorios o riesgo de carga excesiva. No evadas controles anti-bot ni aumentes carga para forzar un resultado.
+Una autorización read-only nunca cubre automáticamente credenciales, billing, login de usuario, mutación externa, compras, despliegues con coste, decisiones manuales de mapping sin evidencia o escrituras productivas no autorizadas.
 
-Una autorización read-only nunca cubre automáticamente:
-
-- credenciales, secretos, cuentas o permisos que el agente no posee;
-- billing, compras o gasto nuevo;
-- login obligatorio con una cuenta del usuario;
-- modificar datos o configuración en sistemas externos ajenos a GitHub del proyecto;
-- checkout, pedidos, reservas, formularios que creen estado del lado servidor o cualquier transacción;
-- despliegues productivos nuevos que creen coste o cambien infraestructura externa fuera de la ruta expresamente autorizada;
-- decisiones manuales reales de mapping de producto cuando no puedan resolverse determinísticamente;
-- trabajo puramente manual dentro de Power BI.
-
-Los runs read-only no conceden por sí solos `production_authority`, `catalog_accepted` ni autoridad para persistir estado comercial. Esas fronteras siguen gobernadas por evidencia y contratos del producto.
+Los runs read-only no conceden por sí solos `production_authority`, `catalog_accepted` ni autoridad de persistencia.
 
 ## Ubicación
 
@@ -106,69 +76,80 @@ No etiquetes un precio como SPS por inferencia.
 
 `la_colonia_online` es un **contexto fuente raw**, no una ubicación comercial. Debe permanecer `location_status=unknown`, sin `location_confidence`. Nunca lo conviertas bajo el mismo ID en SPS/TGU/tienda.
 
-Una ubicación comercial requiere:
+Una ubicación comercial requiere granularidad conocida, binding técnico verificable cuando la fuente permite selección y evidencia coherente. `la_colonia_sps` posee binding técnico de ciudad confirmado. `extraction_enabled` permanece separado de esa evidencia.
 
-1. granularidad conocida;
-2. binding técnico verificable cuando la fuente permite selección;
-3. evidencia coherente con la oferta;
-4. `extraction_enabled=true` sólo después de cerrar las fronteras anteriores.
-
-`la_colonia_sps` ya posee binding técnico de ciudad confirmado por evidencia persistida, pero `extraction_enabled` sigue `false` hasta cerrar la aceptación del catálogo.
-
-La radiografía puede proponer una transición. Si evidencia granularidad `store`, no colapses múltiples tiendas bajo una sola ciudad.
-
-## Cloudflare
-
-La ruta edge está en `edge/cloudflare/`. No flexibilices por conveniencia:
-
-- hosts/path/métodos allowlisted;
-- identidad repo/ref/workflow/environment/audience;
-- destino físico, page size, order o traversal IDs;
-- separación de private key y verificador;
-- presupuesto/pacing/single-flight/replay/fencing;
-- requisitos de tracing/Observability.
-
-La sonda controlada ya produjo evidencia física contra origen propio. No la repitas sin una hipótesis nueva justificada y, cuando implique tráfico externo nuevo, sin la autorización live que corresponda.
-
-El verifier actual de Observability usa discovery de traces y detalle `view: events`; el estado productivo de esa reconciliación se determina por una ejecución real, no por diagnósticos históricos ni por rebajar el contrato.
-
-## Persistencia
-
-La primera persistencia es Google Sheets; BigQuery queda para una fase posterior.
-
-El modelo lógico conserva capacidades de identidad cross-source, pero el backend físico actual materializa únicamente seis tablas con grain/lifecycle/consumidor ya justificado:
+Fingerprint SPS protegido:
 
 ```text
-cfg_supermarkets
-cfg_locations
-fact_offers_current
-fact_offer_history
-fact_scrape_runs
-fact_quality_events
+d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 ```
 
-`dim_products` y `map_source_products` permanecen diferidas hasta que exista necesidad cross-source real. No se crean, escriben ni leen como tabs activos de Google Sheets durante la fase de una sola fuente. La identidad fuente y `product_id` siguen dentro de current/history, por lo que la futura activación puede reconstruirse sin inventar observaciones.
+## Catálogo y normalización actuales
 
-También reutiliza `InMemoryTabularStore`/`TabularBatch`, rehidratación/restauración, guard de autoridad, binding durable de replay, plan Sheets, transporte cerrado, adapter read-modify-write, bootstrap, loader read-only y batch comercial.
+El catálogo completo aceptado técnicamente del intento #15 contiene 9,439 SKU y 9,437 productos. La normalización de presentación del snapshot está cerrada en 9,439/9,439 con cero pendientes.
+
+Conserva siempre valor fuente y valor normalizado por separado. Overrides revisados deben estar ligados a identidad/firma fuente y fallar cerrado si esa firma cambia.
+
+## Inventario
+
+`availability=unknown` no se interpreta como agotado por inferencia. Antes de confiar en inventario histórico se debe conservar como dato de primera clase, como mínimo:
+
+```text
+available_quantity_observed
+availability
+availability_evidence
+seller_id
+```
+
+Verifica que la cantidad corresponda al seller seleccionado. Describe la cantidad como observada/reportada por la fuente, no como inventario físico o venta exacta salvo evidencia adicional.
+
+## Persistencia — BigQuery seleccionado
+
+**BigQuery es el backend persistente seleccionado. Google Sheets queda fuera del camino objetivo.**
+
+La lógica de dominio, current/history, replay, rehidratación y validación permanece backend-neutral. El código legado de Google Sheets puede coexistir temporalmente durante la migración, pero no debe recibir nueva funcionalidad, no debe ejecutarse para persistir el catálogo y sus entrypoints deben quedar neutralizados antes de la primera persistencia real BigQuery.
+
+Tablas objetivo mínimas:
+
+```text
+supermarkets
+locations
+productos
+precios_historicos
+inventario_historico
+scrape_runs
+quality_events
+normalization_overrides
+product_mapping
+```
 
 Reglas críticas:
 
 - no crear tablas por supermercado;
-- antes de crear/materializar una tabla, justificar grain, key, lifecycle y consumidor; concepto futuro no basta;
-- todo run final se registra;
-- current/history sólo mutan con decisión aceptada y autoridad real;
+- `locations` relaciona `location_id` con supermercado y ciudad;
+- `productos` no duplica ciudad;
+- `precios_historicos` e `inventario_historico` llevan `supermarket_id`, `location_id` e identidad de producto;
+- usar nombres explícitos `current_price` y `reported_regular_price`; no una columna ambigua `price/precio`;
+- todo run final debe poder registrarse;
+- runs rechazados/fallidos no alteran estado comercial aceptado;
+- ausencia de producto no implica baja ni agotado;
 - hashes/fingerprints prueban igualdad, no autoridad;
-- runs rechazados/fallidos no alteran current/history;
-- ausencia no implica baja;
 - restaurar estado no autoriza un run nuevo;
-- el loader de Sheets sigue read-only;
-- no conectar persistencia productiva a un `catalog_accepted` caller-controlled.
+- una tabla nueva necesita grain, key, lifecycle y consumidor actuales.
 
-El workbook físico puede tener tabs legados o diferidos. El adapter sólo gestiona el contrato físico activo y debe preservar tabs ajenos; una limpieza/migración real se hace explícitamente, con preflight y read-back, nunca ocultándola dentro de una escritura comercial.
+Para BigQuery, prioriza tablas de observaciones históricas aptas para análisis temporal. Precio e inventario pueden registrar una observación por run exitoso; los cambios/estado actual se derivan con SQL/views, mientras el motor comercial backend-neutral conserva validación e idempotencia.
 
-## Power BI
+Antes de cualquier escritura cloud real, detente en la frontera de proyecto/dataset/credenciales/billing si no están ya disponibles y autorizados.
 
-`power_bi_projection.py` es la frontera semántica read-only. No dupliques la definición de ahorro real en DAX, scripts o workflows. Dataset/refresh productivo sólo consume datos aceptados y durables.
+## Visualización — Dash + Plotly
+
+La aplicación objetivo es **Python Dash + Plotly**. Power BI ya no es el destino del producto. No añadas funcionalidad nueva a `power_bi_projection.py`; puede permanecer temporalmente como código legado hasta que sea seguro retirarlo.
+
+La aplicación debe consumir únicamente datos persistidos/validados y permitir progresivamente búsqueda, precio actual/anterior, variaciones, historial, filtros, disponibilidad, calidad y comparación entre supermercados cuando exista una segunda fuente.
+
+## Cloudflare
+
+La ruta edge existente vive en `edge/cloudflare/`. No flexibilices allowlists, identidad OIDC, presupuesto/pacing, single-flight/replay/fencing, claves o Observability por conveniencia. No repitas una sonda física sin hipótesis nueva y autorización live cuando corresponda.
 
 ## GitHub Actions
 
@@ -178,10 +159,10 @@ Antes de modificar workflows, lee `.github/workflows/AGENTS.md`.
 - mínimo privilegio;
 - checkout inmutable cuando aplica;
 - `persist-credentials: false`;
-- todo workflow SPS nuevo entra en `test_workflow_security_audit.py`;
+- workflows SPS nuevos entran en `test_workflow_security_audit.py`;
 - no debilites el auditor para hacer pasar una configuración;
-- entrypoints live quedan fail-closed cuando no existe autorización vigente para ese alcance;
-- entrypoints con secretos, mutación externa, costes o autoridad comercial siguen fail-closed hasta cerrar su frontera correspondiente.
+- entrypoints live quedan fail-closed sin autorización vigente;
+- entrypoints con secretos, mutación externa, costes o autoridad comercial siguen fail-closed hasta cerrar su frontera.
 
 ## Seguridad de datos
 
@@ -189,14 +170,14 @@ Nunca publiques cookies, Authorization headers, tokens, JWT, session IDs, orderF
 
 ## Desarrollo y Git
 
-1. verifica `main` y PRs concurrentes;
+1. verifica `main`, PRs concurrentes y `PROJECT_STATE.md`;
 2. comprende tests/políticas del área;
 3. crea rama técnica;
 4. implementa el cambio mínimo;
 5. ejecuta suite completa;
 6. abre PR;
-7. revisa diff, seguridad y threads;
-8. fusiona con expected head SHA.
+7. revisa diff, CI, seguridad, comentarios y threads;
+8. fusiona sólo con expected head SHA.
 
 No uses force push, reset destructivo ni rebase destructivo.
 
@@ -207,4 +188,4 @@ python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scr
 pytest precios-supermercados-sps/tests
 ```
 
-La suite ejecuta también la suite Node canónica declarada en `edge/cloudflare/package.json` y la auditoría fail-closed de workflows. No declares un conteo de tests si no fue observado en un run real.
+No declares conteos de tests que no hayas observado en un run real.
