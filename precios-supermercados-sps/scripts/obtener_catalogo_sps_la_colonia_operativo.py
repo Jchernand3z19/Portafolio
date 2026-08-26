@@ -3,8 +3,8 @@
 
 Las cantidades de facets se usan sólo para empacar marcas en buckets conservadores.
 El total raíz y el total real de cada bucket se toman de productSearchV3, que es la
-fuente autoritativa para paginación. Así una diferencia pequeña entre facets y
-Search no aborta una descarga válida.
+fuente autoritativa para paginación. Además, cada bucket se valida contra la URL
+GET real que será enviada para evitar respuestas HTTP 414 por exceso de facets.
 """
 
 from __future__ import annotations
@@ -31,19 +31,53 @@ from precios_supermercados.scrapers.la_colonia_location import (  # noqa: E402
 
 core = frontier.base
 full = core.full
-CAPTURE_STRATEGY = "operational_city_authoritative_brand_buckets_productSearchV3"
-PARTITION_STRATEGY = "brand_buckets_productSearch_authoritative_totals"
+CAPTURE_STRATEGY = "operational_city_url_safe_brand_buckets_productSearchV3"
+PARTITION_STRATEGY = "brand_buckets_productSearch_authoritative_transport_safe"
 LOCATION_VERIFICATION_METHOD = "structural_exact_city_control"
 BUCKET_ESTIMATE_CAPACITY = 2300
+MAX_BRANDS_PER_BUCKET = 24
+MAX_PRODUCT_SEARCH_URL_BYTES = 7000
+
+
+def _bucket_path(values: Sequence[str]) -> tuple[tuple[str, str], ...]:
+    return tuple(("brand", value) for value in values)
+
+
+def _bucket_url_bytes(
+    values: Sequence[str],
+    *,
+    page_size: int,
+) -> int:
+    """Mide la URL más larga que un bucket puede generar dentro de la ventana VTEX."""
+
+    if not values:
+        raise ValueError("brand_bucket_empty")
+    max_page = max(math.ceil(core.SEARCH_WINDOW_MAX_PRODUCTS / page_size), 1)
+    facets = core._partition_facets(_bucket_path(values))
+    url = core._product_url(
+        selected_facets=facets,
+        page=max_page,
+        page_size=page_size,
+    )
+    return len(url.encode("utf-8"))
 
 
 def _build_brand_buckets(
     values: Sequence[Mapping[str, Any]],
     *,
     estimate_capacity: int = BUCKET_ESTIMATE_CAPACITY,
+    page_size: int = 50,
+    max_brands: int = MAX_BRANDS_PER_BUCKET,
+    max_url_bytes: int = MAX_PRODUCT_SEARCH_URL_BYTES,
 ) -> tuple[frontier.FrontierPartition, ...]:
     if estimate_capacity <= 0 or estimate_capacity > core.SEARCH_WINDOW_MAX_PRODUCTS:
         raise ValueError("invalid_brand_bucket_capacity")
+    if page_size <= 0:
+        raise ValueError("invalid_brand_bucket_page_size")
+    if max_brands <= 0:
+        raise ValueError("invalid_brand_bucket_brand_limit")
+    if max_url_bytes <= 0:
+        raise ValueError("invalid_brand_bucket_url_limit")
 
     by_value: dict[str, int] = {}
     for item in values:
@@ -66,11 +100,21 @@ def _build_brand_buckets(
 
     buckets: list[dict[str, Any]] = []
     for value, quantity in sorted(by_value.items(), key=lambda item: (-item[1], item[0])):
-        candidates = [
-            (index, int(bucket["quantity"]))
-            for index, bucket in enumerate(buckets)
-            if int(bucket["quantity"]) + quantity <= estimate_capacity
-        ]
+        if _bucket_url_bytes([value], page_size=page_size) > max_url_bytes:
+            raise ValueError("single_brand_url_too_long")
+
+        candidates: list[tuple[int, int]] = []
+        for index, bucket in enumerate(buckets):
+            current_values = list(bucket["values"])
+            candidate_values = [*current_values, value]
+            if int(bucket["quantity"]) + quantity > estimate_capacity:
+                continue
+            if len(candidate_values) > max_brands:
+                continue
+            if _bucket_url_bytes(candidate_values, page_size=page_size) > max_url_bytes:
+                continue
+            candidates.append((index, int(bucket["quantity"])))
+
         if candidates:
             index = max(candidates, key=lambda item: item[1])[0]
             buckets[index]["values"].append(value)
@@ -81,13 +125,20 @@ def _build_brand_buckets(
     if len(buckets) > core.MAX_PLANNED_PRODUCT_REQUESTS:
         raise ValueError("partition_limit_exceeded")
 
-    return tuple(
-        frontier.FrontierPartition(
-            path=tuple(("brand", value) for value in bucket["values"]),
-            quantity=int(bucket["quantity"]),
+    partitions: list[frontier.FrontierPartition] = []
+    for bucket in buckets:
+        bucket_values = tuple(str(value) for value in bucket["values"])
+        if len(bucket_values) > max_brands:
+            raise ValueError("brand_bucket_brand_limit_exceeded")
+        if _bucket_url_bytes(bucket_values, page_size=page_size) > max_url_bytes:
+            raise ValueError("brand_bucket_url_limit_exceeded")
+        partitions.append(
+            frontier.FrontierPartition(
+                path=_bucket_path(bucket_values),
+                quantity=int(bucket["quantity"]),
+            )
         )
-        for bucket in buckets
-    )
+    return tuple(partitions)
 
 
 def _process_page(
@@ -160,6 +211,10 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
         "planned_product_requests": 0,
         "product_requests_completed": 0,
         "partition_total_adjustments": 0,
+        "max_bucket_brand_count": 0,
+        "max_bucket_url_bytes": 0,
+        "brand_bucket_max_brands": MAX_BRANDS_PER_BUCKET,
+        "brand_bucket_url_limit_bytes": MAX_PRODUCT_SEARCH_URL_BYTES,
     }
     run_id = f"sps_operational_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     unique_products: set[str] = set()
@@ -189,7 +244,6 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                 raise full.FullCatalogError(exc.reason, diagnostic=diagnostic) from exc
             diagnostic["location_verified_same_run"] = True
 
-            # productSearchV3, no facets.recordsFiltered, define el total autoritativo.
             root_url = core._product_url(
                 selected_facets=[dict(core.ROOT_FACET)], page=1, page_size=page_size
             )
@@ -223,7 +277,10 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                 if normalized.get("sampling") is not False:
                     raise ValueError("brand_facets_sampling_detected")
                 brand_values = brand._brand_values(normalized)
-                partitions = _build_brand_buckets(brand_values)
+                partitions = _build_brand_buckets(
+                    brand_values,
+                    page_size=page_size,
+                )
             except Exception as exc:
                 diagnostic["frontier_error"] = str(exc)[:120]
                 raise full.FullCatalogError("brand_buckets_not_usable", diagnostic=diagnostic) from exc
@@ -232,6 +289,17 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
             diagnostic["partition_quantity_estimate_sum"] = sum(
                 partition.quantity for partition in partitions
             )
+            if partitions:
+                diagnostic["max_bucket_brand_count"] = max(
+                    len(partition.path) for partition in partitions
+                )
+                diagnostic["max_bucket_url_bytes"] = max(
+                    _bucket_url_bytes(
+                        [value for key, value in partition.path if key == "brand"],
+                        page_size=page_size,
+                    )
+                    for partition in partitions
+                )
             diagnostic["planned_product_requests"] = sum(
                 math.ceil(partition.quantity / page_size) for partition in partitions
             ) + 1
@@ -243,6 +311,20 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
             extractor = core.LaColoniaExtractor()
             for partition_index, partition in enumerate(partitions, start=1):
                 facets = core._partition_facets(partition.path)
+                brand_values_in_bucket = [
+                    value for key, value in partition.path if key == "brand"
+                ]
+                preflight_url_bytes = _bucket_url_bytes(
+                    brand_values_in_bucket,
+                    page_size=page_size,
+                )
+                if preflight_url_bytes > MAX_PRODUCT_SEARCH_URL_BYTES:
+                    diagnostic["max_bucket_url_bytes"] = max(
+                        diagnostic["max_bucket_url_bytes"], preflight_url_bytes
+                    )
+                    raise full.FullCatalogError(
+                        "brand_bucket_url_limit_exceeded", diagnostic=diagnostic
+                    )
 
                 first_url = core._product_url(
                     selected_facets=facets, page=1, page_size=page_size
@@ -299,6 +381,14 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                         page=partition_page,
                         page_size=page_size,
                     )
+                    request_url_bytes = len(request_url.encode("utf-8"))
+                    if request_url_bytes > MAX_PRODUCT_SEARCH_URL_BYTES:
+                        diagnostic["max_bucket_url_bytes"] = max(
+                            diagnostic["max_bucket_url_bytes"], request_url_bytes
+                        )
+                        raise full.FullCatalogError(
+                            "brand_bucket_url_limit_exceeded", diagnostic=diagnostic
+                        )
                     diagnostic["pages_attempted"] += 1
                     response = context.request.get(
                         request_url,
@@ -353,7 +443,7 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                 )
 
             artifact = {
-                "schema_version": "5",
+                "schema_version": "6",
                 "result": "success",
                 "catalog_type": "la_colonia_sps_full_read_only",
                 "supermarket_id": "la_colonia",
@@ -368,6 +458,10 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                 "radiography_executed": False,
                 "page_size": page_size,
                 "brand_bucket_estimate_capacity": BUCKET_ESTIMATE_CAPACITY,
+                "brand_bucket_max_brands": MAX_BRANDS_PER_BUCKET,
+                "brand_bucket_url_limit_bytes": MAX_PRODUCT_SEARCH_URL_BYTES,
+                "max_bucket_brand_count": diagnostic["max_bucket_brand_count"],
+                "max_bucket_url_bytes": diagnostic["max_bucket_url_bytes"],
                 "catalog_products_reported": root_total,
                 "unique_products_extracted": len(unique_products),
                 "catalog_product_coverage": len(unique_products) / root_total,
@@ -417,6 +511,8 @@ def _failure_artifact(exc: Any) -> dict[str, Any]:
     failure["region_binding_fingerprint_verified"] = False
     failure["binding_source_key_verified"] = False
     failure["brand_bucket_estimate_capacity"] = BUCKET_ESTIMATE_CAPACITY
+    failure["brand_bucket_max_brands"] = MAX_BRANDS_PER_BUCKET
+    failure["brand_bucket_url_limit_bytes"] = MAX_PRODUCT_SEARCH_URL_BYTES
     for key in (
         "partitions_detected",
         "partitions_completed",
@@ -430,6 +526,8 @@ def _failure_artifact(exc: Any) -> dict[str, Any]:
         "partition_observed_total",
         "expected_products_on_page",
         "observed_products_on_page",
+        "max_bucket_brand_count",
+        "max_bucket_url_bytes",
     ):
         if key in exc.diagnostic:
             failure[key] = int(exc.diagnostic[key])
