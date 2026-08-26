@@ -17,9 +17,16 @@ from typing import Any
 
 from precios_supermercados.enums import AvailabilityStatus, RunStatus, SourceKeyType
 
-_EXPECTED_SUPERMARKET = "la_colonia"
-_EXPECTED_LOCATION = "la_colonia_sps"
-_EXPECTED_CITY = "San Pedro Sula"
+_EXPECTED_METADATA = {
+    "schema_version": "7",
+    "catalog_type": "la_colonia_sps_full_read_only",
+    "supermarket_id": "la_colonia",
+    "location_id": "la_colonia_sps",
+    "city": "San Pedro Sula",
+    "capture_strategy": "operational_city_url_safe_brand_buckets_recovery_productSearchV3",
+    "partition_strategy": "brand_buckets_authoritative_transport_safe_reverse_recovery",
+    "location_verification_method": "structural_exact_city_control",
+}
 _AUTHORITY_FLAGS = (
     "catalog_accepted",
     "commercial_persistence",
@@ -27,6 +34,8 @@ _AUTHORITY_FLAGS = (
     "extraction_enabled",
     "raw_context_persisted",
 )
+_MAX_PRODUCT_REQUESTS = 400
+_EXPECTED_PAGE_SIZE = 50
 
 
 class OperationalCatalogArtifactError(ValueError):
@@ -113,9 +122,9 @@ def assess_operational_catalog_artifact(
 ) -> OperationalCatalogAssessment:
     """Evalúa un full-catalog sanitizado sin convertirlo en autoridad comercial.
 
-    Los problemas de identidad, cobertura, precio o contexto son blockers. Campos
-    interpretativos como presentación faltante o disponibilidad ``unknown`` se
-    conservan como warnings: no se inventa información para eliminarlos.
+    Los problemas de identidad, cobertura, precio, presupuesto o contexto son
+    blockers. Campos interpretativos como presentación faltante o disponibilidad
+    ``unknown`` se conservan como warnings: no se inventa información.
     """
 
     if not isinstance(artifact, Mapping):
@@ -124,12 +133,7 @@ def assess_operational_catalog_artifact(
     blockers: list[str] = []
     warnings: list[str] = []
 
-    expected_context = {
-        "supermarket_id": _EXPECTED_SUPERMARKET,
-        "location_id": _EXPECTED_LOCATION,
-        "city": _EXPECTED_CITY,
-    }
-    for field_name, expected in expected_context.items():
+    for field_name, expected in _EXPECTED_METADATA.items():
         if artifact.get(field_name) != expected:
             blockers.append(f"{field_name}_mismatch")
 
@@ -145,8 +149,17 @@ def assess_operational_catalog_artifact(
         blockers.append("validation_not_passed")
     if artifact.get("location_verified_same_run") is not True:
         blockers.append("location_not_verified_same_run")
+    if artifact.get("page_size") != _EXPECTED_PAGE_SIZE:
+        blockers.append("page_size_mismatch")
     if not _exact_coverage(artifact.get("catalog_product_coverage")):
         blockers.append("catalog_product_coverage_not_exact")
+
+    planned_requests = _non_negative_int(artifact.get("planned_product_requests"))
+    completed_requests = _non_negative_int(artifact.get("product_requests_completed"))
+    if planned_requests is None or planned_requests > _MAX_PRODUCT_REQUESTS:
+        blockers.append("planned_product_request_budget_invalid")
+    if completed_requests is None or completed_requests > _MAX_PRODUCT_REQUESTS:
+        blockers.append("completed_product_request_budget_invalid")
 
     raw_products = artifact.get("products")
     if (
@@ -246,6 +259,9 @@ def assess_operational_catalog_artifact(
     products_reported = _non_negative_int(artifact.get("catalog_products_reported"))
     partitions_completed = _non_negative_int(artifact.get("partitions_completed"))
     partitions_detected = _non_negative_int(artifact.get("partitions_detected"))
+    partition_observed_total = _non_negative_int(
+        artifact.get("partition_observed_total_sum")
+    )
     duplicates = _non_negative_int(artifact.get("duplicate_skus_across_partitions"))
 
     if skus_extracted != sku_rows:
@@ -258,6 +274,8 @@ def assess_operational_catalog_artifact(
         blockers.append("unique_products_extracted_mismatch")
     if products_reported != len(product_ids):
         blockers.append("catalog_products_reported_mismatch")
+    if partition_observed_total != products_reported:
+        blockers.append("partition_observed_total_mismatch")
     if (
         partitions_completed is None
         or partitions_detected is None
