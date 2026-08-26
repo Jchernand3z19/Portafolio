@@ -39,6 +39,9 @@ def _first_raw(
         first_item = products[0]["items"][0]
         first_offer = first_item["sellers"][0]["commercialOffer"]
         first_offer["Price"] = price
+        # El escenario pretende cambiar sólo el precio efectivo. Mantener ListPrice
+        # igual evita convertir artificialmente la observación en una promoción.
+        first_offer["ListPrice"] = price
 
     extractor = LaColoniaExtractor(clock=lambda: observed_at)
     result = extractor.parse_payload(
