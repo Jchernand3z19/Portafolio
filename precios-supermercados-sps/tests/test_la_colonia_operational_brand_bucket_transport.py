@@ -97,3 +97,26 @@ def test_default_transport_contract_preserves_all_brands_and_quantities() -> Non
             operational._bucket_url_bytes(bucket_values, page_size=50)
             <= operational.MAX_PRODUCT_SEARCH_URL_BYTES
         )
+
+
+def test_transport_preflight_covers_primary_and_reverse_recovery_orders() -> None:
+    values = [f"marca-{index:02d}" for index in range(12)]
+    facets = operational.core._partition_facets(operational._bucket_path(values))
+    max_page = operational.core.SEARCH_WINDOW_MAX_PRODUCTS // 50
+
+    primary = operational._product_url(
+        selected_facets=facets,
+        page=max_page,
+        page_size=50,
+        order_by=operational.PRIMARY_ORDER_BY,
+    )
+    recovery = operational._product_url(
+        selected_facets=facets,
+        page=max_page,
+        page_size=50,
+        order_by=operational.RECOVERY_ORDER_BY,
+    )
+    measured = operational._bucket_url_bytes(values, page_size=50)
+
+    assert measured == max(len(primary.encode("utf-8")), len(recovery.encode("utf-8")))
+    assert measured <= operational.MAX_PRODUCT_SEARCH_URL_BYTES

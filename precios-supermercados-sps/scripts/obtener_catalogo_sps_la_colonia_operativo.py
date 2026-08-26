@@ -3,8 +3,9 @@
 
 Las cantidades de facets se usan sólo para empacar marcas en buckets conservadores.
 El total raíz y el total real de cada bucket se toman de productSearchV3, que es la
-fuente autoritativa para paginación. Además, cada bucket se valida contra la URL
-GET real que será enviada para evitar respuestas HTTP 414 por exceso de facets.
+fuente autoritativa para paginación. Cada bucket limita su URL GET antes de enviar
+y, si VTEX deja un hueco de paginación, se recupera sólo ese bucket en orden
+inverso antes de aceptarlo.
 """
 
 from __future__ import annotations
@@ -31,12 +32,39 @@ from precios_supermercados.scrapers.la_colonia_location import (  # noqa: E402
 
 core = frontier.base
 full = core.full
-CAPTURE_STRATEGY = "operational_city_url_safe_brand_buckets_productSearchV3"
-PARTITION_STRATEGY = "brand_buckets_productSearch_authoritative_transport_safe"
+CAPTURE_STRATEGY = "operational_city_url_safe_brand_buckets_recovery_productSearchV3"
+PARTITION_STRATEGY = "brand_buckets_authoritative_transport_safe_reverse_recovery"
 LOCATION_VERIFICATION_METHOD = "structural_exact_city_control"
 BUCKET_ESTIMATE_CAPACITY = 2300
 MAX_BRANDS_PER_BUCKET = 24
 MAX_PRODUCT_SEARCH_URL_BYTES = 7000
+PRIMARY_ORDER_BY = "OrderByNameASC"
+RECOVERY_ORDER_BY = "OrderByNameDESC"
+
+
+def _product_url(
+    *,
+    selected_facets: Sequence[Mapping[str, str]],
+    page: int,
+    page_size: int,
+    order_by: str = PRIMARY_ORDER_BY,
+) -> str:
+    if page < 1:
+        raise ValueError("page debe ser mayor o igual que 1")
+    if order_by not in {PRIMARY_ORDER_BY, RECOVERY_ORDER_BY}:
+        raise ValueError("order_by no permitido en catálogo operativo")
+    from_index = (page - 1) * page_size
+    variables = {
+        "query": "",
+        "fullText": "",
+        "selectedFacets": [dict(item) for item in selected_facets],
+        "orderBy": order_by,
+        "from": from_index,
+        "to": from_index + page_size - 1,
+        "hideUnavailableItems": False,
+        "skusFilter": "ALL",
+    }
+    return core._params("productSearchV3", core.PRODUCT_SEARCH_QUERY, variables)
 
 
 def _bucket_path(values: Sequence[str]) -> tuple[tuple[str, str], ...]:
@@ -48,18 +76,23 @@ def _bucket_url_bytes(
     *,
     page_size: int,
 ) -> int:
-    """Mide la URL más larga que un bucket puede generar dentro de la ventana VTEX."""
+    """Mide la URL más larga posible del bucket dentro de la ventana VTEX."""
 
     if not values:
         raise ValueError("brand_bucket_empty")
     max_page = max(math.ceil(core.SEARCH_WINDOW_MAX_PRODUCTS / page_size), 1)
     facets = core._partition_facets(_bucket_path(values))
-    url = core._product_url(
-        selected_facets=facets,
-        page=max_page,
-        page_size=page_size,
+    return max(
+        len(
+            _product_url(
+                selected_facets=facets,
+                page=max_page,
+                page_size=page_size,
+                order_by=order_by,
+            ).encode("utf-8")
+        )
+        for order_by in (PRIMARY_ORDER_BY, RECOVERY_ORDER_BY)
     )
-    return len(url.encode("utf-8"))
 
 
 def _build_brand_buckets(
@@ -105,8 +138,7 @@ def _build_brand_buckets(
 
         candidates: list[tuple[int, int]] = []
         for index, bucket in enumerate(buckets):
-            current_values = list(bucket["values"])
-            candidate_values = [*current_values, value]
+            candidate_values = [*bucket["values"], value]
             if int(bucket["quantity"]) + quantity > estimate_capacity:
                 continue
             if len(candidate_values) > max_brands:
@@ -150,8 +182,10 @@ def _process_page(
     page_size: int,
     unique_products: set[str],
     unique_skus: set[tuple[str, str]],
+    bucket_products: set[str],
     all_products: list[dict[str, Any]],
     diagnostic: dict[str, Any],
+    recovery: bool,
 ) -> None:
     try:
         result = extractor.parse_payload(
@@ -172,19 +206,113 @@ def _process_page(
         product_id = str(product.get("product_id") or "")
         if product_id:
             unique_products.add(product_id)
+            bucket_products.add(product_id)
         identity = (
             str(product.get("source_key_type") or ""),
             str(product.get("source_key") or ""),
         )
         if identity in unique_skus:
-            diagnostic["duplicate_skus_across_pages"] += 1
+            if recovery:
+                diagnostic["recovery_duplicate_skus_ignored"] += 1
+            else:
+                diagnostic["duplicate_skus_across_pages"] += 1
             continue
         unique_skus.add(identity)
         all_products.append(product)
         if product.get("current_price") is not None:
             diagnostic["skus_with_price"] += 1
     diagnostic["pages_completed"] += 1
+    if recovery:
+        diagnostic["recovery_pages_completed"] += 1
     diagnostic["skus_extracted"] = len(unique_skus)
+
+
+def _ensure_request_budget(diagnostic: dict[str, Any]) -> None:
+    if diagnostic["product_requests_completed"] >= core.MAX_PLANNED_PRODUCT_REQUESTS:
+        raise full.FullCatalogError(
+            "partition_request_budget_exceeded", diagnostic=diagnostic
+        )
+
+
+def _fetch_known_total_page(
+    *,
+    context: Any,
+    facets: Sequence[Mapping[str, str]],
+    page: int,
+    page_size: int,
+    order_by: str,
+    expected_total: int,
+    extractor: Any,
+    run_id: str,
+    unique_products: set[str],
+    unique_skus: set[tuple[str, str]],
+    bucket_products: set[str],
+    all_products: list[dict[str, Any]],
+    diagnostic: dict[str, Any],
+    recovery: bool,
+) -> int:
+    _ensure_request_budget(diagnostic)
+    request_url = _product_url(
+        selected_facets=facets,
+        page=page,
+        page_size=page_size,
+        order_by=order_by,
+    )
+    request_url_bytes = len(request_url.encode("utf-8"))
+    if request_url_bytes > MAX_PRODUCT_SEARCH_URL_BYTES:
+        diagnostic["max_bucket_url_bytes"] = max(
+            diagnostic["max_bucket_url_bytes"], request_url_bytes
+        )
+        raise full.FullCatalogError(
+            "brand_bucket_url_limit_exceeded", diagnostic=diagnostic
+        )
+    diagnostic["pages_attempted"] += 1
+    response = context.request.get(
+        request_url,
+        timeout=core.PRODUCT_REQUEST_TIMEOUT_MS,
+        fail_on_status_code=False,
+    )
+    payload = core._read_json_response(response, diagnostic, kind="product_search")
+    observed_total, products_returned = core._read_shape(payload)
+    diagnostic["product_requests_completed"] += 1
+    if observed_total != expected_total:
+        diagnostic["partition_expected_total"] = expected_total
+        diagnostic["partition_observed_total"] = observed_total
+        raise full.FullCatalogError(
+            "partition_total_changed_mid_run", diagnostic=diagnostic
+        )
+    if products_returned > page_size:
+        diagnostic["observed_products_on_page"] = products_returned
+        raise full.FullCatalogError(
+            "unexpected_product_page_overflow", diagnostic=diagnostic
+        )
+    expected_on_page = min(
+        page_size,
+        max(expected_total - ((page - 1) * page_size), 0),
+    )
+    if products_returned < expected_on_page:
+        diagnostic["short_product_pages"] += 1
+        diagnostic["last_expected_products_on_page"] = expected_on_page
+        diagnostic["last_observed_products_on_page"] = products_returned
+    elif products_returned > expected_on_page:
+        diagnostic["oversized_product_pages"] += 1
+        diagnostic["last_expected_products_on_page"] = expected_on_page
+        diagnostic["last_observed_products_on_page"] = products_returned
+
+    _process_page(
+        payload=payload,
+        request_url=request_url,
+        extractor=extractor,
+        run_id=run_id,
+        page_size=page_size,
+        unique_products=unique_products,
+        unique_skus=unique_skus,
+        bucket_products=bucket_products,
+        all_products=all_products,
+        diagnostic=diagnostic,
+        recovery=recovery,
+    )
+    return products_returned
 
 
 def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
@@ -215,6 +343,12 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
         "max_bucket_url_bytes": 0,
         "brand_bucket_max_brands": MAX_BRANDS_PER_BUCKET,
         "brand_bucket_url_limit_bytes": MAX_PRODUCT_SEARCH_URL_BYTES,
+        "short_product_pages": 0,
+        "oversized_product_pages": 0,
+        "partition_recovery_passes": 0,
+        "recovery_pages_completed": 0,
+        "recovery_duplicate_skus_ignored": 0,
+        "partition_products_recovered": 0,
     }
     run_id = f"sps_operational_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     unique_products: set[str] = set()
@@ -244,8 +378,10 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                 raise full.FullCatalogError(exc.reason, diagnostic=diagnostic) from exc
             diagnostic["location_verified_same_run"] = True
 
-            root_url = core._product_url(
-                selected_facets=[dict(core.ROOT_FACET)], page=1, page_size=page_size
+            root_url = _product_url(
+                selected_facets=[dict(core.ROOT_FACET)],
+                page=1,
+                page_size=page_size,
             )
             root_response = context.request.get(
                 root_url,
@@ -326,8 +462,11 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                         "brand_bucket_url_limit_exceeded", diagnostic=diagnostic
                     )
 
-                first_url = core._product_url(
-                    selected_facets=facets, page=1, page_size=page_size
+                _ensure_request_budget(diagnostic)
+                first_url = _product_url(
+                    selected_facets=facets,
+                    page=1,
+                    page_size=page_size,
                 )
                 diagnostic["pages_attempted"] += 1
                 first_response = context.request.get(
@@ -349,12 +488,19 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                     diagnostic["partition_total_adjustments"] += 1
                 diagnostic["partition_observed_total_sum"] += actual_total
 
+                bucket_products: set[str] = set()
                 expected_first = min(page_size, actual_total)
-                if products_returned != expected_first:
-                    diagnostic["expected_products_on_page"] = expected_first
-                    diagnostic["observed_products_on_page"] = products_returned
+                if products_returned < expected_first:
+                    diagnostic["short_product_pages"] += 1
+                    diagnostic["last_expected_products_on_page"] = expected_first
+                    diagnostic["last_observed_products_on_page"] = products_returned
+                elif products_returned > expected_first:
+                    diagnostic["oversized_product_pages"] += 1
+                    diagnostic["last_expected_products_on_page"] = expected_first
+                    diagnostic["last_observed_products_on_page"] = products_returned
+                if products_returned > page_size:
                     raise full.FullCatalogError(
-                        "partial_or_unexpected_product_page", diagnostic=diagnostic
+                        "unexpected_product_page_overflow", diagnostic=diagnostic
                     )
                 _process_page(
                     payload=first_payload,
@@ -364,67 +510,67 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                     page_size=page_size,
                     unique_products=unique_products,
                     unique_skus=unique_skus,
+                    bucket_products=bucket_products,
                     all_products=all_products,
                     diagnostic=diagnostic,
+                    recovery=False,
                 )
 
                 pages = max(math.ceil(actual_total / page_size), 1)
                 for partition_page in range(2, pages + 1):
-                    if diagnostic["product_requests_completed"] >= core.MAX_PLANNED_PRODUCT_REQUESTS:
-                        raise full.FullCatalogError(
-                            "partition_request_budget_exceeded", diagnostic=diagnostic
-                        )
                     if delay_seconds > 0:
                         time.sleep(delay_seconds)
-                    request_url = core._product_url(
-                        selected_facets=facets,
+                    _fetch_known_total_page(
+                        context=context,
+                        facets=facets,
                         page=partition_page,
                         page_size=page_size,
-                    )
-                    request_url_bytes = len(request_url.encode("utf-8"))
-                    if request_url_bytes > MAX_PRODUCT_SEARCH_URL_BYTES:
-                        diagnostic["max_bucket_url_bytes"] = max(
-                            diagnostic["max_bucket_url_bytes"], request_url_bytes
-                        )
-                        raise full.FullCatalogError(
-                            "brand_bucket_url_limit_exceeded", diagnostic=diagnostic
-                        )
-                    diagnostic["pages_attempted"] += 1
-                    response = context.request.get(
-                        request_url,
-                        timeout=core.PRODUCT_REQUEST_TIMEOUT_MS,
-                        fail_on_status_code=False,
-                    )
-                    payload = core._read_json_response(
-                        response, diagnostic, kind="product_search"
-                    )
-                    observed_total, products_returned = core._read_shape(payload)
-                    diagnostic["product_requests_completed"] += 1
-                    if observed_total != actual_total:
-                        diagnostic["partition_expected_total"] = actual_total
-                        diagnostic["partition_observed_total"] = observed_total
-                        raise full.FullCatalogError(
-                            "partition_total_changed_mid_run", diagnostic=diagnostic
-                        )
-                    expected_on_page = min(
-                        page_size,
-                        max(actual_total - ((partition_page - 1) * page_size), 0),
-                    )
-                    if products_returned != expected_on_page:
-                        diagnostic["expected_products_on_page"] = expected_on_page
-                        diagnostic["observed_products_on_page"] = products_returned
-                        raise full.FullCatalogError(
-                            "partial_or_unexpected_product_page", diagnostic=diagnostic
-                        )
-                    _process_page(
-                        payload=payload,
-                        request_url=request_url,
+                        order_by=PRIMARY_ORDER_BY,
+                        expected_total=actual_total,
                         extractor=extractor,
                         run_id=run_id,
-                        page_size=page_size,
                         unique_products=unique_products,
                         unique_skus=unique_skus,
+                        bucket_products=bucket_products,
                         all_products=all_products,
+                        diagnostic=diagnostic,
+                        recovery=False,
+                    )
+
+                primary_bucket_count = len(bucket_products)
+                if primary_bucket_count != actual_total:
+                    diagnostic["partition_recovery_passes"] += 1
+                    before_recovery = primary_bucket_count
+                    for recovery_page in range(1, pages + 1):
+                        if len(bucket_products) >= actual_total:
+                            break
+                        if delay_seconds > 0:
+                            time.sleep(delay_seconds)
+                        _fetch_known_total_page(
+                            context=context,
+                            facets=facets,
+                            page=recovery_page,
+                            page_size=page_size,
+                            order_by=RECOVERY_ORDER_BY,
+                            expected_total=actual_total,
+                            extractor=extractor,
+                            run_id=run_id,
+                            unique_products=unique_products,
+                            unique_skus=unique_skus,
+                            bucket_products=bucket_products,
+                            all_products=all_products,
+                            diagnostic=diagnostic,
+                            recovery=True,
+                        )
+                    diagnostic["partition_products_recovered"] += max(
+                        len(bucket_products) - before_recovery, 0
+                    )
+
+                if len(bucket_products) != actual_total:
+                    diagnostic["partition_expected_total"] = actual_total
+                    diagnostic["partition_observed_total"] = len(bucket_products)
+                    raise full.FullCatalogError(
+                        "partition_unique_product_coverage_mismatch",
                         diagnostic=diagnostic,
                     )
 
@@ -443,7 +589,7 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                 )
 
             artifact = {
-                "schema_version": "6",
+                "schema_version": "7",
                 "result": "success",
                 "catalog_type": "la_colonia_sps_full_read_only",
                 "supermarket_id": "la_colonia",
@@ -479,6 +625,16 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                 "planned_product_requests": diagnostic["planned_product_requests"],
                 "product_requests_completed": diagnostic[
                     "product_requests_completed"
+                ],
+                "short_product_pages": diagnostic["short_product_pages"],
+                "oversized_product_pages": diagnostic["oversized_product_pages"],
+                "partition_recovery_passes": diagnostic["partition_recovery_passes"],
+                "recovery_pages_completed": diagnostic["recovery_pages_completed"],
+                "partition_products_recovered": diagnostic[
+                    "partition_products_recovered"
+                ],
+                "recovery_duplicate_skus_ignored": diagnostic[
+                    "recovery_duplicate_skus_ignored"
                 ],
                 "skus_extracted": len(unique_skus),
                 "skus_with_price": diagnostic["skus_with_price"],
@@ -524,10 +680,16 @@ def _failure_artifact(exc: Any) -> dict[str, Any]:
         "unique_products_extracted",
         "partition_expected_total",
         "partition_observed_total",
-        "expected_products_on_page",
-        "observed_products_on_page",
+        "last_expected_products_on_page",
+        "last_observed_products_on_page",
         "max_bucket_brand_count",
         "max_bucket_url_bytes",
+        "short_product_pages",
+        "oversized_product_pages",
+        "partition_recovery_passes",
+        "recovery_pages_completed",
+        "partition_products_recovered",
+        "recovery_duplicate_skus_ignored",
     ):
         if key in exc.diagnostic:
             failure[key] = int(exc.diagnostic[key])
