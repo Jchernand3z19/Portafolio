@@ -80,6 +80,19 @@ def load_default_registry() -> Mapping[str, Mapping[str, object]]:
     return load_override_registry(DEFAULT_REGISTRY_PATH)
 
 
+def _active_registry(
+    registry: Mapping[str, Mapping[str, object]] | None,
+) -> Mapping[str, Mapping[str, object]]:
+    if registry is not None:
+        return registry
+    try:
+        return load_default_registry()
+    except (OSError, ValueError) as exc:
+        raise LaColoniaOfferNormalizationError(
+            "normalization_registry_invalid"
+        ) from exc
+
+
 def _optional_text(value: object) -> str | None:
     if value is None:
         return None
@@ -189,7 +202,7 @@ def normalize_la_colonia_raw_product(
     if raw.supermarket_id != SUPERMARKET_ID:
         raise LaColoniaOfferNormalizationError("supermarket_mismatch")
 
-    active_registry = load_default_registry() if registry is None else registry
+    active_registry = _active_registry(registry)
     normalized, evidence = _normalize_product_evidence(raw, active_registry)
     base_offer = normalize_raw_product(
         raw,
@@ -257,7 +270,7 @@ def normalize_and_validate_la_colonia_raw_products(
 
     if isinstance(raw_products, (str, bytes)) or not isinstance(raw_products, Sequence):
         raise LaColoniaOfferNormalizationError("raw_products_sequence_invalid")
-    active_registry = load_default_registry() if registry is None else registry
+    active_registry = _active_registry(registry)
     return tuple(
         normalize_and_validate_la_colonia_raw_product(
             raw,
