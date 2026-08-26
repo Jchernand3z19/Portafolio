@@ -1,11 +1,9 @@
 """Valida evidencia sanitizada del catálogo operativo de La Colonia SPS.
 
 Este módulo trabaja exclusivamente sobre artifacts ya descargados. No hace red,
-no persiste y no concede autoridad comercial. Su objetivo es separar:
-
-- completitud técnica demostrable del catálogo;
-- advertencias de calidad que pueden revisarse offline;
-- aceptación comercial/productiva, que permanece fuera de esta capa.
+no persiste y no concede autoridad comercial. Soporta el artifact histórico v7
+y el contrato v8, que añade evidencia sanitizada suficiente para explicar la
+semántica de disponibilidad sin conservar contexto sensible del request.
 """
 
 from __future__ import annotations
@@ -14,11 +12,15 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from urllib.parse import urlsplit
 
 from precios_supermercados.enums import AvailabilityStatus, RunStatus, SourceKeyType
+from precios_supermercados.scrapers.la_colonia_sanitized_evidence import (
+    ALLOWED_AVAILABILITY_EVIDENCE,
+    SANITIZED_PRODUCT_FIELDS,
+)
 
-_EXPECTED_METADATA = {
-    "schema_version": "7",
+_COMMON_METADATA = {
     "catalog_type": "la_colonia_sps_full_read_only",
     "supermarket_id": "la_colonia",
     "location_id": "la_colonia_sps",
@@ -27,6 +29,7 @@ _EXPECTED_METADATA = {
     "partition_strategy": "brand_buckets_authoritative_transport_safe_reverse_recovery",
     "location_verification_method": "structural_exact_city_control",
 }
+_SUPPORTED_SCHEMA_VERSIONS = frozenset({"7", "8"})
 _AUTHORITY_FLAGS = (
     "catalog_accepted",
     "commercial_persistence",
@@ -64,6 +67,9 @@ class OperationalCatalogAssessment:
     in_stock: int
     out_of_stock: int
     promotion_rows: int
+    unknown_price_positive_quantity_zero: int = 0
+    unknown_insufficient_evidence: int = 0
+    out_of_stock_price_absent_quantity_zero: int = 0
 
     def __post_init__(self) -> None:
         if self.catalog_accepted is not False:
@@ -102,6 +108,20 @@ def _positive_decimal(value: object) -> Decimal | None:
     return result if result.is_finite() and result > 0 else None
 
 
+def _optional_non_negative_decimal(value: object) -> tuple[bool, Decimal | None]:
+    if value is None:
+        return True, None
+    if isinstance(value, bool):
+        return False, None
+    try:
+        result = Decimal(str(value).strip())
+    except (InvalidOperation, TypeError, ValueError):
+        return False, None
+    if not result.is_finite() or result < 0:
+        return False, None
+    return True, result
+
+
 def _non_negative_int(value: object) -> int | None:
     if type(value) is not int or value < 0:
         return None
@@ -117,14 +137,83 @@ def _exact_coverage(value: object) -> bool:
         return False
 
 
+def _public_product_url_valid(value: object) -> bool:
+    text = _text(value)
+    if text is None:
+        return False
+    parsed = urlsplit(text)
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == "www.lacolonia.com"
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.port is None
+        and not parsed.query
+        and not parsed.fragment
+        and parsed.path.endswith("/p")
+    )
+
+
+def _sequence_of_text(value: object) -> bool:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return False
+    return all(_text(item) is not None for item in value)
+
+
+def _validate_v8_availability(
+    product: Mapping[str, Any],
+    *,
+    availability: str | None,
+    current_price: Decimal | None,
+    blockers: list[str],
+) -> tuple[str | None, Decimal | None]:
+    evidence = _text(product.get("availability_evidence"))
+    quantity_valid, quantity = _optional_non_negative_decimal(
+        product.get("available_quantity")
+    )
+    if evidence not in ALLOWED_AVAILABILITY_EVIDENCE:
+        blockers.append("availability_evidence_invalid")
+        return evidence, quantity
+    if not quantity_valid:
+        blockers.append("available_quantity_invalid")
+        return evidence, quantity
+
+    if evidence == "price_positive_quantity_positive":
+        if availability != AvailabilityStatus.IN_STOCK.value:
+            blockers.append("availability_evidence_state_mismatch")
+        if current_price is None:
+            blockers.append("availability_evidence_price_mismatch")
+        if quantity is None or quantity <= 0:
+            blockers.append("availability_evidence_quantity_mismatch")
+    elif evidence == "price_positive_quantity_zero":
+        if availability != AvailabilityStatus.UNKNOWN.value:
+            blockers.append("availability_evidence_state_mismatch")
+        if current_price is None:
+            blockers.append("availability_evidence_price_mismatch")
+        if quantity != 0:
+            blockers.append("availability_evidence_quantity_mismatch")
+    elif evidence == "price_absent_quantity_zero":
+        if availability != AvailabilityStatus.OUT_OF_STOCK.value:
+            blockers.append("availability_evidence_state_mismatch")
+        if current_price is not None:
+            blockers.append("availability_evidence_price_mismatch")
+        if quantity != 0:
+            blockers.append("availability_evidence_quantity_mismatch")
+    elif evidence == "insufficient_evidence":
+        if availability != AvailabilityStatus.UNKNOWN.value:
+            blockers.append("availability_evidence_state_mismatch")
+
+    return evidence, quantity
+
+
 def assess_operational_catalog_artifact(
     artifact: Mapping[str, Any],
 ) -> OperationalCatalogAssessment:
     """Evalúa un full-catalog sanitizado sin convertirlo en autoridad comercial.
 
-    Los problemas de identidad, cobertura, precio, presupuesto o contexto son
-    blockers. Campos interpretativos como presentación faltante o disponibilidad
-    ``unknown`` se conservan como warnings: no se inventa información.
+    v7 mantiene exactamente la frontera histórica del primer full catalog. v8
+    permite además demostrar por qué una fila quedó ``unknown`` o ``out_of_stock``
+    y distingue precio ausente legítimo de precio inválido según esa evidencia.
     """
 
     if not isinstance(artifact, Mapping):
@@ -133,7 +222,12 @@ def assess_operational_catalog_artifact(
     blockers: list[str] = []
     warnings: list[str] = []
 
-    for field_name, expected in _EXPECTED_METADATA.items():
+    schema_version = _text(artifact.get("schema_version"))
+    if schema_version not in _SUPPORTED_SCHEMA_VERSIONS:
+        blockers.append("schema_version_mismatch")
+    is_v8 = schema_version == "8"
+
+    for field_name, expected in _COMMON_METADATA.items():
         if artifact.get(field_name) != expected:
             blockers.append(f"{field_name}_mismatch")
 
@@ -185,11 +279,19 @@ def assess_operational_catalog_artifact(
     in_stock = 0
     out_of_stock = 0
     promotion_rows = 0
+    price_rows = 0
+    no_price_rows = 0
+    unknown_price_positive_quantity_zero = 0
+    unknown_insufficient_evidence = 0
+    out_of_stock_price_absent_quantity_zero = 0
 
     allowed_source_keys = {item.value for item in SourceKeyType}
     allowed_availability = {item.value for item in AvailabilityStatus}
 
     for product in products:
+        if is_v8 and set(product) != set(SANITIZED_PRODUCT_FIELDS):
+            blockers.append("sanitized_product_schema_mismatch")
+
         source_key_type = _text(product.get("source_key_type"))
         source_key = _text(product.get("source_key"))
         if source_key_type not in allowed_source_keys or source_key is None:
@@ -213,10 +315,17 @@ def assess_operational_catalog_artifact(
             blockers.append("brand_missing")
         if _text(product.get("category")) is None:
             blockers.append("category_missing")
+        if is_v8 and not _public_product_url_valid(product.get("product_url")):
+            blockers.append("product_url_invalid")
 
-        current_price = _positive_decimal(product.get("current_price"))
-        if current_price is None:
+        raw_current_price = product.get("current_price")
+        current_price = _positive_decimal(raw_current_price)
+        if raw_current_price is None:
+            no_price_rows += 1
+        elif current_price is None:
             blockers.append("current_price_invalid")
+        else:
+            price_rows += 1
 
         availability = _text(product.get("availability"))
         if availability not in allowed_availability:
@@ -227,6 +336,43 @@ def assess_operational_catalog_artifact(
             in_stock += 1
         elif availability == AvailabilityStatus.OUT_OF_STOCK.value:
             out_of_stock += 1
+
+        evidence: str | None = None
+        if is_v8:
+            evidence, _ = _validate_v8_availability(
+                product,
+                availability=availability,
+                current_price=current_price,
+                blockers=blockers,
+            )
+            if evidence == "price_positive_quantity_zero":
+                unknown_price_positive_quantity_zero += 1
+            elif evidence == "insufficient_evidence":
+                unknown_insufficient_evidence += 1
+            elif evidence == "price_absent_quantity_zero":
+                out_of_stock_price_absent_quantity_zero += 1
+
+            source_list_price_raw = product.get("source_list_price")
+            if (
+                source_list_price_raw is not None
+                and _positive_decimal(source_list_price_raw) is None
+            ):
+                blockers.append("source_list_price_invalid")
+            if not _sequence_of_text(product.get("promotion_evidence")):
+                blockers.append("promotion_evidence_invalid")
+            if product.get("weighted_product") not in {True, False}:
+                blockers.append("weighted_product_invalid")
+            unit_multiplier_raw = product.get("unit_multiplier")
+            if (
+                unit_multiplier_raw is not None
+                and _positive_decimal(unit_multiplier_raw) is None
+            ):
+                blockers.append("unit_multiplier_invalid")
+
+        if not is_v8 and current_price is None:
+            blockers.append("current_price_invalid")
+        if is_v8 and availability == AvailabilityStatus.IN_STOCK.value and current_price is None:
+            blockers.append("in_stock_current_price_missing")
 
         if _text(product.get("presentation")) is None:
             missing_presentations += 1
@@ -266,10 +412,16 @@ def assess_operational_catalog_artifact(
 
     if skus_extracted != sku_rows:
         blockers.append("skus_extracted_mismatch")
-    if skus_with_price != sku_rows:
-        blockers.append("skus_with_price_mismatch")
-    if skus_without_price != 0:
-        blockers.append("skus_without_price_nonzero")
+    if is_v8:
+        if skus_with_price != price_rows:
+            blockers.append("skus_with_price_mismatch")
+        if skus_without_price != no_price_rows:
+            blockers.append("skus_without_price_mismatch")
+    else:
+        if skus_with_price != sku_rows:
+            blockers.append("skus_with_price_mismatch")
+        if skus_without_price != 0:
+            blockers.append("skus_without_price_nonzero")
     if unique_products != len(product_ids):
         blockers.append("unique_products_extracted_mismatch")
     if products_reported != len(product_ids):
@@ -316,4 +468,7 @@ def assess_operational_catalog_artifact(
         in_stock=in_stock,
         out_of_stock=out_of_stock,
         promotion_rows=promotion_rows,
+        unknown_price_positive_quantity_zero=unknown_price_positive_quantity_zero,
+        unknown_insufficient_evidence=unknown_insufficient_evidence,
+        out_of_stock_price_absent_quantity_zero=out_of_stock_price_absent_quantity_zero,
     )
