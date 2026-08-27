@@ -16,14 +16,10 @@ capa: su reconciliación contra el registro durable requiere el fingerprint
 persistido y se implementa por separado, evitando convertir un retry ambiguo en
 una segunda escritura.
 
-``extraction_enabled`` controla si se puede iniciar tráfico futuro contra la
-fuente. No invalida una observación ya obtenida y comercialmente autorizada. Por
-eso esta capa permite persistir evidencia histórica con extracción deshabilitada
-si todos los demás invariantes de ubicación siguen demostrados. El serializer
-legado todavía reutiliza el gate live; cuando ése sea el único bloqueo se usa una
-vista efímera sólo para serialización. Las filas de configuración siempre salen
-del catálogo original, por lo que jamás se persiste ``extraction_enabled=True``
-por este mecanismo.
+El preparador público conserva el gate ``extraction_enabled``. La única excepción
+es una función privada destinada a snapshots ya obtenidos y verificados por una
+política de autoridad productiva. Esa ruta nunca cambia el catálogo persistido:
+``extraction_enabled`` continúa en ``False`` y por tanto no habilita tráfico futuro.
 """
 
 from __future__ import annotations
@@ -157,16 +153,14 @@ def _validate_archived_offer_location(
         is LocationSelectionMode.SOURCE_SELECTION_REQUIRED
         and offer.location_status is not LocationStatus.CONFIRMED
     ):
-        raise TabularPersistenceError(
-            "multi_location_offer_requires_confirmed_location"
-        )
+        raise TabularPersistenceError("multi_location_offer_requires_confirmed_location")
 
 
-def _validate_offer_location_for_commercial_persistence(
+def _validate_offer_location_for_archived_persistence(
     offer,
     catalog: LocationCatalog,
 ) -> None:
-    """Valida ubicación durable sin convertir persistencia en permiso de tráfico."""
+    """Permite sólo el caso donde todos los gates salvo extracción ya pasaron."""
 
     try:
         validate_offer_location_for_persistence(offer, catalog)
@@ -174,9 +168,6 @@ def _validate_offer_location_for_commercial_persistence(
     except TabularPersistenceError as exc:
         if str(exc) != "extraction_disabled":
             raise
-    # ``require_extraction_ready`` sólo emite extraction_disabled después de
-    # validar supermercado activo, disponibilidad, scope, granularidad y binding.
-    # Falta completar los checks que el serializer original ejecuta después.
     _validate_archived_offer_location(offer, catalog)
 
 
@@ -184,7 +175,7 @@ def _serialization_catalog_for_archived_location(
     catalog: LocationCatalog,
     location_id: str,
 ) -> LocationCatalog:
-    """Crea una vista efímera para serializers que aún consultan el gate live."""
+    """Vista efímera para serializers legados; jamás se usa para cfg rows."""
 
     location = catalog.location(location_id)
     if location.extraction_enabled:
@@ -204,6 +195,7 @@ def _preflight_offers(
     supermarket_id: str,
     location_id: str,
     catalog: LocationCatalog,
+    archived_evidence_verified: bool,
 ) -> None:
     for item in offers:
         if not isinstance(item, ValidatedOffer):
@@ -217,7 +209,10 @@ def _preflight_offers(
             raise CommercialPersistencePreparationError("offer_location_mismatch")
         if decision.commercial_update_allowed:
             try:
-                _validate_offer_location_for_commercial_persistence(offer, catalog)
+                if archived_evidence_verified:
+                    _validate_offer_location_for_archived_persistence(offer, catalog)
+                else:
+                    validate_offer_location_for_persistence(offer, catalog)
             except TabularPersistenceError as exc:
                 raise CommercialPersistencePreparationError(
                     "offer_location_not_persistable"
@@ -256,7 +251,7 @@ def _preflight_run_record(
         raise CommercialPersistencePreparationError("run_metadata_invalid") from exc
 
 
-def prepare_new_run_persistence(
+def _prepare_run_persistence(
     state: InMemoryCommercialState,
     decision: CommercialRunDecision,
     offers: Sequence[ValidatedOffer],
@@ -267,17 +262,11 @@ def prepare_new_run_persistence(
     finished_at_utc: datetime,
     products_observed: int,
     offers_observed: int,
-    quality_events: Sequence[QualityEventRecord] = (),
-    run_evidence_id: str | None = None,
-    catalog: LocationCatalog = DEFAULT_LOCATION_CATALOG,
+    quality_events: Sequence[QualityEventRecord],
+    run_evidence_id: str | None,
+    catalog: LocationCatalog,
+    archived_evidence_verified: bool,
 ) -> PreparedCommercialPersistence:
-    """Aplica un run final nuevo y construye su transacción tabular completa.
-
-    ``state`` es el estado efímero de la ejecución. Si el backend falla después,
-    el caller debe descartar esa instancia y rehidratar desde el backend antes de
-    reintentar; nunca debe considerar la memoria local como autoridad durable.
-    """
-
     if not isinstance(state, InMemoryCommercialState):
         raise CommercialPersistencePreparationError("commercial_state_invalid")
     if not isinstance(decision, CommercialRunDecision):
@@ -308,6 +297,7 @@ def prepare_new_run_persistence(
         supermarket_id=supermarket_id,
         location_id=location_id,
         catalog=catalog,
+        archived_evidence_verified=archived_evidence_verified,
     )
     _preflight_run_record(
         decision=decision,
@@ -352,9 +342,10 @@ def prepare_new_run_persistence(
         current_rows: list[Mapping[str, object]] = []
         history_rows: list[Mapping[str, object]] = []
         if decision.commercial_update_allowed:
-            serialization_catalog = _serialization_catalog_for_archived_location(
-                catalog,
-                location_id,
+            serialization_catalog = (
+                _serialization_catalog_for_archived_location(catalog, location_id)
+                if archived_evidence_verified
+                else catalog
             )
             for offer_id in affected_offer_ids:
                 current = state.current(offer_id)
@@ -382,9 +373,7 @@ def prepare_new_run_persistence(
     except CommercialPersistencePreparationError:
         raise
     except (TabularPersistenceError, TabularStoreError) as exc:
-        raise CommercialPersistencePreparationError(
-            "tabular_batch_build_failed"
-        ) from exc
+        raise CommercialPersistencePreparationError("tabular_batch_build_failed") from exc
 
     return PreparedCommercialPersistence(
         apply_result=apply_result,
@@ -394,4 +383,76 @@ def prepare_new_run_persistence(
         table_row_counts=MappingProxyType(
             {table_name: len(table_rows) for table_name, table_rows in batch.rows.items()}
         ),
+    )
+
+
+def prepare_new_run_persistence(
+    state: InMemoryCommercialState,
+    decision: CommercialRunDecision,
+    offers: Sequence[ValidatedOffer],
+    *,
+    supermarket_id: str,
+    location_id: str,
+    started_at_utc: datetime,
+    finished_at_utc: datetime,
+    products_observed: int,
+    offers_observed: int,
+    quality_events: Sequence[QualityEventRecord] = (),
+    run_evidence_id: str | None = None,
+    catalog: LocationCatalog = DEFAULT_LOCATION_CATALOG,
+) -> PreparedCommercialPersistence:
+    """Prepara un run normal; conserva estrictamente el gate de extracción."""
+
+    return _prepare_run_persistence(
+        state,
+        decision,
+        offers,
+        supermarket_id=supermarket_id,
+        location_id=location_id,
+        started_at_utc=started_at_utc,
+        finished_at_utc=finished_at_utc,
+        products_observed=products_observed,
+        offers_observed=offers_observed,
+        quality_events=quality_events,
+        run_evidence_id=run_evidence_id,
+        catalog=catalog,
+        archived_evidence_verified=False,
+    )
+
+
+def _prepare_verified_archived_run_persistence(
+    state: InMemoryCommercialState,
+    decision: CommercialRunDecision,
+    offers: Sequence[ValidatedOffer],
+    *,
+    supermarket_id: str,
+    location_id: str,
+    started_at_utc: datetime,
+    finished_at_utc: datetime,
+    products_observed: int,
+    offers_observed: int,
+    quality_events: Sequence[QualityEventRecord] = (),
+    run_evidence_id: str | None = None,
+    catalog: LocationCatalog = DEFAULT_LOCATION_CATALOG,
+) -> PreparedCommercialPersistence:
+    """Ruta privada para evidencia histórica ya obtenida y autoritativamente ligada.
+
+    No verifica autoridad por sí misma. Por diseño sólo la política productiva de
+    fuente auditada puede importarla; los tests de seguridad vigilan ese uso.
+    """
+
+    return _prepare_run_persistence(
+        state,
+        decision,
+        offers,
+        supermarket_id=supermarket_id,
+        location_id=location_id,
+        started_at_utc=started_at_utc,
+        finished_at_utc=finished_at_utc,
+        products_observed=products_observed,
+        offers_observed=offers_observed,
+        quality_events=quality_events,
+        run_evidence_id=run_evidence_id,
+        catalog=catalog,
+        archived_evidence_verified=True,
     )
