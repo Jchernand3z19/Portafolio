@@ -13,7 +13,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from precios_supermercados.bigquery_adapter import BigQueryAdapter, FakeBigQueryClient
-from precios_supermercados.bigquery_persistence import build_bigquery_write_plan
 from precios_supermercados.commercial_authority import (
     CommercialAuthorityClaims,
     CommercialAuthorityError,
@@ -48,6 +47,7 @@ from precios_supermercados.scrapers.la_colonia_catalog_coverage import CatalogCo
 from precios_supermercados.scrapers.la_colonia_commercial_authority import (
     LaColoniaCommercialAuthorityError,
     VerifiedLaColoniaCommercialAuthority,
+    build_la_colonia_authoritative_bigquery_write_plan,
     prepare_la_colonia_authoritative_run_persistence,
     verify_la_colonia_commercial_authority,
 )
@@ -402,9 +402,9 @@ def test_authoritative_snapshot_can_persist_while_future_extraction_stays_disabl
     assert DEFAULT_LOCATION_CATALOG.extraction_block_reason("la_colonia_sps") == "extraction_disabled"
 
 
-def test_authority_path_reaches_bigquery_and_exact_replay_without_enabling_live() -> None:
+def test_authority_path_reaches_bigquery_with_durable_audit_and_exact_replay() -> None:
     authority = _verified_authority()
-    prepared = prepare_la_colonia_authoritative_run_persistence(
+    plan = build_la_colonia_authoritative_bigquery_write_plan(
         InMemoryCommercialState(),
         authority,
         (_offer(),),
@@ -413,7 +413,6 @@ def test_authority_path_reaches_bigquery_and_exact_replay_without_enabling_live(
         products_observed=1,
         offers_observed=1,
     )
-    plan = build_bigquery_write_plan(prepared)
     client = FakeBigQueryClient()
     adapter = BigQueryAdapter(client, dataset_id="precios_authority_test")
     adapter.bootstrap()
@@ -425,14 +424,23 @@ def test_authority_path_reaches_bigquery_and_exact_replay_without_enabling_live(
     )
     locations = client.read_rows("precios_authority_test", "locations")
     sps = next(row for row in locations if row["location_id"] == "la_colonia_sps")
+    run = snapshot.runs[0]
+    attestation = json.loads(run["authority_attestation_json"])
 
     assert first.exact_run_replay is False
     assert len(snapshot.products) == 1
     assert len(snapshot.latest_prices) == 1
     assert len(snapshot.latest_inventory) == 1
     assert len(snapshot.runs) == 1
-    assert snapshot.runs[0]["catalog_accepted"] is True
-    assert snapshot.runs[0]["run_evidence_id"].startswith("crev1_")
+    assert run["catalog_accepted"] is True
+    assert run["run_evidence_id"].startswith("crev1_")
+    assert run["authority_evidence_id"] == authority.authority_evidence_id
+    assert run["authority_signing_key_id"] == KEY_ID
+    assert len(run["authority_public_key_spki_sha256"]) == 64
+    assert run["authority_decided_at_utc"] == BASE + timedelta(minutes=1)
+    assert attestation["claims"]["scrape_run_id"] == RUN
+    assert attestation["claims"]["source_authorization_id"] == AUTH
+    assert attestation["claims"]["discovery_digest"] == DISCOVERY_DIGEST
     assert sps["extraction_enabled"] is False
 
     replay = adapter.apply(plan)
