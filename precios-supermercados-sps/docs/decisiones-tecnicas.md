@@ -229,3 +229,21 @@ fact_quality_events
 `dim_products` y `map_source_products` permanecen como contratos lógicos diferidos. Sus validaciones y funciones pueden seguir probándose, pero no se leen ni escriben como tabs físicos activos hasta que exista una segunda fuente o un consumidor real que requiera equivalencias canónicas.
 
 La decisión se basa en grain/lifecycle/consumo, no en reducir tablas por estética: `source_product_id` y `product_id` ya permanecen en current/history, por lo que no se pierde trazabilidad ni capacidad de backfill. El adapter de Sheets rechaza explícitamente batches que intenten persistir una tabla diferida. La activación futura de MDM requerirá reglas de equivalencia/revisión, backfill y reconciliación demostrables.
+
+## DT-043 — Turso / SQLite es el backend operativo activo
+
+DT-040 queda **supersedida** como selección de backend. Google Sheets permanece como legado fail-closed y BigQuery se conserva como implementación legada/futura sin ruta productiva activa. El backend operativo seleccionado es Turso, con SQLite `:memory:` ejecutando el mismo contrato físico en pruebas offline.
+
+La selección conserva el motor `current/history` backend-neutral y lo materializa con tres superficies mínimas de uso actual:
+
+```text
+offers_current = último estado comercial aceptado
+offer_history  = periodos creados sólo ante cambios reales
+scrape_runs    = cada ejecución terminal, cambie o no el estado
+```
+
+Una confirmación idéntica posterior actualiza la evidencia de estado actual y registra su run sin crear un periodo histórico redundante. Replay exacto es no-op; reutilizar un `scrape_run_id` con fingerprint divergente falla cerrado; cada apply es transaccional y un fallo parcial hace rollback completo.
+
+Para Turso, `products` y `source_products` sí se materializan desde la primera fuente porque ya tienen consumidores actuales: revalidar identidad canónica/pending, conservar el mapping fuente y reconciliar de forma durable el snapshot inicial. Esto supersede únicamente la decisión física específica de Sheets en DT-042; no autoriza fuzzy matching ni convierte mappings pendientes en equivalencias demostradas.
+
+La primera carga productiva se realiza exclusivamente desde el snapshot aprobado por digest exacto, pasa antes por SQLite real y usa `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` como GitHub Actions Secrets. Esa carga no consulta La Colonia ni concede autorización para tráfico live futuro.
