@@ -4,51 +4,53 @@ Proyecto para recolectar, normalizar, validar, historizar y comparar precios de 
 
 ## Fuentes de verdad
 
-- **Estado operativo mutable, autorizaciones, blockers y último CI:** [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)
+- **Estado operativo mutable, autorizaciones y blockers:** [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)
 - **Arquitectura estable:** [`docs/arquitectura.md`](docs/arquitectura.md)
 - **Modelo de datos:** [`docs/modelo-datos.md`](docs/modelo-datos.md)
 - **Decisiones técnicas:** [`docs/decisiones-tecnicas.md`](docs/decisiones-tecnicas.md)
 
-El README no replica SHAs, runs, conteos de tests, authorization IDs ni flags operativos. Esos valores cambian con el tiempo y deben consultarse en `PROJECT_STATE.md` y en la evidencia real de GitHub.
+GitHub es la fuente de verdad para `main`, PRs, CI, runs y artifacts. Este README no replica SHAs ni autorizaciones transitorias.
 
 ## Principios
 
-1. La fuente manda: no se inventan precios, atributos ni ubicación.
-2. `la_colonia_online` es contexto raw; una oferta sólo puede etiquetarse como SPS mediante una frontera de binding verificable.
-3. Corrección técnica, firma, hash o completitud no equivalen por sí solos a autoridad productiva.
+1. La fuente manda: no se inventan precios, atributos, disponibilidad ni ubicación.
+2. `la_colonia_online` es contexto raw; una oferta sólo se etiqueta como SPS cuando existe binding técnico verificable.
+3. Completitud, hash o fingerprint no equivalen por sí solos a autorización live.
 4. Runs fallidos/rechazados no modifican el último estado comercial confiable.
 5. El histórico abre un periodo nuevo sólo cuando cambia un estado comercial relevante.
-6. Todo run terminal se registra, aunque no exista cambio de precio.
+6. Todo run terminal se registra, aunque el estado comercial no cambie.
 7. La lógica de negocio permanece independiente del backend.
-8. Una entidad lógica no obliga a crear una tabla física antes de existir una necesidad real.
-9. No se crea una tabla por supermercado.
-10. Power BI consume datos curados; no decide limpieza, ubicación, identidad ni aceptación.
+8. No se crea una tabla por supermercado.
+9. Durante el MVP se prefiere el cambio mínimo con consumidor actual.
+10. La Colonia debe quedar end-to-end antes de comenzar supermercado #2.
 
-## Flujo de datos
+## Flujo de datos vigente
 
 ```text
 SOURCE
   ↓
-INGEST
-  ↓
-RawProduct                         # RAW / source-faithful
+RawProduct
   ↓
 NormalizedOffer
   ↓
-ValidatedOffer                    # CLEAN / validated
+ValidatedOffer
   ↓
-completitud + provenance + ACCEPT/REJECT
+completitud + aprobación versionada
   ↓
-current/history                   # CURATED
+current/history backend-neutral
   ↓
-Google Sheets                     # backend temporal
+TursoWritePlan
   ↓
-proyección semántica
+TursoAdapter
+  ├─ SQLite :memory:     # pruebas offline con SQL real
+  └─ Turso               # persistencia durable
   ↓
-Power BI                          # SERVE
+queries validadas
+  ↓
+Dash + Plotly            # después de cerrar La Colonia end-to-end
 ```
 
-BigQuery queda como evolución posterior cuando el proceso completo sea estable. La migración podrá cambiar el modelo físico sin cambiar la semántica comercial.
+Turso es el backend persistente operativo. BigQuery queda preservado como implementación legada/futura y su primera carga productiva está retirada/fail-closed. Google Sheets permanece retirado/fail-closed.
 
 ## Identidad
 
@@ -60,7 +62,7 @@ offer_id          = supermercado + ubicación comercial + producto fuente
 
 Precio, promoción, disponibilidad y fecha no forman parte de IDs estables.
 
-Un GTIN-8/12/13/14 sólo se considera identidad cross-source fuerte si supera check digit y se normaliza de forma canónica. Sin identidad fuerte, el producto puede permanecer bajo `prod_pending_*` y `pending_product_mapping`; semejanza textual no basta para unir productos de supermercados distintos.
+Un GTIN-8/12/13/14 sólo se considera identidad cross-source fuerte si supera check digit y se normaliza de forma canónica. Sin identidad fuerte se conserva `prod_pending_*` y mapping pendiente; semejanza textual no basta para unir productos de supermercados distintos.
 
 ## Precio e histórico
 
@@ -69,40 +71,46 @@ Se distinguen:
 ```text
 current_price
 reported_regular_price
-historical_previous_price
+previous_price
 ```
 
-`reported_regular_price` es una referencia declarada por la tienda, no evidencia de ahorro real. La reducción real compara el `current_price` actual contra el `current_price` del periodo aceptado inmediatamente anterior. Sin baseline aceptado no se inventa ahorro.
+`reported_regular_price` es una referencia declarada por la tienda, no evidencia de ahorro real. `previous_price` se deriva del `current_price` del periodo aceptado inmediatamente anterior. Sin baseline aceptado no se inventa ahorro.
 
-`fact_offer_history` representa periodos comerciales, no snapshots diarios duplicados. Si el estado no cambia, se confirma el periodo existente.
+Turso materializa:
+
+```text
+offers_current = último estado aceptado
+offer_history  = periodos de cambios reales
+scrape_runs    = cada ejecución terminal
+```
+
+Una confirmación idéntica posterior no crea un periodo histórico redundante.
 
 ## Almacenamiento físico activo
 
-Google Sheets es el backend temporal y materializa únicamente seis tablas con grain/lifecycle ya justificados:
+El contrato Turso/SQLite usa:
 
 ```text
-cfg_supermarkets
-cfg_locations
-fact_offers_current
-fact_offer_history
-fact_scrape_runs
-fact_quality_events
+supermarkets
+locations
+products
+source_products
+offers_current
+offer_history
+scrape_runs
+quality_events
+normalization_overrides
 ```
 
-Los contratos lógicos:
-
-```text
-dim_products
-map_source_products
-```
-
-permanecen diferidos hasta que exista una segunda fuente o un consumidor real que requiera identidad canónica cross-source. `source_product_id` y `product_id` continúan presentes en current/history, por lo que esa capacidad puede activarse y backfillearse posteriormente sin inventar observaciones.
+El snapshot inicial aprobado de La Colonia se valida por SHA-256 exacto antes de interpretarlo. La primera carga durable se prepara desde el artifact preservado existente; no requiere ni autoriza una nueva consulta al supermercado.
 
 ## Seguridad y tráfico live
 
-La autonomía de desarrollo cubre trabajo offline, GitHub, tests, documentación y preparación fail-closed. No crea una autorización permanente para tráfico contra supermercados.
+La autonomía de desarrollo cubre trabajo offline, GitHub, tests, documentación y preparación fail-closed. No crea autorización permanente para tráfico contra supermercados.
 
-Cualquier nueva observación live exige autorización humana explícita y vigente para su alcance concreto. Autorizaciones históricas consumidas no se reutilizan. Los detalles vigentes se consultan exclusivamente en [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
+Cualquier nueva observación live exige autorización humana explícita y vigente para su alcance concreto. Autorizaciones históricas consumidas no se reutilizan.
+
+Las credenciales Turso se inyectan sólo mediante GitHub Actions Secrets con los nombres definidos por el runtime. Nunca se guardan en el repositorio ni se solicitan por chat.
 
 ## Pruebas
 
@@ -114,4 +122,4 @@ python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scr
 pytest precios-supermercados-sps/tests
 ```
 
-La suite Python ejecuta también la suite Node canónica declarada en `edge/cloudflare/package.json` y la auditoría fail-closed de workflows. El último conteo observado se registra únicamente en `PROJECT_STATE.md`.
+La suite cubre dominio, persistencia, SQL SQLite real y auditoría fail-closed de workflows. Los conteos concretos se obtienen de los runs reales de CI, no se fijan en este README.
