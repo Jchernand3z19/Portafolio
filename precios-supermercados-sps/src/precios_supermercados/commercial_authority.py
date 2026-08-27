@@ -17,7 +17,7 @@ import binascii
 import hashlib
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from types import MappingProxyType
 from typing import NoReturn
@@ -38,6 +38,7 @@ _AUTHORITY_EVIDENCE_PREFIX = "caev1_"
 _B64URL = re.compile(r"[A-Za-z0-9_-]+\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _ALLOWED_STATUSES = frozenset({RunStatus.SUCCESS, RunStatus.WARNING})
+_CRYPTO_VERIFICATION_SEAL = object()
 
 
 class CommercialAuthorityError(ValueError):
@@ -227,17 +228,20 @@ class TrustedCommercialAuthorityPublicKey:
 
 @dataclass(frozen=True, slots=True)
 class CryptographicallyVerifiedCommercialAuthority:
-    """Firma verificada; todavía debe reconciliarse contra readiness de la fuente."""
+    """Capability sellada: sólo ``Ed25519CommercialAuthorityVerifier`` puede crearla."""
 
     attestation: SignedCommercialAuthorityAttestation
     authority_evidence_id: str
     signing_key_id: str
     public_key_spki_sha256: str
+    _verification_seal: object = field(repr=False, compare=False)
     cryptographic_signature_verified: bool = True
     production_authority: bool = False
     catalog_accepted: bool = False
 
     def __post_init__(self) -> None:
+        if self._verification_seal is not _CRYPTO_VERIFICATION_SEAL:
+            _fail("verified_authority_unsealed")
         if not isinstance(self.attestation, SignedCommercialAuthorityAttestation):
             _fail("verified_authority_attestation_invalid")
         if self.authority_evidence_id != self.attestation.authority_evidence_id:
@@ -322,4 +326,5 @@ class Ed25519CommercialAuthorityVerifier:
             authority_evidence_id=attestation.authority_evidence_id,
             signing_key_id=trusted_key.key_id,
             public_key_spki_sha256=trusted_key.spki_sha256,
+            _verification_seal=_CRYPTO_VERIFICATION_SEAL,
         )
