@@ -39,7 +39,7 @@ extraction_enabled = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-`ACTIVE_AUTHORIZATION_IDS = []` significa que no existe autorización live vigente. La evidencia histórica **no se interpreta como autorización abierta**. Cualquier nuevo tráfico contra La Colonia requiere una autorización humana nueva y explícita.
+`ACTIVE_AUTHORIZATION_IDS = []` significa que no existe autorización live vigente. La evidencia histórica **no se interpreta como autorización abierta**. Cualquier nuevo tráfico contra La Colonia requiere autorización humana explícita vigente; una autorización anterior consumida no se reutiliza.
 
 No se necesita tráfico live para la frontera BigQuery actual: el catálogo ya descargado es evidencia suficiente para continuar todo lo que sea estrictamente offline.
 
