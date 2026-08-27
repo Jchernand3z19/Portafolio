@@ -4,22 +4,15 @@ Esta frontera toma una decisión final + ofertas ya validadas, aplica la máquin
 estado en memoria y produce un ``TabularBatch`` atómico con configuración,
 current, histórico, registro del run y eventos de calidad. No hace I/O externo.
 
-La identidad canónica cross-source sigue disponible en el modelo lógico, pero sus
-tablas físicas se difieren hasta que exista una segunda fuente o un consumidor
-que requiera equivalencias reales. La identidad fuente y ``product_id`` siguen
-persistidas dentro de current/history, por lo que esta decisión no pierde
-trazabilidad ni bloquea una materialización futura.
-
 La validación que puede fallar por ubicación/metadata se ejecuta antes de mutar el
-estado en memoria. Un replay ya conocido se rechaza de forma explícita en esta
-capa: su reconciliación contra el registro durable requiere el fingerprint
-persistido y se implementa por separado, evitando convertir un retry ambiguo en
-una segunda escritura.
+estado en memoria. ``extraction_enabled`` controla tráfico futuro; una observación
+ya obtenida puede persistirse si todos los demás gates de ubicación siguen siendo
+válidos. El catálogo serializado conserva el valor real de ``extraction_enabled``.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from types import MappingProxyType
 from typing import Mapping, Sequence
@@ -31,7 +24,12 @@ from .commercial_state import (
     InMemoryCommercialState,
 )
 from .enums import RunStatus
-from .locations import DEFAULT_LOCATION_CATALOG, LocationCatalog, LocationConfigError
+from .locations import (
+    DEFAULT_LOCATION_CATALOG,
+    LocationCatalog,
+    LocationConfigError,
+    build_location_catalog,
+)
 from .models import ValidatedOffer
 from .tabular_persistence import (
     CFG_LOCATIONS,
@@ -96,6 +94,35 @@ def _validate_run_location(
         raise CommercialPersistencePreparationError("run_supermarket_inactive")
     if location.supermarket_id != supermarket_id:
         raise CommercialPersistencePreparationError("run_location_supermarket_mismatch")
+
+
+def _catalog_for_persistence(
+    catalog: LocationCatalog,
+    location_id: str,
+) -> LocationCatalog:
+    """Ignora sólo el switch de tráfico durante serialización de evidencia existente.
+
+    ``validate_offer_location_for_persistence`` históricamente reutiliza
+    ``require_extraction_ready``. Para no reescribir esa capa todavía, se crea una
+    vista efímera donde únicamente el location objetivo aparece con extracción
+    habilitada cuando ése es el único blocker. Las filas ``cfg_locations`` siempre
+    se serializan desde el catálogo original, por lo que nunca se habilita tráfico.
+    """
+
+    try:
+        reason = catalog.extraction_block_reason(location_id)
+    except LocationConfigError as exc:
+        raise CommercialPersistencePreparationError("run_location_unknown") from exc
+    if reason != "extraction_disabled":
+        return catalog
+
+    location = catalog.location(location_id)
+    enabled_location = replace(location, extraction_enabled=True)
+    locations = tuple(
+        enabled_location if item.location_id == location_id else item
+        for item in catalog.locations
+    )
+    return build_location_catalog(tuple(catalog.supermarkets.values()), locations)
 
 
 def _validate_quality_events(
@@ -221,6 +248,11 @@ def prepare_new_run_persistence(
     offer_values = tuple(offers)
     quality_values = tuple(quality_events)
     _validate_run_location(supermarket_id, location_id, catalog)
+    persistence_catalog = (
+        _catalog_for_persistence(catalog, location_id)
+        if decision.commercial_update_allowed
+        else catalog
+    )
     _validate_quality_events(
         quality_values,
         scrape_run_id=decision.scrape_run_id,
@@ -232,7 +264,7 @@ def prepare_new_run_persistence(
         decision=decision,
         supermarket_id=supermarket_id,
         location_id=location_id,
-        catalog=catalog,
+        catalog=persistence_catalog,
     )
     _preflight_run_record(
         decision=decision,
@@ -283,9 +315,9 @@ def prepare_new_run_persistence(
                     raise CommercialPersistencePreparationError(
                         "commercial_current_missing_after_apply"
                     )
-                current_rows.append(current_offer_row(current, catalog))
+                current_rows.append(current_offer_row(current, persistence_catalog))
                 history_rows.extend(
-                    history_offer_row(period, catalog)
+                    history_offer_row(period, persistence_catalog)
                     for period in state.history(offer_id)
                 )
 
