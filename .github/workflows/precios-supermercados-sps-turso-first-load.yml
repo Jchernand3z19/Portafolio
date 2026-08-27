@@ -109,10 +109,11 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
+          import os
           import sqlite3
           from pathlib import Path
 
-          path = Path("$RUNNER_TEMP") / "precios-sps-turso-upload" / "precios-sps-la-colonia-initial.db"
+          path = Path(os.environ["RUNNER_TEMP"]) / "precios-sps-turso-upload" / "precios-sps-la-colonia-initial.db"
           connection = sqlite3.connect(path)
           try:
               if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
