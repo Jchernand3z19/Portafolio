@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import base64
+import json
+import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -14,9 +17,15 @@ from precios_supermercados.bigquery_persistence import build_bigquery_write_plan
 from precios_supermercados.commercial_authority import (
     CommercialAuthorityClaims,
     CommercialAuthorityError,
+    CryptographicallyVerifiedCommercialAuthority,
     Ed25519CommercialAuthorityVerifier,
     SignedCommercialAuthorityAttestation,
     commercial_authority_signing_bytes,
+)
+from precios_supermercados.commercial_authority_trust import (
+    COMMERCIAL_AUTHORITY_KEYRING_ENV,
+    COMMERCIAL_AUTHORITY_TRUST_PURPOSE,
+    CommercialAuthorityTrustError,
 )
 from precios_supermercados.commercial_state import InMemoryCommercialState
 from precios_supermercados.enums import (
@@ -38,6 +47,7 @@ from precios_supermercados.scrapers.la_colonia_catalog_acceptance_readiness impo
 from precios_supermercados.scrapers.la_colonia_catalog_coverage import CatalogCoverageReport
 from precios_supermercados.scrapers.la_colonia_commercial_authority import (
     LaColoniaCommercialAuthorityError,
+    VerifiedLaColoniaCommercialAuthority,
     prepare_la_colonia_authoritative_run_persistence,
     verify_la_colonia_commercial_authority,
 )
@@ -54,6 +64,7 @@ TREE_DIGEST = "4" * 64
 TRUST_GATE = "trusted_collector_provenance_unavailable"
 AUTHORITY_BLOCKER = "production_authority_not_established"
 BASE = datetime(2026, 8, 25, 21, 15, tzinfo=timezone.utc)
+KEY_ID = "commercial-authority-v1"
 
 
 def _b64url(value: bytes) -> str:
@@ -67,6 +78,18 @@ def _key_material():
         PublicFormat.SubjectPublicKeyInfo,
     )
     return private, _b64url(der)
+
+
+def _trust_document(public_spki: str) -> str:
+    return json.dumps(
+        {
+            "schema_version": "1",
+            "purpose": COMMERCIAL_AUTHORITY_TRUST_PURPOSE,
+            "keys": {KEY_ID: public_spki},
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
 
 
 def _coverage(*reasons: str) -> CatalogCoverageReport:
@@ -86,7 +109,7 @@ def _coverage(*reasons: str) -> CatalogCoverageReport:
         missing_coverage_events=0 if reasons == (TRUST_GATE,) else 1,
         total_changes=0,
         uncategorized_products=0,
-        request_limit=50,
+        request_limit=500,
         coverage_demonstrated=False,
         coverage_reason=";".join(reasons),
         accepted=False,
@@ -133,7 +156,7 @@ def _provenance() -> VerifiedCatalogProvenanceRun:
     return value
 
 
-def _claims(*, key_id: str, decided_at: datetime | None = None, **overrides):
+def _claims(*, key_id: str = KEY_ID, decided_at: datetime | None = None, **overrides):
     values = {
         "supermarket_id": "la_colonia",
         "location_id": "la_colonia_sps",
@@ -158,15 +181,30 @@ def _signed(private, claims: CommercialAuthorityClaims):
     )
 
 
+def _verify_source(
+    *,
+    attestation: SignedCommercialAuthorityAttestation,
+    public_spki: str,
+    readiness: VerifiedCatalogAcceptanceReadiness | None = None,
+    provenance: VerifiedCatalogProvenanceRun | None = None,
+):
+    with patch.dict(
+        os.environ,
+        {COMMERCIAL_AUTHORITY_KEYRING_ENV: _trust_document(public_spki)},
+        clear=False,
+    ):
+        return verify_la_colonia_commercial_authority(
+            readiness=readiness or _readiness(),
+            provenance=provenance or _provenance(),
+            attestation=attestation,
+        )
+
+
 def _verified_authority():
     private, public_spki = _key_material()
-    verifier = Ed25519CommercialAuthorityVerifier({"commercial-authority-v1": public_spki})
-    attestation = _signed(private, _claims(key_id="commercial-authority-v1"))
-    return verify_la_colonia_commercial_authority(
-        readiness=_readiness(),
-        provenance=_provenance(),
-        attestation=attestation,
-        verifier=verifier,
+    return _verify_source(
+        attestation=_signed(private, _claims()),
+        public_spki=public_spki,
     )
 
 
@@ -227,9 +265,9 @@ def _offer() -> ValidatedOffer:
 
 def test_crypto_verifier_accepts_only_signature_from_trusted_authority_key() -> None:
     private, public_spki = _key_material()
-    claims = _claims(key_id="commercial-authority-v1")
+    claims = _claims()
     attestation = _signed(private, claims)
-    verifier = Ed25519CommercialAuthorityVerifier({"commercial-authority-v1": public_spki})
+    verifier = Ed25519CommercialAuthorityVerifier({KEY_ID: public_spki})
 
     verified = verifier.verify(attestation)
 
@@ -239,14 +277,38 @@ def test_crypto_verifier_accepts_only_signature_from_trusted_authority_key() -> 
     assert verified.authority_evidence_id.startswith("caev1_")
 
     forged = SignedCommercialAuthorityAttestation(
-        claims=_claims(
-            key_id="commercial-authority-v1",
-            location_id="la_colonia_tgu",
-        ),
+        claims=_claims(location_id="la_colonia_tgu"),
         signature_b64url=attestation.signature_b64url,
     )
     with pytest.raises(CommercialAuthorityError, match="authority_signature_invalid"):
         verifier.verify(forged)
+
+
+def test_crypto_verified_capability_cannot_be_constructed_without_verifier() -> None:
+    private, _ = _key_material()
+    attestation = _signed(private, _claims())
+    with pytest.raises(TypeError):
+        CryptographicallyVerifiedCommercialAuthority(
+            attestation=attestation,
+            authority_evidence_id=attestation.authority_evidence_id,
+            signing_key_id=KEY_ID,
+            public_key_spki_sha256="0" * 64,
+        )
+
+
+def test_source_policy_requires_productive_trust_config_not_caller_keyring() -> None:
+    private, _ = _key_material()
+    attestation = _signed(private, _claims())
+    with patch.dict(os.environ, {}, clear=True):
+        with pytest.raises(
+            CommercialAuthorityTrustError,
+            match="commercial_authority_keyring_missing",
+        ):
+            verify_la_colonia_commercial_authority(
+                readiness=_readiness(),
+                provenance=_provenance(),
+                attestation=attestation,
+            )
 
 
 def test_policy_promotes_only_exact_signed_readiness_binding() -> None:
@@ -261,66 +323,54 @@ def test_policy_promotes_only_exact_signed_readiness_binding() -> None:
     assert decision.run_status is RunStatus.SUCCESS
 
 
+def test_policy_capability_cannot_be_constructed_without_source_verifier() -> None:
+    crypto = _verified_authority().cryptographic_authority
+    with pytest.raises(TypeError):
+        VerifiedLaColoniaCommercialAuthority(
+            cryptographic_authority=crypto,
+            discovery_digest=DISCOVERY_DIGEST,
+            authenticated_plan_digest=PLAN_DIGEST,
+            provenance_manifest_digest=MANIFEST_DIGEST,
+        )
+
+
 def test_policy_rejects_valid_signature_bound_to_wrong_location() -> None:
     private, public_spki = _key_material()
-    verifier = Ed25519CommercialAuthorityVerifier({"commercial-authority-v1": public_spki})
-    attestation = _signed(
-        private,
-        _claims(
-            key_id="commercial-authority-v1",
-            location_id="la_colonia_tgu",
-        ),
-    )
+    attestation = _signed(private, _claims(location_id="la_colonia_tgu"))
 
     with pytest.raises(
         LaColoniaCommercialAuthorityError,
         match="commercial_authority_location_id_mismatch",
     ):
-        verify_la_colonia_commercial_authority(
-            readiness=_readiness(),
-            provenance=_provenance(),
-            attestation=attestation,
-            verifier=verifier,
-        )
+        _verify_source(attestation=attestation, public_spki=public_spki)
 
 
 def test_policy_rejects_authority_decision_that_predates_physical_evidence() -> None:
     private, public_spki = _key_material()
-    verifier = Ed25519CommercialAuthorityVerifier({"commercial-authority-v1": public_spki})
     attestation = _signed(
         private,
-        _claims(
-            key_id="commercial-authority-v1",
-            decided_at=BASE - timedelta(seconds=1),
-        ),
+        _claims(decided_at=BASE - timedelta(seconds=1)),
     )
 
     with pytest.raises(
         LaColoniaCommercialAuthorityError,
         match="commercial_authority_decision_predates_evidence",
     ):
-        verify_la_colonia_commercial_authority(
-            readiness=_readiness(),
-            provenance=_provenance(),
-            attestation=attestation,
-            verifier=verifier,
-        )
+        _verify_source(attestation=attestation, public_spki=public_spki)
 
 
 def test_policy_rejects_technical_incompleteness_even_with_valid_signature() -> None:
     private, public_spki = _key_material()
-    verifier = Ed25519CommercialAuthorityVerifier({"commercial-authority-v1": public_spki})
-    attestation = _signed(private, _claims(key_id="commercial-authority-v1"))
+    attestation = _signed(private, _claims())
 
     with pytest.raises(
         LaColoniaCommercialAuthorityError,
         match="commercial_authority_technical_catalog_incomplete",
     ):
-        verify_la_colonia_commercial_authority(
-            readiness=_readiness(complete=False),
-            provenance=_provenance(),
+        _verify_source(
             attestation=attestation,
-            verifier=verifier,
+            public_spki=public_spki,
+            readiness=_readiness(complete=False),
         )
 
 
