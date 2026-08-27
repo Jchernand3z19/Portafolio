@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
+from typing import Any
 
 from .commercial_authority import (
     CommercialAuthorityError,
@@ -30,12 +31,38 @@ class CommercialAuthorityTrustError(ValueError):
         self.code = code
 
 
+def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Construye un objeto JSON rechazando ambigüedad por keys repetidas."""
+
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise CommercialAuthorityTrustError(
+                "commercial_authority_keyring_duplicate_key"
+            )
+        result[key] = value
+    return result
+
+
+def _parse_trust_document(raw: str) -> dict[str, Any]:
+    try:
+        document = json.loads(raw, object_pairs_hook=_reject_duplicate_json_object)
+    except CommercialAuthorityTrustError:
+        raise
+    except (json.JSONDecodeError, UnicodeError) as exc:
+        raise CommercialAuthorityTrustError("commercial_authority_keyring_invalid") from exc
+    if not isinstance(document, dict):
+        raise CommercialAuthorityTrustError("commercial_authority_keyring_schema_invalid")
+    return document
+
+
 def load_productive_commercial_authority_verifier() -> Ed25519CommercialAuthorityVerifier:
     """Carga exclusivamente la trust config del entorno productivo.
 
     No recibe mappings, paths ni overrides del caller. Tests pueden aislar el
     entorno del proceso, pero el API operacional no puede sustituir la raíz de
-    confianza mediante un argumento de función.
+    confianza mediante un argumento de función. Cualquier clave JSON duplicada,
+    incluso dentro de ``keys``, se considera ambigua y falla cerrado.
     """
 
     raw = os.environ.get(COMMERCIAL_AUTHORITY_KEYRING_ENV)
@@ -43,15 +70,8 @@ def load_productive_commercial_authority_verifier() -> Ed25519CommercialAuthorit
         raise CommercialAuthorityTrustError("commercial_authority_keyring_missing")
     if raw != raw.strip() or len(raw.encode("utf-8")) > _MAX_KEYRING_JSON_BYTES:
         raise CommercialAuthorityTrustError("commercial_authority_keyring_invalid")
-    try:
-        document = json.loads(raw)
-    except (json.JSONDecodeError, UnicodeError) as exc:
-        raise CommercialAuthorityTrustError("commercial_authority_keyring_invalid") from exc
-    if not isinstance(document, dict) or set(document) != {
-        "schema_version",
-        "purpose",
-        "keys",
-    }:
+    document = _parse_trust_document(raw)
+    if set(document) != {"schema_version", "purpose", "keys"}:
         raise CommercialAuthorityTrustError("commercial_authority_keyring_schema_invalid")
     if document["schema_version"] != COMMERCIAL_AUTHORITY_TRUST_SCHEMA_VERSION:
         raise CommercialAuthorityTrustError("commercial_authority_keyring_version_invalid")
@@ -62,7 +82,10 @@ def load_productive_commercial_authority_verifier() -> Ed25519CommercialAuthorit
         raise CommercialAuthorityTrustError("commercial_authority_keyring_keys_invalid")
     if len(keys) > 8:
         raise CommercialAuthorityTrustError("commercial_authority_keyring_too_many_keys")
-    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in keys.items()):
+    if any(
+        not isinstance(key, str) or not isinstance(value, str)
+        for key, value in keys.items()
+    ):
         raise CommercialAuthorityTrustError("commercial_authority_keyring_keys_invalid")
     try:
         return Ed25519CommercialAuthorityVerifier(keys)
