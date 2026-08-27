@@ -83,6 +83,13 @@ def _require(condition: bool, code: str) -> None:
         raise InitialSnapshotError(code)
 
 
+def _subcategory(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    parts = tuple(part.strip() for part in value.split(">") if part.strip())
+    return parts[-1] if len(parts) > 1 else None
+
+
 def _read_exact_json(path: Path) -> Mapping[str, Any]:
     if not isinstance(path, Path):
         path = Path(path)
@@ -166,6 +173,7 @@ def _raw_product(row: Mapping[str, Any], *, observed_at_utc: datetime) -> RawPro
             "reported_regular_price": row.get("reported_regular_price"),
             "is_promotion": row.get("is_promotion"),
             "availability": row.get("availability"),
+            "subcategory": _subcategory(row.get("category")),
         },
     )
 
