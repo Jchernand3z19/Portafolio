@@ -55,6 +55,9 @@ LIVE_MVP_JOB = "mvp-sample"
 LIVE_FACET_JOB = "context-bound-facet-entrypoint"
 LOCATION_BINDING_WORKFLOW = "precios-supermercados-sps-la-colonia-location-binding.yml"
 GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storage.yml"
+PRESERVE_INITIAL_SNAPSHOT_WORKFLOW = (
+    "precios-supermercados-sps-preserve-initial-snapshot.yml"
+)
 GOOGLE_SHEETS_STORAGE_REQUEST = (
     "precios-supermercados-sps/.automation/google-sheets-storage-request.json"
 )
@@ -80,6 +83,7 @@ EXPECTED_PERMISSIONS = {
     LIVE_WORKFLOW: {"contents": "read"},
     LOCATION_BINDING_WORKFLOW: {"contents": "read"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"contents": "read"},
+    PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"actions": "read", "contents": "read"},
     TEST_WORKFLOW: {"contents": "read"},
 }
 
@@ -105,6 +109,7 @@ EXPECTED_TRIGGERS = {
     LIVE_WORKFLOW: {"workflow_dispatch", "push"},
     LOCATION_BINDING_WORKFLOW: {"workflow_dispatch"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch", "push"},
+    PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"workflow_dispatch", "push"},
     TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
 }
 
@@ -240,6 +245,9 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
         ]
         if path.name == LOCATION_BINDING_WORKFLOW:
             assert all_jobs_blocked(workflow)
+            assert checkout_steps == []
+            continue
+        if path.name == PRESERVE_INITIAL_SNAPSHOT_WORKFLOW:
             assert checkout_steps == []
             continue
         if path.name == AUDIT_WORKFLOW:
