@@ -41,6 +41,7 @@ PINNED_ACTIONS = {
     "actions/github-script": "3a2844b7e9c422d3c10d287c895573f7108da1b3",
     "actions/upload-artifact": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
     "actions/download-artifact": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+    "google-github-actions/auth": "7c6bc770dae815cd3e89ee6cdf493a5fab2cc093",
 }
 
 PROBE_WORKFLOW = "precios-supermercados-sps-cloudflare-probe.yml"
@@ -58,6 +59,7 @@ GOOGLE_SHEETS_STORAGE_WORKFLOW = "precios-supermercados-sps-google-sheets-storag
 PRESERVE_INITIAL_SNAPSHOT_WORKFLOW = (
     "precios-supermercados-sps-preserve-initial-snapshot.yml"
 )
+BIGQUERY_FIRST_LOAD_WORKFLOW = "precios-supermercados-sps-bigquery-first-load.yml"
 GOOGLE_SHEETS_STORAGE_REQUEST = (
     "precios-supermercados-sps/.automation/google-sheets-storage-request.json"
 )
@@ -72,6 +74,12 @@ EDGE_GATEWAY_VAR = "CLOUDFLARE_EDGE_GATEWAY_URL"
 EDGE_PUBLIC_KEY_VAR = "CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL"
 GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET = "PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON"
 GOOGLE_SHEETS_SPREADSHEET_VAR = "PRECIOS_SPS_GOOGLE_SPREADSHEET_ID"
+BIGQUERY_GCP_VARS = {
+    "PRECIOS_SPS_GCP_PROJECT_ID",
+    "PRECIOS_SPS_BIGQUERY_DATASET_ID",
+    "PRECIOS_SPS_GCP_WIF_PROVIDER",
+    "PRECIOS_SPS_GCP_SERVICE_ACCOUNT",
+}
 
 EXPECTED_PERMISSIONS = {
     PROBE_WORKFLOW: {"contents": "read"},
@@ -84,6 +92,7 @@ EXPECTED_PERMISSIONS = {
     LOCATION_BINDING_WORKFLOW: {"contents": "read"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"contents": "read"},
     PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"actions": "read", "contents": "read"},
+    BIGQUERY_FIRST_LOAD_WORKFLOW: {"actions": "read", "contents": "read"},
     TEST_WORKFLOW: {"contents": "read"},
 }
 
@@ -96,6 +105,9 @@ ALLOWED_JOB_PERMISSIONS = {
     },
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {
         "publish-status": {"statuses": "write"},
+    },
+    BIGQUERY_FIRST_LOAD_WORKFLOW: {
+        "first-load": {"actions": "read", "contents": "read", "id-token": "write"},
     },
 }
 
@@ -110,6 +122,7 @@ EXPECTED_TRIGGERS = {
     LOCATION_BINDING_WORKFLOW: {"workflow_dispatch"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch", "push"},
     PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"workflow_dispatch", "push"},
+    BIGQUERY_FIRST_LOAD_WORKFLOW: {"workflow_dispatch"},
     TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
 }
 
@@ -129,6 +142,7 @@ ALLOWED_VAR_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
     LIVE_WORKFLOW: {EDGE_GATEWAY_VAR, EDGE_PUBLIC_KEY_VAR},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {GOOGLE_SHEETS_SPREADSHEET_VAR},
+    BIGQUERY_FIRST_LOAD_WORKFLOW: BIGQUERY_GCP_VARS,
 }
 
 
@@ -468,6 +482,7 @@ def test_only_explicit_oidc_jobs_can_request_write_permission():
     allowed = {
         (PROBE_WORKFLOW, "controlled-probe"),
         (LIVE_WORKFLOW, LIVE_FACET_JOB),
+        (BIGQUERY_FIRST_LOAD_WORKFLOW, "first-load"),
     }
     observed: set[tuple[str, str]] = set()
     for path, workflow in workflows():
