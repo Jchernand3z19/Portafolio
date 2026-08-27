@@ -38,14 +38,12 @@ from precios_supermercados.turso_contract import (
     CURRENT_SCHEMA_VERSION,
     OFFER_HISTORY,
     OFFERS_CURRENT,
-    SCRAPE_RUNS,
     TURSO_TABLE_NAMES,
 )
 from precios_supermercados.turso_persistence import (
     TursoAdapter,
     TursoPersistenceError,
     TursoReplayConflict,
-    TursoWritePlan,
     build_turso_write_plan,
 )
 
@@ -315,7 +313,7 @@ def test_real_price_change_closes_previous_period_and_opens_one_new_period():
     assert periods[0][2] == "run-3"
     assert periods[1][0] == "35.5"
     assert periods[1][1] is None
-    assert result.updated >= 2  # current + cierre del periodo anterior
+    assert result.updated >= 2
 
     snapshot = adapter.read_back(supermarket_id="demo", location_id="demo_sps").rehydrate()
     assert len(next(iter(snapshot.history.values()))) == 2
@@ -342,7 +340,7 @@ def test_rejected_run_is_ledger_only_and_cannot_mutate_commercial_state():
             state,
             rejected_item,
             accepted=False,
-            status=RunStatus.ERROR,
+            status=RunStatus.REJECTED,
         )
     )
     adapter.apply(rejected)
@@ -362,12 +360,6 @@ def test_divergent_run_replay_is_rejected():
     )
     adapter.apply(plan)
 
-    run = dict(plan.rows[SCRAPE_RUNS.name][0])
-    run["run_fingerprint"] = "b" * 64
-    rows = dict(plan.rows)
-    rows[SCRAPE_RUNS.name] = (run,)
-    # Construir un plan coherente distinto para el mismo run requiere recalcular el
-    # fingerprint. Este caso verifica directamente la frontera durable existente.
     connection.execute(
         "UPDATE scrape_runs SET run_fingerprint = ? WHERE scrape_run_id = ?",
         ("c" * 64, "run-1"),
@@ -380,7 +372,7 @@ def test_divergent_run_replay_is_rejected():
 def test_partial_failure_rolls_back_run_and_all_prior_writes():
     state = InMemoryCommercialState()
     item = validated(run_id="run-rejected", observed_at=BASE)
-    prepared = prepare(state, item, accepted=False, status=RunStatus.ERROR)
+    prepared = prepare(state, item, accepted=False, status=RunStatus.REJECTED)
     override = {
         "override_id": "ov_missing",
         "supermarket_id": "demo",
