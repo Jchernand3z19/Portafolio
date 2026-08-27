@@ -2,13 +2,22 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from precios_supermercados.commercial_persistence_guard import (
+    LA_COLONIA_INITIAL_SNAPSHOT_ARTIFACT_DIGEST,
+    LA_COLONIA_INITIAL_SNAPSHOT_ARTIFACT_ID,
+    LA_COLONIA_INITIAL_SNAPSHOT_EVIDENCE_ID,
+    LA_COLONIA_INITIAL_SNAPSHOT_LOCATION_ID,
+    LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+    LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS,
+    LA_COLONIA_INITIAL_SNAPSHOT_RUN_ID,
     CommercialPersistenceGuardError,
     NonAuthoritativePersistenceDecision,
     guard_non_authoritative_decision,
+    prepare_la_colonia_initial_snapshot_persistence,
     prepare_non_authoritative_run_persistence,
 )
 from precios_supermercados.commercial_state import (
@@ -67,23 +76,23 @@ def decision(
 def test_guard_accepts_only_final_non_authoritative_decision() -> None:
     guarded = guard_non_authoritative_decision(
         decision(),
-        reason="catalog_authority_not_available",
+        reason="catalog_not_approved",
     )
 
     assert isinstance(guarded, NonAuthoritativePersistenceDecision)
     assert guarded.scrape_run_id == "run-guard-001"
     assert guarded.decision.catalog_accepted is False
     assert guarded.decision.commercial_update_allowed is False
-    assert guarded.reason == "catalog_authority_not_available"
+    assert guarded.reason == "catalog_not_approved"
 
 
 @pytest.mark.parametrize("status", (RunStatus.SUCCESS, RunStatus.WARNING))
-def test_guard_rejects_any_decision_that_would_mutate_commercial_state(
+def test_guard_rejects_generic_decision_that_would_mutate_commercial_state(
     status: RunStatus,
 ) -> None:
     with pytest.raises(
         CommercialPersistenceGuardError,
-        match="productive_authority_required",
+        match="approved_snapshot_required",
     ):
         guard_non_authoritative_decision(
             decision(status=status, accepted=True),
@@ -109,7 +118,7 @@ def test_guarded_success_without_catalog_acceptance_records_run_only() -> None:
     state = InMemoryCommercialState()
     guarded = guard_non_authoritative_decision(
         decision(status=RunStatus.SUCCESS, accepted=False),
-        reason="productive_catalog_authority_missing",
+        reason="catalog_not_approved",
     )
 
     prepared = prepare_non_authoritative_run_persistence(
@@ -154,13 +163,63 @@ def test_preparer_refuses_raw_decision_even_when_it_is_non_authoritative() -> No
         )
 
 
-def test_operational_code_cannot_bypass_guard_with_raw_preparer() -> None:
-    """Scripts/workflows y módulos nuevos deben pasar por este guard.
+def test_initial_snapshot_approval_is_exact_and_versioned() -> None:
+    assert LA_COLONIA_INITIAL_SNAPSHOT_RUN_ID == "32922877781"
+    assert LA_COLONIA_INITIAL_SNAPSHOT_ARTIFACT_ID == 9590684834
+    assert LA_COLONIA_INITIAL_SNAPSHOT_ARTIFACT_DIGEST == (
+        "sha256:0427e88be27df89fd9fcb50ed600ef5c6aef64177bfba92b4af3d2e25756a892"
+    )
+    assert LA_COLONIA_INITIAL_SNAPSHOT_LOCATION_ID == "la_colonia_sps"
+    assert LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS == 9437
+    assert LA_COLONIA_INITIAL_SNAPSHOT_OFFERS == 9439
+    assert LA_COLONIA_INITIAL_SNAPSHOT_EVIDENCE_ID.startswith("crev1_")
+    assert len(LA_COLONIA_INITIAL_SNAPSHOT_EVIDENCE_ID) == len("crev1_") + 64
 
-    El preparador crudo sólo puede vivir en su módulo backend-neutral y ser
-    invocado por este guard. Tests pueden usarlo directamente para validar la
-    máquina interna, pero no forman parte del código operativo escaneado aquí.
-    """
+
+def test_initial_snapshot_rejects_partial_offer_set_before_persistence() -> None:
+    with pytest.raises(
+        CommercialPersistenceGuardError,
+        match="initial_snapshot_offer_count_mismatch",
+    ):
+        prepare_la_colonia_initial_snapshot_persistence(
+            InMemoryCommercialState(),
+            (),
+        )
+
+
+def test_initial_snapshot_wrapper_fixes_all_authoritative_metadata() -> None:
+    class ApprovedSizedOffers:
+        def __len__(self) -> int:
+            return LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
+
+        def __getitem__(self, index):
+            raise IndexError(index)
+
+    sentinel = object()
+    with patch(
+        "precios_supermercados.commercial_persistence_guard.prepare_new_run_persistence",
+        return_value=sentinel,
+    ) as mocked:
+        result = prepare_la_colonia_initial_snapshot_persistence(
+            InMemoryCommercialState(),
+            ApprovedSizedOffers(),  # type: ignore[arg-type]
+        )
+
+    assert result is sentinel
+    args, kwargs = mocked.call_args
+    approved_decision = args[1]
+    assert approved_decision.scrape_run_id == LA_COLONIA_INITIAL_SNAPSHOT_RUN_ID
+    assert approved_decision.run_status is RunStatus.WARNING
+    assert approved_decision.catalog_accepted is True
+    assert kwargs["supermarket_id"] == "la_colonia"
+    assert kwargs["location_id"] == "la_colonia_sps"
+    assert kwargs["products_observed"] == 9437
+    assert kwargs["offers_observed"] == 9439
+    assert kwargs["run_evidence_id"] == LA_COLONIA_INITIAL_SNAPSHOT_EVIDENCE_ID
+
+
+def test_operational_code_cannot_bypass_guard_with_raw_preparer() -> None:
+    """Scripts/workflows y módulos nuevos deben pasar por este guard."""
 
     allowed = {
         PROJECT_ROOT
