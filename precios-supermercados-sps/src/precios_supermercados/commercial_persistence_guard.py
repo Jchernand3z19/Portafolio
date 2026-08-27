@@ -167,7 +167,7 @@ def prepare_la_colonia_initial_snapshot_persistence(
 
     decision = CommercialRunDecision(
         scrape_run_id=LA_COLONIA_INITIAL_SNAPSHOT_RUN_ID,
-        run_status=RunStatus.WARNING,
+        run_status=RunStatus.SUCCESS,
         catalog_accepted=True,
         decided_at_utc=LA_COLONIA_INITIAL_SNAPSHOT_APPROVED_AT_UTC,
     )
