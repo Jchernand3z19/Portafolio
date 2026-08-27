@@ -22,7 +22,8 @@ Principios:
 8. lógica comercial independiente del backend;
 9. BigQuery es el único backend persistente activo;
 10. Dash + Plotly es la capa de consumo seleccionada;
-11. una tabla nueva requiere grain, key, lifecycle y consumidor reales.
+11. una tabla nueva requiere grain, key, lifecycle y consumidor reales;
+12. persistir evidencia histórica y habilitar tráfico futuro son permisos distintos.
 
 ## 2. Flujo principal
 
@@ -41,7 +42,11 @@ Validación + identidad + state_hash
   ↓
 ValidatedOffer
   ↓
-Completitud / provenance / decisión autoritativa
+Completitud técnica + provenance verificada
+  ↓
+Atestación de autoridad comercial + política específica de fuente
+  ↓
+Verified commercial authority + crev1_* bound evidence
   ↓
 Motor backend-neutral de current/history + replay
   ↓
@@ -72,6 +77,9 @@ Forma común entre supermercados. Normalizar no significa completar información
 
 ### `ValidatedOffer`
 Oferta normalizada que pasó validaciones y contiene `state_hash`, estado de revisión y quality events.
+
+### `VerifiedLaColoniaCommercialAuthority`
+Capability productiva específica de fuente. Sólo existe después de verificar una atestación Ed25519 y reconciliarla con readiness técnica y provenance exactas. No acepta `catalog_accepted` como booleano libre.
 
 Estos contratos sólo cambian cuando exista una necesidad demostrada, compatibilidad y pruebas.
 
@@ -110,6 +118,8 @@ la_colonia_tgu    = ubicación conocida fuera del alcance inicial
 
 La existencia del binding técnico no activa por sí sola extracción productiva ni concede autorización live.
 
+`extraction_enabled` es un gate de **contacto futuro con la fuente**. No invalida automáticamente una evidencia histórica ya obtenida. El preparador comercial genérico continúa exigiendo ese flag; una capability privada y auditada permite serializar un snapshot con extracción apagada sólo después de una autoridad comercial tipada. Esa serialización nunca modifica el catálogo original ni persiste `extraction_enabled=true`.
+
 ## 7. Precio
 
 ```text
@@ -147,7 +157,40 @@ BigQuery                     = observaciones analíticas por run aceptado
 
 Un run con precio idéntico confirma el periodo Python sin abrir uno nuevo, pero agrega una observación BigQuery. Un cambio real abre/cierra periodos Python y agrega su observación BigQuery. Los tests reconcilian ambas capas.
 
-## 10. BigQuery — contrato físico cerrado
+## 10. Autoridad comercial
+
+Provenance física, completitud técnica y aceptación comercial son tres estados diferentes.
+
+```text
+verified provenance
+        +
+technical readiness
+        +
+signed commercial authority attestation
+        ↓
+source-specific authority policy
+        ↓
+VerifiedLaColoniaCommercialAuthority
+```
+
+La atestación comercial usa una raíz Ed25519 separada del receipt del collector porque responde a una pregunta distinta: el receipt demuestra **qué request/response ocurrió**; la autoridad comercial decide **si esa evidencia puede promoverse a estado comercial**.
+
+`CommercialAuthorityClaims` liga como mínimo supermercado, ubicación, run, autorización fuente, status final, instante de decisión y los digests de discovery, plan autenticado y manifest. La verificación criptográfica por sí sola mantiene `production_authority=false` y `catalog_accepted=false`.
+
+La política de La Colonia promueve únicamente cuando:
+
+- `technical_catalog_complete=true`;
+- la readiness está explícitamente lista para recibir evidencia autoritativa;
+- readiness y provenance comparten el manifest exacto;
+- la firma pertenece al keyring comercial confiable;
+- todos los IDs/digests coinciden exactamente;
+- la decisión no antecede la evidencia física.
+
+Después de la promoción, `derive_bound_run_evidence_id` produce `crev1_*` sobre autoridad + decisión + ofertas + métricas + quality events. BigQuery vuelve a exigir ese binding para cualquier run que intente mutar estado comercial.
+
+Los tests de auditoría restringen tanto el derivador `crev1_*` como la capability privada de snapshot a la política verificada de La Colonia. Scripts y workflows no pueden saltarse esa frontera.
+
+## 11. BigQuery — contrato físico cerrado
 
 El contrato ejecutable vive en `src/precios_supermercados/bigquery_contract.py` y su proyección en `bigquery_persistence.py`.
 
@@ -186,7 +229,7 @@ El cliente Google Cloud materializa primero staging efímero y luego ejecuta tod
 
 El adapter **no crea proyectos ni datasets**. Esa acción está fuera del dominio y marca la frontera cloud/humana de la primera carga durable.
 
-## 11. Google Sheets legado
+## 12. Google Sheets legado
 
 Google Sheets queda **retirado como backend productivo**.
 
@@ -196,37 +239,37 @@ Google Sheets queda **retirado como backend productivo**.
 - el job que porta credenciales permanece condicionado a `allowed == 'true'`, por lo que no puede ejecutar;
 - no se añade funcionalidad nueva ni se solicitan nuevas credenciales de Sheets.
 
-## 12. Product mapping
+## 13. Product mapping
 
 `product_mapping` conserva la relación `source product -> canonical product`. GTIN válido puede resolverla automáticamente; sin identidad fuerte se conserva estado `pending`/singleton. Su valor cross-source crecerá con supermercado #2, pero la tabla ya tiene consumidor y lifecycle claros.
 
-## 13. Normalization overrides
+## 14. Normalization overrides
 
 Git/versionado sigue siendo la fuente confiable de reglas durante el MVP. BigQuery materializa sólo excepciones explícitas y auditables; no se crea una fila por producto. `source_signature` evita reutilización silenciosa después de un cambio fuente.
 
-## 14. Runs y quality events
+## 15. Runs y quality events
 
 Todo run terminal se registra aunque no cambie precio/inventario. Runs rechazados/fallidos no contaminan productos, precios, inventario ni mapping comerciales. Hashes/fingerprints demuestran igualdad, no autoridad.
 
-## 15. Cloudflare / provenance
+## 16. Cloudflare / provenance
 
 La ruta edge existente conserva allowlists, OIDC, presupuesto/pacing, single-flight, replay/fencing, receipts y Observability. Su existencia no concede autoridad comercial ni autorización live.
 
 La evidencia live ya obtenida se reutiliza offline. Una observación nueva de La Colonia requiere autorización humana vigente.
 
-## 16. Automatización diaria
+## 17. Automatización diaria
 
 Sólo se habilita después de demostrar binding, completitud, normalización/validación, primera persistencia BigQuery durable recuperable, inventario suficiente y manejo de runs rechazados sin contaminación.
 
 Los fallos no borran el último estado confiable.
 
-## 17. Dash + Plotly
+## 18. Dash + Plotly
 
 Dash consumirá views de BigQuery; no redefinirá reglas de negocio. Las primeras views previstas son `vw_precios_actuales`, `vw_inventario_actual` y `vw_ofertas_actuales`, con derivaciones de precio anterior, cambio y ahorro real.
 
 Power BI queda legado; no se añade funcionalidad nueva a esa ruta.
 
-## 18. GitHub y CI
+## 19. GitHub y CI
 
 Todo cambio sigue:
 
@@ -242,17 +285,20 @@ audit main/PRs
 
 Los workflows mantienen mínimo privilegio, pins SHA completos y entrypoints live fail-closed.
 
-## 19. Orden actual
+## 20. Orden actual
 
 ```text
 CATÁLOGO LA COLONIA                    [DONE]
 NORMALIZACIÓN PRODUCTOS                [DONE]
 CURRENT/HISTORY + REPLAY OFFLINE       [DONE]
+COMMERCIAL AUTHORITY CONTRACT          [DONE OFFLINE]
+AUTHORITY → BIGQUERY FAKE              [DONE OFFLINE]
 BIGQUERY CONTRACT                      [DONE OFFLINE]
 BIGQUERY ADAPTER / FAKE / BOOTSTRAP    [DONE OFFLINE]
 REPLAY / PARTIAL FAILURE / READ-BACK   [DONE OFFLINE]
 GOOGLE SHEETS PRODUCTIVE PATH          [RETIRED]
-FIRST DURABLE LOAD                     [NEXT CLOUD BOUNDARY]
+PRODUCTION AUTHORITY ATTESTATION       [HUMAN TRUST BOUNDARY]
+FIRST DURABLE LOAD                     [CLOUD/HUMAN BOUNDARY]
 INVENTORY FIRST-CLASS                  [PENDING]
 DAILY AUTOMATION                       [PENDING]
 DASH + PLOTLY                          [PENDING]
