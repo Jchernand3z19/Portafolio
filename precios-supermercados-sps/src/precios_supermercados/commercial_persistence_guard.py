@@ -4,14 +4,16 @@
 interna útil para probar la máquina comercial, pero acepta una
 ``CommercialRunDecision`` que por sí sola no demuestra autoridad productiva.
 
-Este módulo define la única entrada que código operativo nuevo puede usar antes
-de que exista un verificador productivo de autoridad: **sólo permite runs no
-autoritativos**. Esos runs pueden registrarse para observabilidad, pero nunca
-pueden mutar current/history.
+Este módulo conserva la entrada explícita para runs **no autoritativos**. Esos
+runs pueden registrarse para observabilidad, pero nunca pueden mutar
+``current/history``.
 
-No existe aquí una factory para ``catalog_accepted=True``. Esa capacidad debe
-nacer en un módulo futuro que verifique evidencia productiva real; no se añadirá
-un booleano o escape hatch para simularla.
+La ruta positiva ya no nace de un booleano libre: La Colonia debe pasar por
+``commercial_authority`` +
+``scrapers.la_colonia_commercial_authority.verify_la_colonia_commercial_authority``.
+Esa política exige una atestación Ed25519 independiente ligada a la readiness y
+provenance exactas del run. El preparador crudo sigue siendo una primitiva interna
+y no una API productiva.
 """
 
 from __future__ import annotations
