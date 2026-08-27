@@ -15,10 +15,17 @@ from __future__ import annotations
 
 import hashlib
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import (
+    Conflict,
+    InternalServerError,
+    NotFound,
+    ServiceUnavailable,
+    TooManyRequests,
+)
 from google.cloud import bigquery
 
 from .bigquery_adapter import BigQueryAdapterError, BigQueryReplayConflict
@@ -26,6 +33,7 @@ from .bigquery_contract import BIGQUERY_TABLE_BY_NAME, BigQueryTableSpec
 
 
 _DATASET_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,1023}$")
+_MAX_ATOMIC_JOB_ATTEMPTS = 4
 
 
 class GoogleCloudBigQueryClient:
@@ -153,23 +161,74 @@ class GoogleCloudBigQueryClient:
         )
 
     @staticmethod
+    def _row_difference_predicate(
+        spec: BigQueryTableSpec,
+        left: str,
+        right: str,
+    ) -> str:
+        compared = tuple(
+            column for column in spec.columns if column not in spec.logical_key
+        )
+        if not compared:
+            return "FALSE"
+        return " OR ".join(
+            f"{left}.`{column}` IS DISTINCT FROM {right}.`{column}`"
+            for column in compared
+        )
+
+    @classmethod
     def _immutable_guard_sql(
+        cls,
         *,
-        table_name: str,
+        spec: BigQueryTableSpec,
         target: str,
         staging_ref: str,
         join: str,
     ) -> str:
-        # SELECT es una sentencia admitida dentro de transacciones BigQuery.
-        # ERROR() fuerza el fallo sólo cuando existe colisión de logical key;
-        # sin exception handler BigQuery revierte automáticamente la transacción.
+        # Una logical key existente sólo es conflicto si el payload difiere. Un
+        # replay idéntico se deja pasar y el INSERT posterior omite esa fila.
+        difference = cls._row_difference_predicate(spec, "T", "S")
         return (
-            "SELECT IF(COUNT(*) = 0, TRUE, "
-            f"ERROR('immutable_conflict:{table_name}')) "
+            "SELECT IF(COUNTIF("
+            f"{difference}) = 0, TRUE, ERROR('immutable_conflict:{spec.name}')) "
             f"FROM `{target}` T JOIN `{staging_ref}` S ON {join};"
         )
 
-    def _existing_mutable_count(
+    @staticmethod
+    def _immutable_insert_sql(
+        *,
+        spec: BigQueryTableSpec,
+        target: str,
+        staging_ref: str,
+        join: str,
+    ) -> str:
+        columns = ", ".join(f"`{column}`" for column in spec.columns)
+        source_columns = ", ".join(f"S.`{column}`" for column in spec.columns)
+        return (
+            f"INSERT INTO `{target}` ({columns}) "
+            f"SELECT {source_columns} FROM `{staging_ref}` S "
+            f"WHERE NOT EXISTS (SELECT 1 FROM `{target}` T WHERE {join});"
+        )
+
+    @staticmethod
+    def _atomic_job_id(dataset_id: str, run_id: str, attempt: int = 0) -> str:
+        raw = f"{dataset_id}\x00{run_id}".encode("utf-8")
+        digest = hashlib.sha256(raw).hexdigest()
+        return f"precios_sps_atomic_{digest}_{attempt}"
+
+    @staticmethod
+    def _retryable_atomic_error(exc: Exception) -> bool:
+        if isinstance(
+            exc,
+            (InternalServerError, ServiceUnavailable, TooManyRequests),
+        ):
+            return True
+        text = str(exc).lower()
+        return "transaction" in text and any(
+            token in text for token in ("concurrent", "conflict", "cancel", "aborted")
+        )
+
+    def _existing_key_count(
         self,
         dataset_id: str,
         spec: BigQueryTableSpec,
@@ -180,6 +239,50 @@ class GoogleCloudBigQueryClient:
         sql = f"SELECT COUNT(*) AS n FROM `{target}` T JOIN `{staging_ref}` S ON {join}"
         row = next(iter(self._client.query(sql).result()))
         return int(row["n"])
+
+    def _run_atomic_script(
+        self,
+        *,
+        dataset_id: str,
+        run_id: str,
+        script: str,
+        location: str | None,
+    ) -> bool:
+        """Ejecuta exactamente una transacción por slot de job idempotente.
+
+        ``jobs.insert`` con un job ID conocido evita que dos callers concurrentes
+        ejecuten dos copias de la misma transacción. Si un slot previo terminó con
+        un error transitorio, ambos callers avanzan al mismo siguiente slot
+        determinista; errores lógicos no se reintentan.
+
+        Devuelve ``True`` cuando este caller reutilizó un job ya existente.
+        """
+
+        for attempt in range(_MAX_ATOMIC_JOB_ATTEMPTS):
+            job_id = self._atomic_job_id(dataset_id, run_id, attempt)
+            reused = False
+            try:
+                job = self._client.query(
+                    script,
+                    job_id=job_id,
+                    location=location,
+                )
+            except Conflict:
+                job = self._client.get_job(job_id, location=location)
+                reused = True
+
+            try:
+                job.result()
+                return reused
+            except Exception as exc:
+                text = str(exc)
+                if "immutable_conflict:" in text:
+                    raise BigQueryReplayConflict("immutable_row_conflict") from exc
+                if self._retryable_atomic_error(exc) and attempt + 1 < _MAX_ATOMIC_JOB_ATTEMPTS:
+                    continue
+                raise
+
+        raise BigQueryAdapterError("atomic_retry_exhausted")
 
     def apply_atomic(
         self,
@@ -195,17 +298,23 @@ class GoogleCloudBigQueryClient:
             raise BigQueryAdapterError("exactly_one_scrape_run_required")
         run_id = str(run_rows[0]["scrape_run_id"])
         digest = hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:16]
+        attempt_nonce = uuid.uuid4().hex[:16]
         staged: dict[str, str] = {}
         existing_mutable = 0
+        existing_immutable = 0
         immutable_count = 0
         mutable_count = 0
+        total_rows = sum(len(source_rows) for source_rows in rows.values())
 
         try:
+            dataset = self._client.get_dataset(self._dataset_ref(dataset_id))
+            location = getattr(dataset, "location", None)
+
             for table_name, source_rows in rows.items():
                 if not source_rows:
                     continue
                 spec = BIGQUERY_TABLE_BY_NAME[table_name]
-                staging_name = f"_stg_{table_name}_{digest}"
+                staging_name = f"_stg_{table_name}_{digest}_{attempt_nonce}"
                 staging_ref = f"{self._dataset_ref(dataset_id)}.{staging_name}"
                 self._client.delete_table(staging_ref, not_found_ok=True)
                 staging = bigquery.Table(staging_ref, schema=self._schema(spec))
@@ -221,13 +330,13 @@ class GoogleCloudBigQueryClient:
                     job_config=job_config,
                 ).result()
                 staged[table_name] = staging_ref
+                existing = self._existing_key_count(dataset_id, spec, staging_ref)
                 if table_name in immutable_tables:
                     immutable_count += len(source_rows)
+                    existing_immutable += existing
                 else:
                     mutable_count += len(source_rows)
-                    existing_mutable += self._existing_mutable_count(
-                        dataset_id, spec, staging_ref
-                    )
+                    existing_mutable += existing
 
             statements = ["BEGIN TRANSACTION;"]
             for table_name, staging_ref in staged.items():
@@ -239,15 +348,19 @@ class GoogleCloudBigQueryClient:
                 if table_name in immutable_tables:
                     statements.append(
                         self._immutable_guard_sql(
-                            table_name=table_name,
+                            spec=spec,
                             target=target,
                             staging_ref=staging_ref,
                             join=join,
                         )
                     )
                     statements.append(
-                        f"INSERT INTO `{target}` ({columns}) "
-                        f"SELECT {source_columns} FROM `{staging_ref}` S;"
+                        self._immutable_insert_sql(
+                            spec=spec,
+                            target=target,
+                            staging_ref=staging_ref,
+                            join=join,
+                        )
                     )
                     continue
 
@@ -263,7 +376,12 @@ class GoogleCloudBigQueryClient:
                     f"WHEN NOT MATCHED THEN INSERT ({columns}) VALUES ({source_columns});"
                 )
             statements.append("COMMIT TRANSACTION;")
-            self._client.query("\n".join(statements)).result()
+            reused_job = self._run_atomic_script(
+                dataset_id=dataset_id,
+                run_id=run_id,
+                script="\n".join(statements),
+                location=location,
+            )
         except BigQueryReplayConflict:
             raise
         except Exception as exc:
@@ -279,8 +397,12 @@ class GoogleCloudBigQueryClient:
                     # Expiran automáticamente; nunca ocultamos el resultado target.
                     pass
 
+        if reused_job:
+            return 0, 0, total_rows
+
         created_mutable = mutable_count - existing_mutable
-        return immutable_count + created_mutable, existing_mutable, 0
+        created_immutable = immutable_count - existing_immutable
+        return created_immutable + created_mutable, existing_mutable, existing_immutable
 
     def read_rows(
         self,
