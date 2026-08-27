@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
@@ -144,6 +144,28 @@ def _closed(table_name: str, **values: Any) -> dict[str, Any]:
     return {column: values[column] for column in spec.columns}
 
 
+def _optional_count(value: int | None, field_name: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise BigQueryPersistenceError(f"{field_name}_invalid")
+    return value
+
+
+def _optional_coverage(
+    value: Decimal | int | float | str | None,
+) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        result = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise BigQueryPersistenceError("catalog_product_coverage_invalid") from exc
+    if not result.is_finite() or result < 0 or result > 1:
+        raise BigQueryPersistenceError("catalog_product_coverage_invalid")
+    return result
+
+
 def _product_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return _closed(
         PRODUCTOS.name,
@@ -246,12 +268,19 @@ def build_bigquery_write_plan(
     prepared: PreparedCommercialPersistence,
     *,
     normalization_overrides: Sequence[Mapping[str, Any]] = (),
+    catalog_products_reported: int | None = None,
+    unique_products_extracted: int | None = None,
+    skus_extracted: int | None = None,
+    skus_with_price: int | None = None,
+    catalog_product_coverage: Decimal | int | float | str | None = None,
 ) -> BigQueryWritePlan:
     """Convierte un run ya validado/aplicado en memoria a una escritura durable.
 
     Un run rechazado conserva ledger y quality events, pero no contamina productos,
     precios, inventario ni mapping. Los overrides sólo se materializan cuando el
     caller entrega filas explícitas con ``source_signature``; nunca se sintetizan.
+    Las métricas de catálogo son opcionales porque no todos los runners las conocen;
+    cuando se entregan quedan ligadas al fingerprint inmutable del run.
     """
 
     if not isinstance(prepared, PreparedCommercialPersistence):
@@ -261,6 +290,24 @@ def build_bigquery_write_plan(
     accepted = prepared.apply_result.commercial_update_allowed
     if not accepted and current_rows:
         raise BigQueryPersistenceError("rejected_run_contains_current_rows")
+
+    catalog_products_reported = _optional_count(
+        catalog_products_reported,
+        "catalog_products_reported",
+    )
+    unique_products_extracted = _optional_count(
+        unique_products_extracted,
+        "unique_products_extracted",
+    )
+    skus_extracted = _optional_count(skus_extracted, "skus_extracted")
+    skus_with_price = _optional_count(skus_with_price, "skus_with_price")
+    coverage = _optional_coverage(catalog_product_coverage)
+    if (
+        skus_extracted is not None
+        and skus_with_price is not None
+        and skus_with_price > skus_extracted
+    ):
+        raise BigQueryPersistenceError("skus_with_price_exceeds_skus_extracted")
 
     supermarkets = tuple(
         _closed(
@@ -350,11 +397,11 @@ def build_bigquery_write_plan(
         "current_changed": record.current_changed,
         "current_confirmed": record.current_confirmed,
         "offers_ignored": record.offers_ignored,
-        "catalog_products_reported": None,
-        "unique_products_extracted": None,
-        "skus_extracted": None,
-        "skus_with_price": None,
-        "catalog_product_coverage": None,
+        "catalog_products_reported": catalog_products_reported,
+        "unique_products_extracted": unique_products_extracted,
+        "skus_extracted": skus_extracted,
+        "skus_with_price": skus_with_price,
+        "catalog_product_coverage": coverage,
         "extractor_version": current_rows[0]["extractor_version"] if current_rows else None,
         "schema_version": current_rows[0]["schema_version"] if current_rows else None,
     }
