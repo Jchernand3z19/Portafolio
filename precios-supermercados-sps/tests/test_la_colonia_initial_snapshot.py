@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import precios_supermercados.la_colonia_initial_snapshot as snapshot
-from precios_supermercados.bigquery_adapter import BigQueryAdapter, FakeBigQueryClient
+from precios_supermercados.bigquery_adapter import FakeBigQueryClient
 from precios_supermercados.bigquery_contract import (
     INVENTARIO_HISTORICO,
     PRECIOS_HISTORICOS,
@@ -109,20 +109,32 @@ def test_full_snapshot_shape_converts_to_validated_offers(
     assert all(item.offer.scrape_run_id == LA_COLONIA_INITIAL_SNAPSHOT_RUN_ID for item in offers)
 
 
-def test_full_snapshot_builds_and_applies_existing_bigquery_plan(
+def test_full_snapshot_entrypoint_applies_and_reconciles_bigquery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = _write_snapshot(tmp_path, monkeypatch)
-    plan = snapshot.build_la_colonia_initial_snapshot_bigquery_plan(path)
+    client = FakeBigQueryClient()
 
-    assert plan.scrape_run_id == LA_COLONIA_INITIAL_SNAPSHOT_RUN_ID
-    assert plan.row_counts[PRODUCTOS.name] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
-    assert plan.row_counts[PRECIOS_HISTORICOS.name] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
-    assert plan.row_counts[INVENTARIO_HISTORICO.name] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
-    assert plan.row_counts[PRODUCT_MAPPING.name] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
-    assert plan.row_counts[SCRAPE_RUNS.name] == 1
-    run = plan.rows[SCRAPE_RUNS.name][0]
+    result = snapshot.apply_la_colonia_initial_snapshot_bigquery(
+        path,
+        client=client,
+        dataset_id="precios_sps",
+    )
+
+    assert result.exact_run_replay is False
+    assert client.count("precios_sps", PRODUCTOS.name) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
+    assert client.count("precios_sps", PRECIOS_HISTORICOS.name) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
+    assert client.count("precios_sps", INVENTARIO_HISTORICO.name) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
+    assert client.count("precios_sps", PRODUCT_MAPPING.name) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
+    assert client.count("precios_sps", SCRAPE_RUNS.name) == 1
+
+    run = client.get_row(
+        "precios_sps",
+        SCRAPE_RUNS.name,
+        (LA_COLONIA_INITIAL_SNAPSHOT_RUN_ID,),
+    )
+    assert run is not None
     assert run["catalog_accepted"] is True
     assert run["commercial_update_allowed"] is True
     assert run["catalog_products_reported"] == LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS
@@ -132,20 +144,12 @@ def test_full_snapshot_builds_and_applies_existing_bigquery_plan(
     assert run["catalog_product_coverage"] == Decimal("1")
     assert any(
         row["location_id"] == "la_colonia_sps" and row["extraction_enabled"] is False
-        for row in plan.rows["locations"]
+        for row in client.read_rows("precios_sps", "locations")
     )
 
-    client = FakeBigQueryClient()
-    adapter = BigQueryAdapter(client, dataset_id="precios_sps")
-    adapter.bootstrap()
-    result = adapter.apply(plan)
-
-    assert result.exact_run_replay is False
-    assert client.count("precios_sps", PRODUCTOS.name) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
-    assert client.count("precios_sps", PRECIOS_HISTORICOS.name) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
-    assert client.count("precios_sps", INVENTARIO_HISTORICO.name) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
-    assert client.count("precios_sps", PRODUCT_MAPPING.name) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
-    assert client.count("precios_sps", SCRAPE_RUNS.name) == 1
-
-    replay = adapter.apply(plan)
+    replay = snapshot.apply_la_colonia_initial_snapshot_bigquery(
+        path,
+        client=client,
+        dataset_id="precios_sps",
+    )
     assert replay.exact_run_replay is True
