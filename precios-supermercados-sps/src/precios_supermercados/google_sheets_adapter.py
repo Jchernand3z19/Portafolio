@@ -1,14 +1,12 @@
-"""Adapter transaccional entre Google Sheets y el store tabular común.
+"""Adapter preservado del backend Google Sheets retirado.
 
 La hoja se trata como un snapshot materializado, no como una colección de
-`append`s. Antes de escribir se reconstruyen todas las pestañas físicas activas,
-se validan encabezados/tipos/llaves, se aplica el batch localmente y sólo entonces
-se genera un único ``spreadsheets.batchUpdate`` atómico.
+``append``. Este código permanece para compatibilidad/evidencia y está ligado de
+forma explícita a ``LEGACY_SHEETS_MANAGED_TABLE_SPECS``; nunca consulta el
+contrato físico activo BigQuery.
 
-Las pestañas ajenas o lógicamente diferidas se ignoran y preservan. Una pestaña
-activa con estructura inesperada provoca fallo cerrado para evitar pérdida
-silenciosa de datos. Este módulo no conoce supermercados concretos ni endpoints
-de scraping.
+El workflow que podía ejecutar este adapter está neutralizado. Este módulo no
+concede por sí solo autorización para nuevas escrituras Sheets.
 """
 
 from __future__ import annotations
@@ -24,7 +22,7 @@ from .google_sheets_plan import (
     build_atomic_workbook_plan,
     parse_spreadsheet_metadata,
 )
-from .storage_contract import ACTIVE_STORAGE_TABLE_SPECS
+from .storage_contract import LEGACY_SHEETS_MANAGED_TABLE_SPECS
 from .tabular_persistence import TABLE_SPECS, TableSpec
 from .tabular_store import (
     InMemoryTabularStore,
@@ -81,7 +79,7 @@ _INTEGER_COLUMNS = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class WorkbookSnapshot:
-    """Estado validado leído del Spreadsheet antes de una escritura."""
+    """Estado validado leído del Spreadsheet legado antes de una escritura."""
 
     metadata: SpreadsheetMetadata
     store: InMemoryTabularStore
@@ -94,7 +92,7 @@ class WorkbookSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class GoogleSheetsApplyResult:
-    """Resumen sanitizado de una materialización exitosa."""
+    """Resumen sanitizado de una materialización del backend retirado."""
 
     created: int
     updated: int
@@ -139,13 +137,13 @@ def _a1_range(spec: TableSpec) -> str:
 def managed_existing_ranges(
     metadata: SpreadsheetMetadata,
 ) -> tuple[tuple[str, str], ...]:
-    """Devuelve ``(table_name, A1 range)`` sólo para tabs físicos activos."""
+    """Devuelve rangos sólo de pestañas del backend Sheets legado."""
 
     if not isinstance(metadata, SpreadsheetMetadata):
         raise GoogleSheetsAdapterError("spreadsheet_metadata_invalid")
     return tuple(
         (table_name, _a1_range(spec))
-        for table_name, spec in ACTIVE_STORAGE_TABLE_SPECS.items()
+        for table_name, spec in LEGACY_SHEETS_MANAGED_TABLE_SPECS.items()
         if table_name in metadata.sheets
     )
 
@@ -193,7 +191,7 @@ def _parse_table_values(
     values: Any,
 ) -> tuple[Mapping[str, Any], ...]:
     try:
-        spec = ACTIVE_STORAGE_TABLE_SPECS[table_name]
+        spec = LEGACY_SHEETS_MANAGED_TABLE_SPECS[table_name]
     except KeyError as exc:
         raise GoogleSheetsAdapterError("managed_table_unknown") from exc
 
@@ -239,7 +237,7 @@ def parse_managed_values_payload(
     *,
     expected_spreadsheet_id: str | None = None,
 ) -> Mapping[str, tuple[Mapping[str, Any], ...]]:
-    """Valida la respuesta de ``values:batchGet`` de tabs físicos activos."""
+    """Valida la respuesta de ``values:batchGet`` de tabs legados."""
 
     if isinstance(table_names, (str, bytes)) or not isinstance(table_names, Sequence):
         raise GoogleSheetsAdapterError("managed_table_names_invalid")
@@ -260,7 +258,7 @@ def parse_managed_values_payload(
 
     result: dict[str, tuple[Mapping[str, Any], ...]] = {}
     for table_name, raw_range in zip(table_names, raw_ranges, strict=True):
-        if table_name not in ACTIVE_STORAGE_TABLE_SPECS:
+        if table_name not in LEGACY_SHEETS_MANAGED_TABLE_SPECS:
             raise GoogleSheetsAdapterError("managed_table_unknown")
         if table_name in result:
             raise GoogleSheetsAdapterError("managed_table_duplicate")
@@ -279,16 +277,11 @@ def parse_managed_values_payload(
 def hydrate_store_from_managed_rows(
     rows_by_table: Mapping[str, tuple[Mapping[str, Any], ...]],
 ) -> InMemoryTabularStore:
-    """Reconstruye el store desde las tablas físicas activas.
-
-    Las tablas lógicas diferidas permanecen vacías en memoria. No se interpretan
-    como datos ausentes o borrados: simplemente no pertenecen al backend físico
-    actual.
-    """
+    """Reconstruye el store desde las tablas del backend Sheets legado."""
 
     if not isinstance(rows_by_table, Mapping):
         raise GoogleSheetsAdapterError("managed_rows_invalid")
-    unexpected = set(rows_by_table).difference(ACTIVE_STORAGE_TABLE_SPECS)
+    unexpected = set(rows_by_table).difference(LEGACY_SHEETS_MANAGED_TABLE_SPECS)
     if unexpected:
         raise GoogleSheetsAdapterError("managed_table_unknown")
 
@@ -311,13 +304,13 @@ def snapshot_row_counts(store: InMemoryTabularStore) -> Mapping[str, int]:
     return MappingProxyType(
         {
             table_name: store.count(table_name)
-            for table_name in ACTIVE_STORAGE_TABLE_SPECS
+            for table_name in LEGACY_SHEETS_MANAGED_TABLE_SPECS
         }
     )
 
 
 class GoogleSheetsWorkbookAdapter:
-    """Lee, valida, aplica y materializa el snapshot físico activo."""
+    """Lee/valida el snapshot del backend Sheets preservado."""
 
     def __init__(self, transport: GoogleSheetsTransportLike) -> None:
         required = (
@@ -371,7 +364,7 @@ class GoogleSheetsWorkbookAdapter:
     def apply(self, batch: TabularBatch) -> GoogleSheetsApplyResult:
         if not isinstance(batch, TabularBatch):
             raise GoogleSheetsAdapterError("tabular_batch_invalid")
-        if set(batch.rows).difference(ACTIVE_STORAGE_TABLE_SPECS):
+        if set(batch.rows).difference(LEGACY_SHEETS_MANAGED_TABLE_SPECS):
             raise GoogleSheetsAdapterError("tabular_batch_contains_deferred_table")
 
         snapshot = self.load_snapshot()
@@ -399,5 +392,5 @@ class GoogleSheetsWorkbookAdapter:
             initial_row_counts=snapshot.row_counts,
             final_row_counts=final_counts,
             payload_bytes=plan.payload_bytes,
-            managed_sheet_count=len(ACTIVE_STORAGE_TABLE_SPECS),
+            managed_sheet_count=len(LEGACY_SHEETS_MANAGED_TABLE_SPECS),
         )
