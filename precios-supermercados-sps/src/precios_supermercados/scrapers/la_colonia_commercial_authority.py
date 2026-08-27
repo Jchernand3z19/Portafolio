@@ -17,11 +17,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import NoReturn, Sequence
+from typing import Mapping, NoReturn, Sequence
 
+from precios_supermercados.bigquery_persistence import (
+    BigQueryWritePlan,
+    build_bigquery_write_plan,
+)
 from precios_supermercados.commercial_authority import (
     CryptographicallyVerifiedCommercialAuthority,
     SignedCommercialAuthorityAttestation,
+)
+from precios_supermercados.commercial_authority_audit import (
+    CommercialAuthorityAuditMetadata,
 )
 from precios_supermercados.commercial_authority_trust import (
     load_productive_commercial_authority_verifier,
@@ -118,6 +125,15 @@ class VerifiedLaColoniaCommercialAuthority:
         )
 
 
+def _require_verified_authority(
+    authority: VerifiedLaColoniaCommercialAuthority,
+) -> None:
+    if not isinstance(authority, VerifiedLaColoniaCommercialAuthority):
+        _fail("verified_commercial_authority_required")
+    if authority._policy_seal is not _POLICY_VERIFICATION_SEAL:
+        _fail("verified_commercial_authority_unsealed")
+
+
 def verify_la_colonia_commercial_authority(
     *,
     readiness: VerifiedCatalogAcceptanceReadiness,
@@ -194,10 +210,7 @@ def prepare_la_colonia_authoritative_run_persistence(
     cruza sólo después de validar esta autoridad tipada y sellada.
     """
 
-    if not isinstance(authority, VerifiedLaColoniaCommercialAuthority):
-        _fail("verified_commercial_authority_required")
-    if authority._policy_seal is not _POLICY_VERIFICATION_SEAL:
-        _fail("verified_commercial_authority_unsealed")
+    _require_verified_authority(authority)
     decision = authority.commercial_decision
     run_evidence_id = derive_bound_run_evidence_id(
         authority_evidence_id=authority.authority_evidence_id,
@@ -224,4 +237,47 @@ def prepare_la_colonia_authoritative_run_persistence(
         quality_events=quality_events,
         run_evidence_id=run_evidence_id,
         catalog=catalog,
+    )
+
+
+def build_la_colonia_authoritative_bigquery_write_plan(
+    state: InMemoryCommercialState,
+    authority: VerifiedLaColoniaCommercialAuthority,
+    offers: Sequence[ValidatedOffer],
+    *,
+    started_at_utc: datetime,
+    finished_at_utc: datetime,
+    products_observed: int,
+    offers_observed: int,
+    quality_events: Sequence[QualityEventRecord] = (),
+    normalization_overrides: Sequence[Mapping[str, object]] = (),
+    catalog: LocationCatalog = DEFAULT_LOCATION_CATALOG,
+) -> BigQueryWritePlan:
+    """Ruta cerrada autoridad → binding durable → plan BigQuery auditable.
+
+    El caller no puede entregar un ``PreparedCommercialPersistence`` alternativo:
+    el mismo método deriva ``crev1_*`` del payload recibido y materializa la
+    atestación pública que autorizó exactamente ese run. Esto evita reutilizar una
+    autoridad válida para un payload diferente con el mismo ``scrape_run_id``.
+    """
+
+    _require_verified_authority(authority)
+    prepared = prepare_la_colonia_authoritative_run_persistence(
+        state,
+        authority,
+        offers,
+        started_at_utc=started_at_utc,
+        finished_at_utc=finished_at_utc,
+        products_observed=products_observed,
+        offers_observed=offers_observed,
+        quality_events=quality_events,
+        catalog=catalog,
+    )
+    audit = CommercialAuthorityAuditMetadata.from_verified(
+        authority.cryptographic_authority
+    )
+    return build_bigquery_write_plan(
+        prepared,
+        authority_audit=audit,
+        normalization_overrides=normalization_overrides,
     )
