@@ -25,7 +25,7 @@ from precios_supermercados.commercial_authority import (
 )
 from precios_supermercados.commercial_persistence_batch import (
     PreparedCommercialPersistence,
-    prepare_new_run_persistence,
+    _prepare_verified_archived_run_persistence,
 )
 from precios_supermercados.commercial_run_evidence import derive_bound_run_evidence_id
 from precios_supermercados.commercial_state import (
@@ -179,7 +179,8 @@ def prepare_la_colonia_authoritative_run_persistence(
 
     El ``run_evidence_id`` se deriva internamente de la atestación productiva y
     del payload completo. Así un mismo authority evidence no puede reutilizarse
-    con otras ofertas, métricas o eventos.
+    con otras ofertas, métricas o eventos. La capability privada de snapshot se
+    cruza sólo después de validar esta autoridad tipada.
     """
 
     if not isinstance(authority, VerifiedLaColoniaCommercialAuthority):
@@ -197,7 +198,7 @@ def prepare_la_colonia_authoritative_run_persistence(
         offers_observed=offers_observed,
         quality_events=quality_events,
     )
-    return prepare_new_run_persistence(
+    return _prepare_verified_archived_run_persistence(
         state,
         decision,
         offers,
