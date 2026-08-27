@@ -147,7 +147,41 @@ catalog_accepted = false
 
 Eso es válido y preferible a fabricar autoridad faltante.
 
-La decisión productiva que permita mutar current/history debe ser tipada, verificable y derivada de provenance/completitud suficientes; nunca un booleano libre pasado al backend.
+La decisión productiva que permita mutar current/history es una frontera distinta de la provenance física. El contrato implementado usa dos capas:
+
+```text
+CommercialAuthorityClaims + Ed25519
+        ↓ verificación criptográfica
+CryptographicallyVerifiedCommercialAuthority
+        production_authority = false
+        catalog_accepted = false
+        ↓ política específica de fuente
+VerifiedLaColoniaCommercialAuthority
+        production_authority = true
+        catalog_accepted = true
+```
+
+La atestación de autoridad comercial queda ligada a:
+
+- `supermarket_id` y `location_id` exactos;
+- `scrape_run_id` exacto;
+- `source_authorization_id` del run físico;
+- digest del discovery estructural;
+- digest del plan autenticado;
+- digest del manifest de provenance;
+- `run_status` comercial final;
+- instante de decisión posterior a la evidencia que pretende aceptar;
+- `signing_key_id` de un keyring comercial confiable.
+
+La firma válida no es suficiente: la política de La Colonia exige además `technical_catalog_complete=true`, readiness apta para recibir autoridad, provenance del mismo manifest y todos los bindings exactos. Cualquier mismatch falla cerrado.
+
+Después de esa promoción, `derive_bound_run_evidence_id` genera un `crev1_*` sobre la autoridad y el payload durable completo. El caller operativo no aporta un `catalog_accepted=true` libre ni un `authority_evidence_id` arbitrario.
+
+La clave de autoridad comercial es independiente de la clave del receipt del collector. La primera decide **si un run ya demostrado puede convertirse en baseline/estado comercial**; la segunda demuestra **qué request/response físico ocurrió**. Reutilizar la misma semántica de clave mezclaría trust boundaries diferentes.
+
+Para snapshots ya descargados, `extraction_enabled=false` sigue impidiendo tráfico futuro. Una capability privada permite serializar evidencia histórica únicamente después de `VerifiedLaColoniaCommercialAuthority`; nunca modifica el flag persistido ni habilita el collector.
+
+El estado operativo de una atestación real y su provisionamiento vive sólo en [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
 ## 12. Estado
 
