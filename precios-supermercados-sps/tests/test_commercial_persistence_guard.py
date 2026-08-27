@@ -188,13 +188,7 @@ def test_initial_snapshot_rejects_partial_offer_set_before_persistence() -> None
 
 
 def test_initial_snapshot_wrapper_fixes_all_authoritative_metadata() -> None:
-    class ApprovedSizedOffers:
-        def __len__(self) -> int:
-            return LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
-
-        def __getitem__(self, index):
-            raise IndexError(index)
-
+    approved_sized_offers = (None,) * LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
     sentinel = object()
     with patch(
         "precios_supermercados.commercial_persistence_guard.prepare_new_run_persistence",
@@ -202,7 +196,7 @@ def test_initial_snapshot_wrapper_fixes_all_authoritative_metadata() -> None:
     ) as mocked:
         result = prepare_la_colonia_initial_snapshot_persistence(
             InMemoryCommercialState(),
-            ApprovedSizedOffers(),  # type: ignore[arg-type]
+            approved_sized_offers,  # type: ignore[arg-type]
         )
 
     assert result is sentinel
