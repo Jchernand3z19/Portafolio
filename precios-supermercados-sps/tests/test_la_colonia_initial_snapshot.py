@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,11 @@ from precios_supermercados.enums import LocationStatus
 def _synthetic_snapshot() -> dict[str, object]:
     rows = []
     for index in range(1, LA_COLONIA_INITIAL_SNAPSHOT_OFFERS + 1):
-        product_id = str(index if index <= LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS else index - LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS)
+        product_id = str(
+            index
+            if index <= LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS
+            else index - LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS
+        )
         rows.append(
             {
                 "availability": "in_stock",
@@ -117,8 +122,14 @@ def test_full_snapshot_builds_and_applies_existing_bigquery_plan(
     assert plan.row_counts[INVENTARIO_HISTORICO.name] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
     assert plan.row_counts[PRODUCT_MAPPING.name] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
     assert plan.row_counts[SCRAPE_RUNS.name] == 1
-    assert plan.rows[SCRAPE_RUNS.name][0]["catalog_accepted"] is True
-    assert plan.rows[SCRAPE_RUNS.name][0]["commercial_update_allowed"] is True
+    run = plan.rows[SCRAPE_RUNS.name][0]
+    assert run["catalog_accepted"] is True
+    assert run["commercial_update_allowed"] is True
+    assert run["catalog_products_reported"] == LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS
+    assert run["unique_products_extracted"] == LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS
+    assert run["skus_extracted"] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
+    assert run["skus_with_price"] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
+    assert run["catalog_product_coverage"] == Decimal("1")
     assert any(
         row["location_id"] == "la_colonia_sps" and row["extraction_enabled"] is False
         for row in plan.rows["locations"]
