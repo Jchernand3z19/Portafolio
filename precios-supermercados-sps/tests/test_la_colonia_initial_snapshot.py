@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from decimal import Decimal
 from pathlib import Path
 
@@ -153,3 +154,38 @@ def test_full_snapshot_entrypoint_applies_and_reconciles_bigquery(
         dataset_id="precios_sps",
     )
     assert replay.exact_run_replay is True
+
+
+def test_full_snapshot_entrypoint_applies_rehydrates_and_replays_on_real_sqlite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = _write_snapshot(tmp_path, monkeypatch)
+    connection = sqlite3.connect(":memory:")
+
+    result = snapshot.apply_la_colonia_initial_snapshot_turso(
+        path,
+        connection=connection,
+    )
+
+    assert result.exact_run_replay is False
+    for table in ("source_products", "offers_current", "offer_history"):
+        assert connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
+    assert connection.execute('SELECT COUNT(*) FROM "scrape_runs"').fetchone()[0] == 1
+    assert connection.execute(
+        "SELECT COUNT(*) FROM offers_current WHERE location_id = ?",
+        ("la_colonia_sps",),
+    ).fetchone()[0] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
+    assert connection.execute(
+        "SELECT COUNT(*) FROM offers_current WHERE current_price_minor = 1000"
+    ).fetchone()[0] == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS
+
+    before_history = connection.execute('SELECT COUNT(*) FROM "offer_history"').fetchone()[0]
+    replay = snapshot.apply_la_colonia_initial_snapshot_turso(
+        path,
+        connection=connection,
+    )
+    assert replay.exact_run_replay is True
+    assert connection.execute('SELECT COUNT(*) FROM "offer_history"').fetchone()[0] == before_history
+    assert connection.execute('SELECT COUNT(*) FROM "scrape_runs"').fetchone()[0] == 1
+    connection.close()
