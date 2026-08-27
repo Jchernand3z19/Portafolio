@@ -15,6 +15,11 @@ estado en memoria. Un replay ya conocido se rechaza de forma explícita en esta
 capa: su reconciliación contra el registro durable requiere el fingerprint
 persistido y se implementa por separado, evitando convertir un retry ambiguo en
 una segunda escritura.
+
+``extraction_enabled`` controla si se puede iniciar tráfico futuro contra la
+fuente. No invalida una observación ya obtenida y comercialmente autorizada. Por
+eso esta capa permite persistir evidencia histórica con extracción deshabilitada
+si todos los demás invariantes de ubicación siguen demostrados.
 """
 
 from __future__ import annotations
@@ -30,8 +35,13 @@ from .commercial_state import (
     CommercialStateError,
     InMemoryCommercialState,
 )
-from .enums import RunStatus
-from .locations import DEFAULT_LOCATION_CATALOG, LocationCatalog, LocationConfigError
+from .enums import LocationStatus, RunStatus
+from .locations import (
+    DEFAULT_LOCATION_CATALOG,
+    LocationCatalog,
+    LocationConfigError,
+    LocationSelectionMode,
+)
 from .models import ValidatedOffer
 from .tabular_persistence import (
     CFG_LOCATIONS,
@@ -122,6 +132,49 @@ def _validate_quality_events(
             raise CommercialPersistencePreparationError("quality_event_location_mismatch")
 
 
+def _validate_archived_offer_location(
+    offer,
+    catalog: LocationCatalog,
+) -> None:
+    """Completa el preflight cuando el único bloqueo live es extracción apagada."""
+
+    try:
+        location = catalog.location(offer.location_id)
+        supermarket = catalog.supermarket(offer.supermarket_id)
+    except LocationConfigError as exc:
+        raise TabularPersistenceError("location_unknown") from exc
+    if location.supermarket_id != offer.supermarket_id:
+        raise TabularPersistenceError("location_id pertenece a otro supermarket_id")
+    if offer.location_status is LocationStatus.UNKNOWN:
+        raise TabularPersistenceError("location_status_unknown")
+    if (
+        supermarket.location_selection_mode
+        is LocationSelectionMode.SOURCE_SELECTION_REQUIRED
+        and offer.location_status is not LocationStatus.CONFIRMED
+    ):
+        raise TabularPersistenceError(
+            "multi_location_offer_requires_confirmed_location"
+        )
+
+
+def _validate_offer_location_for_commercial_persistence(
+    offer,
+    catalog: LocationCatalog,
+) -> None:
+    """Valida ubicación durable sin convertir persistencia en permiso de tráfico."""
+
+    try:
+        validate_offer_location_for_persistence(offer, catalog)
+        return
+    except TabularPersistenceError as exc:
+        if str(exc) != "extraction_disabled":
+            raise
+    # ``require_extraction_ready`` sólo emite extraction_disabled después de
+    # validar supermercado activo, disponibilidad, scope, granularidad y binding.
+    # Falta completar los checks que el serializer original ejecuta después.
+    _validate_archived_offer_location(offer, catalog)
+
+
 def _preflight_offers(
     offers: tuple[ValidatedOffer, ...],
     *,
@@ -142,7 +195,7 @@ def _preflight_offers(
             raise CommercialPersistencePreparationError("offer_location_mismatch")
         if decision.commercial_update_allowed:
             try:
-                validate_offer_location_for_persistence(offer, catalog)
+                _validate_offer_location_for_commercial_persistence(offer, catalog)
             except TabularPersistenceError as exc:
                 raise CommercialPersistencePreparationError(
                     "offer_location_not_persistable"
