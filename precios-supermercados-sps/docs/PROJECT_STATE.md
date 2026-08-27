@@ -16,7 +16,10 @@ technical_binding_confirmed = true
 full_catalog_validation_passed = true
 full_crawl = true
 products_normalized = 9439 / 9439
-presentation_pending = 0
+presentation_normalized = 8436
+presentation_pending = 1003
+gtin_mapping_ready = 8965
+product_mapping_pending = 474
 history_change_integration = verified_offline
 tabular_rehydrate_restore_cycle = verified_offline
 persistent_backend_selected = bigquery
@@ -28,6 +31,8 @@ bigquery_first_load = simulated_offline
 bigquery_replay = verified_offline
 bigquery_partial_failure = verified_offline
 bigquery_read_back = verified_offline
+initial_snapshot_loader = verified_offline
+initial_snapshot_bigquery_plan = verified_offline
 google_sheets_selected = false
 google_sheets_productive_path = retired_fail_closed
 google_sheets_writes = false
@@ -74,6 +79,7 @@ run_id = 32922877781
 artifact_id = 9590684834
 artifact_name = la-colonia-sps-data-32922877781
 artifact_digest = sha256:0427e88be27df89fd9fcb50ed600ef5c6aef64177bfba92b4af3d2e25756a892
+full_catalog_json_sha256 = 2780eeffa5ef62f2d1c8c2c8365e88da1ca0006622d2f7b1c3529f834c9b5e50
 source_commit = 589b694fdc75fd97d47fcc5259062fb026cf7ee4
 result = success
 catalog_complete = true
@@ -94,11 +100,15 @@ La diferencia 9,439 SKU vs 9,437 `productId` es válida: 9,435 productos tienen 
 
 El **2026-08-27T04:14:01Z** el usuario aprobó continuar con una solución simple y usar este artifact conocido como snapshot inicial. Esa aprobación está versionada en `commercial_persistence_guard.py` y queda ligada al run, artifact ID, digest, commit, ubicación y conteos conocidos.
 
+El loader offline valida además el SHA-256 exacto de `full-catalog.json` antes de interpretar filas. No descarga nada ni acepta otro snapshot por coincidencia de conteos.
+
 Esto significa:
 
 ```text
 technical_catalog_complete = true
 initial_snapshot_approved = true
+initial_snapshot_loader = verified_offline
+initial_snapshot_bigquery_plan = verified_offline
 first_durable_bigquery_load = false
 extraction_enabled = false
 ```
@@ -116,17 +126,22 @@ El PR #323 se cerró sin merge porque introducía una capa criptográfica de aut
 - una decisión/configuración versionada se prefiere a un subsistema cuando resuelve el mismo problema;
 - para el snapshot inicial, una aprobación exacta del artifact conocido es suficiente.
 
-## Productos y normalización — cerrado para el snapshot actual
+## Productos y normalización — procesado para el snapshot actual
 
 ```text
 sku_input = 9439
 source_keys_unique = 9439
-presentation_normalized = 9439
-presentation_pending = 0
+normalized_offers = 9439
+presentation_normalized = 8436
+presentation_pending = 1003
+gtin_mapping_ready = 8965
+product_mapping_pending = 474
 source_values_preserved = true
 versioned_overrides = true
 normalization_before_state_hash = true
 ```
+
+Las 1,003 presentaciones pendientes no se inventan: permanecen con campos normalizados incompletos y `needs_review`. De igual forma, 474 SKU sin GTIN válido quedan con mapping canónico pendiente. Esto no impide conservar sus observaciones de precio y disponibilidad con identidad fuente estable.
 
 La fuente original permanece separada de valores normalizados. Overrides manuales se ligan a `source_product_id + source_signature`; si cambia la evidencia fuente el override anterior no se reutiliza silenciosamente.
 
@@ -141,7 +156,7 @@ El motor backend-neutral verifica:
 - rehidratación/restauración permite continuar en un proceso nuevo;
 - replay durable divergente falla cerrado.
 
-`extraction_enabled` ya no se interpreta como un permiso de persistencia. Durante la serialización de evidencia histórica puede ignorarse **únicamente ese switch**, mientras el catálogo persistido conserva `extraction_enabled=false` y todos los demás gates de ubicación permanecen vigentes.
+`extraction_enabled` ya no se interpreta como un permiso de persistencia. La evidencia histórica puede persistirse con ese switch en `false`; todos los demás gates de ubicación permanecen vigentes y el valor almacenado sigue siendo `false`.
 
 Estas pruebas no equivalen a persistencia cloud.
 
@@ -181,6 +196,21 @@ BigQueryAdapter
 
 El dominio no importa el SDK de Google.
 
+El snapshot inicial ya recorre offline la ruta completa:
+
+```text
+full-catalog.json exacto
+-> 9439 RawProduct
+-> 9439 ValidatedOffer
+-> decisión inicial versionada
+-> current/history
+-> BigQueryWritePlan
+-> FakeBigQueryClient
+-> replay exacto sin duplicar
+```
+
+El `scrape_runs` inicial conserva también los conteos conocidos (9,437 productos reportados/únicos, 9,439 SKU y 100% de cobertura) dentro del fingerprint inmutable del plan.
+
 ### Historia analítica
 
 BigQuery conserva una observación por **run comercial aceptado**, incluso cuando el precio no cambió. Así se distingue:
@@ -199,6 +229,9 @@ Offline quedó verificado:
 
 - bootstrap de dataset/tablas con fake;
 - primera carga simulada;
+- snapshot inicial completo convertido al plan físico existente;
+- 9,439 productos fuente/SKU, observaciones de precio, inventario y mappings en el plan inicial;
+- métricas conocidas del catálogo preservadas en `scrape_runs`;
 - upsert de productos;
 - append de precio/inventario;
 - `unknown` de inventario permanece `unknown`;
@@ -266,13 +299,14 @@ SOURCE                                  [DONE]
 SPS CONTEXT                             [DONE]
 FULL CATALOG                            [DONE]
 COMPLETENESS / TECHNICAL ACCEPTANCE     [DONE]
-PRODUCT NORMALIZATION                   [DONE]
+PRODUCT NORMALIZATION                   [DONE WITH REVIEW QUEUE]
 CURRENT / HISTORY SEMANTICS             [DONE OFFLINE]
 REHYDRATE / REPLAY                      [DONE OFFLINE]
 BIGQUERY CONTRACT                       [DONE OFFLINE]
 BIGQUERY ADAPTER + FAKE + BOOTSTRAP     [DONE OFFLINE]
 SIMULATED LOAD / REPLAY / ROLLBACK      [DONE OFFLINE]
 INITIAL SNAPSHOT APPROVAL               [DONE OFFLINE]
+INITIAL SNAPSHOT -> BIGQUERY PLAN       [DONE OFFLINE]
 GOOGLE SHEETS PRODUCTIVE PATH           [RETIRED]
 FIRST DURABLE BIGQUERY LOAD              [NEXT — CLOUD/HUMAN BOUNDARY]
 INVENTORY EVIDENCE / HISTORY            [PENDING]
