@@ -50,7 +50,7 @@ from precios_supermercados.locations import (
 from precios_supermercados.models import NormalizedOffer, ValidatedOffer
 from precios_supermercados.storage_contract import (
     ACTIVE_STORAGE_BACKEND,
-    ACTIVE_STORAGE_TABLE_NAMES,
+    LEGACY_BIGQUERY_TABLE_NAMES,
 )
 from precios_supermercados.tabular_records import QualityEventRecord
 
@@ -183,9 +183,9 @@ def bootstrapped():
     return client, adapter
 
 
-def test_bigquery_is_the_only_active_physical_contract():
-    assert ACTIVE_STORAGE_BACKEND == "bigquery"
-    assert ACTIVE_STORAGE_TABLE_NAMES == BIGQUERY_TABLE_NAMES
+def test_bigquery_contract_remains_verified_but_is_not_active_backend():
+    assert ACTIVE_STORAGE_BACKEND == "turso"
+    assert LEGACY_BIGQUERY_TABLE_NAMES == BIGQUERY_TABLE_NAMES
     assert len(BIGQUERY_TABLE_SPECS) == 9
     assert PRECIOS_HISTORICOS.partition_field == "observed_at_utc"
     assert INVENTARIO_HISTORICO.partition_field == "observed_at_utc"
