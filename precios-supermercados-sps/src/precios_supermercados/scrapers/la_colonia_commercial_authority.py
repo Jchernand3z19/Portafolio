@@ -5,23 +5,26 @@ una aceptación de catálogo para La Colonia. Exige simultáneamente:
 
 - readiness técnica completa del catálogo;
 - provenance física cerrada del mismo plan;
-- atestación firmada por un keyring de autoridad comercial independiente;
+- atestación firmada por el keyring comercial confiable del deployment;
 - binding exacto de supermercado, ubicación, run, autorización y digests;
 - decisión posterior a la evidencia física que pretende aceptar.
 
-No hace red, no crea recursos cloud y no habilita extracción futura.
+El caller no puede inyectar un keyring. No hace red, no crea recursos cloud y no
+habilita extracción futura.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import NoReturn, Sequence
 
 from precios_supermercados.commercial_authority import (
     CryptographicallyVerifiedCommercialAuthority,
-    Ed25519CommercialAuthorityVerifier,
     SignedCommercialAuthorityAttestation,
+)
+from precios_supermercados.commercial_authority_trust import (
+    load_productive_commercial_authority_verifier,
 )
 from precios_supermercados.commercial_persistence_batch import (
     PreparedCommercialPersistence,
@@ -47,6 +50,8 @@ from precios_supermercados.scrapers.la_colonia_verified_catalog_finalizer import
 )
 from precios_supermercados.tabular_records import QualityEventRecord
 
+_POLICY_VERIFICATION_SEAL = object()
+
 
 class LaColoniaCommercialAuthorityError(ValueError):
     """La evidencia no puede promover este catálogo a autoridad comercial."""
@@ -62,16 +67,19 @@ def _fail(code: str, message: str | None = None) -> NoReturn:
 
 @dataclass(frozen=True, slots=True)
 class VerifiedLaColoniaCommercialAuthority:
-    """Aceptación tipada, exacta y ligada a una atestación criptográfica."""
+    """Capability sellada de aceptación ligada a una atestación verificada."""
 
     cryptographic_authority: CryptographicallyVerifiedCommercialAuthority
     discovery_digest: str
     authenticated_plan_digest: str
     provenance_manifest_digest: str
+    _policy_seal: object = field(repr=False, compare=False)
     production_authority: bool = True
     catalog_accepted: bool = True
 
     def __post_init__(self) -> None:
+        if self._policy_seal is not _POLICY_VERIFICATION_SEAL:
+            _fail("commercial_authority_unsealed")
         if not isinstance(
             self.cryptographic_authority,
             CryptographicallyVerifiedCommercialAuthority,
@@ -115,9 +123,12 @@ def verify_la_colonia_commercial_authority(
     readiness: VerifiedCatalogAcceptanceReadiness,
     provenance: VerifiedCatalogProvenanceRun,
     attestation: SignedCommercialAuthorityAttestation,
-    verifier: Ed25519CommercialAuthorityVerifier,
 ) -> VerifiedLaColoniaCommercialAuthority:
-    """Reconcilia la firma comercial con el run técnico exacto de La Colonia."""
+    """Reconcilia firma comercial confiable con el run técnico exacto.
+
+    El keyring se carga sólo desde la trust config productiva; no forma parte de
+    los argumentos y no puede ser elegido por el caller de esta función.
+    """
 
     if not isinstance(readiness, VerifiedCatalogAcceptanceReadiness):
         _fail("commercial_authority_readiness_invalid")
@@ -125,8 +136,6 @@ def verify_la_colonia_commercial_authority(
         _fail("commercial_authority_provenance_invalid")
     if not isinstance(attestation, SignedCommercialAuthorityAttestation):
         _fail("commercial_authority_attestation_invalid")
-    if not isinstance(verifier, Ed25519CommercialAuthorityVerifier):
-        _fail("commercial_authority_verifier_invalid")
     if readiness.technical_catalog_complete is not True:
         _fail("commercial_authority_technical_catalog_incomplete")
     if readiness.ready_for_productive_authority_evidence is not True:
@@ -138,6 +147,7 @@ def verify_la_colonia_commercial_authority(
     if readiness.provenance_manifest_digest != provenance.manifest.digest:
         _fail("commercial_authority_readiness_manifest_mismatch")
 
+    verifier = load_productive_commercial_authority_verifier()
     cryptographic = verifier.verify(attestation)
     claims = cryptographic.attestation.claims
     expected = {
@@ -160,6 +170,7 @@ def verify_la_colonia_commercial_authority(
         discovery_digest=readiness.discovery_digest,
         authenticated_plan_digest=readiness.authenticated_plan_digest,
         provenance_manifest_digest=readiness.provenance_manifest_digest,
+        _policy_seal=_POLICY_VERIFICATION_SEAL,
     )
 
 
@@ -180,11 +191,13 @@ def prepare_la_colonia_authoritative_run_persistence(
     El ``run_evidence_id`` se deriva internamente de la atestación productiva y
     del payload completo. Así un mismo authority evidence no puede reutilizarse
     con otras ofertas, métricas o eventos. La capability privada de snapshot se
-    cruza sólo después de validar esta autoridad tipada.
+    cruza sólo después de validar esta autoridad tipada y sellada.
     """
 
     if not isinstance(authority, VerifiedLaColoniaCommercialAuthority):
         _fail("verified_commercial_authority_required")
+    if authority._policy_seal is not _POLICY_VERIFICATION_SEAL:
+        _fail("verified_commercial_authority_unsealed")
     decision = authority.commercial_decision
     run_evidence_id = derive_bound_run_evidence_id(
         authority_evidence_id=authority.authority_evidence_id,
