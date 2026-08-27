@@ -15,6 +15,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .bigquery_adapter import (
+    BigQueryAdapter,
+    BigQueryApplyResult,
+    BigQueryClientPort,
+)
 from .bigquery_persistence import BigQueryWritePlan, build_bigquery_write_plan
 from .commercial_persistence_guard import (
     LA_COLONIA_INITIAL_SNAPSHOT_APPROVED_AT_UTC,
@@ -33,7 +38,7 @@ from .scrapers.la_colonia import CATALOG_URL, EXTRACTOR_VERSION, SCHEMA_VERSION
 
 
 class InitialSnapshotError(ValueError):
-    """El archivo no coincide con el snapshot inicial aprobado."""
+    """El archivo o su resultado durable no coincide con el snapshot aprobado."""
 
     def __init__(self, code: str) -> None:
         super().__init__(code)
@@ -222,3 +227,40 @@ def build_la_colonia_initial_snapshot_bigquery_plan(path: Path) -> BigQueryWrite
         skus_with_price=LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
         catalog_product_coverage=Decimal("1"),
     )
+
+
+def apply_la_colonia_initial_snapshot_bigquery(
+    path: Path,
+    *,
+    client: BigQueryClientPort,
+    dataset_id: str,
+) -> BigQueryApplyResult:
+    """Bootstrap + carga + reconciliación usando el port BigQuery ya existente."""
+
+    plan = build_la_colonia_initial_snapshot_bigquery_plan(path)
+    adapter = BigQueryAdapter(client, dataset_id=dataset_id)
+    adapter.bootstrap()
+    result = adapter.apply(plan)
+    read_back = adapter.read_back(
+        supermarket_id=LA_COLONIA_INITIAL_SNAPSHOT_SUPERMARKET_ID,
+        location_id=LA_COLONIA_INITIAL_SNAPSHOT_LOCATION_ID,
+    )
+    _require(
+        len(read_back.products) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+        "durable_product_count_mismatch",
+    )
+    _require(
+        len(read_back.latest_prices) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+        "durable_price_count_mismatch",
+    )
+    _require(
+        len(read_back.latest_inventory) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+        "durable_inventory_count_mismatch",
+    )
+    matching_runs = tuple(
+        row for row in read_back.runs
+        if row["scrape_run_id"] == LA_COLONIA_INITIAL_SNAPSHOT_RUN_ID
+    )
+    _require(len(matching_runs) == 1, "durable_run_missing")
+    _require(matching_runs[0]["run_fingerprint"] == plan.run_fingerprint, "durable_run_fingerprint_mismatch")
+    return result
