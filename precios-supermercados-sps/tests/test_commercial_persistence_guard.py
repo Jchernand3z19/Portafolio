@@ -155,11 +155,12 @@ def test_preparer_refuses_raw_decision_even_when_it_is_non_authoritative() -> No
 
 
 def test_operational_code_cannot_bypass_guard_with_raw_preparer() -> None:
-    """Scripts/workflows y módulos nuevos deben pasar por este guard.
+    """Scripts/workflows y módulos nuevos deben usar fronteras auditadas.
 
-    El preparador crudo sólo puede vivir en su módulo backend-neutral y ser
-    invocado por este guard. Tests pueden usarlo directamente para validar la
-    máquina interna, pero no forman parte del código operativo escaneado aquí.
+    El preparador crudo sólo puede vivir en su módulo backend-neutral, el guard
+    no autoritativo y la política autoritativa específica de La Colonia. Tests
+    pueden usarlo directamente para validar la máquina interna, pero no forman
+    parte del código operativo escaneado aquí.
     """
 
     allowed = {
@@ -167,6 +168,8 @@ def test_operational_code_cannot_bypass_guard_with_raw_preparer() -> None:
         / "src/precios_supermercados/commercial_persistence_batch.py",
         PROJECT_ROOT
         / "src/precios_supermercados/commercial_persistence_guard.py",
+        PROJECT_ROOT
+        / "src/precios_supermercados/scrapers/la_colonia_commercial_authority.py",
     }
     candidates = [
         *sorted((PROJECT_ROOT / "src").rglob("*.py")),
