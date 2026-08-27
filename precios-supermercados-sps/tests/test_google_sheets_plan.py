@@ -12,8 +12,8 @@ from precios_supermercados.google_sheets_plan import (
     parse_spreadsheet_metadata,
 )
 from precios_supermercados.storage_contract import (
-    ACTIVE_STORAGE_TABLE_SPECS,
-    DEFERRED_STORAGE_TABLE_NAMES,
+    LEGACY_SHEETS_DEFERRED_TABLE_NAMES,
+    LEGACY_SHEETS_MANAGED_TABLE_SPECS,
 )
 from precios_supermercados.tabular_persistence import (
     FACT_OFFERS_CURRENT,
@@ -57,19 +57,19 @@ def requests_of(plan, kind: str):
     return [request[kind] for request in plan.payload["requests"] if kind in request]
 
 
-def test_empty_spreadsheet_bootstraps_only_active_storage_tabs_in_one_payload() -> None:
+def test_empty_spreadsheet_bootstraps_only_legacy_managed_tabs_in_one_payload() -> None:
     store = configured_store()
     plan = build_atomic_workbook_plan(store, SpreadsheetMetadata({}))
 
     payload = plan.payload
     assert payload["includeSpreadsheetInResponse"] is False
     add_sheets = requests_of(plan, "addSheet")
-    assert len(add_sheets) == len(ACTIVE_STORAGE_TABLE_SPECS)
+    assert len(add_sheets) == len(LEGACY_SHEETS_MANAGED_TABLE_SPECS)
     assert {item["properties"]["title"] for item in add_sheets} == set(
-        ACTIVE_STORAGE_TABLE_SPECS
+        LEGACY_SHEETS_MANAGED_TABLE_SPECS
     )
-    assert len(set(plan.sheet_ids.values())) == len(ACTIVE_STORAGE_TABLE_SPECS)
-    assert not set(DEFERRED_STORAGE_TABLE_NAMES).intersection(plan.sheet_ids)
+    assert len(set(plan.sheet_ids.values())) == len(LEGACY_SHEETS_MANAGED_TABLE_SPECS)
+    assert not set(LEGACY_SHEETS_DEFERRED_TABLE_NAMES).intersection(plan.sheet_ids)
     assert plan.row_counts["cfg_supermarkets"] == 1
     assert plan.row_counts["cfg_locations"] == 2
     assert plan.row_counts["fact_offers_current"] == 0
@@ -114,7 +114,7 @@ def test_empty_managed_tabs_keep_one_unfrozen_visible_row() -> None:
         assert grid["rowCount"] > grid["frozenRowCount"]
 
 
-def test_existing_active_tabs_are_reused_and_extra_or_deferred_tabs_are_preserved() -> None:
+def test_existing_legacy_tabs_are_reused_and_extra_or_deferred_tabs_are_preserved() -> None:
     metadata = SpreadsheetMetadata(
         {
             "fact_offers_current": SheetMetadata(7, "fact_offers_current", 1000, 60),
