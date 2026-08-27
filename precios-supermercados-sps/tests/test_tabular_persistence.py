@@ -289,7 +289,7 @@ def test_same_fact_table_accepts_rows_from_different_supermarkets() -> None:
     assert row_b["supermarket_id"] == "b"
 
 
-def test_la_colonia_sps_cannot_be_persisted_while_extraction_is_disabled() -> None:
+def test_la_colonia_sps_is_persistible_while_future_extraction_stays_disabled() -> None:
     offer = make_validated(
         run_id="run-lc",
         observed_at=BASE_TIME,
@@ -297,11 +297,15 @@ def test_la_colonia_sps_cannot_be_persisted_while_extraction_is_disabled() -> No
         location_id="la_colonia_sps",
         location_status=LocationStatus.CONFIRMED,
     ).offer
-    with pytest.raises(
-        TabularPersistenceError,
-        match="extraction_disabled",
-    ):
-        validate_offer_location_for_persistence(offer, DEFAULT_LOCATION_CATALOG)
+
+    location = validate_offer_location_for_persistence(
+        offer,
+        DEFAULT_LOCATION_CATALOG,
+    )
+
+    assert location.location_id == "la_colonia_sps"
+    assert location.extraction_enabled is False
+    assert DEFAULT_LOCATION_CATALOG.extraction_block_reason("la_colonia_sps") == "extraction_disabled"
 
 
 def test_unknown_or_mismatched_location_is_never_persistible() -> None:
