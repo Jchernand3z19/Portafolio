@@ -71,7 +71,7 @@ technical_binding_confirmed BOOL NOT NULL
 evidence STRING
 ```
 
-`extraction_enabled` no se convierte en `true` por existir evidencia técnica; su transición sigue requiriendo autoridad operativa explícita.
+`extraction_enabled` controla tráfico futuro. No se convierte en `true` por existir evidencia técnica ni es requisito para persistir un snapshot histórico ya obtenido y aprobado.
 
 ## 5. `productos`
 
@@ -100,7 +100,7 @@ content_per_unit NUMERIC
 measurement_unit STRING
 total_content NUMERIC
 barcode STRING
-product_url STRING NOT NULL
+product_url STRING
 image_url STRING
 review_status STRING NOT NULL
 first_seen_at_utc TIMESTAMP NOT NULL
@@ -108,7 +108,7 @@ last_seen_at_utc TIMESTAMP NOT NULL
 last_scrape_run_id STRING NOT NULL
 ```
 
-Los valores `source_*` se preservan separados de los normalizados. La tabla no contiene ciudad, precio ni inventario.
+Los valores `source_*` se preservan separados de los normalizados. La tabla no contiene ciudad, precio ni inventario. `product_url` es nullable porque el artifact sanitizado inicial no conserva URLs de producto; no se inventan URLs para llenar ese campo.
 
 ## 6. `precios_historicos`
 
