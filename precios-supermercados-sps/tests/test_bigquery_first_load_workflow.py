@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -88,3 +89,14 @@ def test_cloud_bootstrap_is_least_privilege_and_repo_id_bound() -> None:
     assert "credentials_json" not in raw
     assert "DATASET_LOCATION" in raw
     assert "dataset_location_mismatch" in raw
+
+
+def test_cloud_bootstrap_has_valid_bash_syntax() -> None:
+    result = subprocess.run(
+        ["bash", "-n", str(BOOTSTRAP)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
