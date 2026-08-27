@@ -35,7 +35,7 @@ from precios_supermercados.locations import (
     build_location_catalog,
 )
 from precios_supermercados.models import NormalizedOffer, ValidatedOffer
-from precios_supermercados.storage_contract import ACTIVE_STORAGE_TABLE_NAMES
+from precios_supermercados.storage_contract import LEGACY_TABULAR_TABLE_NAMES
 from precios_supermercados.tabular_records import QualityEventRecord
 from precios_supermercados.tabular_store import InMemoryTabularStore
 
@@ -171,7 +171,7 @@ def prepare(
     )
 
 
-def test_new_accepted_run_builds_active_storage_tables_atomically():
+def test_new_accepted_run_builds_legacy_tabular_transition_batch_atomically():
     state = InMemoryCommercialState()
     item = validated(run_id="run-1", observed_at=BASE)
     event = quality_event("run-1")
@@ -181,7 +181,15 @@ def test_new_accepted_run_builds_active_storage_tables_atomically():
     assert prepared.apply_result.current_created == 1
     assert prepared.apply_result.replayed is False
     assert prepared.affected_offer_ids == (item.offer.offer_id,)
-    assert tuple(prepared.table_row_counts) == ACTIVE_STORAGE_TABLE_NAMES
+    assert tuple(prepared.table_row_counts) == (
+        "cfg_supermarkets",
+        "cfg_locations",
+        "fact_offers_current",
+        "fact_offer_history",
+        "fact_scrape_runs",
+        "fact_quality_events",
+    )
+    assert set(prepared.table_row_counts).issubset(LEGACY_TABULAR_TABLE_NAMES)
     assert prepared.table_row_counts == {
         "cfg_supermarkets": 1,
         "cfg_locations": 1,
@@ -191,9 +199,7 @@ def test_new_accepted_run_builds_active_storage_tables_atomically():
         "fact_quality_events": 1,
     }
     assert prepared.batch.rows["fact_offers_current"][0]["product_id"] == "prod-001"
-    assert prepared.batch.rows["fact_offers_current"][0]["source_product_id"] == (
-        item.offer.source_product_id
-    )
+    assert prepared.batch.rows["fact_offers_current"][0]["source_product_id"] == item.offer.source_product_id
     assert "dim_products" not in prepared.batch.rows
     assert "map_source_products" not in prepared.batch.rows
     assert prepared.run_record.quality_event_count == 1
@@ -212,11 +218,7 @@ def test_new_accepted_run_builds_active_storage_tables_atomically():
 def test_price_change_writes_current_and_full_affected_history():
     state = InMemoryCommercialState()
     first = validated(run_id="run-1", observed_at=BASE, price="40")
-    second = validated(
-        run_id="run-2",
-        observed_at=BASE + timedelta(days=1),
-        price="38",
-    )
+    second = validated(run_id="run-2", observed_at=BASE + timedelta(days=1), price="38")
     prepare(state, first)
 
     prepared = prepare(state, second)
