@@ -163,7 +163,7 @@ def _validated_offer_from_row(
             product_id=_required_text(row, "product_id"),
             offer_id=_required_text(row, "offer_id"),
             source_name=_required_text(row, "source_name"),
-            product_url=_required_text(row, "product_url"),
+            product_url=_optional_text(row, "product_url"),
             normalized_name=_required_text(row, "normalized_name"),
             currency=_required_text(row, "currency"),
             is_promotion=_required_bool(row, "is_promotion"),
@@ -229,79 +229,63 @@ def _validated_offer_from_row(
 
 
 def current_from_row(row: Mapping[str, Any]) -> CurrentCommercialOffer:
-    """Reconstruye una fila de ``fact_offers_current`` con invariantes fuertes."""
-
     _require_row(row, FACT_OFFERS_CURRENT)
     validated = _validated_offer_from_row(row, observed_at_field="observed_at_utc")
-    first = _utc(row, "first_observed_at_utc")
-    last = _utc(row, "last_observed_at_utc")
-    assert first is not None and last is not None
-    if first > last:
-        raise TabularRehydrationError("durable_current_chronology_invalid")
-    if validated.offer.observed_at_utc != last:
-        raise TabularRehydrationError("durable_current_observation_not_latest")
-    last_run = _required_text(row, "last_scrape_run_id")
-    if validated.offer.scrape_run_id != last_run:
+    first_observed_at = _utc(row, "first_observed_at_utc")
+    last_observed_at = _utc(row, "last_observed_at_utc")
+    assert first_observed_at is not None and last_observed_at is not None
+    if first_observed_at > last_observed_at:
+        raise TabularRehydrationError("durable_current_observation_order_invalid")
+    if last_observed_at < validated.offer.observed_at_utc:
+        raise TabularRehydrationError("durable_current_last_seen_before_offer")
+    last_scrape_run_id = _required_text(row, "last_scrape_run_id")
+    if last_scrape_run_id != validated.offer.scrape_run_id:
         raise TabularRehydrationError("durable_current_run_mismatch")
     return CurrentCommercialOffer(
         validated_offer=validated,
-        first_observed_at_utc=first,
-        last_observed_at_utc=last,
-        last_scrape_run_id=last_run,
+        first_observed_at_utc=first_observed_at,
+        last_observed_at_utc=last_observed_at,
+        last_scrape_run_id=last_scrape_run_id,
     )
 
 
 def history_from_row(row: Mapping[str, Any]) -> OfferHistoryPeriod:
-    """Reconstruye una fila de histórico y valida apertura/cierre del periodo."""
-
     _require_row(row, FACT_OFFER_HISTORY)
     validated = _validated_offer_from_row(row, observed_at_field="valid_from_utc")
     valid_from = _utc(row, "valid_from_utc")
     valid_to = _utc(row, "valid_to_utc", optional=True)
-    last_observed = _utc(row, "last_observed_at_utc")
-    assert valid_from is not None and last_observed is not None
-
-    opened_by = _required_text(row, "opened_by_scrape_run_id")
-    closed_by = _optional_text(row, "closed_by_scrape_run_id")
-    if validated.offer.scrape_run_id != opened_by:
-        raise TabularRehydrationError("durable_history_open_run_mismatch")
-    if valid_to is None and closed_by is not None:
-        raise TabularRehydrationError("durable_history_open_period_has_closer")
-    if valid_to is not None and closed_by is None:
-        raise TabularRehydrationError("durable_history_closed_period_missing_closer")
+    last_observed_at = _utc(row, "last_observed_at_utc")
+    assert valid_from is not None and last_observed_at is not None
     if valid_to is not None and valid_to <= valid_from:
-        raise TabularRehydrationError("durable_history_chronology_invalid")
-    if last_observed < valid_from:
-        raise TabularRehydrationError("durable_history_last_observation_invalid")
-    if valid_to is not None and last_observed >= valid_to:
-        raise TabularRehydrationError("durable_history_last_observation_invalid")
-
+        raise TabularRehydrationError("durable_history_interval_invalid")
+    if last_observed_at < valid_from:
+        raise TabularRehydrationError("durable_history_last_seen_before_start")
+    if valid_to is not None and last_observed_at >= valid_to:
+        raise TabularRehydrationError("durable_history_last_seen_after_close")
+    opened_by = _required_text(row, "opened_by_scrape_run_id")
+    if opened_by != validated.offer.scrape_run_id:
+        raise TabularRehydrationError("durable_history_open_run_mismatch")
+    closed_by = _optional_text(row, "closed_by_scrape_run_id")
+    if (valid_to is None) != (closed_by is None):
+        raise TabularRehydrationError("durable_history_close_fields_mismatch")
+    change_type = _required_text(row, "change_type")
     try:
-        change_type = ChangeType(_required_text(row, "change_type"))
+        change = ChangeType(change_type)
     except ValueError as exc:
         raise TabularRehydrationError("durable_change_type_invalid") from exc
-    changed_fields = _json_string_tuple(row, "changed_fields_json")
-    if change_type is ChangeType.INITIAL and changed_fields:
-        raise TabularRehydrationError("durable_initial_changed_fields_invalid")
-    if change_type is not ChangeType.INITIAL and not changed_fields:
-        raise TabularRehydrationError("durable_changed_fields_missing")
-
     return OfferHistoryPeriod(
         offer_history_id=_required_text(row, "offer_history_id"),
-        offer_id=validated.offer.offer_id,
-        state_hash=validated.state_hash,
-        change_type=change_type,
-        changed_fields=changed_fields,
         validated_offer=validated,
         valid_from_utc=valid_from,
         valid_to_utc=valid_to,
         opened_by_scrape_run_id=opened_by,
         closed_by_scrape_run_id=closed_by,
         last_confirmed_by_scrape_run_id=_required_text(
-            row,
-            "last_confirmed_by_scrape_run_id",
+            row, "last_confirmed_by_scrape_run_id"
         ),
-        last_observed_at_utc=last_observed,
+        last_observed_at_utc=last_observed_at,
+        change_type=change,
+        changed_fields=_json_string_tuple(row, "changed_fields_json"),
     )
 
 
@@ -309,56 +293,53 @@ def rehydrate_commercial_snapshot(
     current_rows: Sequence[Mapping[str, Any]],
     history_rows: Sequence[Mapping[str, Any]],
 ) -> RehydratedCommercialSnapshot:
-    """Reconstruye y cruza current/history para detectar drift durable."""
-
-    if isinstance(current_rows, (str, bytes)) or not isinstance(current_rows, Sequence):
-        raise TabularRehydrationError("durable_current_rows_invalid")
-    if isinstance(history_rows, (str, bytes)) or not isinstance(history_rows, Sequence):
-        raise TabularRehydrationError("durable_history_rows_invalid")
-
     current: dict[str, CurrentCommercialOffer] = {}
+    history: dict[str, list[OfferHistoryPeriod]] = {}
+
     for row in current_rows:
         item = current_from_row(row)
         offer_id = item.validated_offer.offer.offer_id
         if offer_id in current:
-            raise TabularRehydrationError("durable_current_offer_duplicate")
+            raise TabularRehydrationError("durable_current_duplicate_offer")
         current[offer_id] = item
 
-    history: dict[str, list[OfferHistoryPeriod]] = {}
-    history_ids: set[str] = set()
     for row in history_rows:
         period = history_from_row(row)
-        if period.offer_history_id in history_ids:
-            raise TabularRehydrationError("durable_history_id_duplicate")
-        history_ids.add(period.offer_history_id)
-        history.setdefault(period.offer_id, []).append(period)
+        offer_id = period.validated_offer.offer.offer_id
+        history.setdefault(offer_id, []).append(period)
 
     if set(current) != set(history):
         raise TabularRehydrationError("durable_current_history_offer_set_mismatch")
 
     normalized_history: dict[str, tuple[OfferHistoryPeriod, ...]] = {}
     for offer_id, periods in history.items():
-        periods.sort(key=lambda item: item.valid_from_utc)
-        opens = [period for period in periods if period.valid_to_utc is None]
-        if len(opens) != 1 or periods[-1] is not opens[0]:
-            raise TabularRehydrationError("durable_history_open_period_invalid")
-        for previous, following in zip(periods, periods[1:]):
-            if previous.valid_to_utc != following.valid_from_utc:
-                raise TabularRehydrationError("durable_history_gap_or_overlap")
-
+        ordered = sorted(periods, key=lambda item: item.valid_from_utc)
+        seen_period_ids: set[str] = set()
+        for index, period in enumerate(ordered):
+            if period.offer_history_id in seen_period_ids:
+                raise TabularRehydrationError("durable_history_duplicate_period")
+            seen_period_ids.add(period.offer_history_id)
+            if index > 0:
+                previous = ordered[index - 1]
+                if previous.valid_to_utc != period.valid_from_utc:
+                    raise TabularRehydrationError("durable_history_gap_or_overlap")
+                if previous.closed_by_scrape_run_id != period.opened_by_scrape_run_id:
+                    raise TabularRehydrationError("durable_history_transition_run_mismatch")
+        if not ordered or ordered[-1].valid_to_utc is not None:
+            raise TabularRehydrationError("durable_history_missing_open_period")
+        if any(item.valid_to_utc is None for item in ordered[:-1]):
+            raise TabularRehydrationError("durable_history_multiple_open_periods")
         live = current[offer_id]
-        open_period = periods[-1]
-        if open_period.state_hash != live.validated_offer.state_hash:
+        opened = ordered[-1]
+        if live.validated_offer.state_hash != opened.validated_offer.state_hash:
             raise TabularRehydrationError("durable_current_history_state_mismatch")
-        if open_period.validated_offer.offer.source_product_id != live.validated_offer.offer.source_product_id:
-            raise TabularRehydrationError("durable_current_history_identity_mismatch")
-        if open_period.last_observed_at_utc != live.last_observed_at_utc:
-            raise TabularRehydrationError("durable_current_history_last_observed_mismatch")
-        if open_period.last_confirmed_by_scrape_run_id != live.last_scrape_run_id:
-            raise TabularRehydrationError("durable_current_history_last_run_mismatch")
-        if open_period.valid_from_utc != live.first_observed_at_utc:
-            raise TabularRehydrationError("durable_current_history_first_observed_mismatch")
-        normalized_history[offer_id] = tuple(periods)
+        if live.first_observed_at_utc != ordered[0].valid_from_utc:
+            raise TabularRehydrationError("durable_current_first_seen_mismatch")
+        if live.last_observed_at_utc != opened.last_observed_at_utc:
+            raise TabularRehydrationError("durable_current_last_seen_mismatch")
+        if live.last_scrape_run_id != opened.last_confirmed_by_scrape_run_id:
+            raise TabularRehydrationError("durable_current_confirmation_run_mismatch")
+        normalized_history[offer_id] = tuple(ordered)
 
     return RehydratedCommercialSnapshot(
         current=current,
