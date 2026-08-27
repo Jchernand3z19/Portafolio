@@ -34,6 +34,7 @@ from precios_supermercados.enums import (
     RunStatus,
     SourceKeyType,
 )
+from precios_supermercados.google_bigquery_client import GoogleCloudBigQueryClient
 from precios_supermercados.identifiers import (
     generate_offer_id,
     generate_source_product_id,
@@ -55,6 +56,7 @@ from precios_supermercados.tabular_records import QualityEventRecord
 
 
 BASE = datetime(2026, 8, 26, 12, 0, tzinfo=timezone.utc)
+EVIDENCE_ID = "crev1_" + "a" * 64
 
 
 def catalog():
@@ -151,6 +153,7 @@ def prepare(
     accepted: bool = True,
     status: RunStatus = RunStatus.SUCCESS,
     events: tuple[QualityEventRecord, ...] = (),
+    run_evidence_id: str | None = EVIDENCE_ID,
 ):
     return prepare_new_run_persistence(
         state,
@@ -168,6 +171,7 @@ def prepare(
         products_observed=1,
         offers_observed=1,
         quality_events=events,
+        run_evidence_id=run_evidence_id if accepted else None,
         catalog=catalog(),
     )
 
@@ -225,6 +229,34 @@ def test_first_accepted_load_materializes_observations_mapping_run_and_quality()
     assert "previous_price" not in price
 
 
+def test_commercial_write_requires_bound_authority_evidence():
+    state = InMemoryCommercialState()
+    prepared = prepare(
+        state,
+        validated(run_id="run-no-evidence", observed_at=BASE),
+        run_evidence_id=None,
+    )
+    plan = build_bigquery_write_plan(prepared)
+    _, adapter = bootstrapped()
+
+    with pytest.raises(BigQueryAdapterError, match="authoritative_run_evidence_required"):
+        adapter.apply(plan)
+
+
+def test_commercial_write_rejects_non_bound_evidence_shape():
+    state = InMemoryCommercialState()
+    prepared = prepare(
+        state,
+        validated(run_id="run-bad-evidence", observed_at=BASE),
+        run_evidence_id="manual-boolean-is-not-evidence",
+    )
+    plan = build_bigquery_write_plan(prepared)
+    _, adapter = bootstrapped()
+
+    with pytest.raises(BigQueryAdapterError, match="authoritative_run_evidence_required"):
+        adapter.apply(plan)
+
+
 def test_exact_run_replay_is_noop_and_conflicting_replay_fails_closed():
     state = InMemoryCommercialState()
     plan = build_bigquery_write_plan(
@@ -249,6 +281,57 @@ def test_exact_run_replay_is_noop_and_conflicting_replay_fails_closed():
     )
     with pytest.raises(BigQueryReplayConflict, match="conflicting_run_replay"):
         adapter.apply(conflict)
+
+
+def test_post_write_fingerprint_detects_concurrent_conflicting_winner():
+    class ConcurrentWinnerClient(FakeBigQueryClient):
+        def apply_atomic(self, dataset_id, rows, *, immutable_tables):
+            run = dict(rows[SCRAPE_RUNS.name][0])
+            run["run_fingerprint"] = "f" * 64
+            spec = self._spec(dataset_id, SCRAPE_RUNS.name)
+            key = self._key(spec, run)
+            self._rows[(dataset_id, SCRAPE_RUNS.name)][key] = run
+            return 0, 0, sum(len(values) for values in rows.values())
+
+    state = InMemoryCommercialState()
+    plan = build_bigquery_write_plan(
+        prepare(state, validated(run_id="run-race", observed_at=BASE))
+    )
+    client = ConcurrentWinnerClient()
+    adapter = BigQueryAdapter(client, dataset_id="precios_sps")
+    adapter.bootstrap()
+
+    with pytest.raises(BigQueryReplayConflict, match="conflicting_run_replay"):
+        adapter.apply(plan)
+
+
+def test_google_client_immutable_sql_treats_identical_key_as_replay():
+    spec = SCRAPE_RUNS
+    join = GoogleCloudBigQueryClient._join_predicate(spec, "T", "S")
+    guard = GoogleCloudBigQueryClient._immutable_guard_sql(
+        spec=spec,
+        target="project.dataset.scrape_runs",
+        staging_ref="project.dataset._stg_scrape_runs",
+        join=join,
+    )
+    insert = GoogleCloudBigQueryClient._immutable_insert_sql(
+        spec=spec,
+        target="project.dataset.scrape_runs",
+        staging_ref="project.dataset._stg_scrape_runs",
+        join=join,
+    )
+
+    assert "IS DISTINCT FROM" in guard
+    assert "immutable_conflict:scrape_runs" in guard
+    assert "WHERE NOT EXISTS" in insert
+
+
+def test_google_client_atomic_job_id_serializes_same_run_per_attempt_slot():
+    first = GoogleCloudBigQueryClient._atomic_job_id("precios_sps", "run-1", 0)
+    assert first == GoogleCloudBigQueryClient._atomic_job_id("precios_sps", "run-1", 0)
+    assert first != GoogleCloudBigQueryClient._atomic_job_id("precios_sps", "run-1", 1)
+    assert first != GoogleCloudBigQueryClient._atomic_job_id("precios_sps", "run-2", 0)
+    assert first != GoogleCloudBigQueryClient._atomic_job_id("otro_dataset", "run-1", 0)
 
 
 def test_partial_failure_rolls_back_every_target_table():
