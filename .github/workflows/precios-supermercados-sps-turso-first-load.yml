@@ -14,6 +14,159 @@ permissions:
   contents: read
 
 jobs:
+  prepare-sqlite:
+    if: >-
+      ${{ github.repository == 'Jchernand3z19/Portafolio' &&
+          github.ref == 'refs/heads/main' &&
+          inputs.apply_initial_snapshot != true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SOURCE_ARTIFACT_ID: "9655225996"
+      EXPECTED_ARTIFACT_DIGEST: "0427e88be27df89fd9fcb50ed600ef5c6aef64177bfba92b4af3d2e25756a892"
+      EXPECTED_JSON_SHA256: "2780eeffa5ef62f2d1c8c8365e88da1ca0006622d2f7b1c3529f834c9b5e50"
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Descargar snapshot preservado exacto
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/precios-sps-initial-snapshot"
+          curl \
+            --fail-with-body \
+            --location \
+            --silent \
+            --show-error \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" \
+            --output "$RUNNER_TEMP/precios-sps-initial-snapshot/source-artifact.zip"
+
+          printf '%s  %s\n' \
+            "$EXPECTED_ARTIFACT_DIGEST" \
+            "$RUNNER_TEMP/precios-sps-initial-snapshot/source-artifact.zip" \
+            | sha256sum --check --strict
+
+          unzip -q \
+            "$RUNNER_TEMP/precios-sps-initial-snapshot/source-artifact.zip" \
+            -d "$RUNNER_TEMP/precios-sps-initial-snapshot/data"
+
+          actual_files="$(find "$RUNNER_TEMP/precios-sps-initial-snapshot/data" -maxdepth 1 -type f -printf '%f\n' | sort)"
+          expected_files="$(printf '%s\n' full-catalog.csv full-catalog.json | sort)"
+          if [[ "$actual_files" != "$expected_files" ]]; then
+            echo "snapshot_artifact_file_set_mismatch" >&2
+            exit 1
+          fi
+
+          printf '%s  %s\n' \
+            "$EXPECTED_JSON_SHA256" \
+            "$RUNNER_TEMP/precios-sps-initial-snapshot/data/full-catalog.json" \
+            | sha256sum --check --strict
+
+      - name: Configurar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: precios-supermercados-sps/requirements.txt
+
+      - name: Instalar dependencias
+        run: python -m pip install -r precios-supermercados-sps/requirements.txt
+
+      - name: Verificar consistencia de dependencias instaladas
+        run: python -m pip check
+
+      - name: Probar snapshot exacto de 9439 SKU sobre SQLite real
+        env:
+          PRECIOS_SPS_APPROVED_SNAPSHOT_JSON: ${{ runner.temp }}/precios-sps-initial-snapshot/data/full-catalog.json
+        run: >-
+          pytest -q
+          precios-supermercados-sps/tests/test_la_colonia_initial_snapshot_turso_integration.py
+
+      - name: Materializar SQLite verificado para importación
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/precios-sps-turso-upload"
+          python precios-supermercados-sps/scripts/cargar_snapshot_inicial_turso.py \
+            --snapshot-json "$RUNNER_TEMP/precios-sps-initial-snapshot/data/full-catalog.json" \
+            --sqlite-output "$RUNNER_TEMP/precios-sps-turso-upload/precios-sps-la-colonia-initial.db" \
+            --apply \
+            | tee "$RUNNER_TEMP/precios-sps-turso-upload/build-result.json"
+
+      - name: Reconciliar archivo SQLite final
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          path = Path("$RUNNER_TEMP") / "precios-sps-turso-upload" / "precios-sps-la-colonia-initial.db"
+          connection = sqlite3.connect(path)
+          try:
+              if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                  raise SystemExit("sqlite_integrity_check_failed")
+              expected = {
+                  "offers_current": 9439,
+                  "offer_history": 9439,
+                  "source_products": 9439,
+                  "scrape_runs": 1,
+              }
+              for table, count in expected.items():
+                  actual = connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+                  if actual != count:
+                      raise SystemExit(f"sqlite_count_mismatch:{table}:{actual}:{count}")
+              run = connection.execute(
+                  "SELECT scrape_run_id, catalog_products_reported, unique_products_extracted, "
+                  "skus_extracted, skus_with_price, catalog_product_coverage FROM scrape_runs"
+              ).fetchone()
+              if run != ("32922877781", 9437, 9437, 9439, 9439, "1"):
+                  raise SystemExit(f"sqlite_run_metadata_mismatch:{run!r}")
+              in_stock = connection.execute(
+                  "SELECT COUNT(*) FROM offers_current WHERE availability = 'in_stock'"
+              ).fetchone()[0]
+              unknown = connection.execute(
+                  "SELECT COUNT(*) FROM offers_current WHERE availability = 'unknown'"
+              ).fetchone()[0]
+              if (in_stock, unknown) != (7081, 2358):
+                  raise SystemExit("sqlite_availability_mismatch")
+              mapped = connection.execute(
+                  "SELECT COUNT(*) FROM source_products WHERE mapping_status = 'mapped'"
+              ).fetchone()[0]
+              pending = connection.execute(
+                  "SELECT COUNT(*) FROM source_products WHERE mapping_status = 'pending'"
+              ).fetchone()[0]
+              needs_review = connection.execute(
+                  "SELECT COUNT(*) FROM source_products WHERE review_status = 'needs_review'"
+              ).fetchone()[0]
+              if (mapped, pending, needs_review) != (8965, 474, 1003):
+                  raise SystemExit("sqlite_normalization_reconciliation_mismatch")
+          finally:
+              connection.close()
+          PY
+
+          cd "$RUNNER_TEMP/precios-sps-turso-upload"
+          sha256sum precios-sps-la-colonia-initial.db > SHA256SUMS.txt
+
+      - name: Publicar SQLite listo para subir a Turso
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: precios-sps-la-colonia-initial-sqlite-32922877781
+          path: ${{ runner.temp }}/precios-sps-turso-upload/
+          if-no-files-found: error
+          retention-days: 90
+
   first-load:
     if: >-
       ${{ github.repository == 'Jchernand3z19/Portafolio' &&
