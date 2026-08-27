@@ -335,7 +335,7 @@ def rehydrate_commercial_snapshot(
         opened = ordered[-1]
         if live.validated_offer.state_hash != opened.validated_offer.state_hash:
             raise TabularRehydrationError("durable_current_history_state_mismatch")
-        if live.first_observed_at_utc != ordered[0].valid_from_utc:
+        if live.first_observed_at_utc != opened.valid_from_utc:
             raise TabularRehydrationError("durable_current_first_seen_mismatch")
         if live.last_observed_at_utc != opened.last_observed_at_utc:
             raise TabularRehydrationError("durable_current_last_seen_mismatch")
