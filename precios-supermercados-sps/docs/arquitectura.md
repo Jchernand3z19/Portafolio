@@ -20,7 +20,7 @@ Principios:
 6. todo run terminal se registra;
 7. un mismo esquema sirve a todos los supermercados;
 8. lógica comercial independiente del backend;
-9. BigQuery es el backend persistente seleccionado;
+9. BigQuery es el único backend persistente activo;
 10. Dash + Plotly es la capa de consumo seleccionada;
 11. una tabla nueva requiere grain, key, lifecycle y consumidor reales.
 
@@ -45,21 +45,22 @@ Completitud / provenance / decisión autoritativa
   ↓
 Motor backend-neutral de current/history + replay
   ↓
-Proyección de observaciones persistibles
+BigQueryWritePlan
+  ↓
+Storage port
+  ↓
+BigQueryAdapter
+  ├─ FakeBigQueryClient          [offline]
+  └─ GoogleCloudBigQueryClient   [cloud]
   ↓
 BigQuery
-  ├─ productos
-  ├─ precios_historicos
-  ├─ inventario_historico
-  ├─ scrape_runs
-  └─ dimensiones/evidencia auxiliares
   ↓
 Views de estado actual / variaciones
   ↓
 Python Dash + Plotly
 ```
 
-La lógica de dominio no depende de BigQuery. Los tests offline usan stores en memoria para demostrar transición, replay y rehidratación antes de cualquier escritura externa.
+El dominio no importa el SDK de Google. El fake prueba contrato, bootstrap, primera carga simulada, replay, conflictos, rollback y read-back sin red. El cliente Google Cloud sólo implementa el port.
 
 ## 3. Contratos protegidos
 
@@ -86,52 +87,11 @@ Precio, promoción, disponibilidad y fecha nunca forman parte de los IDs estable
 
 GTIN-8/12/13/14 sólo puede producir identidad cross-source cuando supera check digit y se normaliza a GTIN-14. Sin identidad fuerte se conserva `prod_pending_*`; la observación no se descarta.
 
-### Producto vs ciudad
-
-La identidad del producto **no pertenece a una ciudad**. Por eso `productos` conserva supermercado/identidad/descriptores, mientras precio e inventario llevan `location_id`.
-
-```text
-productos.supermarket_id
-productos.source_product_id
-productos.product_id
-
-precios_historicos.supermarket_id
-precios_historicos.location_id
-precios_historicos.source_product_id
-precios_historicos.product_id
-
-inventario_historico.supermarket_id
-inventario_historico.location_id
-inventario_historico.source_product_id
-inventario_historico.product_id
-```
-
-`locations` resuelve `location_id -> supermarket_id -> city_id/city_name`. Así cada observación puede responder qué producto, de qué supermercado, en qué ciudad y cuándo sin duplicar ciudad dentro de la dimensión de producto.
+La ciudad pertenece a `locations` y a la observación mediante `location_id`; no se duplica dentro de `productos`.
 
 ## 5. Producto y presentación
 
-Se conservan por separado valores fuente y normalizados:
-
-```text
-source_name / normalized_name
-source_brand / normalized_brand
-source_category / category / subcategory
-source_presentation / presentation_normalized
-```
-
-La presentación estructurada usa cuando sea demostrable:
-
-```text
-presentation_kind
-unit_count
-content_per_unit
-measurement_unit
-declared_content
-content_scope
-total_content
-```
-
-No se colapsan multipacks ni se inventa el alcance de un contenido. Overrides revisados deben ligarse a una identidad/firma fuente para no aplicarse si el producto cambia.
+Se conservan por separado valores fuente y normalizados. La presentación estructurada usa sólo atributos demostrables. Overrides revisados deben ligarse a `source_product_id + source_signature` para no reutilizar una corrección cuando cambie la evidencia fuente.
 
 ## 6. Ubicación
 
@@ -144,55 +104,54 @@ Para La Colonia:
 
 ```text
 la_colonia_online = contexto fuente raw; no es ciudad ni tienda
-la_colonia_sps    = ubicación comercial San Pedro Sula con binding técnico confirmado
+la_colonia_sps    = ubicación comercial SPS con binding técnico confirmado
 la_colonia_tgu    = ubicación conocida fuera del alcance inicial
 ```
 
-Nunca se convierte `la_colonia_online` en SPS bajo el mismo ID. La promoción a ubicación comercial ocurre en una frontera separada y auditable.
+La existencia del binding técnico no activa por sí sola extracción productiva ni concede autorización live.
 
 ## 7. Precio
 
-Nombres canónicos explícitos:
-
 ```text
 current_price          = precio efectivo observado
-reported_regular_price = precio regular/tachado declarado por la tienda cuando existe
-is_promotion           = señal promocional observada
-previous_price         = derivado de observaciones históricas
+reported_regular_price = precio regular/tachado declarado por la tienda
+previous_price         = derivado de una observación histórica aceptada anterior
 ```
 
-No existe un contrato ambiguo llamado sólo `precio`/`price`.
-
-El ahorro real usa el precio histórico aceptado anterior, nunca `reported_regular_price` como sustituto de baseline.
+`reported_regular_price` nunca sustituye a `previous_price`. El ahorro real compara observaciones aceptadas de `current_price`.
 
 ## 8. Inventario observado
 
-La disponibilidad debe conservar evidencia suficiente para distinguir estados sin inferencias silenciosas. La proyección persistible debe incluir como mínimo:
+La proyección física admite:
 
 ```text
 available_quantity_observed
 availability
 availability_evidence
 seller_id
+quantity_is_exact
 observed_at_utc
 scrape_run_id
 ```
 
-Una cantidad de VTEX se describe como cantidad **observada/reportada por la fuente**. No se declara inventario físico exacto ni ventas derivadas salvo evidencia adicional.
+El snapshot disponible no demuestra cantidad/seller/evidencia completos. Por tanto esos valores permanecen `NULL` cuando falta respaldo y `unknown` permanece `unknown`. No se infiere `out_of_stock`.
 
-`unknown` no se convierte automáticamente a `out_of_stock`.
+## 9. Current/history backend-neutral vs historia BigQuery
 
-## 9. Current/history backend-neutral
+Son dos representaciones deliberadamente distintas:
 
-El motor común protege transición atómica, replay idempotente, continuidad de identidad/moneda/ubicación, cronología monotónica y rechazo de reutilización conflictiva de `scrape_run_id`. La ausencia de un producto no implica baja.
+```text
+motor Python current/history = periodos y transición comercial
+BigQuery                     = observaciones analíticas por run aceptado
+```
 
-Estas estructuras validan el comportamiento comercial y permiten rehidratar/reconciliar procesos. BigQuery no copia ciegamente el layout físico del backend temporal anterior.
+Un run con precio idéntico confirma el periodo Python sin abrir uno nuevo, pero agrega una observación BigQuery. Un cambio real abre/cierra periodos Python y agrega su observación BigQuery. Los tests reconcilian ambas capas.
 
-## 10. BigQuery — contrato físico objetivo
+## 10. BigQuery — contrato físico cerrado
 
-BigQuery es el backend persistente seleccionado desde la primera carga durable del catálogo.
+El contrato ejecutable vive en `src/precios_supermercados/bigquery_contract.py` y su proyección en `bigquery_persistence.py`.
 
-Tablas mínimas:
+Tablas:
 
 ```text
 supermarkets
@@ -206,74 +165,66 @@ normalization_overrides
 product_mapping
 ```
 
-### Grain
+Grain, logical key, null semantics, partición y clustering exactos están documentados en [`modelo-datos.md`](modelo-datos.md) y validados por tests.
 
-- `supermarkets`: una fila por supermercado;
-- `locations`: una fila por ubicación comercial;
-- `productos`: una fila por producto/SKU fuente estable dentro del supermercado, con `product_id` canónico asociado;
-- `precios_historicos`: una observación de precio por producto + ubicación + run/instante;
-- `inventario_historico`: una observación de inventario/disponibilidad por producto + ubicación + seller + run/instante;
-- `scrape_runs`: una fila por ejecución terminal;
-- `quality_events`: una fila por evento auditable;
-- `normalization_overrides`: una fila por corrección manual/versionada aplicable a una identidad fuente;
-- `product_mapping`: relación auditable producto fuente -> producto canónico.
-
-### Historia observacional
-
-Para Dash y análisis temporal, `precios_historicos` e `inventario_historico` conservan observaciones por ejecución exitosa incluso cuando el valor no cambie. Esto preserva cobertura temporal y permite distinguir “sin cambio” de “no hubo observación”.
-
-Los cambios, precio anterior y estado actual se derivan mediante SQL/views con ventanas.
-
-### Particionamiento inicial
+Particiones iniciales:
 
 ```text
-precios_historicos     PARTITION BY DATE(observed_at_utc)
-inventario_historico   PARTITION BY DATE(observed_at_utc)
-scrape_runs            PARTITION BY DATE(started_at_utc)
-quality_events         PARTITION BY DATE(observed_at_utc)
+precios_historicos     DATE(observed_at_utc)
+inventario_historico   DATE(observed_at_utc)
+scrape_runs            DATE(started_at_utc)
+quality_events         DATE(observed_at_utc)
 ```
 
-Precio/inventario se clusterizan por claves consultadas con frecuencia, comenzando por `supermarket_id`, `location_id` e identidad de producto. El contrato exacto se fija en código/tests antes del adapter real.
+Precio/inventario clusterizan por `supermarket_id`, `location_id`, `source_product_id`. BigQuery conserva una observación por run comercial aceptado aunque el valor no cambie.
+
+### Atomicidad e idempotencia
+
+`BigQueryAdapter` verifica el `run_fingerprint` antes de escribir. El mismo run/fingerprint es no-op; reutilizar el mismo `scrape_run_id` con plan diferente falla cerrado.
+
+El cliente Google Cloud materializa primero staging efímero y luego ejecuta todas las mutaciones destino en una única transacción BigQuery. Conflictos en hechos inmutables producen un error dentro de una sentencia `SELECT`, de modo que la transacción se revierte. Dimensiones/mapping se resuelven mediante `MERGE`.
+
+El adapter **no crea proyectos ni datasets**. Esa acción está fuera del dominio y marca la frontera cloud/humana de la primera carga durable.
 
 ## 11. Google Sheets legado
 
-Google Sheets fue una arquitectura temporal anterior y queda **supersedida** por BigQuery.
+Google Sheets queda **retirado como backend productivo**.
 
-El código/tests de Sheets puede permanecer transitoriamente mientras se migra sin romper la suite, pero no forma parte del camino objetivo, no recibe nueva funcionalidad, no debe persistir el catálogo y sus workflows/markers deben neutralizarse o retirarse antes de la primera persistencia real.
-
-No se solicitan nuevas credenciales de Sheets.
+- `storage_contract.py` declara únicamente BigQuery como backend activo;
+- planner/adapter/bootstrap de Sheets permanecen sólo como evidencia/compatibilidad y están ligados a constantes `LEGACY_SHEETS_*`;
+- el workflow histórico conserva su estructura de auditoría pero preflight emite siempre `allowed=false`;
+- el job que porta credenciales permanece condicionado a `allowed == 'true'`, por lo que no puede ejecutar;
+- no se añade funcionalidad nueva ni se solicitan nuevas credenciales de Sheets.
 
 ## 12. Product mapping
 
-Durante La Colonia, `product_id` ya se conserva junto a la identidad fuente. `product_mapping` formaliza la relación y será esencial cuando exista un segundo supermercado.
-
-No iniciar el segundo supermercado sólo para justificar la tabla.
+`product_mapping` conserva la relación `source product -> canonical product`. GTIN válido puede resolverla automáticamente; sin identidad fuerte se conserva estado `pending`/singleton. Su valor cross-source crecerá con supermercado #2, pero la tabla ya tiene consumidor y lifecycle claros.
 
 ## 13. Normalization overrides
 
-Git/versionado sigue siendo la fuente confiable de reglas y correcciones durante el MVP. BigQuery puede materializar `normalization_overrides` para auditoría/operación, pero una edición manual en BigQuery no se convierte silenciosamente en la única fuente de verdad sin un flujo explícito de sincronización.
+Git/versionado sigue siendo la fuente confiable de reglas durante el MVP. BigQuery materializa sólo excepciones explícitas y auditables; no se crea una fila por producto. `source_signature` evita reutilización silenciosa después de un cambio fuente.
 
 ## 14. Runs y quality events
 
-Todo run terminal se registra aunque no cambie precio/inventario. Runs rechazados/fallidos no contaminan observaciones comerciales aceptadas. Hashes y fingerprints demuestran igualdad, no autoridad.
+Todo run terminal se registra aunque no cambie precio/inventario. Runs rechazados/fallidos no contaminan productos, precios, inventario ni mapping comerciales. Hashes/fingerprints demuestran igualdad, no autoridad.
 
 ## 15. Cloudflare / provenance
 
 La ruta edge existente conserva allowlists, OIDC, presupuesto/pacing, single-flight, replay/fencing, receipts y Observability. Su existencia no concede autoridad comercial ni autorización live.
 
-La evidencia live ya obtenida puede reutilizarse offline. Una observación nueva de La Colonia requiere autorización humana vigente.
+La evidencia live ya obtenida se reutiliza offline. Una observación nueva de La Colonia requiere autorización humana vigente.
 
 ## 16. Automatización diaria
 
-Sólo se habilita después de demostrar binding de ubicación, extracción/completitud estable, normalización/validación, persistencia BigQuery idempotente/recuperable, semántica de inventario suficiente y manejo de runs rechazados sin contaminación.
+Sólo se habilita después de demostrar binding, completitud, normalización/validación, primera persistencia BigQuery durable recuperable, inventario suficiente y manejo de runs rechazados sin contaminación.
 
 Los fallos no borran el último estado confiable.
 
 ## 17. Dash + Plotly
 
-La aplicación web será el consumidor principal. Debe evolucionar sobre datos persistidos y validados para mostrar búsqueda, precio actual/anterior, variaciones, historial Plotly, promociones/caídas reales, disponibilidad/cantidad observada cuando sea confiable, filtros, última actualización y comparación entre supermercados cuando exista una segunda fuente.
+Dash consumirá views de BigQuery; no redefinirá reglas de negocio. Las primeras views previstas son `vw_precios_actuales`, `vw_inventario_actual` y `vw_ofertas_actuales`, con derivaciones de precio anterior, cambio y ahorro real.
 
-Power BI queda como código legado; no se añade nueva funcionalidad a esa ruta.
+Power BI queda legado; no se añade funcionalidad nueva a esa ruta.
 
 ## 18. GitHub y CI
 
@@ -294,14 +245,17 @@ Los workflows mantienen mínimo privilegio, pins SHA completos y entrypoints liv
 ## 19. Orden actual
 
 ```text
-CATÁLOGO LA COLONIA [DONE]
--> NORMALIZACIÓN PRODUCTOS [DONE]
--> CURRENT/HISTORY + REPLAY OFFLINE [DONE]
--> BIGQUERY CONTRACT
--> BIGQUERY ADAPTER / BOOTSTRAP
--> FIRST DURABLE LOAD
--> INVENTORY FIRST-CLASS
--> DAILY AUTOMATION
--> DASH + PLOTLY
--> SUPERMARKET #2
+CATÁLOGO LA COLONIA                    [DONE]
+NORMALIZACIÓN PRODUCTOS                [DONE]
+CURRENT/HISTORY + REPLAY OFFLINE       [DONE]
+BIGQUERY CONTRACT                      [DONE OFFLINE]
+BIGQUERY ADAPTER / FAKE / BOOTSTRAP    [DONE OFFLINE]
+REPLAY / PARTIAL FAILURE / READ-BACK   [DONE OFFLINE]
+GOOGLE SHEETS PRODUCTIVE PATH          [RETIRED]
+FIRST DURABLE LOAD                     [NEXT CLOUD BOUNDARY]
+INVENTORY FIRST-CLASS                  [PENDING]
+DAILY AUTOMATION                       [PENDING]
+DASH + PLOTLY                          [PENDING]
+TEGUCIGALPA                            [PENDING]
+SUPERMARKET #2                         [PENDING]
 ```

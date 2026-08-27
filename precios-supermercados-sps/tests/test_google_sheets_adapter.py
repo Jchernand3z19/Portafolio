@@ -13,7 +13,7 @@ from precios_supermercados.google_sheets_adapter import (
     snapshot_row_counts,
 )
 from precios_supermercados.google_sheets_plan import parse_spreadsheet_metadata
-from precios_supermercados.storage_contract import ACTIVE_STORAGE_TABLE_SPECS
+from precios_supermercados.storage_contract import LEGACY_SHEETS_MANAGED_TABLE_SPECS
 from precios_supermercados.tabular_persistence import (
     CFG_SUPERMARKETS,
     FACT_SCRAPE_RUNS,
@@ -96,7 +96,7 @@ class FakeTransport:
         return {"spreadsheetId": self._spreadsheet_id, "replies": []}
 
 
-def test_managed_ranges_only_include_existing_active_project_tabs():
+def test_managed_ranges_only_include_existing_legacy_project_tabs():
     metadata = parse_spreadsheet_metadata(
         metadata_payload(
             "Sheet1",
@@ -293,7 +293,7 @@ def test_spreadsheet_id_mismatch_is_rejected():
         )
 
 
-def test_hydration_restores_active_rows_and_reports_only_physical_counts():
+def test_hydration_restores_legacy_rows_and_reports_only_managed_counts():
     row = row_for(
         "cfg_supermarkets",
         supermarket_id="demo",
@@ -309,12 +309,12 @@ def test_hydration_restores_active_rows_and_reports_only_physical_counts():
     assert store.row("cfg_supermarkets", "demo")["supermarket_name"] == "Demo"
     assert counts["cfg_supermarkets"] == 1
     assert counts["fact_offers_current"] == 0
-    assert set(counts) == set(ACTIVE_STORAGE_TABLE_SPECS)
+    assert set(counts) == set(LEGACY_SHEETS_MANAGED_TABLE_SPECS)
     assert store.count("dim_products") == 0
     assert store.count("map_source_products") == 0
 
 
-def test_adapter_initializes_new_workbook_without_reading_missing_tabs():
+def test_adapter_initializes_new_workbook_using_only_legacy_tabs():
     transport = FakeTransport(metadata=metadata_payload("Sheet1"))
     adapter = GoogleSheetsWorkbookAdapter(transport)
     row = row_for(
@@ -335,7 +335,7 @@ def test_adapter_initializes_new_workbook_without_reading_missing_tabs():
     assert result.updated == 0
     assert result.initial_row_counts["cfg_supermarkets"] == 0
     assert result.final_row_counts["cfg_supermarkets"] == 1
-    assert result.managed_sheet_count == len(ACTIVE_STORAGE_TABLE_SPECS)
+    assert result.managed_sheet_count == len(LEGACY_SHEETS_MANAGED_TABLE_SPECS)
 
     requests = transport.batch_update_calls[0]["requests"]
     added_titles = {
@@ -343,7 +343,7 @@ def test_adapter_initializes_new_workbook_without_reading_missing_tabs():
         for request in requests
         if "addSheet" in request
     }
-    assert added_titles == set(ACTIVE_STORAGE_TABLE_SPECS)
+    assert added_titles == set(LEGACY_SHEETS_MANAGED_TABLE_SPECS)
 
 
 def test_adapter_rejects_batch_for_deferred_logical_table_before_remote_read():
@@ -462,7 +462,7 @@ def test_immutable_run_conflict_aborts_before_remote_write():
     assert transport.batch_update_calls == []
 
 
-def test_existing_active_tab_with_bad_header_aborts_before_remote_write():
+def test_existing_legacy_tab_with_bad_header_aborts_before_remote_write():
     bad_values = [list(CFG_SUPERMARKETS.columns)]
     bad_values[0][0] = "id"
     transport = FakeTransport(

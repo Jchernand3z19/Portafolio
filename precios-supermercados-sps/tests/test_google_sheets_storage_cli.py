@@ -77,6 +77,32 @@ def test_required_storage_envs_returns_nonempty_values(monkeypatch) -> None:
     )
 
 
+def test_retired_cli_fails_before_reading_credentials_or_building_transport(monkeypatch) -> None:
+    module = load_module()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("retired CLI must not inspect credentials or touch transport")
+
+    monkeypatch.setattr(module, "_required_storage_envs", forbidden)
+    monkeypatch.setattr(module.GoogleSheetsHttpTransport, "from_service_account_json", forbidden)
+
+    with pytest.raises(module.StorageCliError) as exc_info:
+        module.run(module.MODE_CHECK)
+
+    assert exc_info.value.code == module.RETIRED_ERROR_CODE
+
+
+def test_retired_cli_main_reports_closed_state_without_credentials(monkeypatch, capsys) -> None:
+    module = load_module()
+    monkeypatch.delenv(module.SPREADSHEET_ID_ENV, raising=False)
+    monkeypatch.delenv(module.SERVICE_ACCOUNT_JSON_ENV, raising=False)
+
+    assert module.main([]) == 2
+    error = capsys.readouterr().err
+    assert module.RETIRED_ERROR_CODE in error
+    assert "service_account" not in error
+
+
 def test_github_outputs_are_closed_sanitized_values(tmp_path, monkeypatch) -> None:
     module = load_module()
     output = tmp_path / "github-output.txt"

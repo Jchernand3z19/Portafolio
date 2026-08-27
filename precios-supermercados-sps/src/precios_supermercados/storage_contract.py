@@ -1,14 +1,13 @@
-"""Contrato físico de almacenamiento para la fase actual.
+"""Contrato físico activo de almacenamiento.
 
-El modelo lógico puede contener capacidades que todavía no justifican una
-materialización durable. Esta frontera separa deliberadamente ambas cosas para
-no convertir diseño futuro en tablas físicas prematuras.
+BigQuery es el único backend productivo objetivo. El contrato tabular histórico
+(current + period history) continúa existiendo como motor/backend-neutral de
+transición y rehidratación, pero ya no se presenta como contrato físico activo ni
+como Google Sheets.
 
-Google Sheets es el backend temporal de la fase actual. Sólo se materializan
-entidades con un grain/lifecycle/consumidor distinto que ya existe hoy. Las
-estructuras de identidad canónica cross-source permanecen disponibles como
-contratos lógicos hasta que una segunda fuente o un consumidor real requiera
-resolver equivalencias entre productos.
+El planner/adapter de Google Sheets se conserva únicamente como evidencia legada.
+Sus seis pestañas históricamente administradas quedan nombradas de forma explícita
+para que ese código no vuelva a importar por accidente el contrato activo.
 """
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ from __future__ import annotations
 from types import MappingProxyType
 from typing import Mapping
 
+from .bigquery_contract import BIGQUERY_TABLE_SPECS, BigQueryTableSpec
 from .tabular_persistence import (
     CFG_LOCATIONS,
     CFG_SUPERMARKETS,
@@ -25,11 +25,27 @@ from .tabular_persistence import (
     FACT_QUALITY_EVENTS,
     FACT_SCRAPE_RUNS,
     MAP_SOURCE_PRODUCTS,
+    TABLE_SPECS as LEGACY_TABLE_SPECS,
     TableSpec,
 )
 
 
-ACTIVE_STORAGE_TABLE_SPECS: Mapping[str, TableSpec] = MappingProxyType(
+ACTIVE_STORAGE_BACKEND = "bigquery"
+ACTIVE_STORAGE_TABLE_SPECS: Mapping[str, BigQueryTableSpec] = MappingProxyType(
+    {spec.name: spec for spec in BIGQUERY_TABLE_SPECS}
+)
+ACTIVE_STORAGE_TABLE_NAMES = tuple(ACTIVE_STORAGE_TABLE_SPECS)
+
+# Contrato del motor backend-neutral anterior. No es un segundo backend activo.
+LEGACY_TABULAR_TABLE_SPECS: Mapping[str, TableSpec] = MappingProxyType(
+    dict(LEGACY_TABLE_SPECS)
+)
+LEGACY_TABULAR_TABLE_NAMES = tuple(LEGACY_TABULAR_TABLE_SPECS)
+
+# Superficie exacta que el backend Sheets retirado administraba. Mantener este
+# nombre separado evita que código legado siga a ACTIVE_STORAGE_TABLE_SPECS y
+# convierta accidentalmente las tablas BigQuery en pestañas de un Spreadsheet.
+LEGACY_SHEETS_MANAGED_TABLE_SPECS: Mapping[str, TableSpec] = MappingProxyType(
     {
         spec.name: spec
         for spec in (
@@ -42,24 +58,20 @@ ACTIVE_STORAGE_TABLE_SPECS: Mapping[str, TableSpec] = MappingProxyType(
         )
     }
 )
-
-DEFERRED_STORAGE_TABLE_SPECS: Mapping[str, TableSpec] = MappingProxyType(
-    {
-        spec.name: spec
-        for spec in (
-            DIM_PRODUCTS,
-            MAP_SOURCE_PRODUCTS,
-        )
-    }
+LEGACY_SHEETS_MANAGED_TABLE_NAMES = tuple(LEGACY_SHEETS_MANAGED_TABLE_SPECS)
+LEGACY_SHEETS_DEFERRED_TABLE_NAMES = (
+    DIM_PRODUCTS.name,
+    MAP_SOURCE_PRODUCTS.name,
 )
-
-ACTIVE_STORAGE_TABLE_NAMES = tuple(ACTIVE_STORAGE_TABLE_SPECS)
-DEFERRED_STORAGE_TABLE_NAMES = tuple(DEFERRED_STORAGE_TABLE_SPECS)
 
 
 def is_active_storage_table(table_name: str) -> bool:
     return table_name in ACTIVE_STORAGE_TABLE_SPECS
 
 
-def is_deferred_storage_table(table_name: str) -> bool:
-    return table_name in DEFERRED_STORAGE_TABLE_SPECS
+def is_legacy_tabular_table(table_name: str) -> bool:
+    return table_name in LEGACY_TABULAR_TABLE_SPECS
+
+
+def is_legacy_sheets_managed_table(table_name: str) -> bool:
+    return table_name in LEGACY_SHEETS_MANAGED_TABLE_SPECS

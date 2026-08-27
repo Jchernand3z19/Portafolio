@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Verifica o inicializa el storage Google Sheets sin ejecutar scrapers."""
+"""Entry point histórico de Google Sheets, retirado fail-closed.
+
+BigQuery es el único backend físico activo. Se conservan helpers de validación y
+salida para poder auditar la implementación histórica, pero ninguna invocación de
+este CLI puede construir transporte, usar credenciales ni escribir en Sheets.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +33,7 @@ from precios_supermercados.google_sheets_transport import (
 
 SPREADSHEET_ID_ENV = "PRECIOS_SPS_GOOGLE_SPREADSHEET_ID"
 SERVICE_ACCOUNT_JSON_ENV = "PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON"
+RETIRED_ERROR_CODE = "google_sheets_storage_retired"
 _SAFE_OUTPUT = re.compile(r"^[a-z0-9_.-]{1,128}$")
 
 
@@ -45,7 +51,7 @@ def _required_env(name: str) -> str:
 
 
 def _required_storage_envs() -> tuple[str, str]:
-    """Valida ambas credenciales antes de construir transporte o tocar la red."""
+    """Valida credenciales históricas sin utilizarlas en el entrypoint retirado."""
 
     values = {
         SPREADSHEET_ID_ENV: os.environ.get(SPREADSHEET_ID_ENV),
@@ -73,8 +79,8 @@ def _required_storage_envs() -> tuple[str, str]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Verifica el Spreadsheet o materializa únicamente configuración; "
-            "no ejecuta scraping."
+            "Entry point histórico de Google Sheets retirado; "
+            "BigQuery es el backend activo."
         )
     )
     parser.add_argument(
@@ -86,17 +92,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(mode: str) -> dict[str, object]:
-    spreadsheet_id, service_account_json = _required_storage_envs()
-    transport = GoogleSheetsHttpTransport.from_service_account_json(
-        spreadsheet_id,
-        service_account_json,
-    )
-    adapter = GoogleSheetsWorkbookAdapter(transport)
-    result = run_google_sheets_bootstrap(adapter, mode=mode)
-    return {
-        "status": "ok",
-        **result.as_dict(),
-    }
+    """Falla antes de leer credenciales o construir cualquier transporte de red."""
+
+    del mode
+    raise StorageCliError(RETIRED_ERROR_CODE)
 
 
 def _safe_error_code(exc: Exception) -> str:
