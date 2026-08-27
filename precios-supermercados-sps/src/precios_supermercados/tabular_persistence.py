@@ -4,10 +4,11 @@ No escribe en Google Sheets ni en otro backend. Define las columnas canónicas q
 compartirán todos los supermercados y serializa producto, mapping, current/history
 sin perder identidad fuente ni comercial.
 
-La capa es fail-closed respecto a ubicación: una oferta no puede convertirse en
-fila comercial persistible si su ubicación no está habilitada en
-``LocationCatalog`` o si una fuente multiubicación no demuestra una asignación
-confirmada.
+La capa es fail-closed respecto a ubicación: una oferta sólo puede convertirse en
+fila comercial cuando la ubicación existe, está disponible, está dentro del
+alcance, tiene granularidad demostrada y cumple el binding requerido. El switch
+``extraction_enabled`` queda fuera de este gate porque controla tráfico futuro,
+no la persistencia de una observación ya obtenida.
 
 ``dim_products`` contiene únicamente atributos normalizados/canónicos de productos
 ya mapeados. ``map_source_products`` conserva la relación fuente -> producto y es
@@ -421,14 +422,21 @@ def validate_offer_location_for_persistence(
     offer: NormalizedOffer,
     catalog: LocationCatalog = DEFAULT_LOCATION_CATALOG,
 ) -> LocationConfig:
-    """Impide persistir una oferta bajo una ciudad no demostrada."""
+    """Impide persistir una oferta bajo una ciudad no demostrada.
+
+    ``extraction_enabled`` se excluye deliberadamente: es un switch de tráfico y
+    no cambia la validez comercial de una observación histórica ya capturada.
+    """
 
     if not isinstance(offer, NormalizedOffer):
         raise TabularPersistenceError("offer debe ser NormalizedOffer")
     try:
-        location = catalog.require_extraction_ready(offer.location_id)
+        location = catalog.location(offer.location_id)
+        block_reason = catalog.extraction_block_reason(offer.location_id)
     except LocationConfigError as exc:
         raise TabularPersistenceError(str(exc)) from exc
+    if block_reason not in {None, "extraction_disabled"}:
+        raise TabularPersistenceError(block_reason)
     if location.supermarket_id != offer.supermarket_id:
         raise TabularPersistenceError(
             "location_id pertenece a otro supermarket_id"

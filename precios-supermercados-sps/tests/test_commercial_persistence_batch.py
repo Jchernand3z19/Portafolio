@@ -271,7 +271,7 @@ def test_rejected_run_records_run_and_quality_without_touching_commercial_tables
     assert state.applied_run_count == 1
 
 
-def test_la_colonia_sps_binding_gate_fails_before_state_mutation():
+def test_la_colonia_snapshot_can_persist_while_future_extraction_stays_disabled():
     state = InMemoryCommercialState()
     item = validated(
         run_id="run-lc",
@@ -281,25 +281,25 @@ def test_la_colonia_sps_binding_gate_fails_before_state_mutation():
         location_status=LocationStatus.CONFIRMED,
     )
 
-    with pytest.raises(
-        CommercialPersistencePreparationError,
-        match="offer_location_not_persistable",
-    ):
-        prepare_new_run_persistence(
-            state,
-            decision("run-lc", decided_at=BASE + timedelta(minutes=1)),
-            (item,),
-            supermarket_id="la_colonia",
-            location_id="la_colonia_sps",
-            started_at_utc=BASE - timedelta(seconds=10),
-            finished_at_utc=BASE + timedelta(seconds=10),
-            products_observed=1,
-            offers_observed=1,
-            catalog=DEFAULT_LOCATION_CATALOG,
-        )
+    prepared = prepare_new_run_persistence(
+        state,
+        decision("run-lc", decided_at=BASE + timedelta(minutes=1)),
+        (item,),
+        supermarket_id="la_colonia",
+        location_id="la_colonia_sps",
+        started_at_utc=BASE - timedelta(seconds=10),
+        finished_at_utc=BASE + timedelta(seconds=10),
+        products_observed=1,
+        offers_observed=1,
+        catalog=DEFAULT_LOCATION_CATALOG,
+    )
 
-    assert state.current_count == 0
-    assert state.applied_run_count == 0
+    assert prepared.apply_result.commercial_update_allowed is True
+    assert prepared.table_row_counts["fact_offers_current"] == 1
+    locations = prepared.batch.rows["cfg_locations"]
+    sps = next(row for row in locations if row["location_id"] == "la_colonia_sps")
+    assert sps["extraction_enabled"] is False
+    assert DEFAULT_LOCATION_CATALOG.extraction_block_reason("la_colonia_sps") == "extraction_disabled"
 
 
 def test_quality_event_identity_mismatch_fails_before_state_mutation():

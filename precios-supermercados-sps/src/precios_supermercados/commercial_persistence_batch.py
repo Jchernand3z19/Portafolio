@@ -4,17 +4,9 @@ Esta frontera toma una decisión final + ofertas ya validadas, aplica la máquin
 estado en memoria y produce un ``TabularBatch`` atómico con configuración,
 current, histórico, registro del run y eventos de calidad. No hace I/O externo.
 
-La identidad canónica cross-source sigue disponible en el modelo lógico, pero sus
-tablas físicas se difieren hasta que exista una segunda fuente o un consumidor
-que requiera equivalencias reales. La identidad fuente y ``product_id`` siguen
-persistidas dentro de current/history, por lo que esta decisión no pierde
-trazabilidad ni bloquea una materialización futura.
-
 La validación que puede fallar por ubicación/metadata se ejecuta antes de mutar el
-estado en memoria. Un replay ya conocido se rechaza de forma explícita en esta
-capa: su reconciliación contra el registro durable requiere el fingerprint
-persistido y se implementa por separado, evitando convertir un retry ambiguo en
-una segunda escritura.
+estado en memoria. ``extraction_enabled`` controla tráfico futuro y no participa
+en la validación de persistencia de una observación ya obtenida.
 """
 
 from __future__ import annotations

@@ -31,17 +31,18 @@ bigquery_read_back = verified_offline
 google_sheets_selected = false
 google_sheets_productive_path = retired_fail_closed
 google_sheets_writes = false
+initial_snapshot_approved = true
+initial_snapshot_run_id = 32922877781
+initial_snapshot_artifact_id = 9590684834
 first_durable_bigquery_load = false
-commercial_persistence = false
-catalog_accepted = false
-production_authority = false
+commercial_persistence = pending_cloud_load
 extraction_enabled = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
 `ACTIVE_AUTHORIZATION_IDS = []` significa que no existe autorización live vigente. La evidencia histórica **no se interpreta como autorización abierta**. Cualquier nuevo tráfico contra La Colonia requiere autorización humana explícita vigente; una autorización anterior consumida no se reutiliza.
 
-No se necesita tráfico live para la frontera BigQuery actual: el catálogo ya descargado es evidencia suficiente para continuar todo lo que sea estrictamente offline.
+`extraction_enabled=false` controla tráfico futuro. No invalida por sí mismo un artifact histórico que ya fue obtenido, validado y aprobado para una carga concreta.
 
 ## One-shot full catalog — consumido
 
@@ -64,7 +65,7 @@ sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc
 
 No se persisten cookies, `regionId` raw, sesión, headers ni URLs sensibles.
 
-## Catálogo completo — técnicamente aceptado, no promovido a autoridad comercial
+## Catálogo completo — aprobado como snapshot inicial
 
 Evidencia del intento #15:
 
@@ -72,6 +73,8 @@ Evidencia del intento #15:
 run_id = 32922877781
 artifact_id = 9590684834
 artifact_name = la-colonia-sps-data-32922877781
+artifact_digest = sha256:0427e88be27df89fd9fcb50ed600ef5c6aef64177bfba92b4af3d2e25756a892
+source_commit = 589b694fdc75fd97d47fcc5259062fb026cf7ee4
 result = success
 catalog_complete = true
 validation_passed = true
@@ -89,18 +92,29 @@ product_requests_completed = 252
 
 La diferencia 9,439 SKU vs 9,437 `productId` es válida: 9,435 productos tienen un SKU y 2 productos tienen dos SKU. Las 9,439 identidades fuente son únicas.
 
-La capa `la_colonia_operational_artifact` demuestra **completitud técnica** pero prohíbe promover ese assessment por sí mismo a `catalog_accepted=true` o `production_authority=true`. El motor comercial exige que `catalog_accepted` provenga de un collector/verificador autoritativo y el binding durable de replay exige un `authority_evidence_id` real.
+El **2026-08-27T04:14:01Z** el usuario aprobó continuar con una solución simple y usar este artifact conocido como snapshot inicial. Esa aprobación está versionada en `commercial_persistence_guard.py` y queda ligada al run, artifact ID, digest, commit, ubicación y conteos conocidos.
 
-Por tanto siguen separados:
+Esto significa:
 
 ```text
 technical_catalog_complete = true
-catalog_accepted = false
-production_authority = false
+initial_snapshot_approved = true
+first_durable_bigquery_load = false
 extraction_enabled = false
 ```
 
-Esto no es inercia: son fronteras distintas. La primera carga durable puede prepararse desde evidencia ya descargada, pero no se falsificará una autoridad productiva que el contrato actual no demuestra.
+La aprobación **no** autoriza nuevas consultas a La Colonia, no sirve para otro artifact y no crea una infraestructura general de autoridad. Si cambia el snapshot inicial, la decisión versionada debe cambiar explícitamente mediante PR.
+
+## Control contra sobreingeniería
+
+El PR #323 se cerró sin merge porque introducía una capa criptográfica de autoridad (firmas, keyrings y capabilities) que no era necesaria para resolver la carga inicial.
+
+`AGENTS.md` ahora impone un gate de simplicidad:
+
+- una abstracción genérica necesita consumidores actuales;
+- no se introducen servicios, criptografía o trust layers sin necesidad real demostrada o requisito externo;
+- una decisión/configuración versionada se prefiere a un subsistema cuando resuelve el mismo problema;
+- para el snapshot inicial, una aprobación exacta del artifact conocido es suficiente.
 
 ## Productos y normalización — cerrado para el snapshot actual
 
@@ -126,6 +140,8 @@ El motor backend-neutral verifica:
 - replay exacto es idempotente;
 - rehidratación/restauración permite continuar en un proceso nuevo;
 - replay durable divergente falla cerrado.
+
+`extraction_enabled` ya no se interpreta como un permiso de persistencia. Durante la serialización de evidencia histórica puede ignorarse **únicamente ese switch**, mientras el catálogo persistido conserva `extraction_enabled=false` y todos los demás gates de ubicación permanecen vigentes.
 
 Estas pruebas no equivalen a persistencia cloud.
 
@@ -256,6 +272,7 @@ REHYDRATE / REPLAY                      [DONE OFFLINE]
 BIGQUERY CONTRACT                       [DONE OFFLINE]
 BIGQUERY ADAPTER + FAKE + BOOTSTRAP     [DONE OFFLINE]
 SIMULATED LOAD / REPLAY / ROLLBACK      [DONE OFFLINE]
+INITIAL SNAPSHOT APPROVAL               [DONE OFFLINE]
 GOOGLE SHEETS PRODUCTIVE PATH           [RETIRED]
 FIRST DURABLE BIGQUERY LOAD              [NEXT — CLOUD/HUMAN BOUNDARY]
 INVENTORY EVIDENCE / HISTORY            [PENDING]
@@ -277,4 +294,4 @@ Antes de la primera escritura durable hace falta una decisión/configuración hu
 4. configurar autenticación de mínimo privilegio para que el runtime pueda consultar, crear/validar tablas dentro de ese dataset, cargar staging y ejecutar DML/transacciones;
 5. sólo después ejecutar bootstrap de tablas y la primera carga durable.
 
-La primera carga no requiere volver a consultar La Colonia. Se reutilizará la evidencia offline disponible y cualquier promoción a run comercial autoritativo deberá cumplir el contrato de evidencia, sin inventar `catalog_accepted` ni `production_authority`.
+La primera carga no requiere volver a consultar La Colonia. Usará el artifact #9590684834 ya aprobado y mantendrá `extraction_enabled=false`.

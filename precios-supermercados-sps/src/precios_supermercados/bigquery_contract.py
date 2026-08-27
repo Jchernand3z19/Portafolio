@@ -131,7 +131,7 @@ PRODUCTOS = BigQueryTableSpec(
         F("measurement_unit", "STRING"),
         F("total_content", "NUMERIC"),
         F("barcode", "STRING"),
-        F("product_url", "STRING", True),
+        F("product_url", "STRING"),
         F("image_url", "STRING"),
         F("review_status", "STRING", True),
         F("first_seen_at_utc", "TIMESTAMP", True),

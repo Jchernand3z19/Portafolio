@@ -127,7 +127,7 @@ class RawProduct:
     source_key_type: SourceKeyType | str
     source_key: str
     source_name: str
-    product_url: str
+    product_url: str | None
     observed_at_utc: datetime
     scrape_run_id: str
     extractor_version: str
@@ -149,7 +149,7 @@ class RawProduct:
         object.__setattr__(self, "source_key_type", _enum_value(self.source_key_type, SourceKeyType, "source_key_type"))
         object.__setattr__(self, "source_key", _non_empty(self.source_key, "source_key"))
         object.__setattr__(self, "source_name", _non_empty(self.source_name, "source_name"))
-        object.__setattr__(self, "product_url", _absolute_url(self.product_url, "product_url", required=True))
+        object.__setattr__(self, "product_url", _absolute_url(self.product_url, "product_url"))
         object.__setattr__(self, "source_url", _absolute_url(self.source_url, "source_url", required=True))
         object.__setattr__(self, "image_url", _absolute_url(self.image_url, "image_url"))
         object.__setattr__(self, "observed_at_utc", _utc_datetime(self.observed_at_utc, "observed_at_utc"))
@@ -182,7 +182,7 @@ class NormalizedOffer:
     product_id: str
     offer_id: str
     source_name: str
-    product_url: str
+    product_url: str | None
     normalized_name: str
     currency: str
     is_promotion: bool
@@ -236,7 +236,7 @@ class NormalizedOffer:
         object.__setattr__(self, "source_key_type", _enum_value(self.source_key_type, SourceKeyType, "source_key_type"))
         object.__setattr__(self, "availability", _enum_value(self.availability, AvailabilityStatus, "availability"))
         object.__setattr__(self, "location_status", _enum_value(self.location_status, LocationStatus, "location_status"))
-        object.__setattr__(self, "product_url", _absolute_url(self.product_url, "product_url", required=True))
+        object.__setattr__(self, "product_url", _absolute_url(self.product_url, "product_url"))
         object.__setattr__(self, "source_url", _absolute_url(self.source_url, "source_url", required=True))
         object.__setattr__(self, "image_url", _absolute_url(self.image_url, "image_url"))
         object.__setattr__(self, "observed_at_utc", _utc_datetime(self.observed_at_utc, "observed_at_utc"))
