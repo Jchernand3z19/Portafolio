@@ -16,7 +16,8 @@ from __future__ import annotations
 import hashlib
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Mapping
 
 from google.api_core.exceptions import (
@@ -68,6 +69,38 @@ class GoogleCloudBigQueryClient:
         schema: list[bigquery.SchemaField],
     ) -> tuple[tuple[str, str, str], ...]:
         return tuple((field.name, field.field_type, field.mode) for field in schema)
+
+    @staticmethod
+    def _json_compatible_value(field_type: str, value: Any) -> Any:
+        """Convierte tipos Python ricos a representaciones JSON aceptadas por load jobs."""
+
+        if value is None:
+            return None
+        if field_type == "TIMESTAMP" and isinstance(value, datetime):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise BigQueryAdapterError("timestamp_timezone_required")
+            if value.utcoffset().total_seconds() != 0:
+                raise BigQueryAdapterError("timestamp_must_be_utc")
+            return value.isoformat(timespec="microseconds").replace("+00:00", "Z")
+        if field_type == "DATE" and isinstance(value, date) and not isinstance(value, datetime):
+            return value.isoformat()
+        if field_type == "NUMERIC" and isinstance(value, Decimal):
+            return format(value, "f")
+        return value
+
+    @classmethod
+    def _json_compatible_row(
+        cls,
+        spec: BigQueryTableSpec,
+        row: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        if set(row) != set(spec.columns):
+            raise BigQueryAdapterError(f"staging_row_schema_mismatch:{spec.name}")
+        fields = {field.name: field for field in spec.fields}
+        return {
+            column: cls._json_compatible_value(fields[column].field_type, row[column])
+            for column in spec.columns
+        }
 
     def ensure_dataset(self, dataset_id: str) -> None:
         ref = self._dataset_ref(dataset_id)
@@ -266,6 +299,7 @@ class GoogleCloudBigQueryClient:
                     script,
                     job_id=job_id,
                     location=location,
+                    job_retry=None,
                 )
             except Conflict:
                 job = self._client.get_job(job_id, location=location)
@@ -324,10 +358,14 @@ class GoogleCloudBigQueryClient:
                     schema=self._schema(spec),
                     write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
                 )
+                json_rows = [
+                    self._json_compatible_row(spec, row) for row in source_rows
+                ]
                 self._client.load_table_from_json(
-                    [dict(row) for row in source_rows],
+                    json_rows,
                     staging_ref,
                     job_config=job_config,
+                    location=location,
                 ).result()
                 staged[table_name] = staging_ref
                 existing = self._existing_key_count(dataset_id, spec, staging_ref)
