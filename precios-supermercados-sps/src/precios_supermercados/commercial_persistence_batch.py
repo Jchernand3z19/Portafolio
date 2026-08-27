@@ -19,12 +19,16 @@ una segunda escritura.
 ``extraction_enabled`` controla si se puede iniciar tráfico futuro contra la
 fuente. No invalida una observación ya obtenida y comercialmente autorizada. Por
 eso esta capa permite persistir evidencia histórica con extracción deshabilitada
-si todos los demás invariantes de ubicación siguen demostrados.
+si todos los demás invariantes de ubicación siguen demostrados. El serializer
+legado todavía reutiliza el gate live; cuando ése sea el único bloqueo se usa una
+vista efímera sólo para serialización. Las filas de configuración siempre salen
+del catálogo original, por lo que jamás se persiste ``extraction_enabled=True``
+por este mecanismo.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from types import MappingProxyType
 from typing import Mapping, Sequence
@@ -41,6 +45,7 @@ from .locations import (
     LocationCatalog,
     LocationConfigError,
     LocationSelectionMode,
+    build_location_catalog,
 )
 from .models import ValidatedOffer
 from .tabular_persistence import (
@@ -173,6 +178,23 @@ def _validate_offer_location_for_commercial_persistence(
     # validar supermercado activo, disponibilidad, scope, granularidad y binding.
     # Falta completar los checks que el serializer original ejecuta después.
     _validate_archived_offer_location(offer, catalog)
+
+
+def _serialization_catalog_for_archived_location(
+    catalog: LocationCatalog,
+    location_id: str,
+) -> LocationCatalog:
+    """Crea una vista efímera para serializers que aún consultan el gate live."""
+
+    location = catalog.location(location_id)
+    if location.extraction_enabled:
+        return catalog
+    enabled_location = replace(location, extraction_enabled=True)
+    locations = tuple(
+        enabled_location if item.location_id == location_id else item
+        for item in catalog.locations
+    )
+    return build_location_catalog(tuple(catalog.supermarkets.values()), locations)
 
 
 def _preflight_offers(
@@ -330,15 +352,19 @@ def prepare_new_run_persistence(
         current_rows: list[Mapping[str, object]] = []
         history_rows: list[Mapping[str, object]] = []
         if decision.commercial_update_allowed:
+            serialization_catalog = _serialization_catalog_for_archived_location(
+                catalog,
+                location_id,
+            )
             for offer_id in affected_offer_ids:
                 current = state.current(offer_id)
                 if current is None:
                     raise CommercialPersistencePreparationError(
                         "commercial_current_missing_after_apply"
                     )
-                current_rows.append(current_offer_row(current, catalog))
+                current_rows.append(current_offer_row(current, serialization_catalog))
                 history_rows.extend(
-                    history_offer_row(period, catalog)
+                    history_offer_row(period, serialization_catalog)
                     for period in state.history(offer_id)
                 )
 
