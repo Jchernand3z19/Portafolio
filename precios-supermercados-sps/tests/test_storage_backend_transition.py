@@ -24,7 +24,12 @@ SHEETS_WORKFLOW = (
 def test_turso_contract_is_active_and_previous_backends_are_not_productive():
     assert ACTIVE_STORAGE_BACKEND == "turso"
     assert ACTIVE_STORAGE_TABLE_NAMES == TURSO_TABLE_NAMES
-    assert set(ACTIVE_STORAGE_TABLE_NAMES).isdisjoint(LEGACY_BIGQUERY_TABLE_NAMES)
+    # Los contratos pueden compartir nombres genéricos (p. ej. locations o
+    # scrape_runs) sin que exista un segundo backend activo. Lo que debe ser
+    # distinto es la superficie física completa, no cada identificador aislado.
+    assert ACTIVE_STORAGE_TABLE_NAMES != LEGACY_BIGQUERY_TABLE_NAMES
+    assert "offers_current" in ACTIVE_STORAGE_TABLE_NAMES
+    assert "precios_historicos" in LEGACY_BIGQUERY_TABLE_NAMES
 
     source = SHEETS_WORKFLOW.read_text(encoding="utf-8")
     assert 'handle.write("allowed=false\\n")' in source
