@@ -35,6 +35,13 @@ from .enums import LocationStatus
 from .models import RawProduct, ValidatedOffer
 from .offer_normalization import normalize_and_validate_raw_products
 from .scrapers.la_colonia import CATALOG_URL, EXTRACTOR_VERSION, SCHEMA_VERSION
+from .turso_persistence import (
+    TursoAdapter,
+    TursoApplyResult,
+    TursoConnectionPort,
+    TursoWritePlan,
+    build_turso_write_plan,
+)
 
 
 class InitialSnapshotError(ValueError):
@@ -211,14 +218,18 @@ def load_la_colonia_initial_snapshot(path: Path) -> tuple[ValidatedOffer, ...]:
     return offers
 
 
-def build_la_colonia_initial_snapshot_bigquery_plan(path: Path) -> BigQueryWritePlan:
-    """Construye el plan BigQuery completo del snapshot sin hacer I/O cloud."""
-
+def _prepared_snapshot(path: Path):
     offers = load_la_colonia_initial_snapshot(path)
-    prepared = prepare_la_colonia_initial_snapshot_persistence(
+    return prepare_la_colonia_initial_snapshot_persistence(
         InMemoryCommercialState(),
         offers,
     )
+
+
+def build_la_colonia_initial_snapshot_bigquery_plan(path: Path) -> BigQueryWritePlan:
+    """Construye el plan BigQuery legado completo sin hacer I/O cloud."""
+
+    prepared = _prepared_snapshot(path)
     return build_bigquery_write_plan(
         prepared,
         catalog_products_reported=LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS,
@@ -235,7 +246,7 @@ def apply_la_colonia_initial_snapshot_bigquery(
     client: BigQueryClientPort,
     dataset_id: str,
 ) -> BigQueryApplyResult:
-    """Bootstrap + carga + reconciliación usando el port BigQuery ya existente."""
+    """Bootstrap + carga + reconciliación del adapter BigQuery legado."""
 
     plan = build_la_colonia_initial_snapshot_bigquery_plan(path)
     adapter = BigQueryAdapter(client, dataset_id=dataset_id)
@@ -263,4 +274,67 @@ def apply_la_colonia_initial_snapshot_bigquery(
     )
     _require(len(matching_runs) == 1, "durable_run_missing")
     _require(matching_runs[0]["run_fingerprint"] == plan.run_fingerprint, "durable_run_fingerprint_mismatch")
+    return result
+
+
+def build_la_colonia_initial_snapshot_turso_plan(path: Path) -> TursoWritePlan:
+    """Construye el plan Turso del snapshot aprobado sin abrir conexiones."""
+
+    prepared = _prepared_snapshot(path)
+    return build_turso_write_plan(
+        prepared,
+        catalog_products_reported=LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS,
+        unique_products_extracted=LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS,
+        skus_extracted=LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+        skus_with_price=LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+        catalog_product_coverage=Decimal("1"),
+    )
+
+
+def apply_la_colonia_initial_snapshot_turso(
+    path: Path,
+    *,
+    connection: TursoConnectionPort,
+) -> TursoApplyResult:
+    """Bootstrap + carga + reconciliación Turso usando una conexión explícita."""
+
+    plan = build_la_colonia_initial_snapshot_turso_plan(path)
+    adapter = TursoAdapter(connection)
+    adapter.bootstrap()
+    result = adapter.apply(plan)
+    read_back = adapter.read_back(
+        supermarket_id=LA_COLONIA_INITIAL_SNAPSHOT_SUPERMARKET_ID,
+        location_id=LA_COLONIA_INITIAL_SNAPSHOT_LOCATION_ID,
+    )
+    _require(
+        len(read_back.source_products) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+        "durable_source_product_count_mismatch",
+    )
+    _require(
+        len(read_back.current_rows) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+        "durable_current_count_mismatch",
+    )
+    _require(
+        len(read_back.history_rows) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+        "durable_history_count_mismatch",
+    )
+    matching_runs = tuple(
+        row for row in read_back.runs
+        if row["scrape_run_id"] == LA_COLONIA_INITIAL_SNAPSHOT_RUN_ID
+    )
+    _require(len(matching_runs) == 1, "durable_run_missing")
+    _require(
+        matching_runs[0]["run_fingerprint"] == plan.run_fingerprint,
+        "durable_run_fingerprint_mismatch",
+    )
+    restored = read_back.rehydrate()
+    _require(
+        len(restored.current) == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+        "durable_rehydrated_current_count_mismatch",
+    )
+    _require(
+        sum(len(periods) for periods in restored.history.values())
+        == LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
+        "durable_rehydrated_history_count_mismatch",
+    )
     return result
