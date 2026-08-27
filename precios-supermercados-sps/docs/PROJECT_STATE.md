@@ -28,6 +28,8 @@ bigquery_first_load = simulated_offline
 bigquery_replay = verified_offline
 bigquery_partial_failure = verified_offline
 bigquery_read_back = verified_offline
+commercial_authority_contract = verified_offline
+authority_to_bigquery_path = verified_offline
 google_sheets_selected = false
 google_sheets_productive_path = retired_fail_closed
 google_sheets_writes = false
@@ -89,18 +91,32 @@ product_requests_completed = 252
 
 La diferencia 9,439 SKU vs 9,437 `productId` es válida: 9,435 productos tienen un SKU y 2 productos tienen dos SKU. Las 9,439 identidades fuente son únicas.
 
-La capa `la_colonia_operational_artifact` demuestra **completitud técnica** pero prohíbe promover ese assessment por sí mismo a `catalog_accepted=true` o `production_authority=true`. El motor comercial exige que `catalog_accepted` provenga de un collector/verificador autoritativo y el binding durable de replay exige un `authority_evidence_id` real.
+La capa `la_colonia_operational_artifact` demuestra **completitud técnica** pero prohíbe promover ese assessment por sí mismo a `catalog_accepted=true` o `production_authority=true`.
 
-Por tanto siguen separados:
+La frontera positiva ya está implementada offline: `commercial_authority.py` verifica una atestación Ed25519 de autoridad comercial y `la_colonia_commercial_authority.py` sólo la promueve si queda ligada exactamente al mismo supermercado, ubicación, run, autorización consumida y digests de discovery, plan autenticado y provenance. La decisión firmada además debe ser posterior a la evidencia física que acepta.
+
+La verificación criptográfica sola **no** otorga autoridad. Primero produce un objeto con `production_authority=false` y `catalog_accepted=false`; únicamente la política específica de La Colonia puede producir `VerifiedLaColoniaCommercialAuthority`. Después, `run_evidence_id` se deriva internamente como `crev1_*` sobre autoridad + decisión + payload completo. No existe un booleano productivo libre ni un `authority_evidence_id` suministrado por el caller operativo.
+
+Por tanto el contrato está cerrado offline, pero el estado real sigue siendo:
 
 ```text
 technical_catalog_complete = true
+commercial_authority_contract = verified_offline
+production_authority_attestation_provisioned = false
 catalog_accepted = false
 production_authority = false
 extraction_enabled = false
 ```
 
-Esto no es inercia: son fronteras distintas. La primera carga durable puede prepararse desde evidencia ya descargada, pero no se falsificará una autoridad productiva que el contrato actual no demuestra.
+No se ha firmado ni aplicado una atestación productiva real para el artifact #15 y no se ha escrito ese snapshot en BigQuery. Las pruebas usan claves efímeras generadas dentro del test; ninguna clave privada productiva está en GitHub.
+
+## Persistencia de snapshot vs permiso de extracción
+
+`extraction_enabled` controla **tráfico futuro**, no la validez de evidencia ya obtenida. El preparador comercial genérico continúa fallando cerrado cuando una ubicación tiene extracción deshabilitada.
+
+Existe una única capability privada para persistir un snapshot histórico con ese gate apagado. Sólo `la_colonia_commercial_authority.py` puede consumirla después de verificar la autoridad tipada. Los tests de auditoría impiden que scripts, workflows u otros módulos la usen.
+
+La vista efímera usada por serializers legados nunca altera el catálogo original ni sus filas de configuración. La prueba end-to-end autoridad → `BigQueryWritePlan` → `FakeBigQueryClient` confirma que `locations.extraction_enabled` permanece `false`, el run queda ligado por `crev1_*` y un replay exacto no duplica datos.
 
 ## Productos y normalización — cerrado para el snapshot actual
 
@@ -163,6 +179,24 @@ BigQueryAdapter
         └─ GoogleCloudBigQueryClient
 ```
 
+Para un run comercial aceptado, antes de esa proyección existe ahora:
+
+```text
+TECHNICAL READINESS + VERIFIED PROVENANCE
+        ↓
+SIGNED COMMERCIAL AUTHORITY ATTESTATION
+        ↓
+LA COLONIA SOURCE POLICY
+        ↓
+VerifiedLaColoniaCommercialAuthority
+        ↓
+crev1_* BOUND RUN EVIDENCE
+        ↓
+PreparedCommercialPersistence
+        ↓
+BigQueryWritePlan
+```
+
 El dominio no importa el SDK de Google.
 
 ### Historia analítica
@@ -192,7 +226,8 @@ Offline quedó verificado:
 - mismo run con fingerprint distinto falla cerrado;
 - fallo parcial no publica un subconjunto del run;
 - run rechazado no contamina productos/precios/inventario/mapping;
-- read-back reconstruye productos, última observación de precio/inventario y ledger de runs.
+- read-back reconstruye productos, última observación de precio/inventario y ledger de runs;
+- run autoritativo simulado cruza la frontera completa con `crev1_*` y mantiene `extraction_enabled=false`.
 
 El cliente Google Cloud usa staging efímero y una única transacción DML para mutaciones destino. No crea Google Cloud projects ni datasets.
 
@@ -253,11 +288,14 @@ COMPLETENESS / TECHNICAL ACCEPTANCE     [DONE]
 PRODUCT NORMALIZATION                   [DONE]
 CURRENT / HISTORY SEMANTICS             [DONE OFFLINE]
 REHYDRATE / REPLAY                      [DONE OFFLINE]
+COMMERCIAL AUTHORITY CONTRACT           [DONE OFFLINE]
+AUTHORITY → BIGQUERY FAKE PATH          [DONE OFFLINE]
 BIGQUERY CONTRACT                       [DONE OFFLINE]
 BIGQUERY ADAPTER + FAKE + BOOTSTRAP     [DONE OFFLINE]
 SIMULATED LOAD / REPLAY / ROLLBACK      [DONE OFFLINE]
 GOOGLE SHEETS PRODUCTIVE PATH           [RETIRED]
-FIRST DURABLE BIGQUERY LOAD              [NEXT — CLOUD/HUMAN BOUNDARY]
+PRODUCTION AUTHORITY ATTESTATION        [HUMAN TRUST BOUNDARY]
+FIRST DURABLE BIGQUERY LOAD             [CLOUD/HUMAN BOUNDARY]
 INVENTORY EVIDENCE / HISTORY            [PENDING]
 DAILY AUTOMATION                        [PENDING]
 DASH + PLOTLY                           [PENDING]
@@ -265,16 +303,13 @@ TEGUCIGALPA                             [PENDING]
 SUPERMARKET #2                          [PENDING]
 ```
 
-## Próximo paso exacto — frontera humana/cloud
+## Próximo paso exacto — fronteras humanas/cloud
 
-No crear recursos cloud por inferencia.
+No crear recursos cloud ni autoridad productiva por inferencia.
 
-Antes de la primera escritura durable hace falta una decisión/configuración humana real en Google Cloud:
+Para la primera escritura durable faltan dos decisiones externas independientes:
 
-1. seleccionar o crear el Google Cloud project que será dueño de los datos y confirmar que puede usar billing;
-2. habilitar BigQuery API si aún no está habilitada;
-3. elegir **dataset ID y región** y crear ese dataset;
-4. configurar autenticación de mínimo privilegio para que el runtime pueda consultar, crear/validar tablas dentro de ese dataset, cargar staging y ejecutar DML/transacciones;
-5. sólo después ejecutar bootstrap de tablas y la primera carga durable.
+1. **Trust/autoridad comercial:** provisionar una clave pública de autoridad comercial confiable fuera del código y emitir una atestación real, específica para el artifact/run que se decida aceptar. La clave privada no se guardará en GitHub y una firma válida seguirá sujeta a la política de readiness/provenance exacta.
+2. **Google Cloud:** seleccionar o crear el Google Cloud project dueño de los datos y confirmar billing; habilitar BigQuery API; elegir dataset ID + región y crear ese dataset; configurar autenticación de mínimo privilegio para consultar, crear/validar tablas dentro de ese dataset, cargar staging y ejecutar DML/transacciones.
 
-La primera carga no requiere volver a consultar La Colonia. Se reutilizará la evidencia offline disponible y cualquier promoción a run comercial autoritativo deberá cumplir el contrato de evidencia, sin inventar `catalog_accepted` ni `production_authority`.
+Sólo después se ejecutarán bootstrap de tablas y primera carga durable. La carga no requiere volver a consultar La Colonia. `catalog_accepted`, `production_authority` y `commercial_persistence` seguirán en `false` hasta que exista la atestación productiva real y la escritura durable se complete y se lea de vuelta con éxito.
