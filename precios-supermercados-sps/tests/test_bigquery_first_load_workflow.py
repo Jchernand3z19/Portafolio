@@ -77,6 +77,8 @@ def test_cloud_bootstrap_is_least_privilege_and_repo_id_bound() -> None:
     assert ': "${DATASET_LOCATION:?' in raw
     assert 'GITHUB_REPOSITORY_ID="1282475205"' in raw
     assert 'GITHUB_MAIN_REF="refs/heads/main"' in raw
+    assert 'EXPECTED_ISSUER="https://token.actions.githubusercontent.com"' in raw
+    assert "https://token.actions.githubusercontent.com/\"" not in raw
     assert "assertion.repository_id=='${GITHUB_REPOSITORY_ID}'" in raw
     assert "assertion.ref=='${GITHUB_MAIN_REF}'" in raw
     assert "attribute.repository_id=assertion.repository_id" in raw
