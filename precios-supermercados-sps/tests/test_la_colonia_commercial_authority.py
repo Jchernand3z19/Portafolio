@@ -9,6 +9,8 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
+from precios_supermercados.bigquery_adapter import BigQueryAdapter, FakeBigQueryClient
+from precios_supermercados.bigquery_persistence import build_bigquery_write_plan
 from precios_supermercados.commercial_authority import (
     CommercialAuthorityClaims,
     CommercialAuthorityError,
@@ -347,4 +349,50 @@ def test_authoritative_snapshot_can_persist_while_future_extraction_stays_disabl
     config_rows = prepared.batch.rows["cfg_locations"]
     by_id = {row["location_id"]: row for row in config_rows}
     assert by_id["la_colonia_sps"]["extraction_enabled"] is False
+    assert DEFAULT_LOCATION_CATALOG.extraction_block_reason("la_colonia_sps") == "extraction_disabled"
+
+
+def test_authority_path_reaches_bigquery_and_exact_replay_without_enabling_live() -> None:
+    authority = _verified_authority()
+    prepared = prepare_la_colonia_authoritative_run_persistence(
+        InMemoryCommercialState(),
+        authority,
+        (_offer(),),
+        started_at_utc=BASE - timedelta(minutes=10),
+        finished_at_utc=BASE,
+        products_observed=1,
+        offers_observed=1,
+    )
+    plan = build_bigquery_write_plan(prepared)
+    client = FakeBigQueryClient()
+    adapter = BigQueryAdapter(client, dataset_id="precios_authority_test")
+    adapter.bootstrap()
+
+    first = adapter.apply(plan)
+    snapshot = adapter.read_back(
+        supermarket_id="la_colonia",
+        location_id="la_colonia_sps",
+    )
+    locations = client.read_rows("precios_authority_test", "locations")
+    sps = next(row for row in locations if row["location_id"] == "la_colonia_sps")
+
+    assert first.exact_run_replay is False
+    assert len(snapshot.products) == 1
+    assert len(snapshot.latest_prices) == 1
+    assert len(snapshot.latest_inventory) == 1
+    assert len(snapshot.runs) == 1
+    assert snapshot.runs[0]["catalog_accepted"] is True
+    assert snapshot.runs[0]["run_evidence_id"].startswith("crev1_")
+    assert sps["extraction_enabled"] is False
+
+    replay = adapter.apply(plan)
+    replay_snapshot = adapter.read_back(
+        supermarket_id="la_colonia",
+        location_id="la_colonia_sps",
+    )
+    assert replay.exact_run_replay is True
+    assert len(replay_snapshot.products) == 1
+    assert len(replay_snapshot.latest_prices) == 1
+    assert len(replay_snapshot.latest_inventory) == 1
+    assert len(replay_snapshot.runs) == 1
     assert DEFAULT_LOCATION_CATALOG.extraction_block_reason("la_colonia_sps") == "extraction_disabled"
