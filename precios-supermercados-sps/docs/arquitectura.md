@@ -14,7 +14,7 @@ Principios:
 
 1. la fuente manda; no se inventan atributos, disponibilidad ni ubicación;
 2. contexto fuente y ubicación comercial son conceptos distintos;
-3. corrección técnica no equivale a autoridad productiva;
+3. completitud técnica no equivale por sí sola a aprobación de un snapshot;
 4. toda ambigüedad crítica falla cerrada;
 5. identidad estable no depende de precio, disponibilidad ni fecha;
 6. todo run terminal se registra;
@@ -22,7 +22,8 @@ Principios:
 8. lógica comercial independiente del backend;
 9. BigQuery es el único backend persistente activo;
 10. Dash + Plotly es la capa de consumo seleccionada;
-11. una tabla nueva requiere grain, key, lifecycle y consumidor reales.
+11. una tabla nueva requiere grain, key, lifecycle y consumidor reales;
+12. durante el MVP se prefiere la solución mínima con consumidor actual sobre una plataforma genérica futura.
 
 ## 2. Flujo principal
 
@@ -41,7 +42,7 @@ Validación + identidad + state_hash
   ↓
 ValidatedOffer
   ↓
-Completitud / provenance / decisión autoritativa
+Completitud + aprobación versionada cuando corresponda
   ↓
 Motor backend-neutral de current/history + replay
   ↓
@@ -61,6 +62,8 @@ Python Dash + Plotly
 ```
 
 El dominio no importa el SDK de Google. El fake prueba contrato, bootstrap, primera carga simulada, replay, conflictos, rollback y read-back sin red. El cliente Google Cloud sólo implementa el port.
+
+Para el primer snapshot de La Colonia, la aprobación es una decisión versionada y específica del artifact conocido; no constituye un subsistema general de autoridad ni habilita extracción futura.
 
 ## 3. Contratos protegidos
 
@@ -108,7 +111,7 @@ la_colonia_sps    = ubicación comercial SPS con binding técnico confirmado
 la_colonia_tgu    = ubicación conocida fuera del alcance inicial
 ```
 
-La existencia del binding técnico no activa por sí sola extracción productiva ni concede autorización live.
+La existencia del binding técnico no activa por sí sola extracción ni concede autorización live. `extraction_enabled` controla tráfico futuro y no debe reutilizarse como gate para invalidar evidencia histórica ya obtenida.
 
 ## 7. Precio
 
@@ -206,11 +209,11 @@ Git/versionado sigue siendo la fuente confiable de reglas durante el MVP. BigQue
 
 ## 14. Runs y quality events
 
-Todo run terminal se registra aunque no cambie precio/inventario. Runs rechazados/fallidos no contaminan productos, precios, inventario ni mapping comerciales. Hashes/fingerprints demuestran igualdad, no autoridad.
+Todo run terminal se registra aunque no cambie precio/inventario. Runs rechazados/fallidos no contaminan productos, precios, inventario ni mapping comerciales. Hashes/fingerprints demuestran igualdad y replay; no aprueban por sí solos un snapshot nuevo.
 
 ## 15. Cloudflare / provenance
 
-La ruta edge existente conserva allowlists, OIDC, presupuesto/pacing, single-flight, replay/fencing, receipts y Observability. Su existencia no concede autoridad comercial ni autorización live.
+La ruta edge existente conserva allowlists, OIDC, presupuesto/pacing, single-flight, replay/fencing, receipts y Observability para el tráfico live que ya fue diseñado. No se amplía ni se convierte en requisito de la carga histórica inicial.
 
 La evidencia live ya obtenida se reutiliza offline. Una observación nueva de La Colonia requiere autorización humana vigente.
 
@@ -251,6 +254,7 @@ CURRENT/HISTORY + REPLAY OFFLINE       [DONE]
 BIGQUERY CONTRACT                      [DONE OFFLINE]
 BIGQUERY ADAPTER / FAKE / BOOTSTRAP    [DONE OFFLINE]
 REPLAY / PARTIAL FAILURE / READ-BACK   [DONE OFFLINE]
+INITIAL SNAPSHOT APPROVAL              [DONE OFFLINE]
 GOOGLE SHEETS PRODUCTIVE PATH          [RETIRED]
 FIRST DURABLE LOAD                     [NEXT CLOUD BOUNDARY]
 INVENTORY FIRST-CLASS                  [PENDING]
