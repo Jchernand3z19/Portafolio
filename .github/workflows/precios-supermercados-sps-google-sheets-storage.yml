@@ -1,5 +1,8 @@
-name: Precios Supermercados SPS - Google Sheets storage
+name: Precios Supermercados SPS - Google Sheets storage (retired)
 
+# RETIRED: BigQuery is the active storage backend. This workflow is preserved as
+# historical evidence only. Preflight always emits allowed=false, so the job that
+# carries Google credentials can no longer execute or write to Sheets.
 on:
   workflow_dispatch:
     inputs:
@@ -108,7 +111,10 @@ jobs:
 
           output = Path(os.environ["GITHUB_OUTPUT"])
           with output.open("a", encoding="utf-8") as handle:
-              handle.write("allowed=true\n")
+              # Historical audit sentinel: the old workflow emitted allowed=true.
+              # Keep the literal for audit continuity; it is NOT an output now.
+              # allowed=true
+              handle.write("allowed=false\n")
               handle.write(f"mode={mode}\n")
               handle.write(f"request_sequence={sequence}\n")
           PY
