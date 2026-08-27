@@ -176,7 +176,7 @@ def test_cli_defaults_to_read_only_check():
     assert args.mode == MODE_CHECK
 
 
-def test_cli_missing_credentials_emits_only_sanitized_error(monkeypatch, capsys):
+def test_retired_cli_fails_closed_before_credentials(monkeypatch, capsys):
     module = load_cli_module()
     monkeypatch.delenv(module.SPREADSHEET_ID_ENV, raising=False)
     monkeypatch.delenv(module.SERVICE_ACCOUNT_JSON_ENV, raising=False)
@@ -187,7 +187,8 @@ def test_cli_missing_credentials_emits_only_sanitized_error(monkeypatch, capsys)
     assert exit_code == 2
     assert captured.out == ""
     assert '"status": "error"' in captured.err
-    assert "missing_precios_sps_google_spreadsheet_id" in captured.err
+    assert "google_sheets_storage_retired" in captured.err
+    assert "missing_precios_sps_google" not in captured.err
     assert "Traceback" not in captured.err
 
 
