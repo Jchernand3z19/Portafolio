@@ -17,7 +17,28 @@ El objetivo es cerrar La Colonia San Pedro Sula end-to-end antes de comenzar otr
 
 Antes de crear una clase, adapter, verifier, workflow, tabla o documento nuevo, comprueba que resuelve un blocker actual, que no existe ya una pieza reutilizable y que la nueva frontera es realmente necesaria. Prefiere una implementación específica y clara para La Colonia cuando una plataforma genérica no tenga consumidor actual.
 
-La simplificación no permite evadir controles del sitio, exceder presupuesto de tráfico, inventar ubicación SPS, exponer secretos/datos personales ni convertir evidencia técnica en autoridad comercial.
+### Gate obligatorio de simplicidad
+
+Antes de introducir **cualquier** módulo, abstracción, servicio, dependencia, protocolo, capa de confianza o mecanismo criptográfico nuevo, responde internamente estas cuatro preguntas:
+
+1. ¿Cuál es el blocker **actual** que impide avanzar el producto?
+2. ¿Cuál es el cambio más pequeño que lo resuelve con código existente?
+3. ¿Qué consumidor **actual** necesita la nueva abstracción? Dos consumidores hipotéticos futuros no cuentan.
+4. ¿Qué fallo real y demostrado evita la complejidad adicional?
+
+Si no hay respuestas concretas, **no se crea la nueva capa**.
+
+Reglas adicionales para el MVP:
+
+- una abstracción genérica necesita al menos dos consumidores actuales; con uno solo, implementa la solución específica;
+- no introducir criptografía, keyrings, attestation frameworks, identity planes, trust services ni PKI salvo que una plataforma externa lo exija, exista una amenaza demostrada que no pueda resolverse más simple o el usuario lo pida explícitamente;
+- no crear un servicio, workflow o tabla para representar un estado que puede vivir como una decisión/configuración versionada;
+- no convertir un control operativo simple en un subsistema de seguridad independiente;
+- si una solución propuesta añade más módulos/capas que el problema que resuelve, vuelve a comparar contra la alternativa mínima antes de implementarla;
+- para el snapshot inicial ya obtenido de La Colonia, una aprobación versionada y auditable del artifact conocido es suficiente; no requiere una infraestructura criptográfica propia;
+- `extraction_enabled` controla **tráfico futuro**, no invalida automáticamente evidencia histórica ya obtenida y verificada.
+
+La simplificación no permite evadir controles del sitio, exceder presupuesto de tráfico, inventar ubicación SPS, exponer secretos/datos personales ni aceptar evidencia que falle validaciones técnicas existentes.
 
 ## Contratos protegidos
 
@@ -68,7 +89,7 @@ Reglas:
 
 Una autorización read-only nunca cubre automáticamente credenciales, billing, login de usuario, mutación externa, compras, despliegues con coste, decisiones manuales de mapping sin evidencia o escrituras productivas no autorizadas.
 
-Los runs read-only no conceden por sí solos `production_authority`, `catalog_accepted` ni autoridad de persistencia.
+Un run read-only no concede por sí solo aceptación comercial; un snapshot histórico puede aceptarse únicamente mediante una decisión versionada que lo identifique de forma exacta y después de que sus validaciones técnicas ya hayan pasado.
 
 ## Ubicación
 
@@ -162,7 +183,7 @@ Antes de modificar workflows, lee `.github/workflows/AGENTS.md`.
 - workflows SPS nuevos entran en `test_workflow_security_audit.py`;
 - no debilites el auditor para hacer pasar una configuración;
 - entrypoints live quedan fail-closed sin autorización vigente;
-- entrypoints con secretos, mutación externa, costes o autoridad comercial siguen fail-closed hasta cerrar su frontera.
+- entrypoints con secretos, mutación externa o costes siguen fail-closed hasta cerrar su frontera.
 
 ## Seguridad de datos
 
