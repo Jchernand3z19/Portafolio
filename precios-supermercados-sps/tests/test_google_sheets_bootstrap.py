@@ -14,7 +14,7 @@ from precios_supermercados.google_sheets_bootstrap import (
     build_configuration_batch,
     run_google_sheets_bootstrap,
 )
-from precios_supermercados.storage_contract import ACTIVE_STORAGE_TABLE_SPECS
+from precios_supermercados.storage_contract import LEGACY_SHEETS_MANAGED_TABLE_SPECS
 
 
 SPREADSHEET_ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz_0123456789"
@@ -94,7 +94,7 @@ def test_default_configuration_records_confirmed_sps_binding_without_enabling_ex
     assert locations["la_colonia_tgu"]["technical_binding_confirmed"] is False
 
 
-def test_check_mode_is_read_only():
+def test_check_mode_reads_only_legacy_sheets_contract():
     transport = FakeTransport(metadata={"sheets": []})
     adapter = GoogleSheetsWorkbookAdapter(transport)
 
@@ -107,14 +107,14 @@ def test_check_mode_is_read_only():
     assert result.replayed == 0
     assert result.nonempty_managed_tables == 0
     assert result.payload_bytes is None
-    assert set(result.row_counts) == set(ACTIVE_STORAGE_TABLE_SPECS)
+    assert set(result.row_counts) == set(LEGACY_SHEETS_MANAGED_TABLE_SPECS)
     assert all(count == 0 for count in result.row_counts.values())
     assert transport.metadata_calls == 1
     assert transport.batch_get_calls == []
     assert transport.batch_update_calls == []
 
 
-def test_apply_config_initializes_active_tabs_but_leaves_fact_tables_empty():
+def test_apply_config_initializes_only_legacy_tabs_but_leaves_fact_tables_empty():
     transport = FakeTransport(metadata={"sheets": []})
     adapter = GoogleSheetsWorkbookAdapter(transport)
 
@@ -127,7 +127,7 @@ def test_apply_config_initializes_active_tabs_but_leaves_fact_tables_empty():
     assert result.nonempty_managed_tables == 0
     assert result.row_counts["cfg_supermarkets"] == 1
     assert result.row_counts["cfg_locations"] == 2
-    for table_name in ACTIVE_STORAGE_TABLE_SPECS:
+    for table_name in LEGACY_SHEETS_MANAGED_TABLE_SPECS:
         if table_name.startswith("fact_"):
             assert result.row_counts[table_name] == 0
     assert result.payload_bytes is not None and result.payload_bytes > 0
@@ -139,7 +139,7 @@ def test_apply_config_initializes_active_tabs_but_leaves_fact_tables_empty():
         for request in requests
         if "addSheet" in request
     }
-    assert added_titles == set(ACTIVE_STORAGE_TABLE_SPECS)
+    assert added_titles == set(LEGACY_SHEETS_MANAGED_TABLE_SPECS)
     assert "dim_products" not in added_titles
     assert "map_source_products" not in added_titles
 
