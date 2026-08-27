@@ -107,7 +107,7 @@ d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 
 ## Catálogo y normalización actuales
 
-El catálogo completo aceptado técnicamente del intento #15 contiene 9,439 SKU y 9,437 productos. La normalización de presentación del snapshot está cerrada en 9,439/9,439 con cero pendientes.
+El catálogo completo aceptado técnicamente del intento #15 contiene 9,439 SKU y 9,437 productos. El pipeline produce 9,439 ofertas normalizadas, pero **no** todas tienen la presentación estructurada resuelta: 8,436 quedaron normalizadas y 1,003 permanecen `needs_review`. En identidad canónica, 8,965 SKU están listos por GTIN válido y 474 mantienen mapping pendiente. No conviertas pendientes en valores normalizados ni inventes equivalencias para cerrar conteos.
 
 Conserva siempre valor fuente y valor normalizado por separado. Overrides revisados deben estar ligados a identidad/firma fuente y fallar cerrado si esa firma cambia.
 
