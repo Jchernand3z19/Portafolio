@@ -13,7 +13,7 @@ POOL_ID="${POOL_ID:-precios-sps-github}"
 PROVIDER_ID="${PROVIDER_ID:-github-portafolio}"
 GITHUB_REPOSITORY_ID="1282475205"
 GITHUB_MAIN_REF="refs/heads/main"
-EXPECTED_ISSUER="https://token.actions.githubusercontent.com/"
+EXPECTED_ISSUER="https://token.actions.githubusercontent.com"
 EXPECTED_CONDITION="assertion.repository_id=='${GITHUB_REPOSITORY_ID}' && assertion.ref=='${GITHUB_MAIN_REF}'"
 EXPECTED_MAPPING="google.subject=assertion.sub,attribute.repository_id=assertion.repository_id,attribute.ref=assertion.ref"
 
