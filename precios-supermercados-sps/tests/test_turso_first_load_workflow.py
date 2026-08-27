@@ -30,16 +30,24 @@ def test_turso_first_load_is_manual_main_only_and_requires_explicit_boolean() ->
     }
 
     jobs = workflow["jobs"]
-    assert set(jobs) == {"first-load"}
-    job = jobs["first-load"]
-    assert "github.repository == 'Jchernand3z19/Portafolio'" in job["if"]
-    assert "github.ref == 'refs/heads/main'" in job["if"]
-    assert "inputs.apply_initial_snapshot == true" in job["if"]
-    assert "permissions" not in job
-    assert "environment" not in job
+    assert set(jobs) == {"prepare-sqlite", "first-load"}
+
+    prepare = jobs["prepare-sqlite"]
+    assert "github.repository == 'Jchernand3z19/Portafolio'" in prepare["if"]
+    assert "github.ref == 'refs/heads/main'" in prepare["if"]
+    assert "inputs.apply_initial_snapshot != true" in prepare["if"]
+    assert "permissions" not in prepare
+    assert "environment" not in prepare
+
+    first_load = jobs["first-load"]
+    assert "github.repository == 'Jchernand3z19/Portafolio'" in first_load["if"]
+    assert "github.ref == 'refs/heads/main'" in first_load["if"]
+    assert "inputs.apply_initial_snapshot == true" in first_load["if"]
+    assert "permissions" not in first_load
+    assert "environment" not in first_load
 
 
-def test_turso_first_load_uses_exact_snapshot_sqlite_preflight_and_only_turso_secrets() -> None:
+def test_turso_prepare_sqlite_uses_exact_snapshot_and_publishes_verified_database() -> None:
     raw = WORKFLOW.read_text(encoding="utf-8")
 
     assert 'SOURCE_ARTIFACT_ID: "9655225996"' in raw
@@ -55,6 +63,21 @@ def test_turso_first_load_uses_exact_snapshot_sqlite_preflight_and_only_turso_se
     assert "test_la_colonia_initial_snapshot_turso_integration.py" in raw
     assert "PRECIOS_SPS_APPROVED_SNAPSHOT_JSON" in raw
     assert "scripts/cargar_snapshot_inicial_turso.py" in raw
+    assert "--sqlite-output" in raw
+    assert "precios-sps-la-colonia-initial.db" in raw
+    assert "PRAGMA integrity_check" in raw
+    assert '"offers_current": 9439' in raw
+    assert '"offer_history": 9439' in raw
+    assert '"source_products": 9439' in raw
+    assert "(7081, 2358)" in raw
+    assert "(8965, 474, 1003)" in raw
+    assert "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" in raw
+    assert "precios-sps-la-colonia-initial-sqlite-32922877781" in raw
+
+
+def test_turso_direct_first_load_remains_explicit_and_uses_only_turso_secrets() -> None:
+    raw = WORKFLOW.read_text(encoding="utf-8")
+
     assert "--apply" in raw
     assert "secrets.TURSO_DATABASE_URL" in raw
     assert "secrets.TURSO_AUTH_TOKEN" in raw
