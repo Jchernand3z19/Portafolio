@@ -19,6 +19,10 @@ from .bigquery_contract import (
 from .bigquery_persistence import BigQueryWritePlan
 
 
+_BOUND_EVIDENCE_PREFIX = "crev1_"
+_BOUND_EVIDENCE_HEX_LENGTH = 64
+
+
 class BigQueryAdapterError(RuntimeError):
     """Error fail-closed del adapter de persistencia."""
 
@@ -85,6 +89,19 @@ class BigQueryReadBack:
     runs: tuple[Mapping[str, Any], ...]
 
 
+def _is_bound_run_evidence_id(value: object) -> bool:
+    """Reconoce únicamente el binding durable producido por commercial_run_evidence."""
+
+    if not isinstance(value, str):
+        return False
+    if not value.startswith(_BOUND_EVIDENCE_PREFIX):
+        return False
+    digest = value[len(_BOUND_EVIDENCE_PREFIX) :]
+    return len(digest) == _BOUND_EVIDENCE_HEX_LENGTH and all(
+        char in "0123456789abcdef" for char in digest
+    )
+
+
 class BigQueryAdapter:
     """Orquesta bootstrap, replay y escrituras atómicas sin acoplar el dominio."""
 
@@ -104,6 +121,13 @@ class BigQueryAdapter:
     def apply(self, plan: BigQueryWritePlan) -> BigQueryApplyResult:
         if not isinstance(plan, BigQueryWritePlan):
             raise BigQueryAdapterError("write_plan_invalid")
+
+        run_row = plan.rows[SCRAPE_RUNS.name][0]
+        if run_row["commercial_update_allowed"] and not _is_bound_run_evidence_id(
+            run_row["run_evidence_id"]
+        ):
+            raise BigQueryAdapterError("authoritative_run_evidence_required")
+
         existing = self._client.get_row(
             self.dataset_id,
             SCRAPE_RUNS.name,
@@ -130,12 +154,28 @@ class BigQueryAdapter:
             raise
         except Exception as exc:  # pragma: no cover - defensa frente a clientes reales
             raise BigQueryAdapterError("atomic_write_failed") from exc
+
+        # El precheck anterior no es un lock. Un retry concurrente puede ganar la
+        # carrera después de él; por eso la postcondición durable vuelve a ligar el
+        # run persistido con el fingerprint que este caller intentó aplicar.
+        persisted = self._client.get_row(
+            self.dataset_id,
+            SCRAPE_RUNS.name,
+            (plan.scrape_run_id,),
+        )
+        if persisted is None:
+            raise BigQueryAdapterError("scrape_run_missing_after_atomic_write")
+        if persisted.get("run_fingerprint") != plan.run_fingerprint:
+            raise BigQueryReplayConflict("conflicting_run_replay")
+
+        total_rows = sum(len(rows) for rows in plan.rows.values())
+        exact_after_race = created == 0 and updated == 0 and replayed == total_rows
         return BigQueryApplyResult(
             scrape_run_id=plan.scrape_run_id,
             created=created,
             updated=updated,
             replayed_rows=replayed,
-            exact_run_replay=False,
+            exact_run_replay=exact_after_race,
         )
 
     def read_back(self, *, supermarket_id: str, location_id: str) -> BigQueryReadBack:
