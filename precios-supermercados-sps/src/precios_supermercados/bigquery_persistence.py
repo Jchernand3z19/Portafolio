@@ -5,6 +5,11 @@ capa no intenta convertir sus periodos SCD en el histórico analítico: para cad
 run comercial aceptado materializa una observación de precio e inventario por
 oferta observada. Así ``precio igual observado hoy`` queda distinguible de
 ``no hubo observación hoy``.
+
+La proyección acepta además metadatos públicos de una atestación comercial ya
+verificada. La política productiva de fuente es responsable de exigirlos; esta
+capa los conserva dentro de ``scrape_runs`` para auditoría y re-verificación
+futura sin persistir secretos.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ from .bigquery_contract import (
     SCRAPE_RUNS,
     SUPERMARKETS,
 )
+from .commercial_authority_audit import CommercialAuthorityAuditMetadata
 from .commercial_persistence_batch import PreparedCommercialPersistence
 from .identifiers import canonicalize_gtin, generate_gtin_product_id
 from .tabular_persistence import (
@@ -242,9 +248,42 @@ def _mapping_row(row: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
+def _validate_authority_audit(
+    audit: CommercialAuthorityAuditMetadata | None,
+    *,
+    prepared: PreparedCommercialPersistence,
+) -> None:
+    if audit is None:
+        return
+    if not isinstance(audit, CommercialAuthorityAuditMetadata):
+        raise BigQueryPersistenceError("authority_audit_metadata_invalid")
+    if not prepared.apply_result.commercial_update_allowed:
+        raise BigQueryPersistenceError("non_authoritative_run_has_authority_audit")
+    record = prepared.run_record
+    try:
+        document = json.loads(audit.authority_attestation_json)
+        claims = document["claims"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise BigQueryPersistenceError("authority_attestation_audit_invalid") from exc
+    expected = {
+        "supermarket_id": record.supermarket_id,
+        "location_id": record.location_id,
+        "scrape_run_id": record.scrape_run_id,
+        "run_status": record.run_status.value,
+    }
+    for field_name, expected_value in expected.items():
+        if claims.get(field_name) != expected_value:
+            raise BigQueryPersistenceError(
+                f"authority_audit_{field_name}_mismatch"
+            )
+    if audit.authority_decided_at_utc < record.finished_at_utc:
+        raise BigQueryPersistenceError("authority_audit_predates_run_finish")
+
+
 def build_bigquery_write_plan(
     prepared: PreparedCommercialPersistence,
     *,
+    authority_audit: CommercialAuthorityAuditMetadata | None = None,
     normalization_overrides: Sequence[Mapping[str, Any]] = (),
 ) -> BigQueryWritePlan:
     """Convierte un run ya validado/aplicado en memoria a una escritura durable.
@@ -252,10 +291,15 @@ def build_bigquery_write_plan(
     Un run rechazado conserva ledger y quality events, pero no contamina productos,
     precios, inventario ni mapping. Los overrides sólo se materializan cuando el
     caller entrega filas explícitas con ``source_signature``; nunca se sintetizan.
+
+    ``authority_audit`` no concede autoridad. Cuando existe, esta capa sólo lo
+    reconcilia con el run y lo materializa. La política productiva específica de
+    fuente es quien debe exigir que todo run autoritativo lo incluya.
     """
 
     if not isinstance(prepared, PreparedCommercialPersistence):
         raise BigQueryPersistenceError("prepared_persistence_invalid")
+    _validate_authority_audit(authority_audit, prepared=prepared)
     batch = prepared.batch.rows
     current_rows = tuple(batch.get(FACT_OFFERS_CURRENT.name, ()))
     accepted = prepared.apply_result.commercial_update_allowed
@@ -336,6 +380,23 @@ def build_bigquery_write_plan(
     run_base = {
         "scrape_run_id": record.scrape_run_id,
         "run_evidence_id": record.run_evidence_id,
+        "authority_evidence_id": (
+            authority_audit.authority_evidence_id if authority_audit else None
+        ),
+        "authority_attestation_json": (
+            authority_audit.authority_attestation_json if authority_audit else None
+        ),
+        "authority_signing_key_id": (
+            authority_audit.authority_signing_key_id if authority_audit else None
+        ),
+        "authority_public_key_spki_sha256": (
+            authority_audit.authority_public_key_spki_sha256
+            if authority_audit
+            else None
+        ),
+        "authority_decided_at_utc": (
+            authority_audit.authority_decided_at_utc if authority_audit else None
+        ),
         "supermarket_id": record.supermarket_id,
         "location_id": record.location_id,
         "run_status": record.run_status.value,
