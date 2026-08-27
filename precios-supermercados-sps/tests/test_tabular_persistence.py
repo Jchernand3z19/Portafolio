@@ -308,6 +308,19 @@ def test_la_colonia_sps_is_persistible_while_future_extraction_stays_disabled() 
     assert DEFAULT_LOCATION_CATALOG.extraction_block_reason("la_colonia_sps") == "extraction_disabled"
 
 
+def test_disabled_extraction_does_not_bypass_out_of_scope_location_gate() -> None:
+    offer = make_validated(
+        run_id="run-tgu",
+        observed_at=BASE_TIME,
+        supermarket_id="la_colonia",
+        location_id="la_colonia_tgu",
+        location_status=LocationStatus.CONFIRMED,
+    ).offer
+
+    with pytest.raises(TabularPersistenceError, match="location_out_of_scope"):
+        validate_offer_location_for_persistence(offer, DEFAULT_LOCATION_CATALOG)
+
+
 def test_unknown_or_mismatched_location_is_never_persistible() -> None:
     catalog = fixed_catalog()
     unknown = make_validated(
