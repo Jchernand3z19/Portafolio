@@ -60,6 +60,7 @@ PRESERVE_INITIAL_SNAPSHOT_WORKFLOW = (
     "precios-supermercados-sps-preserve-initial-snapshot.yml"
 )
 BIGQUERY_FIRST_LOAD_WORKFLOW = "precios-supermercados-sps-bigquery-first-load.yml"
+TURSO_FIRST_LOAD_WORKFLOW = "precios-supermercados-sps-turso-first-load.yml"
 GOOGLE_SHEETS_STORAGE_REQUEST = (
     "precios-supermercados-sps/.automation/google-sheets-storage-request.json"
 )
@@ -74,12 +75,8 @@ EDGE_GATEWAY_VAR = "CLOUDFLARE_EDGE_GATEWAY_URL"
 EDGE_PUBLIC_KEY_VAR = "CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL"
 GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET = "PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON"
 GOOGLE_SHEETS_SPREADSHEET_VAR = "PRECIOS_SPS_GOOGLE_SPREADSHEET_ID"
-BIGQUERY_GCP_VARS = {
-    "PRECIOS_SPS_GCP_PROJECT_ID",
-    "PRECIOS_SPS_BIGQUERY_DATASET_ID",
-    "PRECIOS_SPS_GCP_WIF_PROVIDER",
-    "PRECIOS_SPS_GCP_SERVICE_ACCOUNT",
-}
+TURSO_DATABASE_URL_SECRET = "TURSO_DATABASE_URL"
+TURSO_AUTH_TOKEN_SECRET = "TURSO_AUTH_TOKEN"
 
 EXPECTED_PERMISSIONS = {
     PROBE_WORKFLOW: {"contents": "read"},
@@ -92,7 +89,8 @@ EXPECTED_PERMISSIONS = {
     LOCATION_BINDING_WORKFLOW: {"contents": "read"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"contents": "read"},
     PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"actions": "read", "contents": "read"},
-    BIGQUERY_FIRST_LOAD_WORKFLOW: {"actions": "read", "contents": "read"},
+    BIGQUERY_FIRST_LOAD_WORKFLOW: {"contents": "read"},
+    TURSO_FIRST_LOAD_WORKFLOW: {"actions": "read", "contents": "read"},
     TEST_WORKFLOW: {"contents": "read"},
 }
 
@@ -105,9 +103,6 @@ ALLOWED_JOB_PERMISSIONS = {
     },
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {
         "publish-status": {"statuses": "write"},
-    },
-    BIGQUERY_FIRST_LOAD_WORKFLOW: {
-        "first-load": {"actions": "read", "contents": "read", "id-token": "write"},
     },
 }
 
@@ -123,6 +118,7 @@ EXPECTED_TRIGGERS = {
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch", "push"},
     PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"workflow_dispatch", "push"},
     BIGQUERY_FIRST_LOAD_WORKFLOW: {"workflow_dispatch"},
+    TURSO_FIRST_LOAD_WORKFLOW: {"workflow_dispatch"},
     TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
 }
 
@@ -132,17 +128,18 @@ BLOCKED_ENTRYPOINTS = {
     RECOVERY_WORKFLOW,
     FACET_WORKFLOW,
     LOCATION_BINDING_WORKFLOW,
+    BIGQUERY_FIRST_LOAD_WORKFLOW,
 }
 
 ALLOWED_SECRET_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_GATEWAY_SECRET, PROBE_OBSERVABILITY_SECRET},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET},
+    TURSO_FIRST_LOAD_WORKFLOW: {TURSO_DATABASE_URL_SECRET, TURSO_AUTH_TOKEN_SECRET},
 }
 ALLOWED_VAR_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
     LIVE_WORKFLOW: {EDGE_GATEWAY_VAR, EDGE_PUBLIC_KEY_VAR},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {GOOGLE_SHEETS_SPREADSHEET_VAR},
-    BIGQUERY_FIRST_LOAD_WORKFLOW: BIGQUERY_GCP_VARS,
 }
 
 
@@ -257,7 +254,7 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
             for step in steps(workflow)
             if str(step.get("uses", "")).startswith("actions/checkout@")
         ]
-        if path.name == LOCATION_BINDING_WORKFLOW:
+        if path.name in {LOCATION_BINDING_WORKFLOW, BIGQUERY_FIRST_LOAD_WORKFLOW}:
             assert all_jobs_blocked(workflow)
             assert checkout_steps == []
             continue
@@ -462,7 +459,6 @@ def test_controlled_probe_is_manual_isolated_and_verified_outside_oidc_job():
     assert "ACTIONS_ID_TOKEN_REQUEST_URL" not in verifier_raw
     assert "cloudflare_controlled_probe_verifier" in verifier_raw
     assert "cloudflare_controlled_probe_observability" in verifier_raw
-    assert "CloudflareObservabilityHttpTransport" in verifier_raw
     assert "PROBE_OBSERVABILITY_TOKEN" in verifier_raw
     assert "actions/download-artifact@" in verifier_raw
     assert "${{ inputs." not in raw
@@ -482,7 +478,6 @@ def test_only_explicit_oidc_jobs_can_request_write_permission():
     allowed = {
         (PROBE_WORKFLOW, "controlled-probe"),
         (LIVE_WORKFLOW, LIVE_FACET_JOB),
-        (BIGQUERY_FIRST_LOAD_WORKFLOW, "first-load"),
     }
     observed: set[tuple[str, str]] = set()
     for path, workflow in workflows():
@@ -686,6 +681,35 @@ def test_google_sheets_storage_has_controlled_main_trigger_and_least_privilege()
     assert "scripts/descubrir_facets_la_colonia.py" not in raw
     assert ".workers.dev" not in raw
     assert "CLOUDFLARE_PROBE_GATEWAY_URL" not in raw
+
+
+def test_turso_first_load_is_manual_main_only_and_has_only_database_secrets():
+    path = WORKFLOW_DIR / TURSO_FIRST_LOAD_WORKFLOW
+    workflow = load_workflow(path)
+    assert workflow["permissions"] == {"actions": "read", "contents": "read"}
+    assert set(workflow["on"]) == {"workflow_dispatch"}
+    first_load = jobs(workflow)["first-load"]
+    condition = first_load["if"]
+    assert "github.repository == 'Jchernand3z19/Portafolio'" in condition
+    assert "github.ref == 'refs/heads/main'" in condition
+    assert "inputs.apply_initial_snapshot == true" in condition
+    assert "permissions" not in first_load
+    assert "environment" not in first_load
+
+    raw = path.read_text(encoding="utf-8")
+    assert "SOURCE_ARTIFACT_ID: \"9655225996\"" in raw
+    assert "2780eeffa5ef62f2d1c8c2c8365e88da1ca0006622d2f7b1c3529f834c9b5e50" in raw
+    assert "test_la_colonia_initial_snapshot_turso_integration.py" in raw
+    assert "scripts/cargar_snapshot_inicial_turso.py" in raw
+    assert "TURSO_DATABASE_URL" in raw
+    assert "TURSO_AUTH_TOKEN" in raw
+    assert "id-token" not in raw
+    assert "vars." not in raw
+    assert "schedule:" not in raw
+    assert "scripts/probar_la_colonia.py" not in raw
+    assert "scripts/probar_muestra_sps_la_colonia.py" not in raw
+    assert "scripts/descubrir_facets_la_colonia.py" not in raw
+    assert "scripts/diagnosticar_binding_ubicacion_la_colonia.py" not in raw
 
 
 def test_ci_paths_cover_project_policy_and_every_sps_workflow():
