@@ -100,6 +100,26 @@ def test_creates_valid_models():
     assert validated.quality_events == ()
 
 
+def test_missing_product_url_is_preserved_as_unknown_instead_of_invented() -> None:
+    raw = RawProduct(
+        supermarket_id="super-demo",
+        location_id="sps-principal",
+        source_key_type="sku",
+        source_key="SKU-001",
+        source_name="Arroz Blanco Marca Demo 1 kg",
+        product_url=None,
+        observed_at_utc=datetime(2026, 8, 5, 0, 0, tzinfo=timezone.utc),
+        scrape_run_id="run_20260805_000000",
+        extractor_version="0.1.0",
+        schema_version="1.0.0",
+        source_url="https://example.com/catalog",
+    )
+    offer = build_offer(product_url=None)
+
+    assert raw.product_url is None
+    assert offer.product_url is None
+
+
 @pytest.mark.parametrize(
     ("field_name", "invalid_value"),
     [
