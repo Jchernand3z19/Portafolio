@@ -206,11 +206,4 @@ def build_la_colonia_initial_snapshot_bigquery_plan(path: Path) -> BigQueryWrite
         InMemoryCommercialState(),
         offers,
     )
-    return build_bigquery_write_plan(
-        prepared,
-        catalog_products_reported=LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS,
-        unique_products_extracted=LA_COLONIA_INITIAL_SNAPSHOT_PRODUCTS,
-        skus_extracted=LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
-        skus_with_price=LA_COLONIA_INITIAL_SNAPSHOT_OFFERS,
-        catalog_product_coverage=Decimal("1"),
-    )
+    return build_bigquery_write_plan(prepared)
