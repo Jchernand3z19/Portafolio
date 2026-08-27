@@ -327,7 +327,6 @@ _REQUIRED_BY_TABLE: Mapping[str, frozenset[str]] = MappingProxyType(
                 "first_observed_at_utc",
                 "last_observed_at_utc",
                 "last_scrape_run_id",
-                "product_url",
                 "quantity_is_exact",
             }
         ),
@@ -365,7 +364,6 @@ _REQUIRED_BY_TABLE: Mapping[str, frozenset[str]] = MappingProxyType(
                 "opened_by_scrape_run_id",
                 "last_confirmed_by_scrape_run_id",
                 "last_observed_at_utc",
-                "product_url",
                 "quantity_is_exact",
             }
         ),
