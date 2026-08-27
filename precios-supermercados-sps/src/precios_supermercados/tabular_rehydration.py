@@ -275,6 +275,8 @@ def history_from_row(row: Mapping[str, Any]) -> OfferHistoryPeriod:
         raise TabularRehydrationError("durable_change_type_invalid") from exc
     return OfferHistoryPeriod(
         offer_history_id=_required_text(row, "offer_history_id"),
+        offer_id=validated.offer.offer_id,
+        state_hash=validated.state_hash,
         validated_offer=validated,
         valid_from_utc=valid_from,
         valid_to_utc=valid_to,
