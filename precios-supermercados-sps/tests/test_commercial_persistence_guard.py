@@ -203,7 +203,7 @@ def test_initial_snapshot_wrapper_fixes_all_authoritative_metadata() -> None:
     args, kwargs = mocked.call_args
     approved_decision = args[1]
     assert approved_decision.scrape_run_id == LA_COLONIA_INITIAL_SNAPSHOT_RUN_ID
-    assert approved_decision.run_status is RunStatus.WARNING
+    assert approved_decision.run_status is RunStatus.SUCCESS
     assert approved_decision.catalog_accepted is True
     assert kwargs["supermarket_id"] == "la_colonia"
     assert kwargs["location_id"] == "la_colonia_sps"
