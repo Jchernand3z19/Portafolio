@@ -15,6 +15,10 @@ granularity = city
 technical_binding_confirmed = true
 full_catalog_validation_passed = true
 full_crawl = true
+catalog_products_reported = 9437
+unique_products_extracted = 9437
+skus_extracted = 9439
+skus_with_price = 9439
 products_normalized = 9439 / 9439
 presentation_normalized = 8436
 presentation_pending = 1003
@@ -22,25 +26,28 @@ gtin_mapping_ready = 8965
 product_mapping_pending = 474
 history_change_integration = verified_offline
 tabular_rehydrate_restore_cycle = verified_offline
-persistent_backend_selected = bigquery
-bigquery_contract = verified_offline
-bigquery_adapter = verified_offline
-bigquery_fake_client = verified_offline
-bigquery_bootstrap = verified_offline
-bigquery_first_load = simulated_offline
-bigquery_replay = verified_offline
-bigquery_partial_failure = verified_offline
-bigquery_read_back = verified_offline
+persistent_backend_selected = turso
+turso_sqlite_contract = verified_offline
+turso_adapter = verified_offline
+turso_bootstrap = verified_offline
+turso_transactions_rollback = verified_offline
+turso_replay = verified_offline
+turso_read_back_rehydrate = verified_offline
 initial_snapshot_loader = verified_offline
-initial_snapshot_bigquery_plan = verified_offline
+initial_snapshot_turso_plan = verified_offline
+initial_snapshot_9439_sqlite_integration = verified_with_synthetic_full_shape
+initial_snapshot_exact_sqlite_preflight = prepared_for_first_load
+first_durable_turso_load = false
+bigquery_productive_path = retired_fail_closed
+bigquery_implementation = legacy_preserved
 google_sheets_selected = false
 google_sheets_productive_path = retired_fail_closed
 google_sheets_writes = false
 initial_snapshot_approved = true
 initial_snapshot_run_id = 32922877781
 initial_snapshot_artifact_id = 9590684834
-first_durable_bigquery_load = false
-commercial_persistence = pending_cloud_load
+initial_snapshot_preserved_artifact_id = 9655225996
+commercial_persistence = pending_turso_credentials_and_first_load
 extraction_enabled = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
@@ -70,7 +77,7 @@ sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc
 
 No se persisten cookies, `regionId` raw, sesión, headers ni URLs sensibles.
 
-## Catálogo completo — aprobado como snapshot inicial
+## Catálogo completo — snapshot inicial aprobado
 
 Evidencia del intento #15:
 
@@ -98,35 +105,13 @@ product_requests_completed = 252
 
 La diferencia 9,439 SKU vs 9,437 `productId` es válida: 9,435 productos tienen un SKU y 2 productos tienen dos SKU. Las 9,439 identidades fuente son únicas.
 
-El **2026-08-27T04:14:01Z** el usuario aprobó continuar con una solución simple y usar este artifact conocido como snapshot inicial. Esa aprobación está versionada en `commercial_persistence_guard.py` y queda ligada al run, artifact ID, digest, commit, ubicación y conteos conocidos.
+El snapshot exacto fue aprobado como primera carga mediante decisión versionada. El loader valida el SHA-256 de `full-catalog.json` **antes** de interpretar filas y luego revalida metadata, ubicación y conteos. No acepta otro archivo por similitud de datos.
 
-El loader offline valida además el SHA-256 exacto de `full-catalog.json` antes de interpretar filas. No descarga nada ni acepta otro snapshot por coincidencia de conteos.
+Una copia byte-equivalente del artifact original quedó preservada como artifact `9655225996`; su ZIP conserva el mismo SHA-256. La primera carga Turso usa esa evidencia existente y no vuelve a consultar La Colonia.
 
-Esto significa:
+La aprobación no autoriza nuevas consultas a La Colonia, no sirve para otro snapshot y no crea una infraestructura general de autoridad.
 
-```text
-technical_catalog_complete = true
-initial_snapshot_approved = true
-initial_snapshot_loader = verified_offline
-initial_snapshot_bigquery_plan = verified_offline
-first_durable_bigquery_load = false
-extraction_enabled = false
-```
-
-La aprobación **no** autoriza nuevas consultas a La Colonia, no sirve para otro artifact y no crea una infraestructura general de autoridad. Si cambia el snapshot inicial, la decisión versionada debe cambiar explícitamente mediante PR.
-
-## Control contra sobreingeniería
-
-El PR #323 se cerró sin merge porque introducía una capa criptográfica de autoridad (firmas, keyrings y capabilities) que no era necesaria para resolver la carga inicial.
-
-`AGENTS.md` ahora impone un gate de simplicidad:
-
-- una abstracción genérica necesita consumidores actuales;
-- no se introducen servicios, criptografía o trust layers sin necesidad real demostrada o requisito externo;
-- una decisión/configuración versionada se prefiere a un subsistema cuando resuelve el mismo problema;
-- para el snapshot inicial, una aprobación exacta del artifact conocido es suficiente.
-
-## Productos y normalización — procesado para el snapshot actual
+## Productos y normalización
 
 ```text
 sku_input = 9439
@@ -141,129 +126,106 @@ versioned_overrides = true
 normalization_before_state_hash = true
 ```
 
-Las 1,003 presentaciones pendientes no se inventan: permanecen con campos normalizados incompletos y `needs_review`. De igual forma, 474 SKU sin GTIN válido quedan con mapping canónico pendiente. Esto no impide conservar sus observaciones de precio y disponibilidad con identidad fuente estable.
+Las 1,003 presentaciones pendientes no se inventan: permanecen con campos normalizados incompletos y `needs_review`. Los 474 SKU sin GTIN válido conservan `prod_pending_*` y mapping pendiente. Esto no impide conservar sus precios y disponibilidad con identidad fuente estable.
 
 La fuente original permanece separada de valores normalizados. Overrides manuales se ligan a `source_product_id + source_signature`; si cambia la evidencia fuente el override anterior no se reutiliza silenciosamente.
 
 ## Historial comercial — verificado offline
 
-El motor backend-neutral verifica:
+El motor backend-neutral y el adapter Turso verifican:
 
-- primera observación crea current y periodo inicial;
-- observación idéntica confirma sin duplicar periodos;
-- cambio real de `current_price` cierra el periodo anterior y abre uno nuevo;
+- primera observación crea `offers_current` y un periodo inicial;
+- observación idéntica posterior actualiza/confirmar current sin crear un periodo histórico redundante;
+- cada ejecución terminal crea su registro en `scrape_runs`;
+- cambio real de estado comercial cierra el periodo anterior y abre uno nuevo;
 - replay exacto es idempotente;
-- rehidratación/restauración permite continuar en un proceso nuevo;
-- replay durable divergente falla cerrado.
+- el mismo `scrape_run_id` con fingerprint divergente falla cerrado;
+- rehidratación permite continuar en un proceso nuevo;
+- fallo parcial dentro de la transacción revierte todas las mutaciones del run;
+- run rechazado registra ledger/evidencia permitida pero no muta estado comercial.
 
-`extraction_enabled` ya no se interpreta como un permiso de persistencia. La evidencia histórica puede persistirse con ese switch en `false`; todos los demás gates de ubicación permanecen vigentes y el valor almacenado sigue siendo `false`.
+`extraction_enabled` no es permiso de persistencia. El snapshot histórico aprobado puede persistirse manteniendo ese switch en `false`; todos los demás gates de ubicación y evidencia siguen vigentes.
 
-Estas pruebas no equivalen a persistencia cloud.
+## Turso / SQLite — backend operativo activo
 
-## BigQuery — frontera offline cerrada
+El contrato físico activo vive en `turso_contract.py` y la persistencia en `turso_persistence.py`.
 
-**BigQuery es el único backend físico activo.** `storage_contract.py` ya no presenta Google Sheets como backend activo.
-
-Tablas físicas cerradas:
+Tablas:
 
 ```text
 supermarkets
 locations
-productos
-precios_historicos
-inventario_historico
+products
+source_products
+offers_current
+offer_history
 scrape_runs
 quality_events
 normalization_overrides
-product_mapping
 ```
 
-El contrato define grain, logical key, null semantics, partitioning y clustering. BigQuery no hace cumplir primary keys; el adapter aplica las logical keys y replay explícitamente.
-
-Frontera de implementación:
+Características ya implementadas y cubiertas offline:
 
 ```text
-DOMAIN / CURRENT-HISTORY ENGINE
-        ↓
-BigQueryWritePlan
-        ↓
-BigQueryClientPort
-        ↓
-BigQueryAdapter
-        ├─ FakeBigQueryClient
-        └─ GoogleCloudBigQueryClient
+STRICT tables
+foreign_keys = ON
+schema_version = 1
+constraints e índices críticos
+transacción por run
+rollback completo
+current/history
+read-back
+rehydrate
+exact replay
+replay conflictivo fail-closed
+precios en minor units/centavos
+runs rechazados sin mutación comercial
+quality events
+SQLite :memory: como motor real de pruebas
 ```
 
-El dominio no importa el SDK de Google.
+La ruta completa de 9,439 filas se prueba sobre SQLite real con un snapshot sintético de forma completa y determinista. Además existe una prueba de integración que exige el archivo aprobado exacto mediante `PRECIOS_SPS_APPROVED_SNAPSHOT_JSON`; el workflow de primera carga la ejecuta sobre el artifact preservado **antes** de intentar la conexión remota.
 
-El snapshot inicial ya recorre offline la ruta completa:
+La primera carga durable todavía no se ha ejecutado. La frontera pendiente es crear/configurar la base Turso y proporcionar al workflow, mediante GitHub Actions Secrets, las credenciales esperadas por el driver:
 
 ```text
-full-catalog.json exacto
--> 9439 RawProduct
--> 9439 ValidatedOffer
--> decisión inicial versionada
--> current/history
--> BigQueryWritePlan
--> FakeBigQueryClient
--> replay exacto sin duplicar
+TURSO_DATABASE_URL
+TURSO_AUTH_TOKEN
 ```
 
-El `scrape_runs` inicial conserva también los conteos conocidos (9,437 productos reportados/únicos, 9,439 SKU y 100% de cobertura) dentro del fingerprint inmutable del plan.
+Ninguno de esos valores debe guardarse en Git, documentación o chat.
 
-### Historia analítica
+## BigQuery — implementación preservada, ruta productiva retirada
 
-BigQuery conserva una observación por **run comercial aceptado**, incluso cuando el precio no cambió. Así se distingue:
+El trabajo BigQuery previo no se destruye: contrato, adapter, fake client, bootstrap GCP y pruebas legadas permanecen como implementación histórica/futura.
+
+Sin embargo:
 
 ```text
-precio igual observado hoy
-!=
-no hubo observación hoy
+ACTIVE_STORAGE_BACKEND = turso
+bigquery_productive_path = retired_fail_closed
+first_durable_bigquery_load = false
 ```
 
-El motor Python de periodos y el histórico observacional BigQuery son representaciones distintas y reconciliadas por tests.
-
-### Idempotencia y fallo parcial
-
-Offline quedó verificado:
-
-- bootstrap de dataset/tablas con fake;
-- primera carga simulada;
-- snapshot inicial completo convertido al plan físico existente;
-- 9,439 productos fuente/SKU, observaciones de precio, inventario y mappings en el plan inicial;
-- métricas conocidas del catálogo preservadas en `scrape_runs`;
-- upsert de productos;
-- append de precio/inventario;
-- `unknown` de inventario permanece `unknown`;
-- registro de run/quality events;
-- overrides explícitos;
-- replay exacto no duplica;
-- mismo run con fingerprint distinto falla cerrado;
-- fallo parcial no publica un subconjunto del run;
-- run rechazado no contamina productos/precios/inventario/mapping;
-- read-back reconstruye productos, última observación de precio/inventario y ledger de runs.
-
-El cliente Google Cloud usa staging efímero y una única transacción DML para mutaciones destino. No crea Google Cloud projects ni datasets.
+El workflow `.github/workflows/precios-supermercados-sps-bigquery-first-load.yml` está hard fail-closed y ya no solicita OIDC ni configuración GCP. Reactivarlo requeriría una decisión explícita futura y un nuevo cambio versionado.
 
 ## Google Sheets — retirado
 
-Google Sheets ya no forma parte del camino objetivo.
+Google Sheets no forma parte del camino objetivo.
 
-- `ACTIVE_STORAGE_BACKEND = bigquery`;
-- planner/adapter/bootstrap Sheets se conservan sólo como evidencia/compatibilidad histórica y usan constantes `LEGACY_SHEETS_*`;
+- planner/adapter/bootstrap se conservan sólo como evidencia/compatibilidad histórica;
 - el workflow `.github/workflows/precios-supermercados-sps-google-sheets-storage.yml` conserva auditoría histórica pero su preflight emite siempre `allowed=false`;
-- el job que porta credenciales sigue condicionado a `allowed == true`, por lo que no puede ejecutar;
-- no se añadirá funcionalidad nueva ni se solicitarán nuevas credenciales para Sheets.
+- no se añadirá funcionalidad nueva ni se solicitarán credenciales nuevas para Sheets.
 
 ## Precio
 
 ```text
 current_price          = precio efectivo observado
 reported_regular_price = precio regular/tachado declarado por la tienda
-previous_price         = derivado de una observación histórica aceptada anterior
+previous_price         = current_price del periodo histórico aceptado anterior
 ```
 
-`reported_regular_price` nunca sustituye a `previous_price`. El ahorro real compara `current_price` aceptado actual contra el aceptado anterior.
+`reported_regular_price` nunca sustituye a `previous_price`. El ahorro real compara el `current_price` actual contra el del periodo histórico aceptado inmediatamente anterior. Si no existe baseline, no se inventa ahorro.
 
 ## Disponibilidad e inventario
 
@@ -274,23 +236,34 @@ availability_in_stock = 7081
 availability_unknown = 2358
 ```
 
-Los 2,358 `unknown` permanecen `unknown`. El snapshot actual no preservó suficientemente `available_quantity_observed`, `availability_evidence` y `seller_id`; esos campos se mantienen `NULL` y `quantity_is_exact=false` cuando no existe evidencia.
+Los 2,358 `unknown` permanecen `unknown`. El snapshot no preservó evidencia suficiente para `available_quantity_observed`, `availability_evidence` y `seller_id`; esos campos quedan `NULL` y `quantity_is_exact=false`.
 
-Completar inventario de primera clase probablemente requerirá una futura observación live y, por tanto, autorización humana nueva.
+Completar inventario de primera clase probablemente requerirá una observación live futura. Cuando se llegue a esa frontera se deberá pedir autorización humana nueva indicando alcance, número aproximado de peticiones y evidencia buscada.
+
+## Workflow de primera carga Turso
+
+`.github/workflows/precios-supermercados-sps-turso-first-load.yml` está preparado como `workflow_dispatch` manual y sólo permite el run desde `main` del repositorio canónico con confirmación booleana explícita.
+
+El flujo previsto es:
+
+```text
+artifact preservado exacto
+-> verificar SHA-256 del ZIP
+-> verificar file set
+-> verificar SHA-256 del JSON
+-> instalar dependencias fijadas
+-> integración exacta 9439 SKU sobre SQLite real
+-> validar presencia de secrets Turso sin imprimirlos
+-> CLI cargar_snapshot_inicial_turso.py --apply
+-> bootstrap + transacción Turso
+-> read-back + rehydrate + reconciliación
+```
+
+No contiene crawler, no llama a La Colonia y no está programado diariamente.
 
 ## Visualización
 
-La capa de consumo seleccionada es **Python Dash + Plotly**. Power BI queda legado y no recibirá funcionalidad nueva.
-
-Las views previstas después de la primera carga durable son:
-
-```text
-vw_precios_actuales
-vw_inventario_actual
-vw_ofertas_actuales
-```
-
-y derivaciones de `previous_price`, `price_change`, `price_change_pct` y `real_saving`. Dash consumirá esas reglas y no las redefinirá.
+Dash + Plotly permanece como destino futuro, pero **no es prioridad todavía**. Antes deben existir persistencia Turso real, inventario suficientemente sustentado, ejecución diaria estable y varias ejecuciones consecutivas verificadas.
 
 ## Frontera del producto
 
@@ -302,30 +275,34 @@ COMPLETENESS / TECHNICAL ACCEPTANCE     [DONE]
 PRODUCT NORMALIZATION                   [DONE WITH REVIEW QUEUE]
 CURRENT / HISTORY SEMANTICS             [DONE OFFLINE]
 REHYDRATE / REPLAY                      [DONE OFFLINE]
-BIGQUERY CONTRACT                       [DONE OFFLINE]
-BIGQUERY ADAPTER + FAKE + BOOTSTRAP     [DONE OFFLINE]
-SIMULATED LOAD / REPLAY / ROLLBACK      [DONE OFFLINE]
+TURSO / SQLITE CONTRACT                 [DONE OFFLINE]
+TURSO TRANSACTION / ROLLBACK            [DONE OFFLINE]
+TURSO CURRENT/HISTORY/REHYDRATE         [DONE OFFLINE]
 INITIAL SNAPSHOT APPROVAL               [DONE OFFLINE]
-INITIAL SNAPSHOT -> BIGQUERY PLAN       [DONE OFFLINE]
+INITIAL SNAPSHOT -> TURSO PLAN          [DONE OFFLINE]
+FULL 9439 SQLITE SYNTHETIC INTEGRATION  [DONE OFFLINE]
+EXACT ARTIFACT SQLITE PREFLIGHT         [PREPARED — RUNS BEFORE FIRST LOAD]
+BIGQUERY PRODUCTIVE PATH                [RETIRED]
 GOOGLE SHEETS PRODUCTIVE PATH           [RETIRED]
-FIRST DURABLE BIGQUERY LOAD              [NEXT — CLOUD/HUMAN BOUNDARY]
+FIRST DURABLE TURSO LOAD                [NEXT — HUMAN CREDENTIAL BOUNDARY]
 INVENTORY EVIDENCE / HISTORY            [PENDING]
 DAILY AUTOMATION                        [PENDING]
-DASH + PLOTLY                           [PENDING]
+CONSECUTIVE RUN VALIDATION              [PENDING]
+DASH + PLOTLY                           [PENDING AFTER LA COLONIA E2E]
 TEGUCIGALPA                             [PENDING]
 SUPERMARKET #2                          [PENDING]
 ```
 
-## Próximo paso exacto — frontera humana/cloud
+## Próximo paso exacto — frontera humana Turso
 
-No crear recursos cloud por inferencia.
+No crear cuentas, bases o secretos externos por inferencia.
 
-Antes de la primera escritura durable hace falta una decisión/configuración humana real en Google Cloud:
+Cuando CI y revisión del cambio Turso estén cerrados, el siguiente paso productivo es:
 
-1. seleccionar o crear el Google Cloud project que será dueño de los datos y confirmar que puede usar billing;
-2. habilitar BigQuery API si aún no está habilitada;
-3. elegir **dataset ID y región** y crear ese dataset;
-4. configurar autenticación de mínimo privilegio para que el runtime pueda consultar, crear/validar tablas dentro de ese dataset, cargar staging y ejecutar DML/transacciones;
-5. sólo después ejecutar bootstrap de tablas y la primera carga durable.
+1. crear/seleccionar una base Turso;
+2. generar un token de acceso para esa base;
+3. guardar `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` directamente como GitHub Actions Secrets del repositorio;
+4. ejecutar manualmente el workflow de primera carga desde `main` con `apply_initial_snapshot=true`;
+5. verificar el read-back/reconciliación antes de conectar futuras ejecuciones.
 
-La primera carga no requiere volver a consultar La Colonia. Usará el artifact #9590684834 ya aprobado y mantendrá `extraction_enabled=false`.
+La primera carga no necesita ni autoriza una nueva consulta a La Colonia.
