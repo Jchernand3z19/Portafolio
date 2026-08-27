@@ -18,6 +18,7 @@ from precios_supermercados.enums import (
 )
 from precios_supermercados.identifiers import (
     generate_offer_id,
+    generate_pending_product_id,
     generate_source_product_id,
     generate_state_hash,
 )
@@ -93,7 +94,7 @@ def validated(
         source_product_id=source_product_id,
         source_key_type=SourceKeyType.SKU,
         source_key=source_key,
-        product_id=f"prod_pending_{source_product_id}",
+        product_id=generate_pending_product_id(source_product_id),
         offer_id=generate_offer_id("demo", "demo_sps", source_product_id),
         source_name="Producto demo 1 unidad",
         product_url="https://example.invalid/p/001",
