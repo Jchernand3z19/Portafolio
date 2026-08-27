@@ -56,7 +56,9 @@ class GoogleCloudBigQueryClient:
         ]
 
     @staticmethod
-    def _schema_signature(schema: list[bigquery.SchemaField]) -> tuple[tuple[str, str, str], ...]:
+    def _schema_signature(
+        schema: list[bigquery.SchemaField],
+    ) -> tuple[tuple[str, str, str], ...]:
         return tuple((field.name, field.field_type, field.mode) for field in schema)
 
     def ensure_dataset(self, dataset_id: str) -> None:
@@ -150,6 +152,23 @@ class GoogleCloudBigQueryClient:
             f"{left}.`{column}` = {right}.`{column}`" for column in spec.logical_key
         )
 
+    @staticmethod
+    def _immutable_guard_sql(
+        *,
+        table_name: str,
+        target: str,
+        staging_ref: str,
+        join: str,
+    ) -> str:
+        # SELECT es una sentencia admitida dentro de transacciones BigQuery.
+        # ERROR() fuerza el fallo sólo cuando existe colisión de logical key;
+        # sin exception handler BigQuery revierte automáticamente la transacción.
+        return (
+            "SELECT IF(COUNT(*) = 0, TRUE, "
+            f"ERROR('immutable_conflict:{table_name}')) "
+            f"FROM `{target}` T JOIN `{staging_ref}` S ON {join};"
+        )
+
     def _existing_mutable_count(
         self,
         dataset_id: str,
@@ -219,9 +238,12 @@ class GoogleCloudBigQueryClient:
                 join = self._join_predicate(spec, "T", "S")
                 if table_name in immutable_tables:
                     statements.append(
-                        "ASSERT (SELECT COUNT(*) = 0 "
-                        f"FROM `{target}` T JOIN `{staging_ref}` S ON {join}) "
-                        f"AS 'immutable_conflict:{table_name}';"
+                        self._immutable_guard_sql(
+                            table_name=table_name,
+                            target=target,
+                            staging_ref=staging_ref,
+                            join=join,
+                        )
                     )
                     statements.append(
                         f"INSERT INTO `{target}` ({columns}) "
