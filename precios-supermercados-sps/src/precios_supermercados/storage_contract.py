@@ -1,13 +1,12 @@
 """Contrato físico activo de almacenamiento.
 
-BigQuery es el único backend productivo objetivo. El contrato tabular histórico
-(current + period history) continúa existiendo como motor/backend-neutral de
-transición y rehidratación, pero ya no se presenta como contrato físico activo ni
-como Google Sheets.
+Turso es el backend persistente activo. El motor tabular ``current + history``
+continúa siendo la frontera backend-neutral de transición/rehidratación y ahora se
+materializa en SQL operativo en vez de snapshots analíticos diarios.
 
-El planner/adapter de Google Sheets se conserva únicamente como evidencia legada.
-Sus seis pestañas históricamente administradas quedan nombradas de forma explícita
-para que ese código no vuelva a importar por accidente el contrato activo.
+BigQuery y Google Sheets se conservan como implementaciones legadas/verificadas,
+pero ninguna define el backend activo ni debe recibir nuevas escrituras por
+accidente.
 """
 
 from __future__ import annotations
@@ -28,23 +27,29 @@ from .tabular_persistence import (
     TABLE_SPECS as LEGACY_TABLE_SPECS,
     TableSpec,
 )
+from .turso_contract import TURSO_TABLE_SPECS, TursoTableSpec
 
 
-ACTIVE_STORAGE_BACKEND = "bigquery"
-ACTIVE_STORAGE_TABLE_SPECS: Mapping[str, BigQueryTableSpec] = MappingProxyType(
-    {spec.name: spec for spec in BIGQUERY_TABLE_SPECS}
+ACTIVE_STORAGE_BACKEND = "turso"
+ACTIVE_STORAGE_TABLE_SPECS: Mapping[str, TursoTableSpec] = MappingProxyType(
+    {spec.name: spec for spec in TURSO_TABLE_SPECS}
 )
 ACTIVE_STORAGE_TABLE_NAMES = tuple(ACTIVE_STORAGE_TABLE_SPECS)
 
-# Contrato del motor backend-neutral anterior. No es un segundo backend activo.
+# BigQuery quedó completamente validado offline antes del cambio de backend. Se
+# conserva como adapter futuro/legado, no como ruta productiva activa.
+LEGACY_BIGQUERY_TABLE_SPECS: Mapping[str, BigQueryTableSpec] = MappingProxyType(
+    {spec.name: spec for spec in BIGQUERY_TABLE_SPECS}
+)
+LEGACY_BIGQUERY_TABLE_NAMES = tuple(LEGACY_BIGQUERY_TABLE_SPECS)
+
+# Contrato lógico backend-neutral. No es un segundo backend activo.
 LEGACY_TABULAR_TABLE_SPECS: Mapping[str, TableSpec] = MappingProxyType(
     dict(LEGACY_TABLE_SPECS)
 )
 LEGACY_TABULAR_TABLE_NAMES = tuple(LEGACY_TABULAR_TABLE_SPECS)
 
-# Superficie exacta que el backend Sheets retirado administraba. Mantener este
-# nombre separado evita que código legado siga a ACTIVE_STORAGE_TABLE_SPECS y
-# convierta accidentalmente las tablas BigQuery en pestañas de un Spreadsheet.
+# Superficie exacta que el backend Sheets retirado administraba.
 LEGACY_SHEETS_MANAGED_TABLE_SPECS: Mapping[str, TableSpec] = MappingProxyType(
     {
         spec.name: spec
@@ -67,6 +72,10 @@ LEGACY_SHEETS_DEFERRED_TABLE_NAMES = (
 
 def is_active_storage_table(table_name: str) -> bool:
     return table_name in ACTIVE_STORAGE_TABLE_SPECS
+
+
+def is_legacy_bigquery_table(table_name: str) -> bool:
+    return table_name in LEGACY_BIGQUERY_TABLE_SPECS
 
 
 def is_legacy_tabular_table(table_name: str) -> bool:
