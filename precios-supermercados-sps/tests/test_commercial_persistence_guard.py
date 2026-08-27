@@ -29,6 +29,7 @@ BASE = datetime(2026, 8, 22, 20, 0, tzinfo=timezone.utc)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MONOREPO_ROOT = PROJECT_ROOT.parent
 RAW_PREPARER = "prepare_new_run_persistence"
+ARCHIVED_PREPARER = "_prepare_verified_archived_run_persistence"
 
 
 def demo_catalog():
@@ -155,19 +156,28 @@ def test_preparer_refuses_raw_decision_even_when_it_is_non_authoritative() -> No
 
 
 def test_operational_code_cannot_bypass_guard_with_raw_preparer() -> None:
-    """Scripts/workflows y módulos nuevos deben usar fronteras auditadas.
-
-    El preparador crudo sólo puede vivir en su módulo backend-neutral, el guard
-    no autoritativo y la política autoritativa específica de La Colonia. Tests
-    pueden usarlo directamente para validar la máquina interna, pero no forman
-    parte del código operativo escaneado aquí.
-    """
-
     allowed = {
-        PROJECT_ROOT
-        / "src/precios_supermercados/commercial_persistence_batch.py",
-        PROJECT_ROOT
-        / "src/precios_supermercados/commercial_persistence_guard.py",
+        PROJECT_ROOT / "src/precios_supermercados/commercial_persistence_batch.py",
+        PROJECT_ROOT / "src/precios_supermercados/commercial_persistence_guard.py",
+    }
+    candidates = [
+        *sorted((PROJECT_ROOT / "src").rglob("*.py")),
+        *sorted((PROJECT_ROOT / "scripts").rglob("*.py")),
+        *sorted((MONOREPO_ROOT / ".github/workflows").glob("*.yml")),
+        *sorted((MONOREPO_ROOT / ".github/workflows").glob("*.yaml")),
+    ]
+    violations = []
+    for path in candidates:
+        if path in allowed:
+            continue
+        if RAW_PREPARER in path.read_text(encoding="utf-8"):
+            violations.append(str(path.relative_to(MONOREPO_ROOT)))
+    assert violations == []
+
+
+def test_archived_snapshot_capability_is_restricted_to_verified_source_policy() -> None:
+    allowed = {
+        PROJECT_ROOT / "src/precios_supermercados/commercial_persistence_batch.py",
         PROJECT_ROOT
         / "src/precios_supermercados/scrapers/la_colonia_commercial_authority.py",
     }
@@ -177,12 +187,10 @@ def test_operational_code_cannot_bypass_guard_with_raw_preparer() -> None:
         *sorted((MONOREPO_ROOT / ".github/workflows").glob("*.yml")),
         *sorted((MONOREPO_ROOT / ".github/workflows").glob("*.yaml")),
     ]
-
     violations = []
     for path in candidates:
         if path in allowed:
             continue
-        if RAW_PREPARER in path.read_text(encoding="utf-8"):
+        if ARCHIVED_PREPARER in path.read_text(encoding="utf-8"):
             violations.append(str(path.relative_to(MONOREPO_ROOT)))
-
     assert violations == []
