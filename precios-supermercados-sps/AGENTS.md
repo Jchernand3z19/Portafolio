@@ -70,7 +70,7 @@ offer_id          = supermercado + ubicación comercial + producto fuente
 - no elimines una observación porque el mapping esté pendiente;
 - no colapses multipacks: conserva unidades, contenido por unidad y total sólo cuando el alcance esté demostrado.
 
-Durante la primera fuente, `productos` puede conservar la identidad fuente y el `product_id` asociado. `product_mapping` formaliza la equivalencia fuente -> producto canónico y cobra especial importancia al incorporar un segundo supermercado. La identidad del producto no depende de ciudad; la ciudad pertenece a la observación de precio/inventario mediante `location_id`.
+Durante la primera fuente, `source_products` conserva la identidad fuente y el `product_id` asociado. La separación `products` / `source_products` formaliza la equivalencia fuente -> producto canónico y cobra especial importancia al incorporar un segundo supermercado. La identidad del producto no depende de ciudad; la ciudad pertenece a la oferta mediante `location_id`.
 
 ## Autonomía técnica y tráfico live
 
@@ -124,49 +124,51 @@ seller_id
 
 Verifica que la cantidad corresponda al seller seleccionado. Describe la cantidad como observada/reportada por la fuente, no como inventario físico o venta exacta salvo evidencia adicional.
 
-## Persistencia — BigQuery seleccionado
+## Persistencia — Turso / SQLite seleccionado
 
-**BigQuery es el backend persistente seleccionado. Google Sheets queda fuera del camino objetivo.**
+**Turso es el backend persistente operativo seleccionado.** SQLite `:memory:` usa el mismo contrato físico para pruebas offline. BigQuery queda como implementación legada/futura preservada, pero no como ruta productiva activa; Google Sheets permanece retirado/fail-closed.
 
-La lógica de dominio, current/history, replay, rehidratación y validación permanece backend-neutral. El código legado de Google Sheets puede coexistir temporalmente durante la migración, pero no debe recibir nueva funcionalidad, no debe ejecutarse para persistir el catálogo y sus entrypoints deben quedar neutralizados antes de la primera persistencia real BigQuery.
+La lógica de dominio, current/history, replay, rehidratación y validación permanece backend-neutral. No dupliques esa lógica dentro del adapter Turso.
 
-Tablas objetivo mínimas:
+Tablas operativas mínimas:
 
 ```text
 supermarkets
 locations
-productos
-precios_historicos
-inventario_historico
+products
+source_products
+offers_current
+offer_history
 scrape_runs
 quality_events
 normalization_overrides
-product_mapping
 ```
 
 Reglas críticas:
 
 - no crear tablas por supermercado;
 - `locations` relaciona `location_id` con supermercado y ciudad;
-- `productos` no duplica ciudad;
-- `precios_historicos` e `inventario_historico` llevan `supermarket_id`, `location_id` e identidad de producto;
-- usar nombres explícitos `current_price` y `reported_regular_price`; no una columna ambigua `price/precio`;
-- todo run final debe poder registrarse;
+- `products` representa identidad canónica y `source_products` la identidad dentro de la fuente;
+- `offers_current` conserva el último estado aceptado por oferta;
+- `offer_history` abre un periodo inicial y sólo agrega/cierra periodos ante cambios comerciales reales; una confirmación idéntica posterior no crea historia redundante;
+- cada ejecución terminal se registra en `scrape_runs`, aunque no haya cambios comerciales;
+- precio se conserva con semántica `current_price` / `reported_regular_price` y además en minor units enteras para consultas monetarias físicas seguras;
+- `unknown` permanece `unknown`; `seller_id`, cantidad y evidencia quedan `NULL`/no exactos mientras el snapshot no los demuestre;
 - runs rechazados/fallidos no alteran estado comercial aceptado;
 - ausencia de producto no implica baja ni agotado;
-- hashes/fingerprints prueban igualdad, no autoridad;
-- restaurar estado no autoriza un run nuevo;
+- replay exacto es idempotente y el mismo `scrape_run_id` con fingerprint divergente falla cerrado;
+- restaurar/rehidratar estado no autoriza un run nuevo;
 - una tabla nueva necesita grain, key, lifecycle y consumidor actuales.
 
-Para BigQuery, prioriza tablas de observaciones históricas aptas para análisis temporal. Precio e inventario pueden registrar una observación por run exitoso; los cambios/estado actual se derivan con SQL/views, mientras el motor comercial backend-neutral conserva validación e idempotencia.
+La primera carga de La Colonia usa exclusivamente el snapshot aprobado por SHA-256 exacto; nunca dispara scraping live. Antes de una escritura Turso real, valida el snapshot completo contra SQLite y reconcilia read-back. Las credenciales productivas se leen sólo desde `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`; nunca se guardan en el repositorio ni se pegan en documentación.
 
-Antes de cualquier escritura cloud real, detente en la frontera de proyecto/dataset/credenciales/billing si no están ya disponibles y autorizados.
+El workflow legado de primera carga BigQuery debe permanecer fail-closed mientras Turso sea el backend activo. No habilites escrituras BigQuery por inferencia ni por disponibilidad futura de billing.
 
 ## Visualización — Dash + Plotly
 
 La aplicación objetivo es **Python Dash + Plotly**. Power BI ya no es el destino del producto. No añadas funcionalidad nueva a `power_bi_projection.py`; puede permanecer temporalmente como código legado hasta que sea seguro retirarlo.
 
-La aplicación debe consumir únicamente datos persistidos/validados y permitir progresivamente búsqueda, precio actual/anterior, variaciones, historial, filtros, disponibilidad, calidad y comparación entre supermercados cuando exista una segunda fuente.
+La visualización no es prioridad hasta cerrar La Colonia end-to-end: persistencia durable, inventario suficientemente sustentado, ejecución diaria estable y varias ejecuciones consecutivas verificadas. La aplicación deberá consumir únicamente datos persistidos/validados.
 
 ## Cloudflare
 
