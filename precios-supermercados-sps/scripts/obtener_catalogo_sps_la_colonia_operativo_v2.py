@@ -7,15 +7,22 @@ cardinalidad corta puede aportar sus SKU al bucket y una página vacía válida 
 continuar sin aportar datos. En ambos casos la cobertura exacta del bucket sigue
 siendo obligatoria contra recordsFiltered y, si hace falta, se recupera en orden
 inverso por el runner operativo.
+
+Para el catálogo operativo, ``AvailableQuantity`` es además la evidencia primaria
+de disponibilidad: cualquier cantidad positiva implica disponible y una cantidad
+explícita igual a cero implica agotado, aunque VTEX conserve un precio publicado.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import replace
-from typing import Any
+from decimal import Decimal
+from typing import Any, Mapping, Sequence
 
 import obtener_catalogo_sps_la_colonia_operativo as operational
+from precios_supermercados.enums import AvailabilityStatus
+from precios_supermercados.scrapers import la_colonia
 from precios_supermercados.scrapers.base import (
     EmptyResponseError,
     ExtractionMetrics,
@@ -24,6 +31,19 @@ from precios_supermercados.scrapers.base import (
 
 
 BaseExtractor = operational.core.LaColoniaExtractor
+BASE_AVAILABILITY = la_colonia._availability
+
+
+def _operational_availability(
+    current_price: Decimal | None,
+    sellers: Sequence[Mapping[str, Any]],
+    quantities: Sequence[Decimal],
+) -> tuple[AvailabilityStatus, str]:
+    """Resuelve cantidad explícita cero como agotado para el catálogo operativo."""
+
+    if sellers and quantities and not any(quantity > 0 for quantity in quantities):
+        return AvailabilityStatus.OUT_OF_STOCK, "available_quantity_zero"
+    return BASE_AVAILABILITY(current_price, sellers, quantities)
 
 
 def _partial_page_is_safe_for_bucket_recovery(result: Any) -> bool:
@@ -88,13 +108,16 @@ class RecoveryAwareLaColoniaExtractor(BaseExtractor):
 
 def main(argv: list[str] | None = None) -> int:
     # El runner operativo resuelve la clase desde ``core`` al iniciar el catálogo.
-    # No se altera el extractor base usado por otros entrypoints.
-    original = operational.core.LaColoniaExtractor
+    # El ajuste de disponibilidad se limita al mismo recorrido operativo.
+    original_extractor = operational.core.LaColoniaExtractor
+    original_availability = la_colonia._availability
     operational.core.LaColoniaExtractor = RecoveryAwareLaColoniaExtractor
+    la_colonia._availability = _operational_availability
     try:
         return operational.main(argv)
     finally:
-        operational.core.LaColoniaExtractor = original
+        la_colonia._availability = original_availability
+        operational.core.LaColoniaExtractor = original_extractor
 
 
 if __name__ == "__main__":
