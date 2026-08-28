@@ -44,6 +44,7 @@ catalog_complete = true
 validation_passed = true
 result = success
 
+sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 json_sha256 = 9c1b3015da39cd283d97bd66d694e5719700c58b5063d797934235c4ff7a6581
 ```
 
