@@ -275,14 +275,20 @@ Los precios persistidos se almacenan en centavos enteros.
 
 ## Seguridad y live
 
+```text
+ACTIVE_AUTHORIZATION_IDS = []
+```
+
+Ese campo conserva únicamente autorizaciones puntuales one-shot; no representa la
+autorización recurrente diaria documentada arriba.
+
 La autorización temporal de 24 horas usada para las observaciones #2 y #3 sigue
 siendo evidencia histórica y no se interpreta como autorización abierta.
 
 La autorización recurrente anterior cubre únicamente el schedule diario de La
-Colonia SPS + TGU. Cualquier tráfico live fuera de ese alcance requiere autorización
-humana explícita vigente. Los artifacts existentes pueden analizarse, verificarse y
-persistirse sin volver a consultar el sitio cuando su identidad y SHA están
-comprobados.
+Colonia SPS + TGU. Cualquier tráfico live fuera de ese alcance requiere autorización humana explícita vigente.
+Los artifacts existentes pueden analizarse, verificarse y persistirse sin volver a
+consultar el sitio cuando su identidad y SHA están comprobados.
 
 ## Pendiente para cierre
 
