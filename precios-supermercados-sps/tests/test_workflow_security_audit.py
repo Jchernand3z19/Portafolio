@@ -123,7 +123,7 @@ EXPECTED_TRIGGERS = {
     RECOVERY_WORKFLOW: {"workflow_run"},
     FACET_WORKFLOW: {"workflow_dispatch"},
     LIVE_WORKFLOW: {"workflow_dispatch", "push"},
-    MVP_UPDATE_WORKFLOW: {"workflow_dispatch"},
+    MVP_UPDATE_WORKFLOW: {"workflow_dispatch", "schedule"},
     LOCATION_BINDING_WORKFLOW: {"workflow_dispatch"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch", "push"},
     PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"workflow_dispatch", "push"},
