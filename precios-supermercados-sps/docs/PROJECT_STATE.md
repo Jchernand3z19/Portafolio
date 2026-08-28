@@ -50,6 +50,12 @@ result = success
 Dos productos fuente poseen dos SKU; por eso `9471 SKU` y `9469 product_id` son
 consistentes.
 
+El fingerprint canónico del contexto SPS que permanece protegido por los tests es:
+
+```text
+d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+```
+
 El JSON del artifact usado para reconstrucción offline tiene:
 
 ```text
@@ -266,7 +272,9 @@ run global.
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-Autorizaciones anteriores están consumidas y no se reutilizan.
+Autorizaciones anteriores están consumidas y no se reutilizan. Cualquier marker,
+workflow o evidencia histórica no se interpreta como autorización abierta; un
+nuevo tráfico live requiere autorización humana explícita vigente para su alcance.
 
 Artifacts existentes sí pueden analizarse offline.
 
