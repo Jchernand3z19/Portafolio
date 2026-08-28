@@ -227,7 +227,9 @@ comercial era igual al aceptado en la segunda observación.
 
 ## Flujo MVP
 
-PR #343 contiene el flujo mínimo permanente de actualización:
+PR #343 integró el único flujo permanente de actualización y PR #344 eliminó los
+conteos fijos de catálogo de su verificación final. `main` quedó en
+`53b7c3222a10b089f6c101c0909c559f1d3644fb` con CI verde.
 
 ```text
 workflow_dispatch autorizado o schedule diario autorizado
@@ -237,13 +239,16 @@ workflow_dispatch autorizado o schedule diario autorizado
 -> persistir SPS en Turso
 -> persistir TGU en Turso
 -> reconciliar cada commit por run_id + SHA
--> verificar 9509 productos, 18966 estados abiertos y cero duplicados
+-> validar estados abiertos contra los conteos de los snapshots aceptados
+-> exigir cero periodos abiertos duplicados
 -> publicar artifact de evidencia
 ```
 
 No agrega servicios, tablas ni un segundo mecanismo de scraping. Los timeouts
 ambiguos de escritura se resuelven únicamente con una comprobación read-only
-acotada del commit; no se reintenta una escritura de estado desconocido.
+acotada del commit; no se reintenta una escritura de estado desconocido. Los
+conteos diarios se derivan de los snapshots aceptados para permitir crecimiento
+normal del catálogo sin tocar el workflow.
 
 ## Ejecución diaria autorizada
 
@@ -260,8 +265,13 @@ local_time = 05:17 America/Tegucigalpa
 status = authorized until revoked
 ```
 
-El workflow conserva `workflow_dispatch` para operación manual autorizada y usa el
-mismo job para el `schedule`; no existe un pipeline paralelo.
+El workflow está en `main`, conserva `workflow_dispatch` para operación manual
+autorizada y usa el mismo job para el `schedule`; no existe un pipeline paralelo.
+
+Las ramas `ops/la-colonia-24h-validation-20260828`,
+`feature/la-colonia-mvp-manual-production` y `fix/la-colonia-daily-dynamic-counts`
+fueron reconciliadas con `main`, por lo que ya no conservan workflows temporales ni
+código divergente del cierre.
 
 ## Precio
 
@@ -290,17 +300,14 @@ Colonia SPS + TGU. Cualquier tráfico live fuera de ese alcance requiere autoriz
 Los artifacts existentes pueden analizarse, verificarse y persistirse sin volver a
 consultar el sitio cuando su identidad y SHA están comprobados.
 
-## Pendiente para cierre
+## Pendiente para cierre operativo
 
 ```text
-1. pasar CI y fusionar PR #343
-2. verificar main
-3. retirar rama/workflows temporales de validación de 24h
-4. dejar activo el schedule diario autorizado
-5. comprobar el primer ciclo diario programado
+1. comprobar la primera ejecución iniciada por el schedule diario de main
 ```
 
-No es necesario agregar otra arquitectura para cerrar La Colonia.
+El desarrollo requerido para el MVP de La Colonia está completo. No es necesario
+agregar otra arquitectura para cerrar la validación operativa restante.
 
 ## Fuera del alcance actual
 
