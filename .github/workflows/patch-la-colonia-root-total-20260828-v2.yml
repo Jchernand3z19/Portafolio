@@ -1,0 +1,124 @@
+name: Patch La Colonia root total 20260828 v2
+
+on:
+  push:
+    branches: [fix/la-colonia-root-total-recheck-20260828]
+    paths:
+      - precios-supermercados-sps/.automation/patch-root-total-20260828-v2.json
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: precios-supermercados-sps
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fix/la-colonia-root-total-recheck-20260828
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: precios-supermercados-sps/requirements.txt
+
+      - name: Parchear total raíz
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/obtener_catalogo_sps_la_colonia_operativo.py')
+          text = path.read_text(encoding='utf-8')
+          anchor = '\n\ndef _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:\n'
+          helper = '''
+
+def _resolve_root_total_after_partitions(
+    *,
+    context: Any,
+    root_url: str,
+    initial_total: int,
+    unique_product_count: int,
+    diagnostic: dict[str, Any],
+) -> int:
+    """Relee una sola vez el total raíz si el binding inicial quedó transitorio.
+
+    Sólo corrige el total cuando las dos señales de partición ya coinciden
+    exactamente con las identidades únicas extraídas. Cualquier otra discrepancia
+    conserva el comportamiento fail-closed.
+    """
+
+    if unique_product_count == initial_total:
+        return initial_total
+    if (
+        diagnostic["partition_quantity_estimate_sum"] != unique_product_count
+        or diagnostic["partition_observed_total_sum"] != unique_product_count
+    ):
+        raise full.FullCatalogError(
+            "unique_product_coverage_mismatch", diagnostic=diagnostic
+        )
+
+    _ensure_request_budget(diagnostic)
+    response = context.request.get(
+        root_url,
+        timeout=core.PRODUCT_REQUEST_TIMEOUT_MS,
+        fail_on_status_code=False,
+    )
+    payload = core._read_json_response(
+        response, diagnostic, kind="root_product_search_recheck"
+    )
+    rechecked_total, _ = core._read_shape(payload)
+    diagnostic["product_requests_completed"] += 1
+    if rechecked_total <= 0 or rechecked_total != unique_product_count:
+        raise full.FullCatalogError(
+            "unique_product_coverage_mismatch", diagnostic=diagnostic
+        )
+    diagnostic["catalog_products_reported"] = rechecked_total
+    return rechecked_total
+'''
+          if '_resolve_root_total_after_partitions(' not in text:
+              if anchor not in text:
+                  raise SystemExit('run_catalog_anchor_missing')
+              text = text.replace(anchor, helper + anchor, 1)
+
+          old = '''            if len(unique_products) != root_total:
+                raise full.FullCatalogError(
+                    "unique_product_coverage_mismatch", diagnostic=diagnostic
+                )
+
+            artifact = {
+'''
+          new = '''            root_total = _resolve_root_total_after_partitions(
+                context=context,
+                root_url=root_url,
+                initial_total=root_total,
+                unique_product_count=len(unique_products),
+                diagnostic=diagnostic,
+            )
+
+            artifact = {
+'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit('coverage_block_missing')
+          path.write_text(text, encoding='utf-8')
+          PY
+          python -m pip install -r requirements.txt >/dev/null
+          python -m pytest -q tests/test_la_colonia_root_total_recheck.py
+
+      - name: Commit fuente
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/obtener_catalogo_sps_la_colonia_operativo.py
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: reconcilia total raíz transitorio de La Colonia"
+          git push origin HEAD:fix/la-colonia-root-total-recheck-20260828
