@@ -315,6 +315,50 @@ def _fetch_known_total_page(
     return products_returned
 
 
+def _resolve_root_total_after_partitions(
+    *,
+    context: Any,
+    root_url: str,
+    initial_total: int,
+    unique_product_count: int,
+    diagnostic: dict[str, Any],
+) -> int:
+    """Relee una sola vez el total raíz si el binding inicial quedó transitorio.
+
+    Sólo corrige el total cuando las dos señales de partición ya coinciden
+    exactamente con las identidades únicas extraídas. Cualquier otra discrepancia
+    conserva el comportamiento fail-closed.
+    """
+
+    if unique_product_count == initial_total:
+        return initial_total
+    if (
+        diagnostic["partition_quantity_estimate_sum"] != unique_product_count
+        or diagnostic["partition_observed_total_sum"] != unique_product_count
+    ):
+        raise full.FullCatalogError(
+            "unique_product_coverage_mismatch", diagnostic=diagnostic
+        )
+
+    _ensure_request_budget(diagnostic)
+    response = context.request.get(
+        root_url,
+        timeout=core.PRODUCT_REQUEST_TIMEOUT_MS,
+        fail_on_status_code=False,
+    )
+    payload = core._read_json_response(
+        response, diagnostic, kind="root_product_search_recheck"
+    )
+    rechecked_total, _ = core._read_shape(payload)
+    diagnostic["product_requests_completed"] += 1
+    if rechecked_total <= 0 or rechecked_total != unique_product_count:
+        raise full.FullCatalogError(
+            "unique_product_coverage_mismatch", diagnostic=diagnostic
+        )
+    diagnostic["catalog_products_reported"] = rechecked_total
+    return rechecked_total
+
+
 def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
     try:
         from playwright.sync_api import sync_playwright
@@ -583,10 +627,13 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                 raise full.FullCatalogError(
                     "partition_coverage_incomplete", diagnostic=diagnostic
                 )
-            if len(unique_products) != root_total:
-                raise full.FullCatalogError(
-                    "unique_product_coverage_mismatch", diagnostic=diagnostic
-                )
+            root_total = _resolve_root_total_after_partitions(
+                context=context,
+                root_url=root_url,
+                initial_total=root_total,
+                unique_product_count=len(unique_products),
+                diagnostic=diagnostic,
+            )
 
             artifact = {
                 "schema_version": "7",
