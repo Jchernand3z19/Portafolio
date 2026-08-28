@@ -26,6 +26,7 @@ preserved_artifact_id = 9655225996
 artifact_zip_sha256 = 0427e88be27df89fd9fcb50ed600ef5c6aef64177bfba92b4af3d2e25756a892
 full_catalog_json_sha256 = 2780eeffa5ef62f2d1c8c2c8365e88da1ca0006622d2f7b1c3529f834c9b5e50
 location_id = la_colonia_sps
+sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 catalog_products_reported = 9437
 unique_products_extracted = 9437
 skus_extracted = 9439
@@ -148,6 +149,8 @@ El historial gráfico se activa cuando exista más de una observación aceptada.
 ## Seguridad y live
 
 `ACTIVE_AUTHORIZATION_IDS = []` significa que no existe autorización live vigente.
+
+La evidencia histórica no se interpreta como autorización abierta. Una autorización consumida no se reutiliza para generar tráfico nuevo.
 
 La primera carga reutiliza exclusivamente el artifact ya obtenido. No realiza nuevas solicitudes contra La Colonia.
 
