@@ -9,257 +9,128 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-
 import actualizar_mvp_sqlite_la_colonia as updater  # noqa: E402
 
 
-def _product(
-    *,
-    source_key: str = "sku-1",
-    product_id: str = "product-1",
-    item_id: str = "item-1",
-    price: str = "100.00",
-    availability: str = "in_stock",
+def product(
+    key: str = "sku-1", pid: str = "product-1", item: str = "item-1",
+    price: str = "100.00", availability: str = "in_stock",
 ) -> dict[str, object]:
     return {
-        "availability": availability,
-        "brand": "Marca",
-        "category": "Categoria",
-        "current_price": price,
-        "ean": f"ean-{source_key}",
-        "is_promotion": price != "100.00",
-        "item_id": item_id,
-        "presentation": None,
-        "product_id": product_id,
-        "reference": f"ref-{source_key}",
+        "availability": availability, "brand": "Marca", "category": "Categoria",
+        "current_price": price, "ean": f"ean-{key}", "is_promotion": price != "100.00",
+        "item_id": item, "presentation": None, "product_id": pid, "reference": f"ref-{key}",
         "reported_regular_price": "100.00" if price != "100.00" else None,
-        "source_key": source_key,
-        "source_key_type": "item_id",
-        "source_name": f"Producto {source_key}",
+        "source_key": key, "source_key_type": "item_id", "source_name": f"Producto {key}",
     }
 
 
-def _snapshot(
-    *,
-    observed_at: str,
-    products: list[dict[str, object]] | None = None,
-    location_id: str = "la_colonia_sps",
+def snapshot(
+    when: str, rows: list[dict[str, object]] | None = None,
+    location: str = "la_colonia_sps",
 ) -> bytes:
-    rows = products or [_product()]
-    source_products = {str(row["product_id"]) for row in rows}
-    return json.dumps(
-        {
-            "result": "success",
-            "supermarket_id": "la_colonia",
-            "location_id": location_id,
-            "city": updater.LOCATIONS[location_id],
-            "catalog_complete": True,
-            "validation_passed": True,
-            "location_verified_same_run": True,
-            "observed_at_utc": observed_at,
-            "skus_extracted": len(rows),
-            "skus_with_price": len(rows),
-            "catalog_products_reported": len(source_products),
-            "unique_products_extracted": len(source_products),
-            "products": rows,
-        },
-        separators=(",", ":"),
-    ).encode("utf-8")
+    rows = rows or [product()]
+    total = len({str(row["product_id"]) for row in rows})
+    return json.dumps({
+        "result": "success", "supermarket_id": "la_colonia", "location_id": location,
+        "city": updater.LOCATIONS[location], "catalog_complete": True,
+        "validation_passed": True, "location_verified_same_run": True,
+        "observed_at_utc": when, "skus_extracted": len(rows), "skus_with_price": len(rows),
+        "catalog_products_reported": total, "unique_products_extracted": total, "products": rows,
+    }, separators=(",", ":")).encode()
 
 
-def _new_db(tmp_path: Path) -> Path:
-    database = tmp_path / "mvp.db"
-    updater.initialize_database(database)
-    return database
+def db(tmp_path: Path) -> Path:
+    path = tmp_path / "mvp.db"
+    updater.initialize_database(path)
+    return path
 
 
-def _counts(database: Path) -> tuple[int, int, int]:
-    con = sqlite3.connect(database)
+def counts(path: Path) -> tuple[int, int, int]:
+    con = sqlite3.connect(path)
     try:
-        return (
-            con.execute("SELECT COUNT(*) FROM scrape_runs").fetchone()[0],
-            con.execute("SELECT COUNT(*) FROM products").fetchone()[0],
-            con.execute("SELECT COUNT(*) FROM price_history").fetchone()[0],
-        )
+        return tuple(con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                     for table in ("scrape_runs", "products", "price_history"))
     finally:
         con.close()
 
 
-def test_same_state_registers_run_without_redundant_history(tmp_path: Path) -> None:
-    database = _new_db(tmp_path)
-    updater.apply_snapshot(
-        database,
-        _snapshot(observed_at="2026-08-28T01:00:00Z"),
-        run_id="run-1",
-    )
-    result = updater.apply_snapshot(
-        database,
-        _snapshot(observed_at="2026-08-28T02:00:00Z"),
-        run_id="run-2",
-    )
+def test_historical_updater_required_cases(tmp_path: Path) -> None:
+    path = db(tmp_path)
 
-    assert result["history_unchanged"] == 1
-    assert result["history_opened"] == 0
-    assert _counts(database) == (2, 1, 1)
+    # Caso 1: mismo estado registra run, no duplica historia.
+    updater.apply_snapshot(path, snapshot("2026-08-28T01:00:00Z"), run_id="run-1")
+    same = updater.apply_snapshot(path, snapshot("2026-08-28T02:00:00Z"), run_id="run-2")
+    assert same["history_unchanged"] == 1
+    assert counts(path) == (2, 1, 1)
 
-
-def test_price_change_closes_previous_period_and_opens_new_one(tmp_path: Path) -> None:
-    database = _new_db(tmp_path)
-    updater.apply_snapshot(
-        database,
-        _snapshot(observed_at="2026-08-28T01:00:00Z"),
-        run_id="run-1",
+    # Caso 2: cambio de precio cierra el periodo anterior y abre otro.
+    changed = updater.apply_snapshot(
+        path, snapshot("2026-08-28T03:00:00Z", [product(price="90.00")]), run_id="run-3"
     )
-    updater.apply_snapshot(
-        database,
-        _snapshot(
-            observed_at="2026-08-28T02:00:00Z",
-            products=[_product(price="90.00")],
-        ),
-        run_id="run-2",
-    )
+    assert (changed["history_closed"], changed["history_opened"]) == (1, 1)
 
-    con = sqlite3.connect(database)
+    # Caso 3: disponibilidad también forma parte del estado comercial.
+    availability = updater.apply_snapshot(
+        path,
+        snapshot("2026-08-28T04:00:00Z", [product(price="90.00", availability="out_of_stock")]),
+        run_id="run-4",
+    )
+    assert (availability["history_closed"], availability["history_opened"]) == (1, 1)
+
+    # Caso 4: producto nuevo abre su primer periodo.
+    rows = [
+        product(price="90.00", availability="out_of_stock"),
+        product("sku-2", "product-2", "item-2"),
+    ]
+    new_product = updater.apply_snapshot(
+        path, snapshot("2026-08-28T05:00:00Z", rows), run_id="run-5"
+    )
+    assert new_product["products_inserted"] == 1
+    assert counts(path) == (5, 2, 4)
+
+    # Caso 5: replay exacto no duplica.
+    raw = snapshot("2026-08-28T06:00:00Z", rows)
+    updater.apply_snapshot(path, raw, run_id="run-6")
+    before_replay = counts(path)
+    assert updater.apply_snapshot(path, raw, run_id="run-6")["replayed"] is True
+    assert counts(path) == before_replay
+
+    # Caso 6: un run incompleto se rechaza antes de tocar el estado aceptado.
+    before_invalid = updater.validate_database(path)
+    invalid = json.loads(snapshot("2026-08-28T07:00:00Z", rows))
+    invalid["catalog_complete"] = False
+    with pytest.raises(updater.SnapshotError, match="catalog_complete"):
+        updater.apply_snapshot(path, json.dumps(invalid).encode(), run_id="run-invalid")
+    assert updater.validate_database(path) == before_invalid
+
+    con = sqlite3.connect(path)
     try:
-        rows = con.execute(
-            """
-            SELECT current_price_minor, valid_from_utc, valid_to_utc
-            FROM price_history
-            ORDER BY valid_from_utc
-            """
+        periods = con.execute(
+            """SELECT current_price_minor, availability, valid_to_utc
+               FROM price_history WHERE product_id=1 ORDER BY valid_from_utc"""
         ).fetchall()
     finally:
         con.close()
-    assert rows == [
-        (10000, "2026-08-28T01:00:00Z", "2026-08-28T02:00:00Z"),
-        (9000, "2026-08-28T02:00:00Z", None),
+    assert periods[:3] == [
+        (10000, "in_stock", "2026-08-28T03:00:00Z"),
+        (9000, "in_stock", "2026-08-28T04:00:00Z"),
+        (9000, "out_of_stock", None),
     ]
 
 
-def test_availability_change_creates_new_commercial_period(tmp_path: Path) -> None:
-    database = _new_db(tmp_path)
+def test_same_source_product_has_independent_sps_tgu_history(tmp_path: Path) -> None:
+    path = db(tmp_path)
+    updater.apply_snapshot(path, snapshot("2026-08-28T01:00:00Z"), run_id="sps")
     updater.apply_snapshot(
-        database,
-        _snapshot(observed_at="2026-08-28T01:00:00Z"),
-        run_id="run-1",
+        path, snapshot("2026-08-28T02:00:00Z", location="la_colonia_tgu"), run_id="tgu"
     )
-    result = updater.apply_snapshot(
-        database,
-        _snapshot(
-            observed_at="2026-08-28T02:00:00Z",
-            products=[_product(availability="out_of_stock")],
-        ),
-        run_id="run-2",
-    )
-
-    assert result["history_closed"] == 1
-    assert result["history_opened"] == 1
-    con = sqlite3.connect(database)
+    con = sqlite3.connect(path)
     try:
-        current = con.execute(
-            """
-            SELECT availability
-            FROM price_history
-            WHERE valid_to_utc IS NULL
-            """
-        ).fetchone()[0]
+        assert con.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 1
+        assert con.execute(
+            """SELECT location_id, COUNT(*) FROM price_history WHERE valid_to_utc IS NULL
+               GROUP BY location_id ORDER BY location_id"""
+        ).fetchall() == [("la_colonia_sps", 1), ("la_colonia_tgu", 1)]
     finally:
         con.close()
-    assert current == "out_of_stock"
-
-
-def test_new_product_is_inserted_with_initial_period(tmp_path: Path) -> None:
-    database = _new_db(tmp_path)
-    updater.apply_snapshot(
-        database,
-        _snapshot(observed_at="2026-08-28T01:00:00Z"),
-        run_id="run-1",
-    )
-    result = updater.apply_snapshot(
-        database,
-        _snapshot(
-            observed_at="2026-08-28T02:00:00Z",
-            products=[
-                _product(),
-                _product(
-                    source_key="sku-2",
-                    product_id="product-2",
-                    item_id="item-2",
-                ),
-            ],
-        ),
-        run_id="run-2",
-    )
-
-    assert result["products_inserted"] == 1
-    assert result["history_opened"] == 1
-    assert _counts(database) == (2, 2, 2)
-
-
-def test_exact_replay_is_idempotent(tmp_path: Path) -> None:
-    database = _new_db(tmp_path)
-    raw = _snapshot(observed_at="2026-08-28T01:00:00Z")
-    updater.apply_snapshot(database, raw, run_id="run-1")
-    result = updater.apply_snapshot(database, raw, run_id="run-1")
-
-    assert result["replayed"] is True
-    assert _counts(database) == (1, 1, 1)
-
-
-def test_invalid_or_incomplete_run_does_not_modify_accepted_state(
-    tmp_path: Path,
-) -> None:
-    database = _new_db(tmp_path)
-    updater.apply_snapshot(
-        database,
-        _snapshot(observed_at="2026-08-28T01:00:00Z"),
-        run_id="run-1",
-    )
-    before = updater.validate_database(database)
-
-    invalid = json.loads(
-        _snapshot(observed_at="2026-08-28T02:00:00Z").decode("utf-8")
-    )
-    invalid["catalog_complete"] = False
-    with pytest.raises(updater.SnapshotError, match="catalog_complete"):
-        updater.apply_snapshot(
-            database,
-            json.dumps(invalid).encode("utf-8"),
-            run_id="run-invalid",
-        )
-
-    assert updater.validate_database(database) == before
-
-
-def test_same_source_product_keeps_location_history_isolated(tmp_path: Path) -> None:
-    database = _new_db(tmp_path)
-    updater.apply_snapshot(
-        database,
-        _snapshot(observed_at="2026-08-28T01:00:00Z"),
-        run_id="run-sps",
-    )
-    updater.apply_snapshot(
-        database,
-        _snapshot(
-            observed_at="2026-08-28T02:00:00Z",
-            location_id="la_colonia_tgu",
-        ),
-        run_id="run-tgu",
-    )
-
-    con = sqlite3.connect(database)
-    try:
-        products = con.execute("SELECT COUNT(*) FROM products").fetchone()[0]
-        locations = con.execute(
-            """
-            SELECT location_id, COUNT(*)
-            FROM price_history
-            WHERE valid_to_utc IS NULL
-            GROUP BY location_id
-            ORDER BY location_id
-            """
-        ).fetchall()
-    finally:
-        con.close()
-    assert products == 1
-    assert locations == [("la_colonia_sps", 1), ("la_colonia_tgu", 1)]
