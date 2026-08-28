@@ -60,7 +60,9 @@ def apply_remote_sql_locally(
         artifact_id=artifact_id,
         digest=hashlib.sha256(raw).hexdigest(),
     )
-    con = sqlite3.connect(path)
+    # Hrana ejecuta las sentencias anteriores a BEGIN en autocommit. Esta conexión
+    # reproduce ese comportamiento y permite comprobar la misma secuencia SQL.
+    con = sqlite3.connect(path, isolation_level=None)
     try:
         for _, sql, args in steps:
             con.execute(sql, args)
@@ -124,10 +126,12 @@ def test_mutation_batch_is_atomic_chain() -> None:
     assert batch[0].get("condition") is None
     for index in range(1, len(steps)):
         assert batch[index]["condition"] == {"type": "ok", "step": index - 1}
+    begin = next(i for i, step in enumerate(steps) if step[0] == "begin")
+    assert begin > 0
     rollback = batch[-1]
     assert rollback["stmt"]["sql"] == "ROLLBACK"
     referenced = {cond["step"] for cond in rollback["condition"]["conds"]}
-    assert referenced == set(range(1, len(steps)))
+    assert referenced == set(range(begin + 1, len(steps)))
 
 
 def test_batch_response_is_parsed_without_network(monkeypatch: pytest.MonkeyPatch) -> None:
