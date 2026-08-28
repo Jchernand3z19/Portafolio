@@ -4,236 +4,256 @@
 
 - Repositorio: `Jchernand3z19/Portafolio`.
 - Proyecto: `precios-supermercados-sps/`.
-- GitHub `main`, PRs y CI mandan sobre recuerdos o prompts antiguos.
+- GitHub `main`, PRs, Actions y artifacts mandan sobre recuerdos o prompts antiguos.
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
-- `docs/arquitectura.md` sólo debe describir arquitectura que el MVP usa realmente.
+- Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-Antes de modificar: inspecciona `main`, PRs abiertos, CI y busca si la solución ya existe.
+# REGLA MAESTRA — CERRAR LA COLONIA SIN SOBREINGENIERÍA
 
-# REGLA MAESTRA — MVP MÍNIMO ANTES QUE ARQUITECTURA
+El objetivo inmediato es una sola cadena:
 
-El objetivo inmediato es **La Colonia funcionando de punta a punta en San Pedro Sula y Tegucigalpa con el mínimo código necesario**.
+```text
+La Colonia
+├── la_colonia_sps
+└── la_colonia_tgu
 
-Hasta cerrar ese MVP:
+persistencia = Turso / precios-supermercados
+histórico = cambios comerciales
+operación = ejecución diaria
+```
+
+Hasta cerrarlo:
 
 - no iniciar supermercado #2;
-- no construir infraestructura para necesidades futuras;
-- no automatizar una operación que todavía puede resolverse manualmente;
-- no crear una capa propia cuando el proveedor ya ofrece la operación necesaria;
-- no convertir una operación one-shot en un subsistema;
-- no medir progreso por cantidad de archivos, tests, PRs, servicios o capas.
+- no construir Dashboard/Dash/Plotly;
+- no activar BigQuery ni Google Sheets;
+- no construir Cloudflare, microservicios, APIs públicas ni arquitectura multi-cloud;
+- no crear abstracciones para necesidades futuras;
+- no limpiar deuda que no bloquee el MVP;
+- no convertir una operación one-shot en un subsistema.
 
-La base sí debe ser reutilizable para futuros supermercados y ciudades porque ese es un requisito actual del producto, pero **no se implementa ningún supermercado adicional todavía**.
+**Código que no acerca directamente SPS + TGU + histórico + Turso + operación diaria no es progreso.**
 
-**Código que no acerca directamente el MVP a datos utilizables no es progreso.**
+## Definición del MVP
 
-## MVP exacto de La Colonia
+La Colonia queda cerrada cuando exista evidencia de:
 
-El MVP queda cerrado cuando exista esto:
+1. SPS completo, con precios y disponibilidad básica correcta.
+2. TGU con binding propio, catálogo completo, precios y disponibilidad demostrable.
+3. Una única base `precios-supermercados` con SPS y TGU diferenciados por `location_id`.
+4. Histórico que no duplica periodos si el estado no cambia y sí abre uno nuevo ante cambio real.
+5. `scrape_runs` por ejecución aceptada, replay idempotente y run inválido sin corrupción.
+6. La carga vieja de prueba en Turso descartada y sustituida por SPS + TGU válidos.
+7. Al menos 2–3 ejecuciones reales consecutivas válidas.
+8. Ejecución diaria preparada; activar recurrencia live requiere autorización humana explícita.
+9. CI verde y `PROJECT_STATE.md` actualizado.
 
-1. El snapshot aprobado de SPS se valida sin consultarlo nuevamente.
-2. Los datos se convierten a un SQLite válido con el modelo mínimo compartido.
-3. Ese archivo se importa usando `Upload SQLite File` de Turso en una base llamada `precios-supermercados`.
-4. La misma base distingue supermercado, ciudad, producto, precio/historial y run.
-5. SPS y TGU pueden persistirse sin crear bases o tablas nuevas por ciudad.
-6. Una UI mínima Dash + Plotly permite buscar/filtrar productos y ver el precio actual por ciudad.
-7. Antes de activar recurrencia, al menos una segunda ejecución real valida la actualización/histórico.
-8. El scraper queda preparado para ejecución diaria; activar tráfico recurrente exige autorización humana explícita vigente.
-9. CI queda verde y la documentación refleja exactamente ese estado.
+No forman parte de este MVP:
 
-No hace falta para la primera importación:
-
-- API o adapter remoto Turso;
-- workflow de escritura Turso;
-- tokens Turso;
-- migraciones genéricas;
-- BigQuery o Google Sheets activos;
-- microservicios, colas o cachés;
-- MDM o fuzzy matching;
-- nueva infraestructura Cloudflare;
-- nuevas capas criptográficas/PKI/trust;
-- comparación entre supermercados;
-- inventario exacto que la fuente no demuestre.
+- Dashboard;
+- otros supermercados;
+- inventario exacto;
+- normalización perfecta;
+- BigQuery;
+- Google Sheets.
 
 ## Gate obligatorio de simplicidad
 
-Antes de crear cualquier archivo de producción, módulo, clase, adapter, workflow, tabla, dependencia o servicio, responde internamente:
+Antes de crear archivo de producción, módulo, clase, adapter, workflow, tabla, dependencia o servicio:
 
-1. ¿Cuál es el blocker actual exacto?
+1. ¿Cuál es el blocker exacto?
 2. ¿Existe ya una función/capacidad que lo resuelva?
-3. ¿El proveedor ofrece una operación nativa?
-4. ¿Es one-shot y puede hacerse manualmente?
-5. ¿Cuál es el cambio de código más pequeño?
-6. ¿Qué consumidor actual necesita la nueva pieza?
-7. ¿Qué fallo real observado evita la complejidad extra?
+3. ¿Puede resolverse con una operación puntual?
+4. ¿Cuál es el cambio más pequeño correcto?
+5. ¿Qué fallo real observado justifica la complejidad?
 
-Si una respuesta no es concreta, **no se crea la pieza**.
-
-Orden obligatorio:
+Orden preferido:
 
 ```text
-capacidad nativa existente
-> operación manual one-shot
+capacidad existente
+> operación one-shot
 > función/módulo existente
 > cambio específico pequeño
 > abstracción nueva
-> servicio/infraestructura nueva
+> infraestructura nueva
 ```
 
-### Presupuesto de complejidad
+Para un solo blocker:
 
-Para un solo blocker del MVP:
-
-- más de **3 archivos de producción nuevos** -> rediseñar;
-- más de **500 líneas netas nuevas** -> rediseñar;
+- más de 3 archivos de producción nuevos -> rediseñar;
+- más de 500 líneas netas nuevas -> rediseñar;
 - workflow nuevo para una tarea one-shot -> rediseñar;
-- dependencia externa cuando `sqlite3`/stdlib o código existente basta -> rediseñar;
-- abstracción con un solo consumidor actual -> eliminarla y usar solución específica;
-- problemas no relacionados -> separarlos, no ampliar el PR.
-
-Es un hard stop de revisión, no una meta. El resultado correcto normalmente debe ser mucho menor.
-
-No interrumpas al usuario por el rediseño técnico: busca primero la alternativa mínima. Detente sólo ante una frontera humana real.
-
-## Regla especial para la primera carga
-
-El camino vigente es:
-
-```text
-snapshot aprobado
--> generar SQLite
--> validar integridad/conteos
--> Upload SQLite File en Turso
-```
-
-No reemplazarlo por:
-
-```text
-adapter remoto -> driver HTTP -> secrets -> workflow -> CLI remoto
-```
-
-La escritura automática remota se evalúa cuando exista una **segunda ejecución real** que necesite actualizar Turso.
+- dependencia externa cuando `sqlite3`/stdlib basta -> rediseñar;
+- abstracción con un solo consumidor -> evitarla.
 
 ## Persistencia mínima
 
-La base única del proyecto se llama conceptualmente `precios-supermercados` y usa cinco tablas:
+La base única usa exactamente cinco tablas mientras resuelvan el MVP:
 
 ```text
 supermarkets
-  identidad del supermercado
-
 locations
-  ciudades/contextos comerciales del supermercado
-
 products
-  una fila por SKU/identidad fuente; atributos descriptivos actuales
-
 price_history
-  precio, precio regular reportado, promoción, disponibilidad y vigencia por ciudad
-
 scrape_runs
-  una fila por ejecución terminal
 ```
 
-No crear una base por supermercado ni una base por ciudad.
+No crear una base o tabla por ciudad.
 
-No crear `offers_current`: el estado actual es `price_history.valid_to_utc IS NULL`.
-No crear mapping, inventory, quality-events u otra tabla física sin un consumidor real.
-
-Una ejecución futura deberá registrar su run y sólo abrir un nuevo periodo cuando cambie el estado comercial relevante. Ese actualizador se implementa cuando exista la segunda ejecución real que lo necesite.
-
-## Datos protegidos
-
-Snapshot aprobado SPS:
-
-```text
-catalog_products_reported = 9437
-unique_products_extracted = 9437
-skus_extracted = 9439
-skus_with_price = 9439
-presentation_normalized = 8436
-presentation_pending = 1003
-gtin_mapping_ready = 8965
-product_mapping_pending = 474
-availability_in_stock = 7081
-availability_unknown = 2358
-```
-
-No inventar los 1,003 pendientes de presentación, los 474 mappings pendientes ni convertir `unknown` en agotado.
-
-Precio:
-
-```text
-current_price          = precio efectivo observado
-reported_regular_price = precio regular/tachado reportado por la tienda
-previous_price         = current_price del periodo histórico aceptado anterior
-```
-
-`reported_regular_price` nunca sustituye a `previous_price`.
-
-Identidad fuente operativa:
+Identidad fuente:
 
 ```text
 supermarket_id + source_key_type + source_key
 ```
 
-La ciudad pertenece al estado comercial/histórico, no a la identidad del producto fuente. Precio, promoción, disponibilidad y fecha tampoco forman parte de esa identidad.
+El estado comercial pertenece a producto + ubicación.
 
-## Código histórico / deuda
+Estado actual:
 
-La existencia de código complejo no lo convierte en requisito del MVP.
+```text
+price_history.valid_to_utc IS NULL
+```
 
-- BigQuery: legado/futuro; no activar ni ampliar.
-- Google Sheets: legado; no activar ni ampliar.
-- Cloudflare/provenance: no ampliar salvo que un futuro tráfico live autorizado lo necesite.
-- Código antiguo que no bloquee el MVP puede quedarse inactivo hasta después de la entrega.
-- Una pieza nueva innecesaria debe eliminarse antes del merge.
+Cada ejecución aceptada registra `scrape_runs`.
 
-No hacer una limpieza masiva antes del MVP salvo que algo bloquee el camino mínimo.
+Para cada producto + ubicación:
+
+```text
+mismo estado
+-> no crear historia
+
+estado cambió
+-> cerrar periodo actual
+-> abrir periodo nuevo
+
+producto nuevo
+-> insertar producto
+-> abrir primer periodo
+```
+
+Estado comercial mínimo:
+
+```text
+current_price
+reported_regular_price
+is_promotion
+availability
+```
+
+Un snapshot incompleto/rechazado no modifica el último estado aceptado.
+
+## Precio
+
+```text
+current_price          = precio efectivo observado
+reported_regular_price = precio regular/tachado declarado por la fuente
+previous_price         = current_price del periodo histórico aceptado anterior
+```
+
+`reported_regular_price` no sustituye a `previous_price`.
+
+SQLite/Turso puede almacenar precios en centavos enteros.
+
+## Disponibilidad
+
+Estados mínimos:
+
+```text
+in_stock
+out_of_stock
+unknown
+```
+
+`availability` es útil para el MVP.
+
+`available_quantity` es opcional y no bloquea el MVP.
+
+No inferir `unknown -> out_of_stock` sin evidencia de la fuente.
+
+## Evidencia SPS vigente
+
+Usar como referencia operativa el artifact válido más reciente documentado en
+`docs/PROJECT_STATE.md`, no el snapshot antiguo de 9,439 SKU.
+
+No retroceder a datos viejos sólo porque ya estén cargados en Turso.
+
+## TGU
+
+TGU reutiliza el scraper operativo de SPS con su propia selección de ciudad.
+
+No atribuir TGU a `la_colonia_sps`.
+
+Un fallo parcial de TGU no convierte el run global en exitoso y sus datos parciales
+no se persisten como estado aceptado.
+
+## Turso
+
+Base:
+
+```text
+precios-supermercados
+```
+
+La carga vieja conocida es una carga de prueba descartable.
+
+No reemplazarla hasta tener:
+
+```text
+SPS válido
++
+TGU válido
++
+SQLite limpio validado
+```
+
+Antes de importar/verificar:
+
+- `PRAGMA integrity_check`;
+- foreign keys;
+- una fila de supermercado;
+- dos ubicaciones;
+- conteos de productos/histórico/runs;
+- precios;
+- `location_id`;
+- ausencia de periodos actuales duplicados.
 
 ## Tráfico live
 
-Los markers/IDs versionados del repositorio no conceden por sí solos una autorización live nueva.
+Los markers/IDs versionados no conceden autorización nueva.
 
 - no reutilizar autorizaciones consumidas;
-- no realizar solicitudes nuevas contra La Colonia sin autorización humana explícita vigente para ese alcance;
-- evidencia ya obtenida sí puede reutilizarse offline;
-- la primera carga del snapshot aprobado no genera tráfico nuevo;
-- no evadir CAPTCHA, login, 403, 429 ni controles anti-bot.
-
-## Seguridad proporcional
-
-- no secrets, tokens, cookies, JWT ni claves privadas en Git, logs o chat;
-- mínimo privilegio si un workflow llega a ser realmente necesario;
-- acciones externas pinneadas a SHA completo;
-- no construir un sistema de seguridad propio sin un riesgo/requisito real que no pueda resolverse más simple.
+- no generar solicitudes nuevas contra La Colonia sin autorización humana explícita vigente;
+- artifacts y datos ya obtenidos pueden reutilizarse offline;
+- no evadir CAPTCHA, login, 403, 429 ni controles anti-bot;
+- una autorización puntual no autoriza recurrencia diaria.
 
 ## Desarrollo
 
-1. auditar `main` y PRs;
-2. identificar un blocker;
-3. buscar solución existente/nativa;
-4. implementar el cambio mínimo;
-5. probar lo pertinente y luego la suite completa antes del merge;
-6. revisar tamaño/diff adversarialmente;
-7. eliminar piezas no necesarias;
-8. fusionar sólo con CI verde.
+```text
+AUDITAR
+-> IMPLEMENTAR
+-> PROBAR
+-> CORREGIR
+-> CI
+-> REVISAR
+-> MERGE
+-> VERIFICAR
+-> SIGUIENTE BLOQUE
+```
+
+Fusionar sólo con CI verde.
 
 No usar force push, reset destructivo ni rebase destructivo.
 
-Actualizar documentación sólo cuando cambie un estado real. No documentar diseño futuro como requisito vigente.
+Actualizar documentación sólo con evidencia real.
 
-## Visualización
+## Deuda y visualización
 
-Después de importar el SQLite en Turso, construir sólo la UI mínima:
+BigQuery, Google Sheets, Cloudflare y código histórico pueden permanecer inactivos
+si no bloquean el MVP.
 
-- búsqueda por nombre;
-- selector/filtro de ciudad;
-- filtros simples útiles;
-- precio actual;
-- precio regular reportado si existe;
-- promoción;
-- disponibilidad;
-- historial cuando exista más de una observación aceptada.
+La visualización se diseñará después, cuando existan más supermercados y se sepa
+qué campos son realmente comparables entre fuentes.
 
-**Cuando compitan “arquitectura más completa” y “camino más corto y correcto al MVP”, elegir el segundo.**
+**Cuando compitan una arquitectura más completa y el camino más corto correcto al
+MVP, elegir el segundo.**

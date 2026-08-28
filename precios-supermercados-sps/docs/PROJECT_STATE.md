@@ -1,82 +1,116 @@
 # Estado actual — Precios de Supermercados SPS
 
-Este archivo describe únicamente el **estado operativo vigente**. GitHub `main`, PRs y CI siguen siendo la fuente de verdad técnica.
+Este archivo describe el estado operativo vigente. GitHub `main`, PRs, Actions y
+artifacts son la fuente de verdad técnica.
 
 ## Objetivo activo
 
-Cerrar el **MVP mínimo de La Colonia en San Pedro Sula y Tegucigalpa** antes de iniciar otro supermercado.
+Cerrar el MVP funcional de una sola cadena:
 
 ```text
-mvp_scope = la_colonia_sps_tgu
-storage_first_load = sqlite_file
-storage_destination = turso_native_upload
+La Colonia
+├── San Pedro Sula
+└── Tegucigalpa
+
 database_name = precios-supermercados
-visualization = dash_plotly_minimal
+storage = Turso
+history = cambios comerciales
+daily = pendiente de evidencia SPS + TGU y autorización
+dashboard = fuera del MVP actual
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-La base es única para el proyecto completo. No se crea una base por supermercado ni por ciudad.
+No iniciar otro supermercado ni construir visualización antes de cerrar este bloque.
 
-## Snapshot aprobado SPS disponible
+## SPS — última evidencia válida
 
-El catálogo completo SPS ya fue obtenido y no debe descargarse otra vez para la primera carga.
+Ejecución read-only completa:
 
 ```text
-run_id = 32922877781
-artifact_id = 9590684834
-preserved_artifact_id = 9655225996
-artifact_zip_sha256 = 0427e88be27df89fd9fcb50ed600ef5c6aef64177bfba92b4af3d2e25756a892
-full_catalog_json_sha256 = 2780eeffa5ef62f2d1c8c2c8365e88da1ca0006622d2f7b1c3529f834c9b5e50
+workflow_run_id = 33143530292
+artifact_id = 9675011477
+observed_at_utc = 2026-08-28T05:09:23Z
 location_id = la_colonia_sps
-sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
-catalog_products_reported = 9437
-unique_products_extracted = 9437
-skus_extracted = 9439
-skus_with_price = 9439
-availability_in_stock = 7081
-availability_unknown = 2358
+city = San Pedro Sula
+
+catalog_products_reported = 9469
+unique_products_extracted = 9469
+skus_extracted = 9471
+skus_with_price = 9471
+
+availability_in_stock = 7093
+availability_out_of_stock = 2378
+availability_unknown = 0
+
+catalog_complete = true
+validation_passed = true
+result = success
 ```
 
-La diferencia `9439 SKU` vs `9437 source product_id` es válida: dos productos poseen dos SKU.
+Dos productos fuente poseen dos SKU; por eso `9471 SKU` y `9469 product_id` son
+consistentes.
 
-Tegucigalpa ya forma parte del alcance del MVP, pero **todavía no se atribuyen precios a TGU hasta completar y validar su propio run**.
-
-## Normalización existente
-
-La normalización previa se conserva, pero no es requisito para complicar la persistencia inicial.
+El fingerprint canónico del contexto SPS que permanece protegido por los tests es:
 
 ```text
-normalized_offers = 9439
-presentation_normalized = 8436
-presentation_pending = 1003
-gtin_mapping_ready = 8965
-product_mapping_pending = 474
+d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 ```
 
-No inventar los 1,003 pendientes de presentación ni los 474 mappings pendientes.
+El JSON del artifact usado para reconstrucción offline tiene:
+
+```text
+sha256 = 9c1b3015da39cd283d97bd66d694e5719700c58b5063d797934235c4ff7a6581
+```
+
+El snapshot antiguo de 9,439 SKU ya no es la referencia operativa válida.
+
+## TGU — evidencia existente y fallo real
+
+Ya existió una ejecución combinada SPS + TGU:
+
+```text
+workflow_run_id = 33141576809
+artifact_id = 9674386788
+sps_exit = 0
+tgu_exit = 3
+tgu_reason = product_search_graphql_errors
+```
+
+Antes del fallo TGU había confirmado la selección de ubicación de esa misma
+ejecución y había avanzado parcialmente:
+
+```text
+catalog_products_reported = 9493
+pages_completed = 158
+product_requests_completed = 159
+skus_extracted = 7428
+skus_with_price = 7428
+```
+
+Esos 7,428 SKU son parciales y **no son estado aceptado de TGU**.
+
+El artifact de fallo heredó etiquetas SPS porque el wrapper anterior sólo
+reescribía ciudad/ubicación después de un éxito. No usar esas etiquetas como
+evidencia de que los datos parciales pertenecían a SPS.
+
+## Corrección TGU offline
+
+El runner TGU mantiene el mismo scraper probado y aplica únicamente dos cambios
+específicos al fallo observado:
+
+1. `product_search_graphql_errors` puede reintentarse hasta dos veces adicionales;
+2. durante toda la ejecución, incluidos fallos, la metadata usa
+   `la_colonia_tgu` / `Tegucigalpa`.
+
+Cualquier otro error sigue siendo fail-closed. Si el error GraphQL persiste tras
+los reintentos, el run se detiene.
+
+Esta corrección necesita una nueva autorización live puntual para demostrar un
+catálogo TGU completo. No existe autorización activa.
 
 ## Persistencia MVP
 
-La primera carga usa el camino más corto:
-
-```text
-snapshot aprobado SPS
--> verificar SHA-256 y metadata
--> generar SQLite compartido
--> comprobar integridad/FKs/conteos
--> Upload SQLite File en Turso
-```
-
-No se necesita para esta primera carga:
-
-- driver/adapter remoto Turso;
-- workflow de escritura Turso;
-- secrets Turso en GitHub;
-- BigQuery;
-- Google Sheets;
-- nuevas capas de autoridad/seguridad.
-
-El SQLite mínimo tiene cinco tablas:
+El modelo sigue usando cinco tablas:
 
 ```text
 supermarkets
@@ -86,114 +120,177 @@ price_history
 scrape_runs
 ```
 
-Granos:
-
-- `supermarkets`: una fila por supermercado.
-- `locations`: una fila por ciudad/contexto comercial del supermercado.
-- `products`: una fila por SKU/identidad fuente del supermercado.
-- `price_history`: un periodo comercial por producto y ubicación.
-- `scrape_runs`: una fila por ejecución terminal.
-
-Para el snapshot SPS inicial se esperan exactamente:
+Una sola fila de supermercado:
 
 ```text
-supermarkets = 1
-locations = 2            # SPS + TGU conocida, aunque TGU aún no tenga precios
-products = 9439
-price_history = 9439
-scrape_runs = 1
-open_prices = 9439
-priced_rows = 9439
-availability_in_stock = 7081
-availability_unknown = 2358
-tgu_price_rows = 0
+la_colonia
 ```
 
-## Precio
-
-```text
-current_price          = precio efectivo observado
-reported_regular_price = precio regular/tachado declarado por la tienda
-previous_price         = precio efectivo del periodo aceptado anterior
-```
-
-La base SQLite almacena precios en centavos enteros para evitar errores de coma flotante.
-
-## Historial
-
-`price_history.valid_to_utc IS NULL` representa el estado actual.
-
-Una ejecución futura debe:
-
-1. registrar siempre su fila en `scrape_runs`;
-2. actualizar los atributos descriptivos de `products` cuando cambien;
-3. comparar precio/promoción/disponibilidad contra el periodo abierto del producto en esa ciudad;
-4. no crear historia nueva si el estado comercial no cambió;
-5. cerrar el periodo previo y abrir uno nuevo si cambió un atributo comercial relevante.
-
-Ese actualizador se implementa cuando exista la segunda ejecución real que lo necesite.
-
-## Turso
-
-El usuario ya tiene una cuenta Turso Free. La base se llamará:
-
-```text
-precios-supermercados
-```
-
-La primera importación se hará con `Upload SQLite File` después de validar el archivo local. No se requieren tokens para esa importación.
-
-## Ciudades de La Colonia
+Dos ubicaciones:
 
 ```text
 la_colonia_sps = San Pedro Sula
 la_colonia_tgu = Tegucigalpa
 ```
 
-Ambas ciudades viven en la misma tabla `locations` y sus precios viven en la misma `price_history`, diferenciados por `location_id`.
+No existen tablas ni bases separadas por ciudad.
 
-No crear tablas duplicadas por ciudad.
+## Updater histórico
 
-## BigQuery y Google Sheets
+`actualizar_mvp_sqlite_la_colonia.py` implementa el camino mínimo:
 
 ```text
-bigquery = paused_legacy
-bigquery_billing = not_enabled
-google_sheets = legacy_inactive
+snapshot completo aceptado
+-> registrar scrape_run
+-> upsert de products
+-> comparar estado comercial por producto + ubicación
+-> mismo estado: no nueva historia
+-> cambio: cerrar periodo + abrir periodo
+-> producto nuevo: periodo inicial
 ```
 
-El código previo puede permanecer mientras no bloquee el MVP, pero no se amplía ni se usa como arquitectura activa.
+Estado comparado:
 
-## Visualización
+```text
+current_price
+reported_regular_price
+is_promotion
+availability
+```
 
-Después de importar el SQLite en Turso, la siguiente pieza es una UI mínima Dash + Plotly que permita:
+También cubre:
 
-- buscar producto por nombre;
-- seleccionar/filtrar ciudad;
-- filtrar por categoría/marca/disponibilidad cuando sea útil;
-- mostrar precio actual;
-- mostrar precio regular reportado si existe;
-- mostrar promoción;
-- mostrar disponibilidad.
+- replay exacto idempotente;
+- aislamiento SPS/TGU;
+- rechazo previo de snapshot incompleto;
+- transacción con rollback;
+- `PRAGMA foreign_key_check`;
+- validación de integridad y periodos actuales duplicados.
 
-El historial gráfico se activa cuando exista más de una observación aceptada.
+Los tests offline cubren explícitamente los seis casos mínimos del MVP:
+mismo estado, cambio de precio, cambio de disponibilidad, producto nuevo, replay
+exacto y run inválido/incompleto.
+
+## Reconstrucción limpia SPS verificada offline
+
+Aplicando el artifact SPS `9675011477` a una base nueva con el updater:
+
+```text
+supermarkets = 1
+locations = 2
+products = 9471
+price_history = 9471
+scrape_runs = 1
+open_price_history = 9471
+
+la_colonia_sps:
+  in_stock = 7093
+  out_of_stock = 2378
+  unknown = 0
+
+la_colonia_tgu:
+  price_history = 0
+
+PRAGMA integrity_check = ok
+foreign_key_check = empty
+```
+
+Esto demuestra que el SPS vigente puede producir la mitad SPS de la futura base
+limpia sin reutilizar la carga vieja.
+
+## Turso
+
+Base única:
+
+```text
+precios-supermercados
+```
+
+La carga actualmente visible en Turso corresponde a la primera prueba vieja,
+aproximadamente:
+
+```text
+products = 9439
+availability_in_stock = 7081
+availability_unknown = 2358
+```
+
+Esa carga está autorizada como descartable y no debe corregirse masivamente.
+
+Camino vigente:
+
+```text
+carga vieja
+-> descartar cuando TGU sea válido
+-> construir SQLite limpio con SPS válido + TGU válido
+-> validar
+-> reemplazar carga Turso
+-> verificar Turso
+```
+
+No reemplazar Turso antes de tener un catálogo TGU completo aceptado.
+
+## Precio
+
+```text
+current_price          = precio efectivo observado
+reported_regular_price = precio regular/tachado declarado por la fuente
+previous_price         = precio efectivo del periodo histórico aceptado anterior
+```
+
+Los precios físicos del SQLite se almacenan en centavos enteros.
+
+## Normalización
+
+Presentaciones, mappings y otros campos pendientes no bloquean el MVP.
+
+No inventar valores. Conservar el valor fuente y usar `NULL`/pending cuando no
+pueda demostrarse una normalización.
 
 ## Ejecución diaria
 
-La Colonia no se considera cerrada hasta probar al menos una segunda ejecución real de SPS/TGU y comprobar el histórico. Después se deja preparado el flujo diario.
+No hay recurrencia live autorizada.
 
-Activar tráfico recurrente contra La Colonia requiere autorización humana explícita vigente para esa recurrencia; una ejecución read-only puntual no se convierte automáticamente en autorización diaria.
+Orden pendiente:
+
+```text
+1. validar TGU live con autorización nueva
+2. construir y verificar base limpia SPS + TGU
+3. reemplazar/verificar Turso
+4. ejecutar segunda/tercera observación real
+5. comprobar histórico/idempotencia en operación real
+6. preparar flujo diario mínimo
+7. activar recurrencia sólo con autorización humana explícita
+```
+
+Un fallo de una ciudad no permite mezclar datos parciales ni declarar exitoso el
+run global.
 
 ## Seguridad y live
 
-`ACTIVE_AUTHORIZATION_IDS = []` es el sentinel versionado del repositorio y no se sustituye por evidencia histórica ni por inferencia.
+```text
+ACTIVE_AUTHORIZATION_IDS = []
+```
 
-La evidencia histórica no se interpreta como autorización abierta. Una autorización consumida no se reutiliza para generar tráfico nuevo.
+Autorizaciones anteriores están consumidas y no se reutilizan. Cualquier marker,
+workflow o evidencia histórica no se interpreta como autorización abierta; un
+nuevo tráfico live requiere autorización humana explícita vigente para su alcance.
 
-La primera carga SQLite reutiliza exclusivamente el artifact SPS ya obtenido y no realiza nuevas solicitudes contra La Colonia.
+Artifacts existentes sí pueden analizarse offline.
 
-## Deuda técnica
+## Fuera del alcance actual
 
-El repositorio contiene trabajo histórico más complejo de BigQuery, Google Sheets, Cloudflare, provenance y otras capas. **La existencia de ese código no lo convierte en requisito del MVP**.
+No trabajar ahora en:
 
-No hacer una limpieza masiva ahora salvo que algo bloquee el camino mínimo. Primero cerrar el MVP funcional; después se podrá eliminar deuda sin mezclarla con la entrega.
+- Dashboard/Dash/Plotly;
+- supermercado #2;
+- BigQuery;
+- Google Sheets;
+- Cloudflare;
+- APIs públicas;
+- microservicios;
+- comparación entre supermercados;
+- inventario exacto;
+- normalización perfecta.
+
+La deuda histórica que no bloquea puede permanecer hasta después del MVP.
