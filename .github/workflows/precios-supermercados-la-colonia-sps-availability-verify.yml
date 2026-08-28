@@ -1,0 +1,95 @@
+name: La Colonia - Verificar disponibilidad SPS one-shot
+
+on:
+  push:
+    branches: [ops/la-colonia-sps-availability-verify-20260828]
+    paths:
+      - .github/workflows/precios-supermercados-la-colonia-sps-availability-verify.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: la-colonia-sps-availability-verify-20260828
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: precios-supermercados-sps
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Confirmar alcance one-shot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/ops/la-colonia-sps-availability-verify-20260828"
+          echo "Alcance: La Colonia SPS, read-only, una ejecución puntual para validar disponibilidad."
+
+      - name: Configurar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: precios-supermercados-sps/requirements.txt
+
+      - name: Instalar dependencias verificadas
+        run: python -m pip install -r requirements.txt
+
+      - name: Descargar SPS
+        shell: bash
+        run: |
+          python scripts/obtener_catalogo_sps_la_colonia_operativo_v2.py \
+            --live-read-only \
+            --allow-full-catalog \
+            --page-size 50 \
+            --delay-seconds 1.5 \
+            --output run-artifacts/sps/full-catalog.json \
+            --csv-output run-artifacts/sps/full-catalog.csv
+
+      - name: Validar disponibilidad sin unknown
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+
+          path = Path("run-artifacts/sps/full-catalog.json")
+          artifact = json.loads(path.read_text(encoding="utf-8"))
+          products = artifact.get("products") or []
+          counts = Counter(product.get("availability") for product in products)
+          result = {
+              "products": len(products),
+              "in_stock": counts.get("in_stock", 0),
+              "out_of_stock": counts.get("out_of_stock", 0),
+              "unknown": counts.get("unknown", 0),
+          }
+          print(json.dumps(result, sort_keys=True))
+          if not artifact.get("catalog_complete") or not artifact.get("validation_passed"):
+              raise SystemExit("catalog_not_validated")
+          if sum(result[key] for key in ("in_stock", "out_of_stock", "unknown")) != len(products):
+              raise SystemExit("availability_count_mismatch")
+          if result["unknown"] != 0:
+              raise SystemExit(f"availability_unknown_remaining:{result['unknown']}")
+          PY
+
+      - name: Publicar resultado sanitizado
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: la-colonia-sps-availability-${{ github.run_id }}
+          path: precios-supermercados-sps/run-artifacts/sps/
+          if-no-files-found: error
+          retention-days: 14
