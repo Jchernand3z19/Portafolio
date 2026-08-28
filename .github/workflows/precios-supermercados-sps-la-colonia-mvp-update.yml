@@ -144,6 +144,7 @@ jobs:
           import json
           import os
           import sys
+          import time
           from pathlib import Path
           sys.path.insert(0, 'scripts')
           from actualizar_mvp_turso_la_colonia import _execute_rows, _pipeline, _stmt
@@ -158,20 +159,36 @@ jobs:
                   f"{os.environ['GITHUB_RUN_ID']}-{city}", location_id, 'success',
                   sku_count, catalog_count, digest,
               ])
+          expected = sorted(expected)
 
-          requests = [
-              {'type':'execute','stmt':_stmt('''SELECT scrape_run_id,location_id,run_status,sku_count,catalog_product_count,source_json_sha256 FROM scrape_runs WHERE scrape_run_id IN (?,?) ORDER BY scrape_run_id''', (f"{os.environ['GITHUB_RUN_ID']}-sps", f"{os.environ['GITHUB_RUN_ID']}-tgu"))},
-              {'type':'execute','stmt':_stmt('''SELECT (SELECT COUNT(*) FROM products),(SELECT COUNT(*) FROM price_history),(SELECT COUNT(*) FROM scrape_runs),(SELECT COUNT(*) FROM price_history WHERE valid_to_utc IS NULL)''')},
-              {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)''')},
-              {'type':'close'},
-          ]
-          data = _pipeline(os.environ['TURSO_DATABASE_URL'], os.environ['TURSO_AUTH_TOKEN'], requests)
-          results = data['results']
-          runs = _execute_rows(results[0])
-          counts = _execute_rows(results[1])
-          duplicates = _execute_rows(results[2])
-          if runs != sorted(expected):
+          run_sql = '''SELECT scrape_run_id,location_id,run_status,sku_count,catalog_product_count,source_json_sha256 FROM scrape_runs WHERE scrape_run_id IN (?,?) ORDER BY scrape_run_id'''
+          run_args = (f"{os.environ['GITHUB_RUN_ID']}-sps", f"{os.environ['GITHUB_RUN_ID']}-tgu")
+          runs = []
+          for attempt in range(7):
+              data = _pipeline(
+                  os.environ['TURSO_DATABASE_URL'],
+                  os.environ['TURSO_AUTH_TOKEN'],
+                  [{'type':'execute','stmt':_stmt(run_sql, run_args)}, {'type':'close'}],
+              )
+              runs = _execute_rows(data['results'][0])
+              if runs == expected:
+                  break
+              if attempt < 6:
+                  time.sleep(20)
+          if runs != expected:
               raise SystemExit(f'commit_not_confirmed:sps_exit={os.environ["SPS_PERSIST_EXIT"]}:tgu_exit={os.environ["TGU_PERSIST_EXIT"]}:runs={runs}')
+
+          data = _pipeline(
+              os.environ['TURSO_DATABASE_URL'],
+              os.environ['TURSO_AUTH_TOKEN'],
+              [
+                  {'type':'execute','stmt':_stmt('''SELECT (SELECT COUNT(*) FROM products),(SELECT COUNT(*) FROM price_history),(SELECT COUNT(*) FROM scrape_runs),(SELECT COUNT(*) FROM price_history WHERE valid_to_utc IS NULL)''')},
+                  {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)''')},
+                  {'type':'close'},
+              ],
+          )
+          counts = _execute_rows(data['results'][0])
+          duplicates = _execute_rows(data['results'][1])
           if duplicates != [[0]]:
               raise SystemExit(f'duplicate_open_periods:{duplicates}')
           if not counts or counts[0][0] != 9509 or counts[0][3] != 18966:
