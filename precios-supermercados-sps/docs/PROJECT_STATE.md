@@ -12,6 +12,7 @@ storage_first_load = sqlite_file
 storage_destination = turso_native_upload
 database_name = precios-supermercados
 visualization = dash_plotly_minimal
+ACTIVE_AUTHORIZATION_IDS = []
 ```
 
 La base es única para el proyecto completo. No se crea una base por supermercado ni por ciudad.
@@ -184,6 +185,8 @@ La Colonia no se considera cerrada hasta probar al menos una segunda ejecución 
 Activar tráfico recurrente contra La Colonia requiere autorización humana explícita vigente para esa recurrencia; una ejecución read-only puntual no se convierte automáticamente en autorización diaria.
 
 ## Seguridad y live
+
+`ACTIVE_AUTHORIZATION_IDS = []` es el sentinel versionado del repositorio y no se sustituye por evidencia histórica ni por inferencia.
 
 La evidencia histórica no se interpreta como autorización abierta. Una autorización consumida no se reutiliza para generar tráfico nuevo.
 
