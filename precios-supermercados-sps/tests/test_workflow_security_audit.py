@@ -52,6 +52,7 @@ RECOVERY_WORKFLOW = "precios-supermercados-sps-la-colonia-dispatch-recovery.yml"
 LA_DIAGNOSTIC_WORKFLOW = "precios-supermercados-sps-la-colonia-diagnostic.yml"
 FACET_WORKFLOW = "precios-supermercados-sps-la-colonia-facet-discovery.yml"
 LIVE_WORKFLOW = "precios-supermercados-sps-la-colonia-live.yml"
+MVP_UPDATE_WORKFLOW = "precios-supermercados-sps-la-colonia-mvp-update.yml"
 LIVE_MVP_JOB = "mvp-sample"
 LIVE_FACET_JOB = "context-bound-facet-entrypoint"
 LOCATION_BINDING_WORKFLOW = "precios-supermercados-sps-la-colonia-location-binding.yml"
@@ -74,6 +75,8 @@ EDGE_GATEWAY_VAR = "CLOUDFLARE_EDGE_GATEWAY_URL"
 EDGE_PUBLIC_KEY_VAR = "CLOUDFLARE_EDGE_RECEIPT_PUBLIC_KEY_SPKI_B64URL"
 GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET = "PRECIOS_SPS_GOOGLE_SERVICE_ACCOUNT_JSON"
 GOOGLE_SHEETS_SPREADSHEET_VAR = "PRECIOS_SPS_GOOGLE_SPREADSHEET_ID"
+TURSO_DATABASE_URL_SECRET = "TURSO_DATABASE_URL"
+TURSO_AUTH_TOKEN_SECRET = "TURSO_AUTH_TOKEN"
 BIGQUERY_GCP_VARS = {
     "PRECIOS_SPS_GCP_PROJECT_ID",
     "PRECIOS_SPS_BIGQUERY_DATASET_ID",
@@ -89,6 +92,7 @@ EXPECTED_PERMISSIONS = {
     LA_DIAGNOSTIC_WORKFLOW: {"contents": "read"},
     FACET_WORKFLOW: {"contents": "read"},
     LIVE_WORKFLOW: {"contents": "read"},
+    MVP_UPDATE_WORKFLOW: {"contents": "read"},
     LOCATION_BINDING_WORKFLOW: {"contents": "read"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"contents": "read"},
     PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"actions": "read", "contents": "read"},
@@ -119,6 +123,7 @@ EXPECTED_TRIGGERS = {
     RECOVERY_WORKFLOW: {"workflow_run"},
     FACET_WORKFLOW: {"workflow_dispatch"},
     LIVE_WORKFLOW: {"workflow_dispatch", "push"},
+    MVP_UPDATE_WORKFLOW: {"workflow_dispatch", "schedule"},
     LOCATION_BINDING_WORKFLOW: {"workflow_dispatch"},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch", "push"},
     PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"workflow_dispatch", "push"},
@@ -137,6 +142,7 @@ BLOCKED_ENTRYPOINTS = {
 ALLOWED_SECRET_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_GATEWAY_SECRET, PROBE_OBSERVABILITY_SECRET},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET},
+    MVP_UPDATE_WORKFLOW: {TURSO_DATABASE_URL_SECRET, TURSO_AUTH_TOKEN_SECRET},
 }
 ALLOWED_VAR_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},

@@ -1,0 +1,208 @@
+name: La Colonia - Actualización MVP
+
+on:
+  schedule:
+    - cron: "17 11 * * *" # 05:17 America/Tegucigalpa
+  workflow_dispatch:
+    inputs:
+      live_read_only_authorized:
+        description: Confirma autorización humana vigente para consultar SPS y TGU
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: la-colonia-mvp-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && (github.event_name == 'schedule' || inputs.live_read_only_authorized == true) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: precios-supermercados-sps
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Configurar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: precios-supermercados-sps/requirements.txt
+
+      - name: Instalar dependencias verificadas
+        run: python -m pip install -r requirements.txt
+
+      - name: Descargar catálogo SPS
+        id: sps
+        shell: bash
+        run: |
+          set +e
+          python scripts/obtener_catalogo_sps_la_colonia_operativo_v2.py \
+            --live-read-only \
+            --allow-full-catalog \
+            --page-size 50 \
+            --delay-seconds 1.5 \
+            --output run-artifacts/sps/full-catalog.json \
+            --csv-output run-artifacts/sps/full-catalog.csv
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Descargar catálogo TGU
+        id: tgu
+        shell: bash
+        run: |
+          set +e
+          python scripts/obtener_catalogo_tgu_la_colonia_operativo.py \
+            --live-read-only \
+            --allow-full-catalog \
+            --page-size 50 \
+            --delay-seconds 1.5 \
+            --output run-artifacts/tgu/full-catalog.json \
+            --csv-output run-artifacts/tgu/full-catalog.csv
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Aceptar sólo snapshots completos
+        shell: bash
+        env:
+          SPS_EXIT: ${{ steps.sps.outputs.exit_code }}
+          TGU_EXIT: ${{ steps.tgu.outputs.exit_code }}
+        run: |
+          set -euo pipefail
+          test "$SPS_EXIT" = "0"
+          test "$TGU_EXIT" = "0"
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'scripts')
+          from actualizar_mvp_sqlite_la_colonia import validate_snapshot_bytes
+          for city in ('sps', 'tgu'):
+              validate_snapshot_bytes(Path(f'run-artifacts/{city}/full-catalog.json').read_bytes())
+          PY
+
+      - name: Persistir SPS en Turso
+        id: persist_sps
+        shell: bash
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          set +e
+          python scripts/actualizar_mvp_turso_la_colonia.py \
+            run-artifacts/sps/full-catalog.json \
+            --run-id "${GITHUB_RUN_ID}-sps" \
+            > /tmp/sps-persist.out 2> /tmp/sps-persist.err
+          code=$?
+          set -e
+          cat /tmp/sps-persist.out || true
+          cat /tmp/sps-persist.err >&2 || true
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Persistir TGU en Turso
+        id: persist_tgu
+        shell: bash
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          set +e
+          python scripts/actualizar_mvp_turso_la_colonia.py \
+            run-artifacts/tgu/full-catalog.json \
+            --run-id "${GITHUB_RUN_ID}-tgu" \
+            > /tmp/tgu-persist.out 2> /tmp/tgu-persist.err
+          code=$?
+          set -e
+          cat /tmp/tgu-persist.out || true
+          cat /tmp/tgu-persist.err >&2 || true
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Verificar commits exactos en Turso
+        shell: bash
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          SPS_PERSIST_EXIT: ${{ steps.persist_sps.outputs.exit_code }}
+          TGU_PERSIST_EXIT: ${{ steps.persist_tgu.outputs.exit_code }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import sys
+          import time
+          from pathlib import Path
+          sys.path.insert(0, 'scripts')
+          from actualizar_mvp_turso_la_colonia import _execute_rows, _pipeline, _stmt
+
+          expected = []
+          for city, location_id, sku_count, catalog_count in (
+              ('sps', 'la_colonia_sps', 9471, 9469),
+              ('tgu', 'la_colonia_tgu', 9495, 9493),
+          ):
+              digest = hashlib.sha256(Path(f'run-artifacts/{city}/full-catalog.json').read_bytes()).hexdigest()
+              expected.append([
+                  f"{os.environ['GITHUB_RUN_ID']}-{city}", location_id, 'success',
+                  sku_count, catalog_count, digest,
+              ])
+          expected = sorted(expected)
+
+          run_sql = '''SELECT scrape_run_id,location_id,run_status,sku_count,catalog_product_count,source_json_sha256 FROM scrape_runs WHERE scrape_run_id IN (?,?) ORDER BY scrape_run_id'''
+          run_args = (f"{os.environ['GITHUB_RUN_ID']}-sps", f"{os.environ['GITHUB_RUN_ID']}-tgu")
+          runs = []
+          for attempt in range(7):
+              data = _pipeline(
+                  os.environ['TURSO_DATABASE_URL'],
+                  os.environ['TURSO_AUTH_TOKEN'],
+                  [{'type':'execute','stmt':_stmt(run_sql, run_args)}, {'type':'close'}],
+              )
+              runs = _execute_rows(data['results'][0])
+              if runs == expected:
+                  break
+              if attempt < 6:
+                  time.sleep(20)
+          if runs != expected:
+              raise SystemExit(f'commit_not_confirmed:sps_exit={os.environ["SPS_PERSIST_EXIT"]}:tgu_exit={os.environ["TGU_PERSIST_EXIT"]}:runs={runs}')
+
+          data = _pipeline(
+              os.environ['TURSO_DATABASE_URL'],
+              os.environ['TURSO_AUTH_TOKEN'],
+              [
+                  {'type':'execute','stmt':_stmt('''SELECT (SELECT COUNT(*) FROM products),(SELECT COUNT(*) FROM price_history),(SELECT COUNT(*) FROM scrape_runs),(SELECT COUNT(*) FROM price_history WHERE valid_to_utc IS NULL)''')},
+                  {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)''')},
+                  {'type':'close'},
+              ],
+          )
+          counts = _execute_rows(data['results'][0])
+          duplicates = _execute_rows(data['results'][1])
+          if duplicates != [[0]]:
+              raise SystemExit(f'duplicate_open_periods:{duplicates}')
+          if not counts or counts[0][0] != 9509 or counts[0][3] != 18966:
+              raise SystemExit(f'current_state_mismatch:{counts}')
+          print(json.dumps({'runs': runs, 'counts': counts, 'duplicate_open_periods': duplicates}, ensure_ascii=False, sort_keys=True))
+          PY
+
+      - name: Publicar evidencia
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: la-colonia-mvp-${{ github.run_id }}
+          path: precios-supermercados-sps/run-artifacts/
+          if-no-files-found: warn
+          retention-days: 14

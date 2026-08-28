@@ -1,7 +1,6 @@
 # Estado actual — Precios de Supermercados SPS
 
-Este archivo describe el estado operativo vigente. GitHub `main`, PRs, Actions y
-artifacts son la fuente de verdad técnica.
+GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad técnica.
 
 ## Objetivo activo
 
@@ -14,79 +13,11 @@ La Colonia
 
 database_name = precios-supermercados
 storage = Turso
-history = cambios comerciales
-daily = pendiente de observaciones consecutivas + flujo diario + autorización recurrente
+history = cambios comerciales por ubicación
 dashboard = fuera del MVP actual
-ACTIVE_AUTHORIZATION_IDS = []
 ```
 
 No iniciar otro supermercado ni construir visualización antes de cerrar este bloque.
-
-## SPS — última evidencia válida
-
-```text
-workflow_run_id = 33143530292
-artifact_id = 9675011477
-observed_at_utc = 2026-08-28T05:09:23Z
-location_id = la_colonia_sps
-city = San Pedro Sula
-
-catalog_products_reported = 9469
-unique_products_extracted = 9469
-skus_extracted = 9471
-skus_with_price = 9471
-
-availability_in_stock = 7093
-availability_out_of_stock = 2378
-availability_unknown = 0
-
-catalog_complete = true
-validation_passed = true
-result = success
-
-sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
-json_sha256 = 9c1b3015da39cd283d97bd66d694e5719700c58b5063d797934235c4ff7a6581
-```
-
-Dos productos fuente poseen dos SKU; por eso `9471 SKU` y `9469 product_id` son
-consistentes. El snapshot antiguo de 9,439 SKU ya no es referencia operativa.
-
-## TGU — última evidencia válida
-
-```text
-workflow_run_id = 33150113253
-artifact_id = 9677584556
-artifact_digest = sha256:6f4116dac8c64341ef5d4da0b5664979f8ef3a55bd45b20f449553758d958b82
-observed_at_utc = 2026-08-28T07:14:45Z
-location_id = la_colonia_tgu
-city = Tegucigalpa
-
-catalog_products_reported = 9493
-unique_products_extracted = 9493
-skus_extracted = 9495
-skus_with_price = 9495
-
-availability_in_stock = 7584
-availability_out_of_stock = 1911
-availability_unknown = 0
-
-partitions_detected = 62
-partitions_completed = 62
-catalog_product_coverage = 1.0
-
-catalog_complete = true
-validation_passed = true
-result = success
-
-json_sha256 = 97c688290b5b1d00580c908d20164fa41f0282cb2f133e95e73030ac16bc0595
-```
-
-Dos productos fuente poseen dos SKU. El fallo anterior
-`product_search_graphql_errors` queda sólo como evidencia histórica; la ejecución
-parcial `33141576809` no forma parte del estado aceptado.
-
-El runner TGU reutiliza el scraper operativo de SPS y añade sólo el retry acotado
-del fallo GraphQL observado. Cualquier otro fallo sigue siendo fail-closed.
 
 ## Persistencia MVP
 
@@ -98,19 +29,6 @@ locations
 products
 price_history
 scrape_runs
-```
-
-Una sola cadena:
-
-```text
-la_colonia
-```
-
-Dos ubicaciones:
-
-```text
-la_colonia_sps = San Pedro Sula
-la_colonia_tgu = Tegucigalpa
 ```
 
 Identidad de producto:
@@ -128,21 +46,24 @@ is_promotion
 availability
 ```
 
-Reglas:
+Reglas vigentes:
 
 ```text
-mismo estado -> registrar run, no abrir historia nueva
+mismo estado -> registrar scrape_run, no abrir historia nueva
 estado cambió -> cerrar periodo actual y abrir periodo nuevo
 producto nuevo -> insertar producto y abrir periodo inicial
 replay exacto -> no duplicar
 snapshot inválido/incompleto -> no mutar estado aceptado
 ```
 
-`actualizar_mvp_sqlite_la_colonia.py` implementa y prueba estas reglas offline.
+`actualizar_mvp_sqlite_la_colonia.py` prueba estas reglas offline y
+`actualizar_mvp_turso_la_colonia.py` las aplica directamente en Turso mediante el
+protocolo HTTP de Turso, sin subir de nuevo el archivo SQLite y sin agregar otra
+dependencia.
 
-## Base limpia SPS + TGU
+## Base limpia inicial SPS + TGU
 
-La base limpia se reconstruyó desde los dos artifacts aceptados:
+La base se reconstruyó desde los dos primeros snapshots completos aceptados:
 
 ```text
 workflow_run_id = 33151305834
@@ -157,35 +78,39 @@ price_history = 18966
 scrape_runs = 2
 open_price_history = 18966
 duplicate_open_periods = 0
-
-la_colonia_sps:
-  current_rows = 9471
-  in_stock = 7093
-  out_of_stock = 2378
-  unknown = 0
-
-la_colonia_tgu:
-  current_rows = 9495
-  in_stock = 7584
-  out_of_stock = 1911
-  unknown = 0
-
-shared_product_identities = 9457
-sps_only_product_identities = 14
-tgu_only_product_identities = 38
-
-PRAGMA integrity_check = ok
-foreign_key_check = empty
-journal_mode = wal
-page_size = 4096
-auto_vacuum = 0
-encoding = UTF-8
 ```
 
-La unión produce 9,509 identidades SKU únicas; SPS y TGU no se modelan como
-catálogos de productos independientes.
+Snapshot inicial SPS:
 
-## Turso — reemplazo limpio completado y reconciliado
+```text
+workflow_run_id = 33143530292
+artifact_id = 9675011477
+location_id = la_colonia_sps
+catalog_products_reported = 9469
+skus_extracted = 9471
+in_stock = 7093
+out_of_stock = 2378
+sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+json_sha256 = 9c1b3015da39cd283d97bd66d694e5719700c58b5063d797934235c4ff7a6581
+```
+
+Snapshot inicial TGU:
+
+```text
+workflow_run_id = 33150113253
+artifact_id = 9677584556
+location_id = la_colonia_tgu
+catalog_products_reported = 9493
+skus_extracted = 9495
+in_stock = 7584
+out_of_stock = 1911
+json_sha256 = 97c688290b5b1d00580c908d20164fa41f0282cb2f133e95e73030ac16bc0595
+```
+
+La unión inicial contiene 9,509 identidades SKU únicas. SPS y TGU comparten la
+identidad del producto y conservan estado comercial independiente por ubicación.
+
+## Turso — base limpia y persistencia directa comprobadas
 
 Base única:
 
@@ -193,28 +118,97 @@ Base única:
 precios-supermercados
 ```
 
-La carga vieja de prueba fue eliminada el `2026-08-28` y la base fue recreada desde
-el SQLite limpio anterior. Después se renovó `TURSO_AUTH_TOKEN` en GitHub.
+La carga vieja de prueba fue eliminada el `2026-08-28`, la base fue recreada desde
+el SQLite limpio y `TURSO_AUTH_TOKEN` fue renovado en GitHub.
 
-La reconciliación de solo lectura desde GitHub Actions fue exitosa:
+La persistencia directa GitHub -> Turso quedó implementada en `main` mediante el PR
+#340. Mantiene las cinco tablas y usa transacción fail-closed para cada snapshot.
+
+## Segunda observación real — aceptada
+
+Ejecución conjunta:
 
 ```text
-verification_workflow_run_id = 33184874691
-verification_job_id = 98896132583
-result = success
+workflow_run_id = 33197121042
+artifact_id = 9697218431
+artifact_digest = sha256:d6d5196dc7f52b6fa00da691c516d41fd5e4e456276ca5c898140caad2ad049e
+```
 
-tables =
-  locations
-  price_history
-  products
-  scrape_runs
-  supermarkets
+SPS:
 
-supermarkets = 1
-locations = 2
+```text
+scrape_run_id = 33197121042-sps
+catalog_products_reported = 9469
+skus_extracted = 9471
+json_sha256 = 2aca3c7b4ee89ed77c750654be1c3d2c5ae6f98b7e8ff020a1de0886706cb55a
+history_opened = 793
+history_closed = 793
+```
+
+TGU:
+
+```text
+scrape_run_id = 33197121042-tgu
+catalog_products_reported = 9493
+skus_extracted = 9495
+json_sha256 = b3c4c9390a3a5da8467a041d0c4cfcb7df4ed1cf8255aef8e94304a380ebaa36
+history_opened = 555
+history_closed = 555
+```
+
+Estado de Turso después de aceptar ambos snapshots:
+
+```text
 products = 9509
-price_history = 18966
-scrape_runs = 2
+price_history = 20314
+scrape_runs = 4
+open_price_history = 18966
+duplicate_open_periods = 0
+```
+
+Un timeout HTTP del cliente ocurrió después de que Turso había confirmado el commit
+de SPS. El estado se reconcilió por `scrape_run_id` + SHA antes de continuar; no se
+repitió una escritura incierta.
+
+## Tercera observación real — aceptada e idempotente
+
+Ejecución conjunta:
+
+```text
+workflow_run_id = 33202545775
+artifact_id = 9698730415
+artifact_digest = sha256:fcb11c5a5aea8ac17568eb881839d02ac7563b3f1da85fc446b4a131c50720ab
+```
+
+SPS:
+
+```text
+scrape_run_id = 33202545775-sps
+catalog_products_reported = 9469
+skus_extracted = 9471
+json_sha256 = 1cfa1bd6500928f0f5c5259cd09b23601c1260f0f22d748990f17b9d7fb353d8
+history_opened = 0
+history_closed = 0
+```
+
+TGU:
+
+```text
+scrape_run_id = 33202545775-tgu
+catalog_products_reported = 9493
+skus_extracted = 9495
+json_sha256 = edff6d902ab63f9b9119f10869abee5d718d1822d72448980efc9397e1343d3d
+history_opened = 0
+history_closed = 0
+```
+
+La verificación posterior desde GitHub Actions (`33203720746`) confirmó ambos runs
+y el estado final:
+
+```text
+products = 9509
+price_history = 20314
+scrape_runs = 6
 open_price_history = 18966
 duplicate_open_periods = 0
 
@@ -223,32 +217,51 @@ la_colonia_sps:
   out_of_stock = 2378
 
 la_colonia_tgu:
-  in_stock = 7584
-  out_of_stock = 1911
+  in_stock = 7790
+  out_of_stock = 1705
 ```
 
-Los dos `scrape_runs` remotos coinciden con los artifacts y SHA aceptados de SPS y
-TGU. Por tanto, reemplazar/reconciliar la carga inicial de Turso ya no es pendiente.
+La tercera observación demuestra la idempotencia real requerida: los dos
+`scrape_runs` se registraron, pero `price_history` no aumentó porque el estado
+comercial era igual al aceptado en la segunda observación.
 
-## Persistencia directa GitHub -> Turso
+## Flujo MVP
 
-El siguiente cambio técnico es usar los mismos snapshots completos aceptados para
-actualizar Turso directamente, sin volver a subir un archivo SQLite completo.
-
-Requisitos del camino mínimo:
+PR #343 contiene el flujo mínimo permanente de actualización:
 
 ```text
-snapshot válido
--> validar esquema/ubicación/run
--> registrar scrape_run
--> upsert products
--> comparar estado por ubicación
--> cerrar/abrir historia sólo cuando corresponda
--> commit atómico
+workflow_dispatch autorizado o schedule diario autorizado
+-> SPS completo read-only
+-> TGU completo read-only
+-> validar ambos snapshots
+-> persistir SPS en Turso
+-> persistir TGU en Turso
+-> reconciliar cada commit por run_id + SHA
+-> verificar 9509 productos, 18966 estados abiertos y cero duplicados
+-> publicar artifact de evidencia
 ```
 
-No agregar tablas, base por ciudad ni dependencia externa si el protocolo HTTP de
-Turso y la librería estándar son suficientes.
+No agrega servicios, tablas ni un segundo mecanismo de scraping. Los timeouts
+ambiguos de escritura se resuelven únicamente con una comprobación read-only
+acotada del commit; no se reintenta una escritura de estado desconocido.
+
+## Ejecución diaria autorizada
+
+El usuario autorizó explícitamente el `2026-08-28T19:53:13Z` el paso de ejecución
+diaria recurrente para terminar el MVP de La Colonia, manteniendo el alcance sin
+sobreingeniería.
+
+```text
+scope = La Colonia SPS + TGU
+mode = full catalog read-only + validación + persistencia Turso
+cadence = daily
+cron_utc = 17 11 * * *
+local_time = 05:17 America/Tegucigalpa
+status = authorized until revoked
+```
+
+El workflow conserva `workflow_dispatch` para operación manual autorizada y usa el
+mismo job para el `schedule`; no existe un pipeline paralelo.
 
 ## Precio
 
@@ -260,43 +273,40 @@ previous_price         = current_price del periodo histórico aceptado anterior
 
 Los precios persistidos se almacenan en centavos enteros.
 
-## Ejecución diaria
-
-No hay recurrencia live autorizada.
-
-Orden pendiente:
-
-```text
-1. terminar y validar persistencia directa GitHub -> Turso
-2. ejecutar segunda observación real SPS + TGU con autorización puntual nueva
-3. aplicarla a Turso y comprobar histórico/idempotencia real
-4. ejecutar tercera observación real con nueva autorización puntual
-5. preparar el workflow diario mínimo con los mismos scrapers y persistencia
-6. activar recurrencia sólo con autorización humana explícita
-7. validar el primer ciclo diario y cerrar La Colonia MVP
-```
-
-Un fallo de una ciudad no permite persistir su snapshot parcial ni declararlo como
-ejecución aceptada.
-
 ## Seguridad y live
 
 ```text
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-Todas las autorizaciones live anteriores están consumidas. Cualquier marker,
-workflow o evidencia histórica no se interpreta como autorización abierta. Un
-nuevo tráfico live requiere autorización humana explícita vigente para su alcance;
-la recurrencia diaria requiere una autorización recurrente separada.
+Ese campo conserva únicamente autorizaciones puntuales one-shot; no representa la
+autorización recurrente diaria documentada arriba.
 
-Artifacts existentes sí pueden analizarse y transformarse offline.
+La autorización temporal de 24 horas usada para las observaciones #2 y #3 sigue
+siendo evidencia histórica y no se interpreta como autorización abierta.
+
+La autorización recurrente anterior cubre únicamente el schedule diario de La
+Colonia SPS + TGU. Cualquier tráfico live fuera de ese alcance requiere autorización humana explícita vigente.
+Los artifacts existentes pueden analizarse, verificarse y persistirse sin volver a
+consultar el sitio cuando su identidad y SHA están comprobados.
+
+## Pendiente para cierre
+
+```text
+1. pasar CI y fusionar PR #343
+2. verificar main
+3. retirar rama/workflows temporales de validación de 24h
+4. dejar activo el schedule diario autorizado
+5. comprobar el primer ciclo diario programado
+```
+
+No es necesario agregar otra arquitectura para cerrar La Colonia.
 
 ## Fuera del alcance actual
 
 No trabajar ahora en:
 
-- Dashboard/Dash/Plotly;
+- dashboard;
 - supermercado #2;
 - BigQuery;
 - Google Sheets;
