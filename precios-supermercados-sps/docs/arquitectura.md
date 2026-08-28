@@ -4,16 +4,18 @@ Este documento describe únicamente la arquitectura necesaria para el **MVP actu
 
 ## Objetivo
 
-Cerrar La Colonia San Pedro Sula de punta a punta con el menor número de piezas posible:
+Cerrar La Colonia en San Pedro Sula y Tegucigalpa de punta a punta con el menor número de piezas posible:
 
 ```text
-snapshot aprobado
--> SQLite mínimo
+snapshots validados
+-> SQLite compartido
 -> importación nativa a Turso
 -> consulta/visualización mínima en Dash + Plotly
 ```
 
-No diseñar para supermercado #2 antes de cerrar este flujo.
+La base se llama `precios-supermercados` y es única para el proyecto. No se crea una base por supermercado ni por ciudad.
+
+No iniciar supermercado #2 antes de cerrar este flujo.
 
 ## Principios
 
@@ -22,61 +24,122 @@ No diseñar para supermercado #2 antes de cerrar este flujo.
 3. No crear una abstracción sin consumidor actual.
 4. No crear infraestructura recurrente para resolver una carga única.
 5. No ampliar código legado si no participa en el camino mínimo.
-6. Precio, disponibilidad y fecha no forman parte de la identidad fuente estable.
-7. Todo run terminal se registra.
-8. Una observación idéntica no crea historia redundante.
-9. Una observación nueva de La Colonia requiere autorización humana vigente.
+6. El producto fuente se identifica independientemente de la ciudad.
+7. Precio, disponibilidad y fecha pertenecen al estado comercial por ubicación.
+8. Todo run terminal se registra.
+9. Una observación idéntica no crea historia redundante.
+10. Una observación nueva de La Colonia requiere autorización humana vigente para ese alcance.
 
 ## Flujo MVP
 
 ```text
-full-catalog.json aprobado
+full-catalog.json aprobado SPS
         ↓
 validación exacta SHA-256 + metadata + 9,439 SKU
         ↓
 generar_mvp_sqlite_la_colonia.py
         ↓
-SQLite local
-  ├─ scrape_runs
-  └─ offer_history
+SQLite local: precios-supermercados.db
+  ├─ supermarkets
+  ├─ locations
+  ├─ products
+  ├─ price_history
+  └─ scrape_runs
         ↓
-PRAGMA integrity_check + reconciliación de conteos
+PRAGMA integrity_check + foreign_key_check + reconciliación
         ↓
 Upload SQLite File
         ↓
-Turso
+Turso: precios-supermercados
         ↓
 Dash + Plotly mínimo
 ```
 
-No existe una conexión remota Turso en la primera carga. No se necesitan tokens ni un workflow de escritura para importar el archivo inicial.
+La primera importación no necesita conexión remota Turso, tokens ni workflow de escritura.
 
 ## Modelo físico mínimo
 
-### `scrape_runs`
+### `supermarkets`
 
-Grain: una fila por ejecución terminal.
+Grain: una fila por supermercado.
 
-Guarda sólo la evidencia necesaria para saber qué snapshot produjo la observación persistida.
+La primera fila es `la_colonia`. Esta tabla evita repetir identidad/nombre de supermercado y permite que la misma base reciba futuros supermercados sin cambiar el modelo.
 
-### `offer_history`
+### `locations`
 
-Grain: un periodo comercial por identidad fuente y ubicación.
+Grain: una fila por ciudad/contexto comercial del supermercado.
+
+Para La Colonia:
+
+```text
+la_colonia_sps -> San Pedro Sula
+la_colonia_tgu -> Tegucigalpa
+```
+
+La presencia de una ubicación no significa que ya existan precios para ella. El run/historial demuestra qué ciudad fue realmente observada.
+
+### `products`
+
+Grain: una fila por SKU/identidad fuente del supermercado.
+
+Contiene únicamente atributos descriptivos actuales y la identidad fuente estable:
+
+- `supermarket_id`;
+- `source_key_type` + `source_key`;
+- IDs fuente de producto/item;
+- referencia/EAN;
+- nombre;
+- marca;
+- presentación;
+- categoría.
+
+La clave única operativa es:
+
+```text
+supermarket_id + source_key_type + source_key
+```
+
+La ciudad no forma parte de la identidad del producto fuente.
+
+### `price_history`
+
+Grain: un periodo comercial por producto y ubicación.
 
 Contiene:
 
+- producto;
 - supermercado y ubicación;
-- identidad fuente estable;
-- IDs/descriptores fuente útiles para mostrar el producto;
-- nombre, marca, presentación y categoría observados;
 - precio efectivo;
 - precio regular reportado cuando existe;
 - promoción;
 - disponibilidad;
+- moneda;
 - inicio/fin del periodo;
 - run que originó el periodo.
 
-`valid_to_utc IS NULL` representa el estado actual. No se materializa otra tabla de current durante el MVP porque una consulta simple resuelve ese consumidor.
+`valid_to_utc IS NULL` representa el estado actual. No se materializa una tabla adicional de current.
+
+### `scrape_runs`
+
+Grain: una fila por ejecución terminal y ubicación.
+
+Permite registrar una ejecución incluso cuando ningún precio cambie. En el futuro también puede registrar un run rechazado/fallido sin alterar historia comercial.
+
+## Primera carga SPS
+
+El snapshot aprobado produce exactamente:
+
+```text
+supermarkets = 1
+locations = 2
+products = 9439
+price_history = 9439
+scrape_runs = 1
+```
+
+Los 9,439 registros de `price_history` pertenecen a `la_colonia_sps`.
+
+TGU queda con cero precios hasta completar su propio run. No se copian ni infieren precios SPS hacia TGU.
 
 ## Precio
 
@@ -90,44 +153,25 @@ SQLite almacena los precios en centavos enteros (`*_price_minor`).
 
 ## Historial
 
-Primera carga:
-
-```text
-9439 SKU -> 9439 periodos abiertos
-1 run    -> 1 fila en scrape_runs
-```
-
-Una ejecución futura sólo justifica construir el actualizador cuando exista esa segunda ejecución real. Su comportamiento requerido será:
+Una ejecución posterior debe:
 
 - registrar el run siempre;
+- actualizar atributos descriptivos de `products` si cambiaron;
+- comparar el estado comercial por `product_id + location_id`;
 - mantener el periodo abierto si el estado no cambió;
 - cerrar y abrir periodo sólo ante cambio relevante.
 
-No construir esa automatización anticipadamente.
-
-## Identidad
-
-Para este MVP la identidad operativa puede apoyarse directamente en:
-
-```text
-supermarket_id + location_id + source_key_type + source_key
-```
-
-Los IDs canónicos/GTIN y mappings ya investigados pueden conservarse como trabajo disponible, pero no son requisito para mostrar y conservar correctamente el primer supermercado.
-
-No hacer fuzzy matching ni MDM antes de supermercado #2.
+Ese actualizador se implementa cuando exista una segunda ejecución real que lo necesite.
 
 ## Ubicación
 
-`la_colonia_sps` es la ubicación comercial confirmada del snapshot aprobado.
+SPS y TGU usan la misma estructura física. Cada snapshot/run debe demostrar su propia ciudad antes de persistir precios.
 
-`la_colonia_online` es contexto fuente histórico y no debe reinterpretarse como ciudad.
-
-La existencia del binding técnico no concede autorización para nuevas consultas live.
+La existencia de un binding técnico histórico no concede autorización para nuevas consultas live.
 
 ## Disponibilidad
 
-El snapshot actual demuestra:
+El snapshot SPS actual demuestra:
 
 ```text
 in_stock = 7081
@@ -151,20 +195,25 @@ BigQuery      = legado/futuro
 Google Sheets = legado
 ```
 
-No construir adapters, migraciones o workflows para esos backends durante el MVP.
+No construir adapters, migraciones o workflows de primera carga para esos backends.
 
 ## Visualización
 
 La primera UI Dash + Plotly sólo necesita:
 
 - búsqueda por nombre;
-- filtros simples si ayudan al uso;
+- selector/filtro de ciudad;
+- filtros simples útiles;
 - precio actual;
 - precio regular reportado;
 - promoción;
 - disponibilidad.
 
-No construir dashboards generales, analítica avanzada ni comparación entre supermercados antes de que esa pantalla funcione.
+No construir dashboards generales ni analítica avanzada antes de que esa pantalla funcione.
+
+## Ejecución diaria
+
+La Colonia se deja preparada para ejecución diaria después de validar al menos una segunda ejecución real y comprobar el comportamiento del histórico. La activación recurrente requiere autorización humana explícita para ese tráfico periódico.
 
 ## Código histórico
 
@@ -180,6 +229,6 @@ Mantener únicamente controles proporcionales:
 - no cookies/tokens/credenciales en logs o chat;
 - no nuevas solicitudes live sin autorización;
 - validación exacta del artifact aprobado;
-- integridad SQLite antes de importar.
+- integridad y foreign keys SQLite antes de importar.
 
 No añadir una capa de seguridad propia sin un riesgo real que no pueda resolverse de forma más simple.
