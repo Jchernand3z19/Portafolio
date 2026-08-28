@@ -150,7 +150,7 @@ El historial gráfico se activa cuando exista más de una observación aceptada.
 
 `ACTIVE_AUTHORIZATION_IDS = []` significa que no existe autorización live vigente.
 
-La evidencia histórica no se interpreta como autorización abierta. Una autorización consumida no se reutiliza para generar tráfico nuevo.
+La evidencia histórica no se interpreta como autorización abierta. Una autorización consumida no se reutiliza para generar tráfico nuevo. Cualquier nuevo tráfico contra La Colonia requiere autorización humana explícita vigente.
 
 La primera carga reutiliza exclusivamente el artifact ya obtenido. No realiza nuevas solicitudes contra La Colonia.
 
