@@ -1,6 +1,8 @@
-name: La Colonia - Actualización MVP manual
+name: La Colonia - Actualización MVP
 
 on:
+  schedule:
+    - cron: "17 11 * * *" # 05:17 America/Tegucigalpa
   workflow_dispatch:
     inputs:
       live_read_only_authorized:
@@ -18,7 +20,7 @@ concurrency:
 
 jobs:
   update:
-    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && inputs.live_read_only_authorized == true }}
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && (github.event_name == 'schedule' || inputs.live_read_only_authorized == true) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     defaults:
