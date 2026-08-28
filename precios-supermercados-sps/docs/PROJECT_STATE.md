@@ -1,331 +1,161 @@
 # Estado actual — Precios de Supermercados SPS
 
-Este documento es la **fuente canónica del estado operativo mutable**. La arquitectura estable vive en [`arquitectura.md`](arquitectura.md), el modelo físico en [`modelo-datos.md`](modelo-datos.md) y las decisiones técnicas en [`decisiones-tecnicas.md`](decisiones-tecnicas.md).
+Este archivo describe únicamente el **estado operativo vigente**. GitHub `main`, PRs y CI siguen siendo la fuente de verdad técnica.
 
-GitHub sigue siendo la fuente de verdad para `main`, SHA, PRs y CI. Este archivo no duplica esos valores transitorios para no quedar obsoleto al fusionar el mismo cambio que lo actualiza.
+## Objetivo activo
 
-## Corte actual
-
-Estado verificado al **2026-08-27 UTC**:
+Cerrar el **MVP mínimo de La Colonia San Pedro Sula** antes de ampliar arquitectura o iniciar otro supermercado.
 
 ```text
-SPS_TECHNICAL_CONTEXT = CONFIRMED
-location_id = la_colonia_sps
-granularity = city
-technical_binding_confirmed = true
-full_catalog_validation_passed = true
-full_crawl = true
-products_normalized = 9439 / 9439
-presentation_normalized = 8436
-presentation_pending = 1003
-gtin_mapping_ready = 8965
-product_mapping_pending = 474
-history_change_integration = verified_offline
-tabular_rehydrate_restore_cycle = verified_offline
-persistent_backend_selected = bigquery
-bigquery_contract = verified_offline
-bigquery_adapter = verified_offline
-bigquery_fake_client = verified_offline
-bigquery_bootstrap = verified_offline
-bigquery_first_load = simulated_offline
-bigquery_replay = verified_offline
-bigquery_partial_failure = verified_offline
-bigquery_read_back = verified_offline
-initial_snapshot_loader = verified_offline
-initial_snapshot_bigquery_plan = verified_offline
-google_sheets_selected = false
-google_sheets_productive_path = retired_fail_closed
-google_sheets_writes = false
-initial_snapshot_approved = true
-initial_snapshot_run_id = 32922877781
-initial_snapshot_artifact_id = 9590684834
-first_durable_bigquery_load = false
-commercial_persistence = pending_cloud_load
-extraction_enabled = false
+mvp_scope = la_colonia_sps_only
+storage_first_load = sqlite_file
+storage_destination = turso_native_upload
+visualization = dash_plotly_minimal
+new_live_traffic_authorized = false
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-`ACTIVE_AUTHORIZATION_IDS = []` significa que no existe autorización live vigente. La evidencia histórica **no se interpreta como autorización abierta**. Cualquier nuevo tráfico contra La Colonia requiere autorización humana explícita vigente; una autorización anterior consumida no se reutiliza.
+## Snapshot aprobado disponible
 
-`extraction_enabled=false` controla tráfico futuro. No invalida por sí mismo un artifact histórico que ya fue obtenido, validado y aprobado para una carga concreta.
-
-## One-shot full catalog — consumido
-
-La autorización humana para obtener una vez el catálogo completo read-only de La Colonia San Pedro Sula terminó correctamente en el intento #15.
-
-```text
-authorization_mode = one_time_full_catalog_after_staged_validation
-authorized_at_utc = 2026-08-25T21:13:44Z
-termination_condition = first_successful_downloadable_full_sps_catalog
-termination_condition_met = true
-attempt_sequence = 15
-active = false
-```
-
-Fingerprint técnico SPS preservado:
-
-```text
-sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
-```
-
-No se persisten cookies, `regionId` raw, sesión, headers ni URLs sensibles.
-
-## Catálogo completo — aprobado como snapshot inicial
-
-Evidencia del intento #15:
+El catálogo completo ya fue obtenido y no debe descargarse otra vez para la primera carga.
 
 ```text
 run_id = 32922877781
 artifact_id = 9590684834
-artifact_name = la-colonia-sps-data-32922877781
-artifact_digest = sha256:0427e88be27df89fd9fcb50ed600ef5c6aef64177bfba92b4af3d2e25756a892
+preserved_artifact_id = 9655225996
+artifact_zip_sha256 = 0427e88be27df89fd9fcb50ed600ef5c6aef64177bfba92b4af3d2e25756a892
 full_catalog_json_sha256 = 2780eeffa5ef62f2d1c8c2c8365e88da1ca0006622d2f7b1c3529f834c9b5e50
-source_commit = 589b694fdc75fd97d47fcc5259062fb026cf7ee4
-result = success
-catalog_complete = true
-validation_passed = true
-catalog_product_coverage = 1.0
-location_verified_same_run = true
+location_id = la_colonia_sps
+sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 catalog_products_reported = 9437
 unique_products_extracted = 9437
 skus_extracted = 9439
 skus_with_price = 9439
-skus_without_price = 0
-partitions_detected = 62
-partitions_completed = 62
-product_requests_completed = 252
+availability_in_stock = 7081
+availability_unknown = 2358
 ```
 
-La diferencia 9,439 SKU vs 9,437 `productId` es válida: 9,435 productos tienen un SKU y 2 productos tienen dos SKU. Las 9,439 identidades fuente son únicas.
+La diferencia `9439 SKU` vs `9437 product_id` es válida: dos productos poseen dos SKU.
 
-El **2026-08-27T04:14:01Z** el usuario aprobó continuar con una solución simple y usar este artifact conocido como snapshot inicial. Esa aprobación está versionada en `commercial_persistence_guard.py` y queda ligada al run, artifact ID, digest, commit, ubicación y conteos conocidos.
+## Normalización existente
 
-El loader offline valida además el SHA-256 exacto de `full-catalog.json` antes de interpretar filas. No descarga nada ni acepta otro snapshot por coincidencia de conteos.
-
-Esto significa:
+La normalización previa se conserva, pero no es requisito para complicar la primera persistencia.
 
 ```text
-technical_catalog_complete = true
-initial_snapshot_approved = true
-initial_snapshot_loader = verified_offline
-initial_snapshot_bigquery_plan = verified_offline
-first_durable_bigquery_load = false
-extraction_enabled = false
-```
-
-La aprobación **no** autoriza nuevas consultas a La Colonia, no sirve para otro artifact y no crea una infraestructura general de autoridad. Si cambia el snapshot inicial, la decisión versionada debe cambiar explícitamente mediante PR.
-
-## Control contra sobreingeniería
-
-El PR #323 se cerró sin merge porque introducía una capa criptográfica de autoridad (firmas, keyrings y capabilities) que no era necesaria para resolver la carga inicial.
-
-`AGENTS.md` ahora impone un gate de simplicidad:
-
-- una abstracción genérica necesita consumidores actuales;
-- no se introducen servicios, criptografía o trust layers sin necesidad real demostrada o requisito externo;
-- una decisión/configuración versionada se prefiere a un subsistema cuando resuelve el mismo problema;
-- para el snapshot inicial, una aprobación exacta del artifact conocido es suficiente.
-
-## Productos y normalización — procesado para el snapshot actual
-
-```text
-sku_input = 9439
-source_keys_unique = 9439
 normalized_offers = 9439
 presentation_normalized = 8436
 presentation_pending = 1003
 gtin_mapping_ready = 8965
 product_mapping_pending = 474
-source_values_preserved = true
-versioned_overrides = true
-normalization_before_state_hash = true
 ```
 
-Las 1,003 presentaciones pendientes no se inventan: permanecen con campos normalizados incompletos y `needs_review`. De igual forma, 474 SKU sin GTIN válido quedan con mapping canónico pendiente. Esto no impide conservar sus observaciones de precio y disponibilidad con identidad fuente estable.
+No inventar los 1,003 pendientes de presentación ni los 474 mappings pendientes.
 
-La fuente original permanece separada de valores normalizados. Overrides manuales se ligan a `source_product_id + source_signature`; si cambia la evidencia fuente el override anterior no se reutiliza silenciosamente.
+## Persistencia MVP
 
-## Historial comercial — verificado offline
-
-El motor backend-neutral verifica:
-
-- primera observación crea current y periodo inicial;
-- observación idéntica confirma sin duplicar periodos;
-- cambio real de `current_price` cierra el periodo anterior y abre uno nuevo;
-- replay exacto es idempotente;
-- rehidratación/restauración permite continuar en un proceso nuevo;
-- replay durable divergente falla cerrado.
-
-`extraction_enabled` ya no se interpreta como un permiso de persistencia. La evidencia histórica puede persistirse con ese switch en `false`; todos los demás gates de ubicación permanecen vigentes y el valor almacenado sigue siendo `false`.
-
-Estas pruebas no equivalen a persistencia cloud.
-
-## BigQuery — frontera offline cerrada
-
-**BigQuery es el único backend físico activo.** `storage_contract.py` ya no presenta Google Sheets como backend activo.
-
-Tablas físicas cerradas:
+La primera carga usa el camino más corto:
 
 ```text
-supermarkets
-locations
-productos
-precios_historicos
-inventario_historico
+snapshot aprobado
+-> verificar SHA-256 y metadata
+-> generar SQLite
+-> comprobar integridad/conteos
+-> Upload SQLite File en Turso
+```
+
+No se necesita para esta primera carga:
+
+- driver/adapter remoto Turso;
+- workflow de escritura Turso;
+- secrets Turso en GitHub;
+- BigQuery;
+- Google Sheets;
+- nuevas capas de autoridad/seguridad;
+- nueva extracción live.
+
+El SQLite mínimo tiene sólo dos tablas:
+
+```text
 scrape_runs
-quality_events
-normalization_overrides
-product_mapping
+  registra el run terminal
+
+offer_history
+  conserva identidad fuente + atributos mostrables + estado comercial
+  valid_to_utc NULL = estado actual
 ```
 
-El contrato define grain, logical key, null semantics, partitioning y clustering. BigQuery no hace cumplir primary keys; el adapter aplica las logical keys y replay explícitamente.
-
-Frontera de implementación:
+Para el primer snapshot se esperan exactamente:
 
 ```text
-DOMAIN / CURRENT-HISTORY ENGINE
-        ↓
-BigQueryWritePlan
-        ↓
-BigQueryClientPort
-        ↓
-BigQueryAdapter
-        ├─ FakeBigQueryClient
-        └─ GoogleCloudBigQueryClient
+scrape_runs = 1
+offer_history = 9439
+open_offers = 9439
+priced_offers = 9439
+availability_unknown = 2358
 ```
-
-El dominio no importa el SDK de Google.
-
-El snapshot inicial ya recorre offline la ruta completa:
-
-```text
-full-catalog.json exacto
--> 9439 RawProduct
--> 9439 ValidatedOffer
--> decisión inicial versionada
--> current/history
--> BigQueryWritePlan
--> FakeBigQueryClient
--> replay exacto sin duplicar
-```
-
-El `scrape_runs` inicial conserva también los conteos conocidos (9,437 productos reportados/únicos, 9,439 SKU y 100% de cobertura) dentro del fingerprint inmutable del plan.
-
-### Historia analítica
-
-BigQuery conserva una observación por **run comercial aceptado**, incluso cuando el precio no cambió. Así se distingue:
-
-```text
-precio igual observado hoy
-!=
-no hubo observación hoy
-```
-
-El motor Python de periodos y el histórico observacional BigQuery son representaciones distintas y reconciliadas por tests.
-
-### Idempotencia y fallo parcial
-
-Offline quedó verificado:
-
-- bootstrap de dataset/tablas con fake;
-- primera carga simulada;
-- snapshot inicial completo convertido al plan físico existente;
-- 9,439 productos fuente/SKU, observaciones de precio, inventario y mappings en el plan inicial;
-- métricas conocidas del catálogo preservadas en `scrape_runs`;
-- upsert de productos;
-- append de precio/inventario;
-- `unknown` de inventario permanece `unknown`;
-- registro de run/quality events;
-- overrides explícitos;
-- replay exacto no duplica;
-- mismo run con fingerprint distinto falla cerrado;
-- fallo parcial no publica un subconjunto del run;
-- run rechazado no contamina productos/precios/inventario/mapping;
-- read-back reconstruye productos, última observación de precio/inventario y ledger de runs.
-
-El cliente Google Cloud usa staging efímero y una única transacción DML para mutaciones destino. No crea Google Cloud projects ni datasets.
-
-## Google Sheets — retirado
-
-Google Sheets ya no forma parte del camino objetivo.
-
-- `ACTIVE_STORAGE_BACKEND = bigquery`;
-- planner/adapter/bootstrap Sheets se conservan sólo como evidencia/compatibilidad histórica y usan constantes `LEGACY_SHEETS_*`;
-- el workflow `.github/workflows/precios-supermercados-sps-google-sheets-storage.yml` conserva auditoría histórica pero su preflight emite siempre `allowed=false`;
-- el job que porta credenciales sigue condicionado a `allowed == true`, por lo que no puede ejecutar;
-- no se añadirá funcionalidad nueva ni se solicitarán nuevas credenciales para Sheets.
 
 ## Precio
 
 ```text
 current_price          = precio efectivo observado
 reported_regular_price = precio regular/tachado declarado por la tienda
-previous_price         = derivado de una observación histórica aceptada anterior
+previous_price         = precio efectivo del periodo aceptado anterior
 ```
 
-`reported_regular_price` nunca sustituye a `previous_price`. El ahorro real compara `current_price` aceptado actual contra el aceptado anterior.
+La base SQLite almacena precios en centavos enteros para evitar errores de coma flotante.
 
-## Disponibilidad e inventario
+## Historial
 
-El artifact #15 conserva:
+En el MVP, el registro abierto de `offer_history` representa el estado actual. Una ejecución futura debe:
+
+1. registrar siempre su fila en `scrape_runs`;
+2. comparar contra el periodo abierto de cada identidad fuente;
+3. no crear historia nueva si el estado comercial no cambió;
+4. cerrar el periodo previo y abrir uno nuevo si cambió precio/promoción/disponibilidad u otro atributo que realmente forme parte del estado aceptado.
+
+Ese actualizador **no se implementa hasta tener una segunda ejecución real que lo necesite**.
+
+## Turso
+
+El usuario ya tiene una cuenta Turso Free. La base Turso todavía no debe crearse vacía.
+
+Primero se genera y valida el SQLite local; después el usuario lo sube mediante `Upload SQLite File`.
+
+No generar tokens para la primera importación.
+
+## BigQuery y Google Sheets
 
 ```text
-availability_in_stock = 7081
-availability_unknown = 2358
+bigquery = paused_legacy
+bigquery_billing = not_enabled
+google_sheets = legacy_inactive
 ```
 
-Los 2,358 `unknown` permanecen `unknown`. El snapshot actual no preservó suficientemente `available_quantity_observed`, `availability_evidence` y `seller_id`; esos campos se mantienen `NULL` y `quantity_is_exact=false` cuando no existe evidencia.
-
-Completar inventario de primera clase probablemente requerirá una futura observación live y, por tanto, autorización humana nueva.
+El código previo puede permanecer mientras no bloquee el MVP, pero no se amplía ni se usa como arquitectura activa.
 
 ## Visualización
 
-La capa de consumo seleccionada es **Python Dash + Plotly**. Power BI queda legado y no recibirá funcionalidad nueva.
+Después de importar el SQLite en Turso, la siguiente pieza es una UI mínima Dash + Plotly que permita:
 
-Las views previstas después de la primera carga durable son:
+- buscar producto por nombre;
+- filtrar por categoría/marca/disponibilidad cuando sea útil;
+- mostrar precio actual;
+- mostrar precio regular reportado si existe;
+- mostrar promoción;
+- mostrar disponibilidad.
 
-```text
-vw_precios_actuales
-vw_inventario_actual
-vw_ofertas_actuales
-```
+El historial gráfico se activa cuando exista más de una observación aceptada.
 
-y derivaciones de `previous_price`, `price_change`, `price_change_pct` y `real_saving`. Dash consumirá esas reglas y no las redefinirá.
+## Seguridad y live
 
-## Frontera del producto
+`ACTIVE_AUTHORIZATION_IDS = []` significa que no existe autorización live vigente.
 
-```text
-SOURCE                                  [DONE]
-SPS CONTEXT                             [DONE]
-FULL CATALOG                            [DONE]
-COMPLETENESS / TECHNICAL ACCEPTANCE     [DONE]
-PRODUCT NORMALIZATION                   [DONE WITH REVIEW QUEUE]
-CURRENT / HISTORY SEMANTICS             [DONE OFFLINE]
-REHYDRATE / REPLAY                      [DONE OFFLINE]
-BIGQUERY CONTRACT                       [DONE OFFLINE]
-BIGQUERY ADAPTER + FAKE + BOOTSTRAP     [DONE OFFLINE]
-SIMULATED LOAD / REPLAY / ROLLBACK      [DONE OFFLINE]
-INITIAL SNAPSHOT APPROVAL               [DONE OFFLINE]
-INITIAL SNAPSHOT -> BIGQUERY PLAN       [DONE OFFLINE]
-GOOGLE SHEETS PRODUCTIVE PATH           [RETIRED]
-FIRST DURABLE BIGQUERY LOAD              [NEXT — CLOUD/HUMAN BOUNDARY]
-INVENTORY EVIDENCE / HISTORY            [PENDING]
-DAILY AUTOMATION                        [PENDING]
-DASH + PLOTLY                           [PENDING]
-TEGUCIGALPA                             [PENDING]
-SUPERMARKET #2                          [PENDING]
-```
+La evidencia histórica no se interpreta como autorización abierta. Una autorización consumida no se reutiliza para generar tráfico nuevo. Cualquier nuevo tráfico contra La Colonia requiere autorización humana explícita vigente.
 
-## Próximo paso exacto — frontera humana/cloud
+La primera carga reutiliza exclusivamente el artifact ya obtenido. No realiza nuevas solicitudes contra La Colonia.
 
-No crear recursos cloud por inferencia.
+## Deuda técnica
 
-Antes de la primera escritura durable hace falta una decisión/configuración humana real en Google Cloud:
+El repositorio contiene trabajo histórico más complejo de BigQuery, Google Sheets, Cloudflare, provenance y otras capas. **La existencia de ese código no lo convierte en requisito del MVP**.
 
-1. seleccionar o crear el Google Cloud project que será dueño de los datos y confirmar que puede usar billing;
-2. habilitar BigQuery API si aún no está habilitada;
-3. elegir **dataset ID y región** y crear ese dataset;
-4. configurar autenticación de mínimo privilegio para que el runtime pueda consultar, crear/validar tablas dentro de ese dataset, cargar staging y ejecutar DML/transacciones;
-5. sólo después ejecutar bootstrap de tablas y la primera carga durable.
-
-La primera carga no requiere volver a consultar La Colonia. Usará el artifact #9590684834 ya aprobado y mantendrá `extraction_enabled=false`.
+No hacer una limpieza masiva ahora salvo que algo bloquee el camino mínimo. Primero cerrar el MVP funcional; después se podrá eliminar deuda sin mezclarla con la entrega.
