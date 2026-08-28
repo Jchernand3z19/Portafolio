@@ -90,6 +90,7 @@ catalog_products_reported = 9469
 skus_extracted = 9471
 in_stock = 7093
 out_of_stock = 2378
+sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 json_sha256 = 9c1b3015da39cd283d97bd66d694e5719700c58b5063d797934235c4ff7a6581
 ```
 
@@ -224,12 +225,12 @@ La tercera observación demuestra la idempotencia real requerida: los dos
 `scrape_runs` se registraron, pero `price_history` no aumentó porque el estado
 comercial era igual al aceptado en la segunda observación.
 
-## Flujo manual MVP
+## Flujo MVP
 
-PR #343 contiene el flujo mínimo permanente de actualización manual:
+PR #343 contiene el flujo mínimo permanente de actualización:
 
 ```text
-workflow_dispatch con autorización humana explícita
+workflow_dispatch autorizado o schedule diario autorizado
 -> SPS completo read-only
 -> TGU completo read-only
 -> validar ambos snapshots
@@ -240,18 +241,27 @@ workflow_dispatch con autorización humana explícita
 -> publicar artifact de evidencia
 ```
 
-No tiene `schedule`, no agrega servicios, no agrega tablas y no introduce un segundo
-mecanismo de scraping. Los timeouts ambiguos de escritura se resuelven únicamente
-con una comprobación read-only acotada del commit; no se reintenta una escritura de
-estado desconocido.
+No agrega servicios, tablas ni un segundo mecanismo de scraping. Los timeouts
+ambiguos de escritura se resuelven únicamente con una comprobación read-only
+acotada del commit; no se reintenta una escritura de estado desconocido.
 
-CI del PR #343:
+## Ejecución diaria autorizada
+
+El usuario autorizó explícitamente el `2026-08-28T19:53:13Z` el paso de ejecución
+diaria recurrente para terminar el MVP de La Colonia, manteniendo el alcance sin
+sobreingeniería.
 
 ```text
-workflow_run_id = 33203261337
-result = success
-pytest = 1876 passed
+scope = La Colonia SPS + TGU
+mode = full catalog read-only + validación + persistencia Turso
+cadence = daily
+cron_utc = 17 11 * * *
+local_time = 05:17 America/Tegucigalpa
+status = authorized until revoked
 ```
+
+El workflow conserva `workflow_dispatch` para operación manual autorizada y usa el
+mismo job para el `schedule`; no existe un pipeline paralelo.
 
 ## Precio
 
@@ -265,27 +275,23 @@ Los precios persistidos se almacenan en centavos enteros.
 
 ## Seguridad y live
 
-Autorización temporal actual:
+La autorización temporal de 24 horas usada para las observaciones #2 y #3 sigue
+siendo evidencia histórica y no se interpreta como autorización abierta.
 
-```text
-authorization_id = auth-la-colonia-24h-20260828T161436Z
-scope = La Colonia SPS + TGU, live read-only y trabajo necesario de persistencia/validación
-expires_at_utc = 2026-08-29T16:14:36Z
-```
-
-Esta autorización temporal no autoriza una recurrencia permanente después de su
-vencimiento. Un `schedule` diario requiere autorización humana explícita separada.
-
-Los artifacts existentes pueden analizarse, verificarse y persistirse sin volver a
-consultar el sitio cuando su identidad y SHA están comprobados.
+La autorización recurrente anterior cubre únicamente el schedule diario de La
+Colonia SPS + TGU. Cualquier tráfico live fuera de ese alcance requiere autorización
+humana explícita vigente. Los artifacts existentes pueden analizarse, verificarse y
+persistirse sin volver a consultar el sitio cuando su identidad y SHA están
+comprobados.
 
 ## Pendiente para cierre
 
 ```text
-1. fusionar el workflow manual MVP después de su CI final
-2. verificar CI de main
-3. retirar la rama/workflows temporales de validación de 24h
-4. activar ejecución diaria únicamente si existe autorización recurrente explícita
+1. pasar CI y fusionar PR #343
+2. verificar main
+3. retirar rama/workflows temporales de validación de 24h
+4. dejar activo el schedule diario autorizado
+5. comprobar el primer ciclo diario programado
 ```
 
 No es necesario agregar otra arquitectura para cerrar La Colonia.
