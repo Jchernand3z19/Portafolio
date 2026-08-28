@@ -130,6 +130,32 @@ def test_mutation_batch_is_atomic_chain() -> None:
     assert referenced == set(range(1, len(steps)))
 
 
+def test_batch_response_is_parsed_without_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    steps = [("begin", "BEGIN", ()), ("commit", "COMMIT", ())]
+    fake = {
+        "results": [
+            {
+                "type": "ok",
+                "response": {
+                    "type": "batch",
+                    "result": {
+                        "step_results": [
+                            {"cols": [], "rows": [], "affected_row_count": 0},
+                            {"cols": [], "rows": [], "affected_row_count": 0},
+                            None,
+                        ],
+                        "step_errors": [None, None, None],
+                    },
+                },
+            },
+            {"type": "ok", "response": {"type": "close"}},
+        ]
+    }
+    monkeypatch.setattr(turso_updater, "_pipeline", lambda *args, **kwargs: fake)
+    result = turso_updater._run_batch("libsql://example.turso.io", "token", steps)
+    assert result == fake["results"][0]["response"]["result"]["step_results"][:-1]
+
+
 def test_out_of_order_change_is_rejected_before_persistent_mutation(tmp_path: Path) -> None:
     path = database(tmp_path / "mvp.db")
     initial = snapshot("2026-08-28T03:00:00Z", [product()])
