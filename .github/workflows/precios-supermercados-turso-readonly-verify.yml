@@ -1,0 +1,101 @@
+name: Precios supermercados - Verificar Turso solo lectura
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/precios-supermercados-turso-readonly-verify.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify-turso:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - name: Validar credenciales configuradas
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TURSO_DATABASE_URL:-}" ]; then
+            echo "::error::Falta el secret TURSO_DATABASE_URL"
+            exit 1
+          fi
+          if [ -z "${TURSO_AUTH_TOKEN:-}" ]; then
+            echo "::error::Falta el secret TURSO_AUTH_TOKEN"
+            exit 1
+          fi
+
+      - name: Consultar base remota sin modificar datos
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          raw_url = os.environ["TURSO_DATABASE_URL"].strip().rstrip("/")
+          if raw_url.startswith("libsql://"):
+              base_url = "https://" + raw_url[len("libsql://"):]
+          elif raw_url.startswith("https://"):
+              base_url = raw_url
+          else:
+              raise SystemExit("TURSO_DATABASE_URL debe usar libsql:// o https://")
+
+          queries = [
+              ("tables", "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"),
+              ("counts", "SELECT 'supermarkets' AS table_name, COUNT(*) AS row_count FROM supermarkets UNION ALL SELECT 'locations', COUNT(*) FROM locations UNION ALL SELECT 'products', COUNT(*) FROM products UNION ALL SELECT 'price_history', COUNT(*) FROM price_history UNION ALL SELECT 'scrape_runs', COUNT(*) FROM scrape_runs"),
+              ("open_history", "SELECT COUNT(*) AS open_history FROM price_history WHERE valid_to_utc IS NULL"),
+              ("duplicate_open", "SELECT COUNT(*) AS duplicate_open_groups FROM (SELECT product_id, location_id FROM price_history WHERE valid_to_utc IS NULL GROUP BY product_id, location_id HAVING COUNT(*) > 1)"),
+              ("availability", "SELECT location_id, availability, COUNT(*) AS row_count FROM price_history WHERE valid_to_utc IS NULL GROUP BY location_id, availability ORDER BY location_id, availability"),
+              ("runs", "SELECT scrape_run_id, location_id, sku_count, catalog_product_count, source_artifact_id, source_json_sha256 FROM scrape_runs ORDER BY observed_at_utc"),
+          ]
+
+          payload = {
+              "requests": [
+                  *[{"type": "execute", "stmt": {"sql": sql}} for _, sql in queries],
+                  {"type": "close"},
+              ]
+          }
+          request = urllib.request.Request(
+              base_url + "/v2/pipeline",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Authorization": "Bearer " + os.environ["TURSO_AUTH_TOKEN"],
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  data = json.load(response)
+          except urllib.error.HTTPError as exc:
+              body = exc.read().decode("utf-8", errors="replace")
+              print(f"HTTP {exc.code}: {body}")
+              raise SystemExit(1)
+
+          def scalar(value):
+              if isinstance(value, dict):
+                  if value.get("type") == "null":
+                      return None
+                  return value.get("value")
+              return value
+
+          for (label, _), result in zip(queries, data.get("results", [])):
+              print(f"\n## {label}")
+              if result.get("type") != "ok":
+                  print(json.dumps(result, ensure_ascii=False))
+                  raise SystemExit(1)
+              execute = result.get("response", {})
+              query_result = execute.get("result", {})
+              columns = [col.get("name") for col in query_result.get("cols", [])]
+              rows = query_result.get("rows", [])
+              print(" | ".join(columns))
+              for row in rows:
+                  print(" | ".join(str(scalar(value)) for value in row))
+          PY
