@@ -1,9 +1,8 @@
 name: Precios Supermercados - Verificar Turso
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main]
+    branches: [feature/precios-supermercados-turso-verify]
     paths:
       - .github/workflows/precios-supermercados-turso-verify.yml
 
