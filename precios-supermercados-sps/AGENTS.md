@@ -1,212 +1,309 @@
 # Instrucciones para agentes — Precios de Supermercados SPS
 
-## Alcance y fuentes de verdad
+## Fuente de verdad
 
-- Proyecto: **Precios de Supermercados de San Pedro Sula**.
-- Monorepositorio: `Portafolio`.
-- Árbol principal: `precios-supermercados-sps/`.
-- Workflows relacionados: `.github/workflows/`.
+- Repositorio: `Jchernand3z19/Portafolio`.
+- Proyecto: `precios-supermercados-sps/`.
+- GitHub `main`, PRs y CI son la fuente de verdad técnica.
+- `docs/PROJECT_STATE.md` describe el estado operativo vigente.
+- `docs/arquitectura.md` sólo describe arquitectura que ya tiene uso real.
 
-Antes de modificar, inspecciona `main`, PRs abiertos, CI y código. [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) es la fuente canónica del estado operativo mutable y [`docs/arquitectura.md`](docs/arquitectura.md) describe la arquitectura estable. Runs, PRs, ramas y artifacts son evidencia/historia; no conceden autoridad comercial.
+Antes de modificar: inspecciona `main`, PRs abiertos, CI y busca si la solución ya existe.
 
-Si `PROJECT_STATE.md` contradice evidencia más nueva en `main`, corrige primero el documento mediante PR; no reviertas código nuevo por seguir un corte viejo.
+---
 
-## MVP primero — control contra sobrearquitectura
+# REGLA MAESTRA: MVP MÍNIMO ANTES QUE ARQUITECTURA
 
-El objetivo es cerrar La Colonia San Pedro Sula end-to-end antes de comenzar otro supermercado. Progreso significa datos utilizables y confiables más cerca de existir, no cantidad de PRs, tests o capas.
+El objetivo inmediato no es construir una plataforma general. El objetivo es tener **La Colonia San Pedro Sula funcionando de punta a punta con el mínimo código necesario**.
 
-Antes de crear una clase, adapter, verifier, workflow, tabla o documento nuevo, comprueba que resuelve un blocker actual, que no existe ya una pieza reutilizable y que la nueva frontera es realmente necesaria. Prefiere una implementación específica y clara para La Colonia cuando una plataforma genérica no tenga consumidor actual.
+Hasta cerrar ese MVP:
 
-### Gate obligatorio de simplicidad
+- no iniciar supermercado #2;
+- no generalizar para múltiples supermercados;
+- no construir infraestructura para necesidades futuras;
+- no automatizar una operación que todavía puede resolverse de forma simple/manual;
+- no crear una capa propia cuando el proveedor ya ofrece la operación necesaria;
+- no convertir una operación one-shot en un subsistema;
+- no medir progreso por cantidad de archivos, tests, PRs, servicios o capas.
 
-Antes de introducir **cualquier** módulo, abstracción, servicio, dependencia, protocolo, capa de confianza o mecanismo criptográfico nuevo, responde internamente estas cuatro preguntas:
+**Código que no acerca directamente el MVP a datos utilizables no es progreso.**
 
-1. ¿Cuál es el blocker **actual** que impide avanzar el producto?
-2. ¿Cuál es el cambio más pequeño que lo resuelve con código existente?
-3. ¿Qué consumidor **actual** necesita la nueva abstracción? Dos consumidores hipotéticos futuros no cuentan.
-4. ¿Qué fallo real y demostrado evita la complejidad adicional?
+---
 
-Si no hay respuestas concretas, **no se crea la nueva capa**.
+## Definición exacta del MVP de La Colonia
 
-Reglas adicionales para el MVP:
+El MVP queda cerrado cuando exista esto, y no más:
 
-- una abstracción genérica necesita al menos dos consumidores actuales; con uno solo, implementa la solución específica;
-- no introducir criptografía, keyrings, attestation frameworks, identity planes, trust services ni PKI salvo que una plataforma externa lo exija, exista una amenaza demostrada que no pueda resolverse más simple o el usuario lo pida explícitamente;
-- no crear un servicio, workflow o tabla para representar un estado que puede vivir como una decisión/configuración versionada;
-- no convertir un control operativo simple en un subsistema de seguridad independiente;
-- si una solución propuesta añade más módulos/capas que el problema que resuelve, vuelve a comparar contra la alternativa mínima antes de implementarla;
-- para el snapshot inicial ya obtenido de La Colonia, una aprobación versionada y auditable del artifact conocido es suficiente; no requiere una infraestructura criptográfica propia;
-- `extraction_enabled` controla **tráfico futuro**, no invalida automáticamente evidencia histórica ya obtenida y verificada.
+1. El snapshot aprobado de La Colonia SPS se valida sin consultar nuevamente la fuente.
+2. Los 9,439 SKU se convierten a una base SQLite válida.
+3. La base puede subirse mediante la importación nativa de Turso (`Upload SQLite File`).
+4. El almacenamiento mínimo permite:
+   - identificar producto fuente;
+   - consultar precio efectivo observado;
+   - conservar precio regular reportado cuando exista;
+   - conservar promoción y disponibilidad;
+   - conservar el momento/run de observación;
+   - añadir un nuevo periodo sólo cuando cambie el estado comercial relevante.
+5. Existe una visualización mínima usable para buscar/filtrar productos y ver su precio actual.
+6. CI queda verde y el estado real queda documentado.
 
-La simplificación no permite evadir controles del sitio, exceder presupuesto de tráfico, inventar ubicación SPS, exponer secretos/datos personales ni aceptar evidencia que falle validaciones técnicas existentes.
+No hace falta para cerrar este MVP:
 
-## Contratos protegidos
+- API propia de escritura remota a Turso;
+- adapter genérico Turso;
+- workflow de primera carga remota;
+- tokens Turso en GitHub para la primera importación;
+- sistema de migraciones genérico;
+- microservicios;
+- colas;
+- cachés;
+- MDM completo;
+- fuzzy matching entre supermercados;
+- PKI, keyrings, trust layers o nuevos sistemas criptográficos;
+- scheduler de scraping diario;
+- comparación entre supermercados;
+- infraestructura BigQuery;
+- nueva infraestructura Cloudflare;
+- inventario exacto que el snapshot no demuestre.
 
-`RawProduct`, `NormalizedOffer` y `ValidatedOffer` son contratos protegidos. No se modifican sin necesidad demostrada, compatibilidad y pruebas.
+Si alguna de esas piezas llega a ser necesaria después, se implementa cuando exista el consumidor real.
 
-Reglas comerciales protegidas:
+---
 
-- `current_price` es el precio efectivo observado;
-- `reported_regular_price` es sólo el precio regular/tachado declarado por la tienda cuando existe evidencia separada;
-- `previous_price` es derivado del histórico y nunca es alias de `reported_regular_price`;
-- el ahorro real compara el `current_price` actual contra el `current_price` aceptado inmediatamente anterior;
-- sin baseline confiable no se inventa ahorro;
-- `is_promotion` conserva la señal promocional observada.
+## Gate obligatorio de simplicidad
 
-## Identidad de producto
+Antes de crear **cualquier** archivo de producción, módulo, clase, adapter, workflow, tabla, dependencia, servicio o documento técnico nuevo, responde internamente:
 
-Distingue siempre:
+1. ¿Cuál es el blocker actual exacto?
+2. ¿Puede resolverse usando una función/capacidad que ya existe?
+3. ¿Puede resolverse con una operación nativa del proveedor?
+4. ¿Puede resolverse manualmente si es una operación one-shot?
+5. ¿Cuál es el cambio de código más pequeño que lo resuelve?
+6. ¿Qué consumidor actual necesita la nueva pieza?
+7. ¿Qué fallo real y observado evita la complejidad adicional?
+
+Si una respuesta no es concreta, **no se crea la pieza**.
+
+### Orden obligatorio de preferencia
+
+Usa siempre este orden:
+
+```text
+capacidad nativa existente
+> operación manual one-shot
+> función/módulo existente
+> cambio específico pequeño
+> abstracción nueva
+> servicio/infraestructura nueva
+```
+
+No saltar directamente a los últimos niveles.
+
+### Presupuesto de complejidad
+
+Para resolver un solo blocker del MVP:
+
+- si la solución propone más de **3 archivos de producción nuevos**, rediseña primero;
+- si propone más de **500 líneas netas nuevas**, rediseña primero;
+- si requiere un workflow nuevo para una tarea one-shot, rediseña primero;
+- si requiere una dependencia externa para algo que `sqlite3`/stdlib o código existente puede hacer, rediseña primero;
+- si crea una abstracción con un solo consumidor actual, elimínala y usa la implementación específica;
+- si el PR crece porque aparecen problemas no relacionados, sepáralos; no conviertas el PR en una migración general.
+
+Estos números son un **hard stop de revisión**, no una meta que deba llenarse. El resultado correcto normalmente debe ser mucho menor.
+
+No preguntes al usuario por cada rediseño técnico: encuentra primero la alternativa mínima por evidencia del repositorio. Sólo detente si la alternativa mínima requiere una decisión humana real.
+
+---
+
+## Regla especial para operaciones one-shot
+
+Una operación que se hará una vez **no justifica** infraestructura recurrente.
+
+Ejemplo actual:
+
+```text
+snapshot aprobado
+-> generar SQLite
+-> validar conteos/integridad
+-> Upload SQLite File en Turso
+```
+
+Ese flujo tiene prioridad sobre:
+
+```text
+adapter remoto
+-> driver HTTP
+-> secrets
+-> workflow
+-> CLI remoto
+-> rehidratación remota
+-> reconciliación remota
+```
+
+La segunda ruta sólo se considera cuando exista una segunda ejecución real que necesite escribir automáticamente en Turso.
+
+---
+
+## Código existente y deuda de sobreingeniería
+
+La existencia de código complejo en el repositorio **no lo convierte en requisito del MVP**.
+
+- No extender código legado sólo porque ya existe.
+- No crear compatibilidad con una capa que no tenga consumidor actual.
+- No mantener una arquitectura futura en documentos como si fuera necesaria hoy.
+- Si una pieza antigua no participa en el camino mínimo, déjala inactiva; su limpieza puede hacerse después del MVP si no bloquea.
+- Si una pieza nueva del PR actual no es necesaria para el MVP, elimínala antes de fusionar.
+
+### Estado de backends para este MVP
+
+- **SQLite**: formato de preparación/importación inicial.
+- **Turso**: destino durable mediante importación nativa del archivo SQLite.
+- **BigQuery**: trabajo legado/futuro; no activar ni ampliar durante el MVP.
+- **Google Sheets**: legado; no activar ni ampliar durante el MVP.
+
+No construir un adapter Turso remoto para la primera carga.
+
+---
+
+## Modelo mínimo de persistencia
+
+Para La Colonia con una sola fuente, empieza con el mínimo que el producto consume realmente.
+
+Preferencia actual:
+
+```text
+products
+  identidad y atributos fuente/normalizados necesarios para mostrar el producto
+
+offer_history
+  estado comercial observado por producto/ubicación
+  el registro abierto representa el estado actual
+  un cambio real cierra el periodo anterior y abre otro
+
+scrape_runs
+  una fila por ejecución terminal
+```
+
+No crear una tabla adicional si una consulta simple sobre estas tres resuelve el consumidor actual.
+
+`current` puede derivarse del periodo abierto; no materializar una segunda tabla sólo por conveniencia antes de medir una necesidad real.
+
+---
+
+## Contratos y datos protegidos
+
+No inventar ni completar valores para cerrar métricas.
+
+Hechos actuales del snapshot aprobado:
+
+```text
+catalog_products_reported = 9437
+unique_products_extracted = 9437
+skus_extracted = 9439
+skus_with_price = 9439
+presentation_normalized = 8436
+presentation_pending = 1003
+gtin_mapping_ready = 8965
+product_mapping_pending = 474
+availability_in_stock = 7081
+availability_unknown = 2358
+```
+
+Los 1,003 pendientes de presentación permanecen pendientes. Los 474 mappings pendientes permanecen pendientes. Los 2,358 `availability=unknown` permanecen `unknown`.
+
+Reglas de precio:
+
+```text
+current_price          = precio efectivo observado
+reported_regular_price = precio regular/tachado reportado por la tienda
+previous_price         = current_price del periodo histórico aceptado anterior
+```
+
+`reported_regular_price` nunca sustituye a `previous_price`.
+
+Identidades estables:
 
 ```text
 source_product_id = identidad dentro de la fuente
-product_id        = identidad comparable entre fuentes
-offer_id          = supermercado + ubicación comercial + producto fuente
+product_id        = identidad comparable cuando existe evidencia suficiente
+offer_id          = supermercado + ubicación + producto fuente
 ```
 
-- precio, promoción, disponibilidad y fecha no forman parte de IDs estables;
-- `source_product_id` y `offer_id` se recalculan en fronteras críticas;
-- GTIN sólo crea identidad cross-supermercado si supera check digit y se normaliza a GTIN-14;
-- si no existe identidad fuerte, conserva `prod_pending_*` + mapping pendiente;
-- no elimines una observación porque el mapping esté pendiente;
-- no colapses multipacks: conserva unidades, contenido por unidad y total sólo cuando el alcance esté demostrado.
+Precio, promoción, disponibilidad y fecha no forman parte de IDs estables.
 
-Durante la primera fuente, `productos` puede conservar la identidad fuente y el `product_id` asociado. `product_mapping` formaliza la equivalencia fuente -> producto canónico y cobra especial importancia al incorporar un segundo supermercado. La identidad del producto no depende de ciudad; la ciudad pertenece a la observación de precio/inventario mediante `location_id`.
+---
 
-## Autonomía técnica y tráfico live
+## Tráfico live
 
-La autonomía del usuario permite continuar desarrollo local/GitHub/offline: auditoría, diseño, código, tests, documentación, PRs, CI y merge.
+Autonomía técnica no significa autorización live.
 
-**No crea autorización permanente de tráfico live.** Antes de cualquier observación nueva contra un supermercado verifica autorización humana vigente y su alcance.
+`ACTIVE_AUTHORIZATION_IDS = []` se interpreta como **ninguna autorización vigente**.
 
-Reglas:
+- No reutilizar autorizaciones consumidas.
+- No realizar nuevas solicitudes contra La Colonia sin autorización humana explícita vigente.
+- Evidencia ya obtenida puede reutilizarse offline.
+- El snapshot aprobado puede procesarse/persistirse sin generar tráfico nuevo.
+- No evadir CAPTCHA, login, 403, 429 ni controles anti-bot.
 
-- una autorización histórica consumida no se reutiliza;
-- no inventes Authorization IDs ni amplíes un marker;
-- evidencia live ya obtenida puede reutilizarse offline;
-- si falta autorización live, continúa todo lo posible offline y detente sólo en esa frontera real;
-- con autorización read-only, conserva concurrencia/pacing/presupuesto acotados y detente ante 403 persistente, 429, CAPTCHA, login obligatorio o riesgo de carga excesiva;
-- no evadas controles anti-bot.
+---
 
-Una autorización read-only nunca cubre automáticamente credenciales, billing, login de usuario, mutación externa, compras, despliegues con coste, decisiones manuales de mapping sin evidencia o escrituras productivas no autorizadas.
+## Seguridad proporcional
 
-Un run read-only no concede por sí solo aceptación comercial; un snapshot histórico puede aceptarse únicamente mediante una decisión versionada que lo identifique de forma exacta y después de que sus validaciones técnicas ya hayan pasado.
+Mantener controles básicos reales:
 
-## Ubicación
+- no publicar tokens, cookies, Authorization headers, JWT, claves privadas ni credenciales;
+- no guardar secrets en Git;
+- mínimo privilegio en GitHub Actions cuando un workflow sea realmente necesario;
+- acciones externas pinneadas a SHA completo.
 
-No etiquetes un precio como SPS por inferencia.
+No introducir sistemas de seguridad propios cuando no exista una amenaza o requisito real que los justifique.
 
-`la_colonia_online` es un **contexto fuente raw**, no una ubicación comercial. Debe permanecer `location_status=unknown`, sin `location_confidence`. Nunca lo conviertas bajo el mismo ID en SPS/TGU/tienda.
+---
 
-Una ubicación comercial requiere granularidad conocida, binding técnico verificable cuando la fuente permite selección y evidencia coherente. `la_colonia_sps` posee binding técnico de ciudad confirmado. `extraction_enabled` permanece separado de esa evidencia.
+## Git y desarrollo
 
-Fingerprint SPS protegido:
+Flujo por defecto:
 
-```text
-d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
-```
+1. auditar `main` y PRs abiertos;
+2. identificar **un blocker**;
+3. buscar solución existente/nativa;
+4. implementar el cambio mínimo;
+5. probar sólo lo pertinente y luego suite completa antes del merge;
+6. revisar tamaño y diff adversarialmente;
+7. eliminar piezas no necesarias;
+8. fusionar sólo con CI verde.
 
-## Catálogo y normalización actuales
+No usar force push, reset destructivo ni rebase destructivo.
 
-El catálogo completo aceptado técnicamente del intento #15 contiene 9,439 SKU y 9,437 productos. El pipeline produce 9,439 ofertas normalizadas, pero **no** todas tienen la presentación estructurada resuelta: 8,436 quedaron normalizadas y 1,003 permanecen `needs_review`. En identidad canónica, 8,965 SKU están listos por GTIN válido y 474 mantienen mapping pendiente. No conviertas pendientes en valores normalizados ni inventes equivalencias para cerrar conteos.
+### Regla para documentación
 
-Conserva siempre valor fuente y valor normalizado por separado. Overrides revisados deben estar ligados a identidad/firma fuente y fallar cerrado si esa firma cambia.
+Actualizar documentación sólo cuando cambia un estado real o una decisión vigente. No escribir diseño futuro como si ya fuera requisito.
 
-## Inventario
+---
 
-`availability=unknown` no se interpreta como agotado por inferencia. Antes de confiar en inventario histórico se debe conservar como dato de primera clase, como mínimo:
+## Visualización
 
-```text
-available_quantity_observed
-availability
-availability_evidence
-seller_id
-```
+Después de tener SQLite/Turso con datos válidos, la siguiente prioridad es una UI mínima en **Dash + Plotly**:
 
-Verifica que la cantidad corresponda al seller seleccionado. Describe la cantidad como observada/reportada por la fuente, no como inventario físico o venta exacta salvo evidencia adicional.
+- búsqueda por nombre;
+- filtros básicos útiles;
+- precio actual;
+- precio regular reportado si existe;
+- promoción;
+- disponibilidad;
+- historial cuando exista más de una observación aceptada.
 
-## Persistencia — BigQuery seleccionado
+No construir un sistema de BI general antes de que esa pantalla mínima funcione.
 
-**BigQuery es el backend persistente seleccionado. Google Sheets queda fuera del camino objetivo.**
+---
 
-La lógica de dominio, current/history, replay, rehidratación y validación permanece backend-neutral. El código legado de Google Sheets puede coexistir temporalmente durante la migración, pero no debe recibir nueva funcionalidad, no debe ejecutarse para persistir el catálogo y sus entrypoints deben quedar neutralizados antes de la primera persistencia real BigQuery.
+# Criterio de éxito
 
-Tablas objetivo mínimas:
+Cuando una decisión enfrente:
 
-```text
-supermarkets
-locations
-productos
-precios_historicos
-inventario_historico
-scrape_runs
-quality_events
-normalization_overrides
-product_mapping
-```
+> “arquitectura más completa” vs “camino más corto y correcto al MVP”
 
-Reglas críticas:
+elige el segundo.
 
-- no crear tablas por supermercado;
-- `locations` relaciona `location_id` con supermercado y ciudad;
-- `productos` no duplica ciudad;
-- `precios_historicos` e `inventario_historico` llevan `supermarket_id`, `location_id` e identidad de producto;
-- usar nombres explícitos `current_price` y `reported_regular_price`; no una columna ambigua `price/precio`;
-- todo run final debe poder registrarse;
-- runs rechazados/fallidos no alteran estado comercial aceptado;
-- ausencia de producto no implica baja ni agotado;
-- hashes/fingerprints prueban igualdad, no autoridad;
-- restaurar estado no autoriza un run nuevo;
-- una tabla nueva necesita grain, key, lifecycle y consumidor actuales.
-
-Para BigQuery, prioriza tablas de observaciones históricas aptas para análisis temporal. Precio e inventario pueden registrar una observación por run exitoso; los cambios/estado actual se derivan con SQL/views, mientras el motor comercial backend-neutral conserva validación e idempotencia.
-
-Antes de cualquier escritura cloud real, detente en la frontera de proyecto/dataset/credenciales/billing si no están ya disponibles y autorizados.
-
-## Visualización — Dash + Plotly
-
-La aplicación objetivo es **Python Dash + Plotly**. Power BI ya no es el destino del producto. No añadas funcionalidad nueva a `power_bi_projection.py`; puede permanecer temporalmente como código legado hasta que sea seguro retirarlo.
-
-La aplicación debe consumir únicamente datos persistidos/validados y permitir progresivamente búsqueda, precio actual/anterior, variaciones, historial, filtros, disponibilidad, calidad y comparación entre supermercados cuando exista una segunda fuente.
-
-## Cloudflare
-
-La ruta edge existente vive en `edge/cloudflare/`. No flexibilices allowlists, identidad OIDC, presupuesto/pacing, single-flight/replay/fencing, claves o Observability por conveniencia. No repitas una sonda física sin hipótesis nueva y autorización live cuando corresponda.
-
-## GitHub Actions
-
-Antes de modificar workflows, lee `.github/workflows/AGENTS.md`.
-
-- acciones externas fijadas a SHA completo;
-- mínimo privilegio;
-- checkout inmutable cuando aplica;
-- `persist-credentials: false`;
-- workflows SPS nuevos entran en `test_workflow_security_audit.py`;
-- no debilites el auditor para hacer pasar una configuración;
-- entrypoints live quedan fail-closed sin autorización vigente;
-- entrypoints con secretos, mutación externa o costes siguen fail-closed hasta cerrar su frontera.
-
-## Seguridad de datos
-
-Nunca publiques cookies, Authorization headers, tokens, JWT, session IDs, orderForm IDs, direcciones, coordenadas, datos personales, private keys, spreadsheet IDs ni credenciales. Para valores opacos usa fingerprints sanitizados.
-
-## Desarrollo y Git
-
-1. verifica `main`, PRs concurrentes y `PROJECT_STATE.md`;
-2. comprende tests/políticas del área;
-3. crea rama técnica;
-4. implementa el cambio mínimo;
-5. ejecuta suite completa;
-6. abre PR;
-7. revisa diff, CI, seguridad, comentarios y threads;
-8. fusiona sólo con expected head SHA.
-
-No uses force push, reset destructivo ni rebase destructivo.
-
-## Pruebas
-
-```bash
-python -m compileall precios-supermercados-sps/src precios-supermercados-sps/scripts
-pytest precios-supermercados-sps/tests
-```
-
-No declares conteos de tests que no hayas observado en un run real.
+**El proyecto no necesita demostrar que puede soportar el futuro. Necesita primero funcionar para La Colonia SPS.**
