@@ -15,7 +15,7 @@ La Colonia
 database_name = precios-supermercados
 storage = Turso
 history = cambios comerciales
-daily = pendiente de reemplazo Turso + observaciones consecutivas + autorización recurrente
+daily = pendiente de observaciones consecutivas + flujo diario + autorización recurrente
 dashboard = fuera del MVP actual
 ACTIVE_AUTHORIZATION_IDS = []
 ```
@@ -23,8 +23,6 @@ ACTIVE_AUTHORIZATION_IDS = []
 No iniciar otro supermercado ni construir visualización antes de cerrar este bloque.
 
 ## SPS — última evidencia válida
-
-Ejecución read-only completa:
 
 ```text
 workflow_run_id = 33143530292
@@ -45,28 +43,15 @@ availability_unknown = 0
 catalog_complete = true
 validation_passed = true
 result = success
+
+sps_region_fingerprint = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+json_sha256 = 9c1b3015da39cd283d97bd66d694e5719700c58b5063d797934235c4ff7a6581
 ```
 
 Dos productos fuente poseen dos SKU; por eso `9471 SKU` y `9469 product_id` son
-consistentes.
+consistentes. El snapshot antiguo de 9,439 SKU ya no es referencia operativa.
 
-El fingerprint canónico del contexto SPS que permanece protegido por los tests es:
-
-```text
-d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
-```
-
-El JSON aceptado tiene:
-
-```text
-sha256 = 9c1b3015da39cd283d97bd66d694e5719700c58b5063d797934235c4ff7a6581
-```
-
-El snapshot antiguo de 9,439 SKU ya no es la referencia operativa válida.
-
-## TGU — catálogo completo validado
-
-La corrección mínima se validó con una ejecución read-only TGU propia:
+## TGU — última evidencia válida
 
 ```text
 workflow_run_id = 33150113253
@@ -87,43 +72,25 @@ availability_unknown = 0
 
 partitions_detected = 62
 partitions_completed = 62
-planned_product_requests = 217
-product_requests_completed = 236
 catalog_product_coverage = 1.0
 
 catalog_complete = true
 validation_passed = true
 result = success
+
+json_sha256 = 97c688290b5b1d00580c908d20164fa41f0282cb2f133e95e73030ac16bc0595
 ```
 
-Dos productos fuente poseen dos SKU; por eso `9495 SKU` y `9493 product_id` son
-consistentes.
+Dos productos fuente poseen dos SKU. El fallo anterior
+`product_search_graphql_errors` queda sólo como evidencia histórica; la ejecución
+parcial `33141576809` no forma parte del estado aceptado.
 
-El JSON aceptado tiene:
-
-```text
-sha256 = 97c688290b5b1d00580c908d20164fa41f0282cb2f133e95e73030ac16bc0595
-```
-
-El fallo anterior `product_search_graphql_errors` queda únicamente como evidencia
-histórica. La ejecución `33141576809` llegó a 7,428 SKU parciales y **no** forma
-parte del estado aceptado.
-
-## Corrección TGU validada
-
-El runner TGU mantiene el mismo scraper probado y sólo añade el comportamiento
-necesario para el fallo observado:
-
-1. `product_search_graphql_errors` puede reintentarse hasta dos veces adicionales;
-2. durante toda la ejecución, incluidos fallos, la metadata usa
-   `la_colonia_tgu` / `Tegucigalpa`.
-
-Cualquier otro error sigue siendo fail-closed. La ejecución completa TGU demuestra
-que no se necesitó un scraper distinto ni una arquitectura separada por ciudad.
+El runner TGU reutiliza el scraper operativo de SPS y añade sólo el retry acotado
+del fallo GraphQL observado. Cualquier otro fallo sigue siendo fail-closed.
 
 ## Persistencia MVP
 
-El modelo sigue usando exactamente cinco tablas:
+El modelo usa exactamente cinco tablas:
 
 ```text
 supermarkets
@@ -133,7 +100,7 @@ price_history
 scrape_runs
 ```
 
-Una sola fila de supermercado:
+Una sola cadena:
 
 ```text
 la_colonia
@@ -146,23 +113,13 @@ la_colonia_sps = San Pedro Sula
 la_colonia_tgu = Tegucigalpa
 ```
 
-No existen tablas ni bases separadas por ciudad.
-
-## Updater histórico
-
-`actualizar_mvp_sqlite_la_colonia.py` implementa el camino mínimo:
+Identidad de producto:
 
 ```text
-snapshot completo aceptado
--> registrar scrape_run
--> upsert de products
--> comparar estado comercial por producto + ubicación
--> mismo estado: no nueva historia
--> cambio: cerrar periodo + abrir periodo
--> producto nuevo: periodo inicial
+supermarket_id + source_key_type + source_key
 ```
 
-Estado comparado:
+Estado comercial histórico por producto + ubicación:
 
 ```text
 current_price
@@ -171,22 +128,21 @@ is_promotion
 availability
 ```
 
-También cubre:
+Reglas:
 
-- replay exacto idempotente;
-- aislamiento SPS/TGU;
-- rechazo previo de snapshot incompleto;
-- transacción con rollback;
-- `PRAGMA foreign_key_check`;
-- validación de integridad y periodos actuales duplicados.
+```text
+mismo estado -> registrar run, no abrir historia nueva
+estado cambió -> cerrar periodo actual y abrir periodo nuevo
+producto nuevo -> insertar producto y abrir periodo inicial
+replay exacto -> no duplicar
+snapshot inválido/incompleto -> no mutar estado aceptado
+```
 
-Los tests offline cubren explícitamente los seis casos mínimos del MVP:
-mismo estado, cambio de precio, cambio de disponibilidad, producto nuevo, replay
-exacto y run inválido/incompleto.
+`actualizar_mvp_sqlite_la_colonia.py` implementa y prueba estas reglas offline.
 
-## Base limpia SPS + TGU verificada
+## Base limpia SPS + TGU
 
-Se reconstruyó desde cero con los dos artifacts aceptados y el updater vigente:
+La base limpia se reconstruyó desde los dos artifacts aceptados:
 
 ```text
 workflow_run_id = 33151305834
@@ -226,59 +182,83 @@ auto_vacuum = 0
 encoding = UTF-8
 ```
 
-La unión produce `9509` productos porque SPS y TGU comparten 9,457 identidades de
-SKU; no se suman catálogos completos como si fueran productos distintos.
+La unión produce 9,509 identidades SKU únicas; SPS y TGU no se modelan como
+catálogos de productos independientes.
 
-El artifact contiene `precios-supermercados.sqlite`, `SHA256SUMS.txt` y
-`manifest.json`, y está preparado para la importación inicial limpia a Turso.
+## Turso — reemplazo limpio completado y reconciliado
 
-## Turso
-
-Base objetivo única:
+Base única:
 
 ```text
 precios-supermercados
 ```
 
-La carga actualmente visible en Turso corresponde a la primera prueba vieja,
-aproximadamente:
+La carga vieja de prueba fue eliminada el `2026-08-28` y la base fue recreada desde
+el SQLite limpio anterior. Después se renovó `TURSO_AUTH_TOKEN` en GitHub.
+
+La reconciliación de solo lectura desde GitHub Actions fue exitosa:
 
 ```text
-products = 9439
-availability_in_stock = 7081
-availability_unknown = 2358
+verification_workflow_run_id = 33184874691
+verification_job_id = 98896132583
+result = success
+
+tables =
+  locations
+  price_history
+  products
+  scrape_runs
+  supermarkets
+
+supermarkets = 1
+locations = 2
+products = 9509
+price_history = 18966
+scrape_runs = 2
+open_price_history = 18966
+duplicate_open_periods = 0
+
+la_colonia_sps:
+  in_stock = 7093
+  out_of_stock = 2378
+
+la_colonia_tgu:
+  in_stock = 7584
+  out_of_stock = 1911
 ```
 
-Esa carga está autorizada como descartable y no debe corregirse masivamente.
+Los dos `scrape_runs` remotos coinciden con los artifacts y SHA aceptados de SPS y
+TGU. Por tanto, reemplazar/reconciliar la carga inicial de Turso ya no es pendiente.
 
-El estado correcto para el siguiente paso ya existe como SQLite limpio y validado.
-El camino vigente queda reducido a:
+## Persistencia directa GitHub -> Turso
+
+El siguiente cambio técnico es usar los mismos snapshots completos aceptados para
+actualizar Turso directamente, sin volver a subir un archivo SQLite completo.
+
+Requisitos del camino mínimo:
 
 ```text
-carga vieja Turso
--> reemplazar por artifact 9677798005
--> reconciliar Turso contra la base limpia
--> ejecutar observaciones reales siguientes
+snapshot válido
+-> validar esquema/ubicación/run
+-> registrar scrape_run
+-> upsert products
+-> comparar estado por ubicación
+-> cerrar/abrir historia sólo cuando corresponda
+-> commit atómico
 ```
 
-No crear otro esquema ni otra base para resolver esta importación.
+No agregar tablas, base por ciudad ni dependencia externa si el protocolo HTTP de
+Turso y la librería estándar son suficientes.
 
 ## Precio
 
 ```text
 current_price          = precio efectivo observado
 reported_regular_price = precio regular/tachado declarado por la fuente
-previous_price         = precio efectivo del periodo histórico aceptado anterior
+previous_price         = current_price del periodo histórico aceptado anterior
 ```
 
-Los precios físicos del SQLite se almacenan en centavos enteros.
-
-## Normalización
-
-Presentaciones, mappings y otros campos pendientes no bloquean el MVP.
-
-No inventar valores. Conservar el valor fuente y usar `NULL`/pending cuando no
-pueda demostrarse una normalización.
+Los precios persistidos se almacenan en centavos enteros.
 
 ## Ejecución diaria
 
@@ -287,15 +267,17 @@ No hay recurrencia live autorizada.
 Orden pendiente:
 
 ```text
-1. reemplazar/verificar Turso con la base limpia ya validada
-2. ejecutar segunda/tercera observación real con autorizaciones puntuales nuevas
-3. comprobar histórico/idempotencia en operación real
-4. preparar flujo diario mínimo
-5. activar recurrencia sólo con autorización humana explícita
+1. terminar y validar persistencia directa GitHub -> Turso
+2. ejecutar segunda observación real SPS + TGU con autorización puntual nueva
+3. aplicarla a Turso y comprobar histórico/idempotencia real
+4. ejecutar tercera observación real con nueva autorización puntual
+5. preparar el workflow diario mínimo con los mismos scrapers y persistencia
+6. activar recurrencia sólo con autorización humana explícita
+7. validar el primer ciclo diario y cerrar La Colonia MVP
 ```
 
-Un fallo de una ciudad no permite mezclar datos parciales ni declarar exitoso el
-run global.
+Un fallo de una ciudad no permite persistir su snapshot parcial ni declararlo como
+ejecución aceptada.
 
 ## Seguridad y live
 
@@ -303,10 +285,10 @@ run global.
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-La autorización puntual usada para `33150113253` está consumida. Autorizaciones
-anteriores también están consumidas y no se reutilizan. Cualquier marker, workflow
-o evidencia histórica no se interpreta como autorización abierta; un nuevo tráfico
-live requiere autorización humana explícita vigente para su alcance.
+Todas las autorizaciones live anteriores están consumidas. Cualquier marker,
+workflow o evidencia histórica no se interpreta como autorización abierta. Un
+nuevo tráfico live requiere autorización humana explícita vigente para su alcance;
+la recurrencia diaria requiere una autorización recurrente separada.
 
 Artifacts existentes sí pueden analizarse y transformarse offline.
 
@@ -325,4 +307,5 @@ No trabajar ahora en:
 - inventario exacto;
 - normalización perfecta.
 
-La deuda histórica que no bloquea puede permanecer hasta después del MVP.
+La deuda histórica que no bloquee el MVP puede permanecer hasta después del cierre
+de La Colonia.
