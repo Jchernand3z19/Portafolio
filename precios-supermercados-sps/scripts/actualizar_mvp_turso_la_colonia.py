@@ -54,7 +54,10 @@ def _pipeline(url: str, token: str, requests: list[dict[str, Any]]) -> dict[str,
     req = urllib.request.Request(
         _http_url(url) + "/v2/pipeline",
         data=json.dumps({"requests": requests}, separators=(",", ":")).encode(),
-        headers={"Authorization": "Bearer " + token.strip(), "Content-Type": "application/json"},
+        headers={
+            "Authorization": "Bearer " + token.strip(),
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
     try:
@@ -117,14 +120,24 @@ def _preflight(
     url: str, token: str, *, location_id: str, run_id: str
 ) -> dict[str, object] | None:
     queries = [
-        ("SELECT name FROM sqlite_master WHERE type='table' "
-         "AND name NOT LIKE 'sqlite_%' ORDER BY name", ()),
-        ("SELECT supermarket_id, city_name FROM locations WHERE location_id=?", (location_id,)),
-        ("SELECT location_id, run_status, source_json_sha256 "
-         "FROM scrape_runs WHERE scrape_run_id=?", (run_id,)),
+        (
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%' ORDER BY name",
+            (),
+        ),
+        (
+            "SELECT supermarket_id, city_name FROM locations WHERE location_id=?",
+            (location_id,),
+        ),
+        (
+            "SELECT location_id, run_status, source_json_sha256 "
+            "FROM scrape_runs WHERE scrape_run_id=?",
+            (run_id,),
+        ),
     ]
     data = _pipeline(
-        url, token,
+        url,
+        token,
         [{"type": "execute", "stmt": _stmt(sql, args)} for sql, args in queries]
         + [{"type": "close"}],
     )
@@ -144,112 +157,178 @@ def _preflight(
 
 
 def _mutation_steps(
-    incoming: str, *, location_id: str, observed_at: str, run_id: str,
-    sku_count: int, catalog_count: int, artifact_id: str | None, digest: str,
+    incoming: str,
+    *,
+    location_id: str,
+    observed_at: str,
+    run_id: str,
+    sku_count: int,
+    catalog_count: int,
+    artifact_id: str | None,
+    digest: str,
 ) -> list[tuple[str, str, tuple[object, ...]]]:
+    # Preparar el snapshot en TEMP antes de abrir la transacción persistente evita
+    # consumir la ventana transaccional mientras SQLite expande ~9.5k filas JSON.
     return [
+        (
+            "incoming_table",
+            """CREATE TEMP TABLE incoming(
+                source_key_type TEXT NOT NULL, source_key TEXT NOT NULL,
+                source_catalog_product_id TEXT NOT NULL, source_item_id TEXT NOT NULL,
+                reference TEXT, ean TEXT, name TEXT NOT NULL, brand TEXT,
+                presentation TEXT, category TEXT, current_price_minor INTEGER NOT NULL,
+                reported_regular_price_minor INTEGER, is_promotion INTEGER NOT NULL,
+                availability TEXT NOT NULL) STRICT""",
+            (),
+        ),
+        (
+            "incoming_load",
+            """INSERT INTO incoming SELECT
+                json_extract(value,'$.source_key_type'),json_extract(value,'$.source_key'),
+                json_extract(value,'$.source_catalog_product_id'),
+                json_extract(value,'$.source_item_id'),json_extract(value,'$.reference'),
+                json_extract(value,'$.ean'),json_extract(value,'$.name'),
+                json_extract(value,'$.brand'),json_extract(value,'$.presentation'),
+                json_extract(value,'$.category'),
+                CAST(json_extract(value,'$.current_price_minor') AS INTEGER),
+                CAST(json_extract(value,'$.reported_regular_price_minor') AS INTEGER),
+                CAST(json_extract(value,'$.is_promotion') AS INTEGER),
+                json_extract(value,'$.availability') FROM json_each(?)""",
+            (incoming,),
+        ),
+        (
+            "guard_table",
+            "CREATE TEMP TABLE guard_ok(value INTEGER NOT NULL CHECK(value=0)) STRICT",
+            (),
+        ),
+        (
+            "guard_incoming",
+            "INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM incoming",
+            (sku_count,),
+        ),
         ("begin", "BEGIN IMMEDIATE", ()),
-        ("incoming_table", """CREATE TEMP TABLE incoming(
-            source_key_type TEXT NOT NULL, source_key TEXT NOT NULL,
-            source_catalog_product_id TEXT NOT NULL, source_item_id TEXT NOT NULL,
-            reference TEXT, ean TEXT, name TEXT NOT NULL, brand TEXT,
-            presentation TEXT, category TEXT, current_price_minor INTEGER NOT NULL,
-            reported_regular_price_minor INTEGER, is_promotion INTEGER NOT NULL,
-            availability TEXT NOT NULL) STRICT""", ()),
-        ("incoming_load", """INSERT INTO incoming SELECT
-            json_extract(value,'$.source_key_type'),json_extract(value,'$.source_key'),
-            json_extract(value,'$.source_catalog_product_id'),
-            json_extract(value,'$.source_item_id'),json_extract(value,'$.reference'),
-            json_extract(value,'$.ean'),json_extract(value,'$.name'),
-            json_extract(value,'$.brand'),json_extract(value,'$.presentation'),
-            json_extract(value,'$.category'),
-            CAST(json_extract(value,'$.current_price_minor') AS INTEGER),
-            CAST(json_extract(value,'$.reported_regular_price_minor') AS INTEGER),
-            CAST(json_extract(value,'$.is_promotion') AS INTEGER),
-            json_extract(value,'$.availability') FROM json_each(?)""", (incoming,)),
-        ("guard_table",
-         "CREATE TEMP TABLE guard_ok(value INTEGER NOT NULL CHECK(value=0)) STRICT", ()),
-        ("guard_incoming",
-         "INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM incoming",
-         (sku_count,)),
-        ("guard_out_of_order", """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
-            SELECT 1 FROM price_history ph
-            JOIN products p ON p.product_id=ph.product_id
-             AND p.supermarket_id=ph.supermarket_id
-            JOIN incoming i ON i.source_key_type=p.source_key_type
-             AND i.source_key=p.source_key
-            WHERE ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL
-              AND (ph.current_price_minor IS NOT i.current_price_minor
-                OR ph.reported_regular_price_minor IS NOT i.reported_regular_price_minor
-                OR ph.is_promotion IS NOT i.is_promotion
-                OR ph.availability IS NOT i.availability)
-              AND julianday(?)<=julianday(ph.valid_from_utc)
-            ) THEN 1 ELSE 0 END""", (SUPERMARKET_ID, location_id, observed_at)),
-        ("guard_existing_duplicates", """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
-            SELECT 1 FROM price_history
-            WHERE supermarket_id=? AND location_id=? AND valid_to_utc IS NULL
-            GROUP BY product_id HAVING COUNT(*)>1) THEN 1 ELSE 0 END""",
-         (SUPERMARKET_ID, location_id)),
-        ("insert_run", """INSERT INTO scrape_runs(
-            scrape_run_id,supermarket_id,location_id,observed_at_utc,run_status,
-            sku_count,catalog_product_count,source_artifact_id,source_json_sha256,error_reason)
-            VALUES(?,?,?,?,'success',?,?,?,?,NULL)""",
-         (run_id, SUPERMARKET_ID, location_id, observed_at, sku_count, catalog_count,
-          artifact_id, digest)),
-        ("upsert_products", """INSERT INTO products(
-            supermarket_id,source_key_type,source_key,source_catalog_product_id,
-            source_item_id,reference,ean,name,brand,presentation,category)
-            SELECT ?,source_key_type,source_key,source_catalog_product_id,
-            source_item_id,reference,ean,name,brand,presentation,category
-            FROM incoming WHERE 1
-            ON CONFLICT(supermarket_id,source_key_type,source_key) DO UPDATE SET
-            source_catalog_product_id=excluded.source_catalog_product_id,
-            source_item_id=excluded.source_item_id,reference=excluded.reference,
-            ean=excluded.ean,name=excluded.name,brand=excluded.brand,
-            presentation=excluded.presentation,category=excluded.category""",
-         (SUPERMARKET_ID,)),
-        ("close_history", """UPDATE price_history AS ph SET valid_to_utc=?
-            WHERE ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL
-            AND EXISTS(SELECT 1 FROM products p JOIN incoming i
-              ON i.source_key_type=p.source_key_type AND i.source_key=p.source_key
-              WHERE p.product_id=ph.product_id AND p.supermarket_id=ph.supermarket_id
-              AND (ph.current_price_minor IS NOT i.current_price_minor
-                OR ph.reported_regular_price_minor IS NOT i.reported_regular_price_minor
-                OR ph.is_promotion IS NOT i.is_promotion
-                OR ph.availability IS NOT i.availability))""",
-         (observed_at, SUPERMARKET_ID, location_id)),
-        ("open_history", """INSERT INTO price_history(
-            product_id,supermarket_id,location_id,current_price_minor,
-            reported_regular_price_minor,is_promotion,availability,currency,
-            valid_from_utc,valid_to_utc,scrape_run_id)
-            SELECT p.product_id,?,?,i.current_price_minor,i.reported_regular_price_minor,
-            i.is_promotion,i.availability,'HNL',?,NULL,?
-            FROM incoming i JOIN products p ON p.supermarket_id=?
-             AND p.source_key_type=i.source_key_type AND p.source_key=i.source_key
-            WHERE NOT EXISTS(SELECT 1 FROM price_history ph
-              WHERE ph.product_id=p.product_id AND ph.supermarket_id=?
-                AND ph.location_id=? AND ph.valid_to_utc IS NULL)""",
-         (SUPERMARKET_ID, location_id, observed_at, run_id,
-          SUPERMARKET_ID, SUPERMARKET_ID, location_id)),
-        ("guard_current", """INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END
-            FROM incoming i JOIN products p ON p.supermarket_id=?
-             AND p.source_key_type=i.source_key_type AND p.source_key=i.source_key
-            JOIN price_history ph ON ph.product_id=p.product_id
-             AND ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL""",
-         (sku_count, SUPERMARKET_ID, SUPERMARKET_ID, location_id)),
-        ("guard_duplicates", """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
-            SELECT 1 FROM price_history WHERE supermarket_id=? AND location_id=?
-             AND valid_to_utc IS NULL GROUP BY product_id HAVING COUNT(*)>1)
-            THEN 1 ELSE 0 END""", (SUPERMARKET_ID, location_id)),
-        ("guard_run", """INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=1 THEN 0 ELSE 1 END
-            FROM scrape_runs WHERE scrape_run_id=?""", (run_id,)),
-        ("drop_incoming", "DROP TABLE incoming", ()),
-        ("drop_guard", "DROP TABLE guard_ok", ()),
+        (
+            "guard_out_of_order",
+            """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
+                SELECT 1 FROM price_history ph
+                JOIN products p ON p.product_id=ph.product_id
+                 AND p.supermarket_id=ph.supermarket_id
+                JOIN incoming i ON i.source_key_type=p.source_key_type
+                 AND i.source_key=p.source_key
+                WHERE ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL
+                  AND (ph.current_price_minor IS NOT i.current_price_minor
+                    OR ph.reported_regular_price_minor IS NOT i.reported_regular_price_minor
+                    OR ph.is_promotion IS NOT i.is_promotion
+                    OR ph.availability IS NOT i.availability)
+                  AND julianday(?)<=julianday(ph.valid_from_utc)
+                ) THEN 1 ELSE 0 END""",
+            (SUPERMARKET_ID, location_id, observed_at),
+        ),
+        (
+            "guard_existing_duplicates",
+            """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
+                SELECT 1 FROM price_history
+                WHERE supermarket_id=? AND location_id=? AND valid_to_utc IS NULL
+                GROUP BY product_id HAVING COUNT(*)>1) THEN 1 ELSE 0 END""",
+            (SUPERMARKET_ID, location_id),
+        ),
+        (
+            "insert_run",
+            """INSERT INTO scrape_runs(
+                scrape_run_id,supermarket_id,location_id,observed_at_utc,run_status,
+                sku_count,catalog_product_count,source_artifact_id,source_json_sha256,error_reason)
+                VALUES(?,?,?,?,'success',?,?,?,?,NULL)""",
+            (
+                run_id,
+                SUPERMARKET_ID,
+                location_id,
+                observed_at,
+                sku_count,
+                catalog_count,
+                artifact_id,
+                digest,
+            ),
+        ),
+        (
+            "upsert_products",
+            """INSERT INTO products(
+                supermarket_id,source_key_type,source_key,source_catalog_product_id,
+                source_item_id,reference,ean,name,brand,presentation,category)
+                SELECT ?,source_key_type,source_key,source_catalog_product_id,
+                source_item_id,reference,ean,name,brand,presentation,category
+                FROM incoming WHERE 1
+                ON CONFLICT(supermarket_id,source_key_type,source_key) DO UPDATE SET
+                source_catalog_product_id=excluded.source_catalog_product_id,
+                source_item_id=excluded.source_item_id,reference=excluded.reference,
+                ean=excluded.ean,name=excluded.name,brand=excluded.brand,
+                presentation=excluded.presentation,category=excluded.category""",
+            (SUPERMARKET_ID,),
+        ),
+        (
+            "close_history",
+            """UPDATE price_history AS ph SET valid_to_utc=?
+                WHERE ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL
+                AND EXISTS(SELECT 1 FROM products p JOIN incoming i
+                  ON i.source_key_type=p.source_key_type AND i.source_key=p.source_key
+                  WHERE p.product_id=ph.product_id AND p.supermarket_id=ph.supermarket_id
+                  AND (ph.current_price_minor IS NOT i.current_price_minor
+                    OR ph.reported_regular_price_minor IS NOT i.reported_regular_price_minor
+                    OR ph.is_promotion IS NOT i.is_promotion
+                    OR ph.availability IS NOT i.availability))""",
+            (observed_at, SUPERMARKET_ID, location_id),
+        ),
+        (
+            "open_history",
+            """INSERT INTO price_history(
+                product_id,supermarket_id,location_id,current_price_minor,
+                reported_regular_price_minor,is_promotion,availability,currency,
+                valid_from_utc,valid_to_utc,scrape_run_id)
+                SELECT p.product_id,?,?,i.current_price_minor,i.reported_regular_price_minor,
+                i.is_promotion,i.availability,'HNL',?,NULL,?
+                FROM incoming i JOIN products p ON p.supermarket_id=?
+                 AND p.source_key_type=i.source_key_type AND p.source_key=i.source_key
+                WHERE NOT EXISTS(SELECT 1 FROM price_history ph
+                  WHERE ph.product_id=p.product_id AND ph.supermarket_id=?
+                    AND ph.location_id=? AND ph.valid_to_utc IS NULL)""",
+            (
+                SUPERMARKET_ID,
+                location_id,
+                observed_at,
+                run_id,
+                SUPERMARKET_ID,
+                SUPERMARKET_ID,
+                location_id,
+            ),
+        ),
+        (
+            "guard_current",
+            """INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END
+                FROM incoming i JOIN products p ON p.supermarket_id=?
+                 AND p.source_key_type=i.source_key_type AND p.source_key=i.source_key
+                JOIN price_history ph ON ph.product_id=p.product_id
+                 AND ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL""",
+            (sku_count, SUPERMARKET_ID, SUPERMARKET_ID, location_id),
+        ),
+        (
+            "guard_duplicates",
+            """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
+                SELECT 1 FROM price_history WHERE supermarket_id=? AND location_id=?
+                 AND valid_to_utc IS NULL GROUP BY product_id HAVING COUNT(*)>1)
+                THEN 1 ELSE 0 END""",
+            (SUPERMARKET_ID, location_id),
+        ),
+        (
+            "guard_run",
+            """INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=1 THEN 0 ELSE 1 END
+                FROM scrape_runs WHERE scrape_run_id=?""",
+            (run_id,),
+        ),
         ("commit", "COMMIT", ()),
     ]
 
 
 def _batch_request(steps: list[tuple[str, str, tuple[object, ...]]]) -> dict[str, Any]:
+    begin = next(i for i, step in enumerate(steps) if step[0] == "begin")
     batch = []
     for index, (_, sql, args) in enumerate(steps):
         item: dict[str, Any] = {"stmt": _stmt(sql, args)}
@@ -257,9 +336,13 @@ def _batch_request(steps: list[tuple[str, str, tuple[object, ...]]]) -> dict[str
             item["condition"] = {"type": "ok", "step": index - 1}
         batch.append(item)
     batch.append({
-        "condition": {"type": "or", "conds": [
-            {"type": "error", "step": index} for index in range(1, len(steps))
-        ]},
+        "condition": {
+            "type": "or",
+            "conds": [
+                {"type": "error", "step": index}
+                for index in range(begin + 1, len(steps))
+            ],
+        },
         "stmt": _stmt("ROLLBACK"),
     })
     return {"type": "batch", "batch": {"steps": batch}}
@@ -290,7 +373,8 @@ def _run_batch(
     if not isinstance(result, dict):
         raise SnapshotError("turso_batch_result_invalid")
     size = len(steps) + 1
-    values, errors = _slots(result.get("step_results"), size), _slots(result.get("step_errors"), size)
+    values = _slots(result.get("step_results"), size)
+    errors = _slots(result.get("step_errors"), size)
     for index, error in enumerate(errors[:-1]):
         if error is None:
             continue
@@ -321,7 +405,11 @@ def _affected(
 
 
 def persist_snapshot(
-    raw: bytes, *, database_url: str, auth_token: str, run_id: str,
+    raw: bytes,
+    *,
+    database_url: str,
+    auth_token: str,
+    run_id: str,
     source_artifact_id: str | None = None,
 ) -> dict[str, object]:
     snapshot = validate_snapshot_bytes(raw)
@@ -335,29 +423,40 @@ def persist_snapshot(
         database_url, auth_token, location_id=location_id, run_id=run_id
     )
     if previous is not None:
-        if (previous["location_id"] == location_id
-                and previous["run_status"] == "success"
-                and previous["sha"] == digest):
+        if (
+            previous["location_id"] == location_id
+            and previous["run_status"] == "success"
+            and previous["sha"] == digest
+        ):
             return {
-                "run_id": run_id, "location_id": location_id,
-                "source_json_sha256": digest, "replayed": True,
-                "products_processed": 0, "history_opened": 0,
-                "history_closed": 0, "history_unchanged": 0,
+                "run_id": run_id,
+                "location_id": location_id,
+                "source_json_sha256": digest,
+                "replayed": True,
+                "products_processed": 0,
+                "history_opened": 0,
+                "history_closed": 0,
+                "history_unchanged": 0,
             }
         raise SnapshotError("run_id_conflict")
 
-    incoming = _normalised_json(snapshot)
     steps = _mutation_steps(
-        incoming, location_id=location_id, observed_at=str(snapshot["observed_at_utc"]),
-        run_id=run_id, sku_count=len(snapshot["products"]),
+        _normalised_json(snapshot),
+        location_id=location_id,
+        observed_at=str(snapshot["observed_at_utc"]),
+        run_id=run_id,
+        sku_count=len(snapshot["products"]),
         catalog_count=int(snapshot["catalog_products_reported"]),
-        artifact_id=source_artifact_id, digest=digest,
+        artifact_id=source_artifact_id,
+        digest=digest,
     )
     results = _run_batch(database_url, auth_token, steps)
     opened = _affected(results, steps, "open_history")
     return {
-        "run_id": run_id, "location_id": location_id,
-        "source_json_sha256": digest, "replayed": False,
+        "run_id": run_id,
+        "location_id": location_id,
+        "source_json_sha256": digest,
+        "replayed": False,
         "products_processed": _affected(results, steps, "upsert_products"),
         "history_opened": opened,
         "history_closed": _affected(results, steps, "close_history"),
@@ -371,13 +470,17 @@ def main() -> None:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--source-artifact-id")
     args = parser.parse_args()
-    url, token = os.environ.get("TURSO_DATABASE_URL", ""), os.environ.get("TURSO_AUTH_TOKEN", "")
+    url = os.environ.get("TURSO_DATABASE_URL", "")
+    token = os.environ.get("TURSO_AUTH_TOKEN", "")
     if not url.strip() or not token.strip():
         raise SystemExit("TURSO_DATABASE_URL/TURSO_AUTH_TOKEN missing")
     try:
         summary = persist_snapshot(
-            args.snapshot_json.read_bytes(), database_url=url, auth_token=token,
-            run_id=args.run_id, source_artifact_id=args.source_artifact_id,
+            args.snapshot_json.read_bytes(),
+            database_url=url,
+            auth_token=token,
+            run_id=args.run_id,
+            source_artifact_id=args.source_artifact_id,
         )
     except SnapshotError as exc:
         raise SystemExit(str(exc)) from exc
