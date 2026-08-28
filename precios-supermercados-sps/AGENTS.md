@@ -12,17 +12,18 @@ Antes de modificar: inspecciona `main`, PRs abiertos, CI y busca si la solución
 
 # REGLA MAESTRA — MVP MÍNIMO ANTES QUE ARQUITECTURA
 
-El objetivo inmediato es **La Colonia San Pedro Sula funcionando de punta a punta con el mínimo código necesario**.
+El objetivo inmediato es **La Colonia funcionando de punta a punta en San Pedro Sula y Tegucigalpa con el mínimo código necesario**.
 
 Hasta cerrar ese MVP:
 
 - no iniciar supermercado #2;
-- no generalizar para múltiples supermercados;
 - no construir infraestructura para necesidades futuras;
 - no automatizar una operación que todavía puede resolverse manualmente;
 - no crear una capa propia cuando el proveedor ya ofrece la operación necesaria;
 - no convertir una operación one-shot en un subsistema;
 - no medir progreso por cantidad de archivos, tests, PRs, servicios o capas.
+
+La base sí debe ser reutilizable para futuros supermercados y ciudades porque ese es un requisito actual del producto, pero **no se implementa ningún supermercado adicional todavía**.
 
 **Código que no acerca directamente el MVP a datos utilizables no es progreso.**
 
@@ -30,23 +31,25 @@ Hasta cerrar ese MVP:
 
 El MVP queda cerrado cuando exista esto:
 
-1. El snapshot aprobado se valida sin consultar nuevamente La Colonia.
-2. Los 9,439 SKU se convierten a un SQLite válido.
-3. Ese archivo se importa usando `Upload SQLite File` de Turso.
-4. La base conserva identidad fuente, precio efectivo, precio regular reportado, promoción, disponibilidad y run/fecha.
-5. Una UI mínima Dash + Plotly permite buscar/filtrar productos y ver el precio actual.
-6. CI queda verde y la documentación refleja exactamente ese estado.
+1. El snapshot aprobado de SPS se valida sin consultarlo nuevamente.
+2. Los datos se convierten a un SQLite válido con el modelo mínimo compartido.
+3. Ese archivo se importa usando `Upload SQLite File` de Turso en una base llamada `precios-supermercados`.
+4. La misma base distingue supermercado, ciudad, producto, precio/historial y run.
+5. SPS y TGU pueden persistirse sin crear bases o tablas nuevas por ciudad.
+6. Una UI mínima Dash + Plotly permite buscar/filtrar productos y ver el precio actual por ciudad.
+7. Antes de activar recurrencia, al menos una segunda ejecución real valida la actualización/histórico.
+8. El scraper queda preparado para ejecución diaria; activar tráfico recurrente exige autorización humana explícita vigente.
+9. CI queda verde y la documentación refleja exactamente ese estado.
 
-No hace falta para cerrar este MVP:
+No hace falta para la primera importación:
 
 - API o adapter remoto Turso;
 - workflow de escritura Turso;
-- tokens Turso para la primera importación;
+- tokens Turso;
 - migraciones genéricas;
 - BigQuery o Google Sheets activos;
 - microservicios, colas o cachés;
 - MDM o fuzzy matching;
-- scheduler diario;
 - nueva infraestructura Cloudflare;
 - nuevas capas criptográficas/PKI/trust;
 - comparación entre supermercados;
@@ -109,28 +112,39 @@ No reemplazarlo por:
 adapter remoto -> driver HTTP -> secrets -> workflow -> CLI remoto
 ```
 
-La escritura automática remota sólo se evalúa cuando exista una **segunda ejecución real** que la necesite.
+La escritura automática remota se evalúa cuando exista una **segunda ejecución real** que necesite actualizar Turso.
 
 ## Persistencia mínima
 
-Para el primer supermercado se usan sólo dos tablas:
+La base única del proyecto se llama conceptualmente `precios-supermercados` y usa cinco tablas:
 
 ```text
+supermarkets
+  identidad del supermercado
+
+locations
+  ciudades/contextos comerciales del supermercado
+
+products
+  una fila por SKU/identidad fuente; atributos descriptivos actuales
+
+price_history
+  precio, precio regular reportado, promoción, disponibilidad y vigencia por ciudad
+
 scrape_runs
   una fila por ejecución terminal
-
-offer_history
-  identidad fuente + atributos mostrables + estado comercial
-  valid_to_utc IS NULL = estado actual
 ```
 
-No crear `products`, `current`, mapping, inventory u otra tabla física durante este MVP si `offer_history` resuelve el consumidor actual.
+No crear una base por supermercado ni una base por ciudad.
 
-Una ejecución futura deberá registrar su run y sólo abrir un nuevo periodo cuando cambie el estado comercial relevante. Ese actualizador no se implementa antes de tener una segunda ejecución real.
+No crear `offers_current`: el estado actual es `price_history.valid_to_utc IS NULL`.
+No crear mapping, inventory, quality-events u otra tabla física sin un consumidor real.
+
+Una ejecución futura deberá registrar su run y sólo abrir un nuevo periodo cuando cambie el estado comercial relevante. Ese actualizador se implementa cuando exista la segunda ejecución real que lo necesite.
 
 ## Datos protegidos
 
-Snapshot aprobado:
+Snapshot aprobado SPS:
 
 ```text
 catalog_products_reported = 9437
@@ -157,13 +171,13 @@ previous_price         = current_price del periodo histórico aceptado anterior
 
 `reported_regular_price` nunca sustituye a `previous_price`.
 
-Para el MVP la identidad operativa puede usar:
+Identidad fuente operativa:
 
 ```text
-supermarket_id + location_id + source_key_type + source_key
+supermarket_id + source_key_type + source_key
 ```
 
-Precio, promoción, disponibilidad y fecha no forman parte de esa identidad.
+La ciudad pertenece al estado comercial/histórico, no a la identidad del producto fuente. Precio, promoción, disponibilidad y fecha tampoco forman parte de esa identidad.
 
 ## Código histórico / deuda
 
@@ -179,10 +193,10 @@ No hacer una limpieza masiva antes del MVP salvo que algo bloquee el camino mín
 
 ## Tráfico live
 
-`ACTIVE_AUTHORIZATION_IDS = []` significa **ninguna autorización live vigente**.
+Los markers/IDs versionados del repositorio no conceden por sí solos una autorización live nueva.
 
 - no reutilizar autorizaciones consumidas;
-- no realizar solicitudes nuevas contra La Colonia sin autorización humana explícita vigente;
+- no realizar solicitudes nuevas contra La Colonia sin autorización humana explícita vigente para ese alcance;
 - evidencia ya obtenida sí puede reutilizarse offline;
 - la primera carga del snapshot aprobado no genera tráfico nuevo;
 - no evadir CAPTCHA, login, 403, 429 ni controles anti-bot.
@@ -214,6 +228,7 @@ Actualizar documentación sólo cuando cambie un estado real. No documentar dise
 Después de importar el SQLite en Turso, construir sólo la UI mínima:
 
 - búsqueda por nombre;
+- selector/filtro de ciudad;
 - filtros simples útiles;
 - precio actual;
 - precio regular reportado si existe;
