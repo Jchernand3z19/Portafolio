@@ -196,7 +196,7 @@ jobs:
               [
                   {'type':'execute','stmt':_stmt('''SELECT (SELECT COUNT(*) FROM products),(SELECT COUNT(*) FROM price_history),(SELECT COUNT(*) FROM scrape_runs),(SELECT COUNT(*) FROM price_history WHERE valid_to_utc IS NULL)''')},
                   {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)''')},
-                  {'type':'execute','stmt':_stmt('''SELECT location_id,COUNT(*) FROM price_history WHERE valid_to_utc IS NULL GROUP BY location_id ORDER BY location_id''')},
+                  {'type':'execute','stmt':_stmt('''SELECT location_id,COUNT(*) FROM price_history WHERE supermarket_id=? AND valid_to_utc IS NULL GROUP BY location_id ORDER BY location_id''', ('la_colonia',))},
                   {'type':'close'},
               ],
           )
