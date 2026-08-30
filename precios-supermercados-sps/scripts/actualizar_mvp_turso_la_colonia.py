@@ -171,10 +171,9 @@ def _mutation_steps(
     digest: str,
     supermarket_id: str = SUPERMARKET_ID,
 ) -> list[tuple[str, str, tuple[object, ...]]]:
-    # Preparar el snapshot en TEMP antes de abrir la transacción persistente evita
-    # consumir la ventana transaccional mientras SQLite expande ~9.5k filas JSON.
-    # El índice de identidad evita un scan completo de incoming por cada periodo
-    # en close_history, incluso cuando no hay cambios comerciales.
+    # incoming se materializa e indexa una sola vez. Dentro de la transacción se
+    # materializa delta para no repetir la misma comparación current-vs-snapshot
+    # en guardas, cierre y apertura de histórico.
     steps = [
         (
             "incoming_table",
@@ -215,29 +214,83 @@ def _mutation_steps(
         ),
         ("begin", "BEGIN IMMEDIATE", ()),
         (
-            "guard_out_of_order",
-            """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
-                SELECT 1 FROM price_history ph
-                JOIN products p ON p.product_id=ph.product_id
-                 AND p.supermarket_id=ph.supermarket_id
-                JOIN incoming i ON i.source_key_type=p.source_key_type
-                 AND i.source_key=p.source_key
-                WHERE ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL
-                  AND (ph.current_price_minor IS NOT i.current_price_minor
-                    OR ph.reported_regular_price_minor IS NOT i.reported_regular_price_minor
-                    OR ph.is_promotion IS NOT i.is_promotion
-                    OR ph.availability IS NOT i.availability)
-                  AND julianday(?)<=julianday(ph.valid_from_utc)
-                ) THEN 1 ELSE 0 END""",
-            (supermarket_id, location_id, observed_at),
-        ),
-        (
             "guard_existing_duplicates",
             """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
                 SELECT 1 FROM price_history
                 WHERE supermarket_id=? AND location_id=? AND valid_to_utc IS NULL
                 GROUP BY product_id HAVING COUNT(*)>1) THEN 1 ELSE 0 END""",
             (supermarket_id, location_id),
+        ),
+        (
+            "upsert_products",
+            """INSERT INTO products(
+                supermarket_id,source_key_type,source_key,source_catalog_product_id,
+                source_item_id,reference,ean,name,brand,presentation,category)
+                SELECT ?,source_key_type,source_key,source_catalog_product_id,
+                source_item_id,reference,ean,name,brand,presentation,category
+                FROM incoming WHERE 1
+                ON CONFLICT(supermarket_id,source_key_type,source_key) DO UPDATE SET
+                source_catalog_product_id=excluded.source_catalog_product_id,
+                source_item_id=excluded.source_item_id,reference=excluded.reference,
+                ean=excluded.ean,name=excluded.name,brand=excluded.brand,
+                presentation=excluded.presentation,category=excluded.category
+                WHERE products.source_catalog_product_id IS NOT excluded.source_catalog_product_id
+                   OR products.source_item_id IS NOT excluded.source_item_id
+                   OR products.reference IS NOT excluded.reference
+                   OR products.ean IS NOT excluded.ean
+                   OR products.name IS NOT excluded.name
+                   OR products.brand IS NOT excluded.brand
+                   OR products.presentation IS NOT excluded.presentation
+                   OR products.category IS NOT excluded.category""",
+            (supermarket_id,),
+        ),
+        (
+            "delta_table",
+            """CREATE TEMP TABLE delta(
+                product_id INTEGER PRIMARY KEY,
+                had_current INTEGER NOT NULL CHECK(had_current IN (0,1)),
+                changed INTEGER NOT NULL CHECK(changed IN (0,1)),
+                previous_valid_from_utc TEXT,
+                current_price_minor INTEGER NOT NULL,
+                reported_regular_price_minor INTEGER,
+                is_promotion INTEGER NOT NULL,
+                availability TEXT NOT NULL) STRICT""",
+            (),
+        ),
+        (
+            "delta_load",
+            """INSERT INTO delta
+                SELECT p.product_id,
+                  CASE WHEN ph.product_id IS NULL THEN 0 ELSE 1 END,
+                  CASE WHEN ph.product_id IS NULL
+                    OR ph.current_price_minor IS NOT i.current_price_minor
+                    OR ph.reported_regular_price_minor IS NOT i.reported_regular_price_minor
+                    OR ph.is_promotion IS NOT i.is_promotion
+                    OR ph.availability IS NOT i.availability
+                    THEN 1 ELSE 0 END,
+                  ph.valid_from_utc,
+                  i.current_price_minor,i.reported_regular_price_minor,
+                  i.is_promotion,i.availability
+                FROM incoming i
+                JOIN products p ON p.supermarket_id=?
+                 AND p.source_key_type=i.source_key_type AND p.source_key=i.source_key
+                LEFT JOIN price_history ph ON ph.product_id=p.product_id
+                 AND ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL""",
+            (supermarket_id, supermarket_id, location_id),
+        ),
+        (
+            "guard_delta",
+            "INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM delta",
+            (sku_count,),
+        ),
+        (
+            "guard_out_of_order",
+            """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
+                SELECT 1 FROM delta
+                WHERE changed=1 AND had_current=1
+                  AND julianday(?)<=julianday(previous_valid_from_utc)
+                ) THEN 1 ELSE 0 END""",
+            (observed_at,),
         ),
         (
             "insert_run",
@@ -257,31 +310,12 @@ def _mutation_steps(
             ),
         ),
         (
-            "upsert_products",
-            """INSERT INTO products(
-                supermarket_id,source_key_type,source_key,source_catalog_product_id,
-                source_item_id,reference,ean,name,brand,presentation,category)
-                SELECT ?,source_key_type,source_key,source_catalog_product_id,
-                source_item_id,reference,ean,name,brand,presentation,category
-                FROM incoming WHERE 1
-                ON CONFLICT(supermarket_id,source_key_type,source_key) DO UPDATE SET
-                source_catalog_product_id=excluded.source_catalog_product_id,
-                source_item_id=excluded.source_item_id,reference=excluded.reference,
-                ean=excluded.ean,name=excluded.name,brand=excluded.brand,
-                presentation=excluded.presentation,category=excluded.category""",
-            (supermarket_id,),
-        ),
-        (
             "close_history",
             """UPDATE price_history AS ph SET valid_to_utc=?
                 WHERE ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL
-                AND EXISTS(SELECT 1 FROM products p JOIN incoming i
-                  ON i.source_key_type=p.source_key_type AND i.source_key=p.source_key
-                  WHERE p.product_id=ph.product_id AND p.supermarket_id=ph.supermarket_id
-                  AND (ph.current_price_minor IS NOT i.current_price_minor
-                    OR ph.reported_regular_price_minor IS NOT i.reported_regular_price_minor
-                    OR ph.is_promotion IS NOT i.is_promotion
-                    OR ph.availability IS NOT i.availability))""",
+                  AND ph.product_id IN (
+                    SELECT product_id FROM delta WHERE changed=1 AND had_current=1
+                  )""",
             (observed_at, supermarket_id, location_id),
         ),
         (
@@ -290,38 +324,23 @@ def _mutation_steps(
                 product_id,supermarket_id,location_id,current_price_minor,
                 reported_regular_price_minor,is_promotion,availability,currency,
                 valid_from_utc,valid_to_utc,scrape_run_id)
-                SELECT p.product_id,?,?,i.current_price_minor,i.reported_regular_price_minor,
-                i.is_promotion,i.availability,'HNL',?,NULL,?
-                FROM incoming i JOIN products p ON p.supermarket_id=?
-                 AND p.source_key_type=i.source_key_type AND p.source_key=i.source_key
-                WHERE NOT EXISTS(SELECT 1 FROM price_history ph
-                  WHERE ph.product_id=p.product_id AND ph.supermarket_id=?
-                    AND ph.location_id=? AND ph.valid_to_utc IS NULL)""",
-            (
-                supermarket_id,
-                location_id,
-                observed_at,
-                run_id,
-                supermarket_id,
-                supermarket_id,
-                location_id,
-            ),
+                SELECT product_id,?,?,current_price_minor,reported_regular_price_minor,
+                  is_promotion,availability,'HNL',?,NULL,?
+                FROM delta WHERE changed=1""",
+            (supermarket_id, location_id, observed_at, run_id),
         ),
         (
             "guard_current",
-            """INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END
-                FROM incoming i JOIN products p ON p.supermarket_id=?
-                 AND p.source_key_type=i.source_key_type AND p.source_key=i.source_key
-                JOIN price_history ph ON ph.product_id=p.product_id
-                 AND ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL""",
-            (sku_count, supermarket_id, supermarket_id, location_id),
-        ),
-        (
-            "guard_duplicates",
             """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
-                SELECT 1 FROM price_history WHERE supermarket_id=? AND location_id=?
-                 AND valid_to_utc IS NULL GROUP BY product_id HAVING COUNT(*)>1)
-                THEN 1 ELSE 0 END""",
+                SELECT 1 FROM delta d
+                LEFT JOIN price_history ph ON ph.product_id=d.product_id
+                 AND ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL
+                WHERE ph.product_id IS NULL
+                   OR ph.current_price_minor IS NOT d.current_price_minor
+                   OR ph.reported_regular_price_minor IS NOT d.reported_regular_price_minor
+                   OR ph.is_promotion IS NOT d.is_promotion
+                   OR ph.availability IS NOT d.availability
+                ) THEN 1 ELSE 0 END""",
             (supermarket_id, location_id),
         ),
         (
@@ -479,7 +498,7 @@ def persist_snapshot(
         "location_id": location_id,
         "source_json_sha256": digest,
         "replayed": False,
-        "products_processed": _affected(results, steps, "upsert_products"),
+        "products_processed": len(snapshot["products"]),
         "history_opened": opened,
         "history_closed": _affected(results, steps, "close_history"),
         "history_unchanged": len(snapshot["products"]) - opened,
