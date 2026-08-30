@@ -4,7 +4,12 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 
 ## Objetivo activo
 
-Cerrar el MVP funcional de una sola cadena:
+Preparar el MVP de Supermercados Colonial solicitado el 2026-08-30, incorporándolo
+a la base compartida sólo después de demostrar catálogo completo y validación.
+El cierre exige primera persistencia y segunda observación real correcta; ninguno
+de esos hitos de Colonial está demostrado todavía.
+
+La Colonia conserva el alcance existente:
 
 ```text
 La Colonia
@@ -17,7 +22,9 @@ history = cambios comerciales por ubicación
 dashboard = fuera del MVP actual
 ```
 
-No iniciar otro supermercado ni construir visualización antes de cerrar este bloque.
+No ampliar La Colonia, iniciar una tercera cadena ni construir visualización.
+La autorización recurrente de La Colonia no cubre Colonial. Ver la
+[auditoría y propuesta de probe Colonial](supermercados/colonial-auditoria-preflight.md).
 
 ## Persistencia MVP
 
@@ -300,21 +307,58 @@ Colonia SPS + TGU. Cualquier tráfico live fuera de ese alcance requiere autoriz
 Los artifacts existentes pueden analizarse, verificarse y persistirse sin volver a
 consultar el sitio cuando su identidad y SHA están comprobados.
 
-## Pendiente para cierre operativo
+## Schedule observado — bloqueo compartido de Turso
+
+La auditoría del 2026-08-30 sobre `main`
+`f34a324b2cb177baa77ce788c360476268af0f01` encontró dos ejecuciones por
+`schedule`, ambas fallidas; por tanto, no se declara cierre operativo:
+
+- [33260860123](https://github.com/Jchernand3z19/Portafolio/actions/runs/33260860123):
+  timeout de catálogo TGU; el PR #346 añadió retry acotado y fue fusionado con CI
+  verde. No se repite esa corrección.
+- [33319436863](https://github.com/Jchernand3z19/Portafolio/actions/runs/33319436863):
+  ambos catálogos completos, pero el preflight de persistencia SPS y TGU recibió
+  de Turso `BLOCKED`: `SQL read operations are forbidden`. La verificación final
+  también fue rechazada. El error precede al batch de mutación; este run no
+  demuestra nuevas escrituras ni permite certificar el estado actual de Turso.
+
+El mensaje del proveedor sugiere revisar límites/plan, pero la causa de cuenta no
+está verificada. No cambiar billing, storage ni credenciales por inferencia.
+El bloqueo afecta también a la futura persistencia de Colonial.
+
+Los snapshots del segundo schedule se verificaron offline con el validador de
+`main`, sin repetir tráfico al supermercado:
 
 ```text
-1. comprobar la primera ejecución iniciada por el schedule diario de main
+artifact_id = 9734740995
+artifact_sha256 = 722c3aeb5adeffd5d4f9ff6db2c1cd05fc9c2289ed2e74e1f9a230de53ed90ef
+SPS = 9469 productos / 9471 SKU / 7091 in_stock / 2380 out_of_stock
+SPS_json_sha256 = ccf36e969d4c33973125690715d7a12c6c20300cd26d7bcad68a3e47095232e6
+TGU = 9493 productos / 9495 SKU / 7820 in_stock / 1675 out_of_stock
+TGU_json_sha256 = d8c583d112fa3874ba56f44c186fee774b5d32abf0ef51acbbb15c6e606b8a2a
 ```
 
-El desarrollo requerido para el MVP de La Colonia está completo. No es necesario
-agregar otra arquitectura para cerrar la validación operativa restante.
+El artifact existente permite recuperar esas observaciones sin recrawl después
+de resolver el acceso y comprobar cronología/replay contra Turso. Los conteos
+históricos anteriores siguen siendo evidencia de sus runs, no una lectura actual.
+
+## Pendiente operativo
+
+```text
+1. resolver el bloqueo de lecturas de Turso y verificar estado sin asumir commits
+2. comprobar una ejecución diaria íntegramente correcta de La Colonia
+3. obtener autorización acotada para el primer probe automatizado de Colonial
+```
+
+No esperar otra ejecución diaria para preparar Colonial. No se identifica aquí
+un defecto de código compartido que justifique refactorizar La Colonia.
 
 ## Fuera del alcance actual
 
 No trabajar ahora en:
 
 - dashboard;
-- supermercado #2;
+- supermercados distintos de La Colonia y Colonial;
 - BigQuery;
 - Google Sheets;
 - Cloudflare;
