@@ -322,9 +322,21 @@ La auditoría del 2026-08-30 sobre `main`
   también fue rechazada. El error precede al batch de mutación; este run no
   demuestra nuevas escrituras ni permite certificar el estado actual de Turso.
 
-El mensaje del proveedor sugiere revisar límites/plan, pero la causa de cuenta no
-está verificada. No cambiar billing, storage ni credenciales por inferencia.
-El bloqueo afecta también a la futura persistencia de Colonial.
+La consulta read-only `turso plan show` confirmó plan `starter`, excedentes
+deshabilitados y 713.7M filas leídas sobre una cuota de 500M (143%). La CLI indica
+reinicio el 2026-08-31 a las 18:00 CST. No se cambió billing, storage ni credenciales.
+El bloqueo afecta también a la futura persistencia de Colonial. `turso db inspect
+precios-supermercados --queries` no devolvió estadísticas por consulta; no permite
+atribuir una cifra exacta facturada a cada sentencia.
+
+Se reprodujo offline un defecto del SQL aplicable a la futura integración Colonial:
+`close_history` recorría toda la tabla temporal `incoming` por cada periodo sin
+cambios. El [PR #348](https://github.com/Jchernand3z19/Portafolio/pull/348) añade sólo
+un índice único de identidad mediante `UNIQUE(source_key_type, source_key)` en esa
+tabla TEMP existente. Con 1,000 productos la comprobación pasó de aproximadamente
+13,018,000 a 34,000 instrucciones SQLite. La regresión falla sin el cambio y pasa
+con él; ocho tests de persistencia pasan offline. Esto no restablece la cuota ni
+demuestra todavía ahorro facturado en Turso.
 
 Los snapshots del segundo schedule se verificaron offline con el validador de
 `main`, sin repetir tráfico al supermercado:
@@ -350,8 +362,8 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 3. obtener autorización acotada para el primer probe automatizado de Colonial
 ```
 
-No esperar otra ejecución diaria para preparar Colonial. No se identifica aquí
-un defecto de código compartido que justifique refactorizar La Colonia.
+No esperar otra ejecución diaria para preparar Colonial. La corrección SQL es
+puntual; no justifica refactorizar La Colonia ni cambiar su extracción.
 
 ## Fuera del alcance actual
 

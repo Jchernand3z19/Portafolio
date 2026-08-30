@@ -122,6 +122,12 @@ aislamiento Colonial, parser Colonial ni los trece escenarios exigidos para el M
 Esos tests se incorporarán con el contrato Colonial real, sin fabricar fixtures
 presentadas como capturas de la fuente.
 
-No se modificaron código productivo, tablas, persistencia, configuración live ni
+La auditoría también reprodujo lecturas cuadráticas de `incoming` en el SQL que
+necesitará Colonial. Se corrigen separadamente en el [PR #348](https://github.com/Jchernand3z19/Portafolio/pull/348)
+con un índice temporal, sin nuevo modelo ni refactor. El estado de cuenta confirmado
+y la prueba de regresión se describen en PROJECT_STATE. La corrección no repone
+la cuota consumida.
+
+Este documento no modifica código productivo, tablas, configuración live ni
 workflow. No se descargaron imágenes ni scripts del supermercado. El siguiente
-paso técnico es la primera observación automatizada autorizada, no arquitectura.
+paso Colonial es la primera observación automatizada autorizada, no arquitectura.
