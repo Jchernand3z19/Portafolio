@@ -32,11 +32,14 @@ HTML = b'''<!doctype html>
     window.effectiveClicks = 0;
     function openLocation() {
       window.rawClicks += 1;
-      if (!window.appReady) return;
+      // El primer click siempre es noop, aunque el runner tarde en iniciarlo.
+      if (!window.appReady) {
+        window.appReady = true;
+        return;
+      }
       window.effectiveClicks += 1;
       document.getElementById('panel').hidden = false;
     }
-    setTimeout(() => { window.appReady = true; }, 1800);
   </script>
 </body></html>'''
 

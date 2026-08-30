@@ -54,6 +54,12 @@ Suite completa local con Python 3.12 y dependencias fijadas del proyecto:
 1,905 passed, 21 skipped. Incluye reproducción de la captura íntegra con HTTP
 bloqueado. CI de PR y main deben confirmar la revisión publicada.
 
+Entrega en [PR #349](https://github.com/Jchernand3z19/Portafolio/pull/349).
+El primer CI pasó todos los casos Colonial, pero detectó una carrera en un fixture
+antiguo del selector: su timer de 1.8 s podía vencer antes del primer click.
+Se reprodujo offline y se cambió sólo el fixture para que el primer click siempre
+sea noop; se mantienen las aserciones de reintento y el código productivo intacto.
+
 Bloqueo reconfirmado: Turso plan Starter, 713.7 M / 500 M lecturas (143%), overages
 deshabilitados. Reset anunciado 31/8/2026 18:00 CST, después del vencimiento live
 (31/8 14:10:18 CST). No se cambió facturación ni se intentó sortear el bloqueo.
