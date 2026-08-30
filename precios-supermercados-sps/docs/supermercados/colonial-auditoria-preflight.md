@@ -1,8 +1,13 @@
-# Colonial — auditoría y primer probe propuesto
+# Colonial — fuente, catálogo completo y frontera Turso
 
-Fecha: 2026-08-30. Estado: `BLOCKED_HUMAN_AUTHORIZATION` para tráfico automatizado
-nuevo; `BLOCKED_EXTERNAL` para futura persistencia mientras Turso rechace lecturas.
-Este documento no concede autorización, no habilita un workflow y no declara MVP.
+Fecha: 2026-08-30. Estado: `CATALOG_COMPLETE`, `BLOCKED_EXTERNAL_TURSO_QUOTA`.
+**No es MVP cerrado:** faltan primera carga Turso, segunda observación real y,
+únicamente después de demostrar ambas, workflow mínimo. Sin recurrencia autorizada.
+
+La propuesta inicial del PR #347 no se ejecutó sin permiso. El usuario autorizó
+24 horas en la tarea; se registró conservadoramente de 2026-08-30 20:10:18 UTC a
+2026-08-31 20:10:18 UTC. Esa autorización permitió probes, full y persistencia
+validada/segunda observación; no cambia facturación ni habilita ejecución diaria.
 
 ## Base auditada
 
@@ -30,104 +35,140 @@ La instrucción actual inicia Colonial sin ampliar La Colonia. Se mantienen las
 fronteras de autorización y de persistencia del proyecto. El bloqueo de Turso y
 los snapshots recuperables del schedule se detallan en [PROJECT_STATE](../PROJECT_STATE.md).
 
-## Reconocimiento público permitido
+## Fuente y scope demostrados
 
-La herramienta de investigación web consultó únicamente la
-[portada pública](https://supercolonial.com/); las búsquedas de texto posteriores
-reutilizaron esa misma vista. Es evidencia de contenido público, no una captura
-HTTP RAW ni una sesión de navegador reproducida.
+Tras confirmar en RAW `Shopify.shop = "bm1gbx-tm.myshopify.com"`, se probó un
+producto en `/products.json?limit=1&page=1`, luego 40 productos y dos páginas de
+250 sin overlap. Muestra: cinco categorías, diez promociones, vendor literal
+`RMS`. El listado general anuncia 9,199 productos. Las pruebas pequeñas preceden
+al full; sus respuestas útiles se reutilizaron.
 
-Observado:
+| Responsabilidad | Evidencia utilizada |
+| --- | --- |
+| Identidad, descripción, precios por variante | `/products.json?limit=250&page=N` |
+| Stock ecommerce | Botón y variante de cada tarjeta de `/collections/all` |
+| Páginas HTML ligeras | `/collections/all?section_id=template--25869947109668__banner&page=N` |
+| Total | `9199 productos` en cada página HTML |
+| Membership independiente | Diez sitemaps de productos listados por `/sitemap.xml` |
+| Contexto | Portada: Shopify, HNL, Delivery/Pick Up San Pedro Sula |
 
-- Catálogo con categorías, enlaces de producto, precios en HNL y precios tachados.
-- Ejemplo promocional: LEYDE QuesilloTipo Sureno 1Lb, L 101.19 y L 118.99 tachado.
-- Ejemplo agotado: COLONIAL Tequeños 8 Un, L 119.99, control «Agotado».
-- Delivery/Pick Up anuncia San Pedro Sula, Honduras.
-- Errores de plantilla Liquid y rutas de comercio compatibles con Shopify.
+`colonial_sps` representa el catálogo ecommerce público de San Pedro Sula.
+No se observó selección de sucursal ni binding de precio/stock por tienda en el
+HTML/estado y requests usados. No se enviaron parámetros de sucursal ni cookies
+privadas. No se afirma inexistencia absoluta de estados ocultos no inspeccionados;
+no hay evidencia que justifique cuatro ubicaciones físicas. Navegador y storage
+no fueron necesarios para reproducir los datos públicos observados.
 
-**Shopify es una hipótesis**, pendiente de evidencia cruda de plataforma.
-No hay request JSON demostrada, product/variant IDs verificados ni muestra
-estructurada aceptada. No se considera «in_stock» todo producto sólo por mostrar
-precio. No se abrió carrito, checkout, login ni formularios.
+No se descargaron imágenes, CSS, fuentes, analytics ni JavaScript separado.
+Concurrencia 1, conexión reutilizada, pausa mínima 1 segundo; sin evasión de
+controles, login, carrito ni checkout. `/search?...&view=json` sólo devuelve diez
+coincidencias y no stock; el `limit=250` HTML se ignora y entrega 24 tarjetas.
+No hay un batch de stock más eficiente demostrado en el reconocimiento acotado.
 
-No se observó selector comercial por sucursal en el texto disponible; esto no
-prueba su ausencia en DOM/JavaScript. `colonial_sps` sigue siendo la hipótesis de
-ubicación lógica única. Cookies/storage, variables de inventario/sucursal y
-binding comercial están `not_tested`; no se crean ubicaciones físicas por inferencia.
+## Semántica comercial y límites
 
-## Primer probe: plan acotado, NO AUTORIZADO
+- `product_id` = ID Shopify; `item_id` y `source_key` = ID de variante;
+  `source_key_type=item_id`. No deduplicar por SKU: dos variantes pueden compartirlo.
+- `reference` = SKU fuente; `ean` sólo si existe barcode explícito. No reinterpretar
+  un SKU numérico como GTIN. `brand` conserva vendor literal; no inferir marca del
+  nombre. `presentation=NULL`: las opciones numéricas observadas no prueban formato.
+- `current_price` = `variant.price`; `reported_regular_price` = `compare_at_price`
+  nullable; promoción si regular > efectivo. Precios HNL exactos en centavos.
+  `previous_price` sigue perteneciendo al periodo histórico anterior.
+- Shopify JSON/JS puede decir `available=true` mientras el botón propio del
+  comercio muestra **Agotado**, con `cp-sold-out` y `disabled`. Ese botón determina
+  `out_of_stock`; el botón habilitado determina `in_stock`; evidencia ambigua,
+  `unknown`. No se infiere cantidad ni inventario de una sucursal física.
+- Hay seis productos con dos variantes. El stock del botón se asigna sólo a su
+  variante; las otras seis quedan `unknown`. CANADA DRY Fruit Splash 12 Oz anuncia
+  L 22.49 / L 24.99 tachado pero el botón apunta a una variante de L 24.99 sin
+  regular. La otra variante tiene L 22.49 / L 24.99. Se comprueba que el par
+  comercial de la tarjeta exista en alguna variante **del mismo producto**, sin
+  copiarlo sobre la variante del botón ni propagar stock.
 
-Objetivo: confirmar plataforma y obtener primero un producto correcto, luego
-20–50 productos, casos comerciales representativos y evidencia mínima de recorrido.
+## Preflight y primer full
 
-Scope permitido propuesto: sólo GET públicos a `https://supercolonial.com`, sin
-credenciales, cookies privadas, assets visuales, mutaciones ni browser por producto.
-No se consultará una API de administración ni se usará una identidad alternativa.
+Plan previo: 37 páginas JSON de 250 (última 199), 384 páginas HTML de 24 (última 7),
+10 sitemaps de producto, índice y portada: **433 recursos**. Siete ya capturados;
+426 GET adicionales previstos. Items esperados desconocidos antes de recorrer
+las variantes; no asumir un item por producto. Presupuesto: 450 GET nuevos,
+1,200 segundos, concurrencia 1, hasta un retry por recurso y cinco totales sólo
+para fallos transitorios; stop 401/403/429 y cero redirects automáticos. Duración
+estimada 9–12 minutos. RAW permite recuperar sólo recursos faltantes del mismo run.
 
-Presupuesto máximo: **10 requests HTTP**, contando redirects y retries;
-concurrencia 1, pacing mínimo 1 segundo, timeout por request 20 segundos,
-deadline total 5 minutos. No se repite una URL ya recibida y validada. Ningún
-retry automático; un retry explícito por error transitorio sólo si cabe en los
-10 requests. Stop ante 401/403/429, CAPTCHA, login o degradación sostenida.
-Un 404 de una hipótesis permite otra superficie pública dentro del mismo presupuesto.
+Resultado: **9,199 productos / 9,205 variantes con precio**, sin identidad duplicada
+ni residual. Coinciden exactamente handles de JSON, tarjetas y sitemaps; todas las
+páginas HTML mantienen total 9,199 y tamaños esperados. Stock: 7,726 disponibles,
+1,473 agotados, 6 unknown. Esta comprobación detecta deriva estructural/membership;
+no convierte una captura secuencial en un snapshot atómico del servidor.
 
-Orden adaptativo (no ejecutar todas las alternativas por defecto):
+426 GET nuevos exitosos, cero fallos/retries; 7 reutilizados. 433 recursos por
+catálogo, 0.047070 recursos/producto; 21.594 productos por GET nuevo. Intervalo
+entre inicio del primer/último GET nuevo: 541.385 s. Con los 13 GET de investigación,
+el trabajo completo usó **439 GET nuevos**. Cuerpos nuevos: 51,038,453 bytes.
 
-1. Un GET del documento inicial para confirmar plataforma, JSON embebido y
-   posibles parámetros/contexto comercial; conservar RAW y SHA.
-2. Si Shopify queda confirmado, probar inmediatamente la hipótesis pública
-   `/products.json?limit=1&page=1`. Ese endpoint no está demostrado aún.
-3. Sólo si devuelve identidad/nombre/precio correctos: una página de 40 productos
-   del listado y validación offline de todas sus variantes.
-4. Hasta dos recursos de producto/colección ya enlazados, si la muestra no incluye
-   promoción, precio regular o agotado; priorizar JSON/estado antes de HTML.
-5. Sólo con muestra aceptada: dos páginas consecutivas del listado con el mayor
-   tamaño normal que la fuente permita comprobar (250 es candidato, no capacidad
-   demostrada). Medir identidades, overlap, orden y productos por request.
-6. Usar el saldo, hasta el máximo global, para la colección general, sitemap o
-   metadata pública que ofrezca total/membership y contexto. No recorrer todo el
-   sitemap ni completar el catálogo dentro de este probe.
+Tras la descarga, el primer parser rechazó el caso multivariante descrito arriba.
+Se corrigió contra RAW y se aceptó offline, **sin repetir el crawl**. El snapshot
+conserva fechas fuente 20:11:03–20:31:00 UTC; no se fecha con la hora del parseo.
+Sus métricas de cero requests pertenecen a esa validación offline, no al crawl.
 
-Si el listado no funciona, volver al HTML/estado ya capturado y usar sólo una
-alternativa pública justificada. No construir código productivo para una hipótesis
-fallida. Si el scope depende de navegador, dejar esa necesidad explícita para una
-autorización posterior acotada.
+La [evidencia versionada](../../reports/colonial/2026-08-30/README.md) incluye RAW
+completo comprimido, manifest URL/fecha/status/SHA, ejecutor inicial, snapshot,
+preflight/métricas y resultado SQL offline. El test de captura completa reproduce
+los 9,205 registros y falla si intenta HTTP. SHA-256 del snapshot original:
+`2f7861ff6decd0f7e95a82c321d71e1cd7fe2e6440b6794bbe94c6457b41e2fd`.
 
-Resultados esperados: cuerpos RAW reutilizables, status/content type/URL/fecha/SHA,
-identidad producto-variante-SKU, semántica precio/compare-at/promoción/disponibilidad,
-scope y campos unknown, paginación y mejor señal independiente de completitud.
-No afirmar completitud usando únicamente conteo de las propias filas.
+## Persistencia compartida y pruebas
 
-## Preflight del full crawl todavía no calculable
+Dos archivos productivos nuevos: parser específico y downloader específico.
+Sin framework, nueva dependencia, sexta tabla, base Colonial ni workflow nuevo.
+El validador/updater existente admite Colonial mediante selección explícita;
+La Colonia sigue siendo el valor predeterminado. Registro inicial de supermercado
++ ubicación dentro de la misma transacción y con guardas de identidad/contexto.
+Se conserva el índice temporal de PR #348 para evitar el scan cuadrático.
 
-`expected_products`, `expected_items`, `page_size`, `expected_pages`,
-`expected_requests`, duración, límites y recovery: **desconocidos** hasta el probe.
-No usar las cifras de La Colonia ni un supuesto de 8,000 productos como total Colonial.
-Una vez comprobados N y P, el listado lineal costaría aproximadamente `ceil(N/P)`
-más requests de evidencia/terminación y recovery autorizado, sin página por producto.
+Pruebas offline: producto nuevo, sin cambios, cambios de cada uno de los cuatro
+campos comerciales, replay, inválido, incompleto, duplicado, desaparición sin OOS,
+aislamiento Colonial→La Colonia y La Colonia→Colonial aun con IDs idénticos,
+orden temporal y rollback de contexto incorrecto. Parser probado con RAW exacto
+y casos sintéticos explícitos; controles de presupuesto/expiry/403/429/cache.
 
-La autorización del probe no cubrirá full crawl, segunda observación ni recurrencia.
+También se aplicaron los **9,205 items reales** al SQL remoto ejecutado sobre
+SQLite local de las cinco tablas, junto a SPS/TGU del artifact 9734740995. Resultado:
+18,714 productos, 28,171 periodos, tres runs, dos cadenas y tres ubicaciones;
+integrity_check ok, foreign keys sin fallos, cero periodos abiertos duplicados,
+replay sin cambios y La Colonia intacta. Es evidencia offline, no carga Turso.
 
-## Integración existente, sin implementación anticipada
+## Frontera operativa pendiente
 
-El schema actual ya separa `supermarket_id` y `location_id` en cinco tablas.
-Los updaters vigentes validan explícitamente La Colonia; no se puede pasar Colonial
-renombrado como La Colonia ni cambiar constantes globales para simular otro proveedor.
-Después de demostrar fuente y catálogo, adaptar sólo la responsabilidad común
-necesaria, conservando ambos validadores específicos e identidades fuente aisladas.
+Turso rechaza lecturas por cuota de cuenta: 713.7 M / 500 M (143%), plan Starter,
+overages deshabilitados. `turso plan show` lo reconfirmó después de la autorización;
+no faltan credenciales. No se intentó el batch Colonial con el preflight bloqueado.
+El reinicio anunciado es **31/8/2026 18:00 CST** (1/9 00:00 UTC), posterior al fin
+de la autorización de 24 horas (31/8 14:10:18 CST).
 
-Verificación offline ejecutada: los siete tests existentes de los updaters SQLite
-y Turso pasaron; el SQL remoto se prueba localmente. Eso **no demuestra** todavía
-aislamiento Colonial, parser Colonial ni los trece escenarios exigidos para el MVP.
-Esos tests se incorporarán con el contrato Colonial real, sin fabricar fixtures
-presentadas como capturas de la fuente.
+No eludir ese bloqueo, habilitar cobros ni modificar el plan. Restauradas las
+lecturas: validar los bytes originales, cargar primera observación con run-id
+estable, verificar cinco tablas/aislamiento/replay; luego nueva captura real
+**sin reutilizar datos comerciales de la primera**, segunda persistencia y
+verificación. Sólo entonces construir el workflow mínimo. Si se espera al
+reinicio, renovar autorización para solicitudes Colonial posteriores al vencimiento.
 
-La auditoría también reprodujo lecturas cuadráticas de `incoming` en el SQL que
-necesitará Colonial. Se corrigen separadamente en el [PR #348](https://github.com/Jchernand3z19/Portafolio/pull/348)
-con un índice temporal, sin nuevo modelo ni refactor. El estado de cuenta confirmado
-y la prueba de regresión se describen en PROJECT_STATE. La corrección no repone
-la cuota consumida.
+Desde la raíz, con `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` ya disponibles sin
+imprimirlos, el comando de primera carga preparado es:
 
-Este documento no modifica código productivo, tablas, configuración live ni
-workflow. No se descargaron imágenes ni scripts del supermercado. El siguiente
-paso Colonial es la primera observación automatizada autorizada, no arquitectura.
+```bash
+gunzip -c precios-supermercados-sps/reports/colonial/2026-08-30/full-catalog.json.gz > /tmp/colonial-first.json
+python precios-supermercados-sps/scripts/actualizar_mvp_turso_la_colonia.py \
+  /tmp/colonial-first.json --supermarket colonial --run-id colonial-20260830T203100Z
+```
+
+No ejecutar hasta comprobar restablecimiento de lecturas. Una nueva captura
+requiere `obtener_catalogo_colonial.py --output CARPETA_NUEVA --authorized-until
+CADUCIDAD_UTC_REAL`; ese argumento registra una autorización humana existente,
+no la genera. El modo `--offline` no requiere tráfico ni reautoriza producción.
+
+Los aprendizajes de contraste API/UI e identidad por variante ya están cubiertos
+por api-discovery, web-data-extraction y normalization-governance. Se documenta
+la aplicación concreta aquí sin duplicar una skill ni introducir reglas Colonial
+en el repositorio reusable.
