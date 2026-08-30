@@ -4,10 +4,10 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 
 ## Objetivo activo
 
-Preparar el MVP de Supermercados Colonial solicitado el 2026-08-30, incorporándolo
-a la base compartida sólo después de demostrar catálogo completo y validación.
-El cierre exige primera persistencia y segunda observación real correcta; ninguno
-de esos hitos de Colonial está demostrado todavía.
+Completar el MVP de Supermercados Colonial solicitado el 2026-08-30. El primer
+catálogo completo está demostrado: 9,199 productos / 9,205 variantes con precio.
+El cierre exige primera persistencia Turso y segunda observación real correcta;
+ambas siguen pendientes por bloqueo de cuota Turso. **Colonial no está cerrado.**
 
 La Colonia conserva el alcance existente:
 
@@ -24,7 +24,42 @@ dashboard = fuera del MVP actual
 
 No ampliar La Colonia, iniciar una tercera cadena ni construir visualización.
 La autorización recurrente de La Colonia no cubre Colonial. Ver la
-[auditoría y propuesta de probe Colonial](supermercados/colonial-auditoria-preflight.md).
+[fuente, catálogo y frontera operativa Colonial](supermercados/colonial-auditoria-preflight.md).
+
+## Colonial: primer catálogo aceptado, Turso bloqueado
+
+Autorización de 24 horas registrada el 2026-08-30 a las 20:10:18 UTC; vence el
+2026-08-31 a las 20:10:18 UTC. No autoriza recurrencia ni cambios de facturación.
+El catálogo público corresponde a `colonial_sps`; no se inventan sucursales ni
+inventario físico. JSON de variantes + botones HTML para stock + sitemaps para
+membership: 9,199 productos y 9,205 variantes, 7,726 in_stock / 1,473 out_of_stock /
+6 unknown. Las seis variantes sin botón propio conservan disponibilidad unknown.
+
+Full: 426 GET nuevos + 7 respuestas reutilizadas = 433 recursos; cero fallos y
+retries, concurrencia 1, sin imágenes ni browser. 439 GET nuevos contando los dos
+probes. La corrección de un caso precio-mínimo/variante se hizo sobre RAW, sin
+repetir el crawl. [Snapshot y RAW reproducibles](../reports/colonial/2026-08-30/README.md),
+con fechas fuente 20:11:03–20:31:00 UTC y SHA del snapshot
+`2f7861ff6decd0f7e95a82c321d71e1cd7fe2e6440b6794bbe94c6457b41e2fd`.
+
+Implementación específica sin dependencias nuevas. El updater Turso existente
+admite `--supermarket colonial` y registra `colonial` / `colonial_sps` dentro de
+la transacción. Mantiene las cinco tablas, histórico por cambios y validación
+antes de cualquier SQL. Pruebas offline cubren los trece escenarios requeridos,
+replay, rollback e identidades coincidentes entre cadenas. El catálogo completo
+aplicado al SQL productivo sobre SQLite junto a SPS/TGU conserva La Colonia e
+integridad; **no equivale a persistencia Turso ni segundo run real**.
+
+Suite completa local con Python 3.12 y dependencias fijadas del proyecto:
+1,905 passed, 21 skipped. Incluye reproducción de la captura íntegra con HTTP
+bloqueado. CI de PR y main deben confirmar la revisión publicada.
+
+Bloqueo reconfirmado: Turso plan Starter, 713.7 M / 500 M lecturas (143%), overages
+deshabilitados. Reset anunciado 31/8/2026 18:00 CST, después del vencimiento live
+(31/8 14:10:18 CST). No se cambió facturación ni se intentó sortear el bloqueo.
+Siguiente: restablecer lecturas, primera carga y verificación, segunda observación
+real autorizada sin cache comercial anterior, persistir/verificar y sólo entonces
+workflow mínimo. No se construyó ni activó workflow Colonial anticipadamente.
 
 ## Persistencia MVP
 

@@ -1,0 +1,80 @@
+{
+  "evidence_level": "LIVE_CAPTURE_OFFLINE_VALIDATED_NOT_PERSISTED_TO_TURSO",
+  "authorization_recorded_at_utc": "2026-08-30T20:10:18Z",
+  "authorization_expires_at_utc": "2026-08-31T20:10:18Z",
+  "authorization_scope": "Colonial public probes, full catalog, validated shared persistence and second observation; no daily recurrence or billing changes",
+  "preflight": {
+    "expected_products": 9199,
+    "expected_items": "unknown until all variants parsed",
+    "json_page_size": 250,
+    "json_pages": 37,
+    "html_page_size": 24,
+    "html_pages": 384,
+    "product_sitemaps": 10,
+    "expected_resources": 433,
+    "cached_resources_reused": 7,
+    "expected_new_requests": 426,
+    "request_budget": 450,
+    "deadline_seconds": 1200,
+    "concurrency": 1,
+    "minimum_spacing_seconds": 1,
+    "max_retries_per_resource": 1,
+    "max_total_retries": 5,
+    "estimated_runtime_minutes": [
+      9,
+      12
+    ]
+  },
+  "acquisition": {
+    "total_requests": 426,
+    "successful_requests": 426,
+    "failed_requests": 0,
+    "retries": 0,
+    "cached_resources_reused": 7,
+    "duplicate_requests_avoided_within_downloader": 0,
+    "distinct_resources_used": 433,
+    "first_new_request_at_utc": "2026-08-30T20:21:58.809212+00:00",
+    "last_new_request_at_utc": "2026-08-30T20:31:00.194211+00:00",
+    "request_start_span_seconds": 541.384999,
+    "new_response_body_bytes": 51038453,
+    "all_response_body_bytes": 53138966,
+    "unique_products": 9199,
+    "unique_items": 9205,
+    "products_with_price": 9199,
+    "items_with_price": 9205,
+    "duplicate_identities": 0,
+    "unexplained_membership_residual": 0,
+    "products_per_new_request": 21.593897,
+    "new_requests_per_product": 0.046309,
+    "resources_per_complete_catalog": 433,
+    "resources_per_product": 0.04707
+  },
+  "exploration": {
+    "first_probe_requests": 10,
+    "availability_probe_requests": 3,
+    "total_new_requests_including_exploration": 439
+  },
+  "validation": {
+    "accepted": true,
+    "requests": 0,
+    "parser_elapsed_seconds": 1.739,
+    "snapshot_sha256": "2f7861ff6decd0f7e95a82c321d71e1cd7fe2e6440b6794bbe94c6457b41e2fd",
+    "membership_sha256": "9ae0e79ddb10d697ab166d89d8d7a660d623cae9d20358d322",
+    "availability_counts": {
+      "in_stock": 7726,
+      "out_of_stock": 1473,
+      "unknown": 6
+    },
+    "initial_executor_outcome": "Rejected during final price reconciliation; downloaded RAW retained. A card advertises another variant minimum price. Parser corrected offline; no recrawl."
+  },
+  "production": {
+    "turso_first_load": "NOT_EXECUTED_QUOTA_BLOCKED",
+    "second_real_observation": "NOT_EXECUTED_FIRST_TURSO_LOAD_REQUIRED",
+    "workflow": "NOT_CREATED_PENDING_FIRST_LOAD_AND_SECOND_OBSERVATION"
+  },
+  "files": {
+    "full-catalog.json.gz": "76272fca3a4a3fc0fcb35e9252e9a9effc030ea6088a857853a1894fe391fc95",
+    "offline-sql-summary.json": "17dbe7c388fdb6311f02bbfe46870796d90c2aa8e228e894fabf41734cc7e62b",
+    "raw-capture.tar.gz": "544392a2e0d504a8bab5012a92ee51355f23ad30558033002a3fb34aaefed44d"
+  }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aplica un snapshot completo aceptado de La Colonia directamente en Turso."""
+"""Aplica snapshots completos de La Colonia o Colonial a las cinco tablas Turso."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from actualizar_mvp_sqlite_la_colonia import (  # noqa: E402
     LOCATIONS,
+    COLONIAL_LOCATIONS,
     SUPERMARKET_ID,
     SnapshotError,
     _minor,
@@ -117,7 +118,7 @@ def _normalised_json(snapshot: dict[str, Any]) -> str:
 
 
 def _preflight(
-    url: str, token: str, *, location_id: str, run_id: str
+    url: str, token: str, *, location_id: str, run_id: str, supermarket_id: str = SUPERMARKET_ID
 ) -> dict[str, object] | None:
     queries = [
         (
@@ -146,7 +147,9 @@ def _preflight(
         raise SnapshotError("turso_preflight_response_invalid")
     if {str(row[0]) for row in _execute_rows(results[0])} != EXPECTED_TABLES:
         raise SnapshotError("turso_schema_mismatch")
-    if _execute_rows(results[1]) != [[SUPERMARKET_ID, LOCATIONS[location_id]]]:
+    locations = LOCATIONS if supermarket_id == SUPERMARKET_ID else COLONIAL_LOCATIONS
+    found = _execute_rows(results[1])
+    if found != [[supermarket_id, locations[location_id]]] and not (supermarket_id == "colonial" and not found):
         raise SnapshotError("turso_location_mismatch")
     rows = _execute_rows(results[2])
     if not rows:
@@ -166,12 +169,13 @@ def _mutation_steps(
     catalog_count: int,
     artifact_id: str | None,
     digest: str,
+    supermarket_id: str = SUPERMARKET_ID,
 ) -> list[tuple[str, str, tuple[object, ...]]]:
     # Preparar el snapshot en TEMP antes de abrir la transacción persistente evita
     # consumir la ventana transaccional mientras SQLite expande ~9.5k filas JSON.
     # El índice de identidad evita un scan completo de incoming por cada periodo
     # en close_history, incluso cuando no hay cambios comerciales.
-    return [
+    steps = [
         (
             "incoming_table",
             """CREATE TEMP TABLE incoming(
@@ -225,7 +229,7 @@ def _mutation_steps(
                     OR ph.availability IS NOT i.availability)
                   AND julianday(?)<=julianday(ph.valid_from_utc)
                 ) THEN 1 ELSE 0 END""",
-            (SUPERMARKET_ID, location_id, observed_at),
+            (supermarket_id, location_id, observed_at),
         ),
         (
             "guard_existing_duplicates",
@@ -233,7 +237,7 @@ def _mutation_steps(
                 SELECT 1 FROM price_history
                 WHERE supermarket_id=? AND location_id=? AND valid_to_utc IS NULL
                 GROUP BY product_id HAVING COUNT(*)>1) THEN 1 ELSE 0 END""",
-            (SUPERMARKET_ID, location_id),
+            (supermarket_id, location_id),
         ),
         (
             "insert_run",
@@ -243,7 +247,7 @@ def _mutation_steps(
                 VALUES(?,?,?,?,'success',?,?,?,?,NULL)""",
             (
                 run_id,
-                SUPERMARKET_ID,
+                supermarket_id,
                 location_id,
                 observed_at,
                 sku_count,
@@ -265,7 +269,7 @@ def _mutation_steps(
                 source_item_id=excluded.source_item_id,reference=excluded.reference,
                 ean=excluded.ean,name=excluded.name,brand=excluded.brand,
                 presentation=excluded.presentation,category=excluded.category""",
-            (SUPERMARKET_ID,),
+            (supermarket_id,),
         ),
         (
             "close_history",
@@ -278,7 +282,7 @@ def _mutation_steps(
                     OR ph.reported_regular_price_minor IS NOT i.reported_regular_price_minor
                     OR ph.is_promotion IS NOT i.is_promotion
                     OR ph.availability IS NOT i.availability))""",
-            (observed_at, SUPERMARKET_ID, location_id),
+            (observed_at, supermarket_id, location_id),
         ),
         (
             "open_history",
@@ -294,12 +298,12 @@ def _mutation_steps(
                   WHERE ph.product_id=p.product_id AND ph.supermarket_id=?
                     AND ph.location_id=? AND ph.valid_to_utc IS NULL)""",
             (
-                SUPERMARKET_ID,
+                supermarket_id,
                 location_id,
                 observed_at,
                 run_id,
-                SUPERMARKET_ID,
-                SUPERMARKET_ID,
+                supermarket_id,
+                supermarket_id,
                 location_id,
             ),
         ),
@@ -310,7 +314,7 @@ def _mutation_steps(
                  AND p.source_key_type=i.source_key_type AND p.source_key=i.source_key
                 JOIN price_history ph ON ph.product_id=p.product_id
                  AND ph.supermarket_id=? AND ph.location_id=? AND ph.valid_to_utc IS NULL""",
-            (sku_count, SUPERMARKET_ID, SUPERMARKET_ID, location_id),
+            (sku_count, supermarket_id, supermarket_id, location_id),
         ),
         (
             "guard_duplicates",
@@ -318,7 +322,7 @@ def _mutation_steps(
                 SELECT 1 FROM price_history WHERE supermarket_id=? AND location_id=?
                  AND valid_to_utc IS NULL GROUP BY product_id HAVING COUNT(*)>1)
                 THEN 1 ELSE 0 END""",
-            (SUPERMARKET_ID, location_id),
+            (supermarket_id, location_id),
         ),
         (
             "guard_run",
@@ -328,6 +332,19 @@ def _mutation_steps(
         ),
         ("commit", "COMMIT", ()),
     ]
+
+    if supermarket_id == "colonial":
+        begin = next(i for i, step in enumerate(steps) if step[0] == "begin")
+        steps[begin + 1:begin + 1] = [
+            ("register_supermarket", "INSERT OR IGNORE INTO supermarkets VALUES('colonial','Supermercados Colonial','HN')", ()),
+            ("register_location", "INSERT OR IGNORE INTO locations VALUES('colonial_sps','colonial','San Pedro Sula','HN')", ()),
+            ("guard_registered_scope", """INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=1 THEN 0 ELSE 1 END
+                FROM locations l JOIN supermarkets s ON s.supermarket_id=l.supermarket_id
+                WHERE l.location_id='colonial_sps' AND l.supermarket_id='colonial'
+                  AND l.city_name='San Pedro Sula' AND l.country_code='HN'
+                  AND s.name='Supermercados Colonial' AND s.country_code='HN'""", ()),
+        ]
+    return steps
 
 
 def _batch_request(steps: list[tuple[str, str, tuple[object, ...]]]) -> dict[str, Any]:
@@ -414,8 +431,9 @@ def persist_snapshot(
     auth_token: str,
     run_id: str,
     source_artifact_id: str | None = None,
+    supermarket_id: str = SUPERMARKET_ID,
 ) -> dict[str, object]:
-    snapshot = validate_snapshot_bytes(raw)
+    snapshot = validate_snapshot_bytes(raw, supermarket_id=supermarket_id)
     if not run_id.strip():
         raise SnapshotError("run_id_missing")
     if not auth_token.strip():
@@ -423,7 +441,7 @@ def persist_snapshot(
     digest = hashlib.sha256(raw).hexdigest()
     location_id = str(snapshot["location_id"])
     previous = _preflight(
-        database_url, auth_token, location_id=location_id, run_id=run_id
+        database_url, auth_token, location_id=location_id, run_id=run_id, supermarket_id=supermarket_id
     )
     if previous is not None:
         if (
@@ -452,6 +470,7 @@ def persist_snapshot(
         catalog_count=int(snapshot["catalog_products_reported"]),
         artifact_id=source_artifact_id,
         digest=digest,
+        supermarket_id=supermarket_id,
     )
     results = _run_batch(database_url, auth_token, steps)
     opened = _affected(results, steps, "open_history")
@@ -471,6 +490,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("snapshot_json", type=Path)
     parser.add_argument("--run-id", required=True)
+    parser.add_argument("--supermarket", choices=(SUPERMARKET_ID, "colonial"), default=SUPERMARKET_ID)
     parser.add_argument("--source-artifact-id")
     args = parser.parse_args()
     url = os.environ.get("TURSO_DATABASE_URL", "")
@@ -484,6 +504,7 @@ def main() -> None:
             auth_token=token,
             run_id=args.run_id,
             source_artifact_id=args.source_artifact_id,
+            supermarket_id=args.supermarket,
         )
     except SnapshotError as exc:
         raise SystemExit(str(exc)) from exc

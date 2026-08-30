@@ -1,0 +1,42 @@
+{
+  "evidence_level": "OFFLINE_SQL_NOT_TURSO",
+  "apply": {
+    "run_id": "colonial-a-offline",
+    "location_id": "colonial_sps",
+    "source_json_sha256": "2f7861ff6decd0f7e95a82c321d71e1cd7fe2e6440b6794bbe94c6457b41e2fd",
+    "replayed": false,
+    "products_processed": 9205,
+    "history_opened": 9205,
+    "history_closed": 0,
+    "history_unchanged": 0
+  },
+  "counts": {
+    "products": 18714,
+    "price_history": 28171,
+    "scrape_runs": 3,
+    "supermarkets": 2,
+    "locations": 3
+  },
+  "la_colonia_unchanged": true,
+  "replay_unchanged": true,
+  "snapshot_sha256": "2f7861ff6decd0f7e95a82c321d71e1cd7fe2e6440b6794bbe94c6457b41e2fd",
+  "integrity": {
+    "supermarkets": 2,
+    "locations": 3,
+    "products": 18714,
+    "price_history": 28171,
+    "scrape_runs": 3,
+    "open_price_history": 28171,
+    "current_availability": {
+      "la_colonia_sps": {
+        "in_stock": 7091,
+        "out_of_stock": 2380
+      },
+      "la_colonia_tgu": {
+        "in_stock": 7820,
+        "out_of_stock": 1675
+      }
+    },
+    "sqlite_integrity": "ok"
+  }
+}

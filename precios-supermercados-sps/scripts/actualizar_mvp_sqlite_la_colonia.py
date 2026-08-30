@@ -19,6 +19,7 @@ from generar_mvp_sqlite_la_colonia import create_schema  # noqa: E402
 
 SUPERMARKET_ID = "la_colonia"
 LOCATIONS = {"la_colonia_sps": "San Pedro Sula", "la_colonia_tgu": "Tegucigalpa"}
+COLONIAL_LOCATIONS = {"colonial_sps": "San Pedro Sula"}
 STATE_COLUMNS = ("current_price_minor", "reported_regular_price_minor", "is_promotion", "availability")
 PRODUCT_KEYS = {
     "availability", "brand", "category", "current_price", "ean", "is_promotion",
@@ -57,13 +58,16 @@ def _utc(value: object) -> datetime:
         raise SnapshotError("snapshot_observed_at_invalid") from exc
 
 
-def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
+def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID) -> dict[str, Any]:
+    if supermarket_id not in (SUPERMARKET_ID, "colonial"):
+        raise SnapshotError("snapshot_supermarket_invalid")
+    locations = LOCATIONS if supermarket_id == SUPERMARKET_ID else COLONIAL_LOCATIONS
     try:
         data = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise SnapshotError("snapshot_json_invalid") from exc
     expected = {
-        "result": "success", "supermarket_id": SUPERMARKET_ID,
+        "result": "success", "supermarket_id": supermarket_id,
         "catalog_complete": True, "validation_passed": True,
         "location_verified_same_run": True,
     }
@@ -73,7 +77,7 @@ def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
         if data.get(key) != value:
             raise SnapshotError(f"snapshot_metadata_invalid:{key}")
     location_id = data.get("location_id")
-    if location_id not in LOCATIONS or data.get("city") != LOCATIONS[location_id]:
+    if location_id not in locations or data.get("city") != locations[location_id]:
         raise SnapshotError("snapshot_location_invalid")
     _utc(data.get("observed_at_utc"))
 
@@ -110,6 +114,20 @@ def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
         or len(source_products) != reported
     ):
         raise SnapshotError("snapshot_product_count_mismatch")
+    if supermarket_id == "colonial":
+        if (any(data.get(k) is not True for k in ("catalog_complete", "validation_passed", "location_verified_same_run"))
+                or data.get("currency") != "HNL"
+                or data.get("scope") != "public_ecommerce_sps_not_physical_branch_inventory"
+                or any(type(data.get(k)) is not int or data[k] != reported for k in ("membership_count", "html_cards_count"))):
+            raise SnapshotError("colonial_evidence_invalid")
+        for row in rows:
+            if (row["source_key_type"] != "item_id" or row["source_key"] != row["item_id"]
+                    or any(not isinstance(row[k], str) or not row[k].isdigit() or int(row[k]) <= 0 for k in ("product_id", "item_id"))):
+                raise SnapshotError("colonial_identity_invalid")
+        counts = {state: sum(row["availability"] == state for row in rows)
+                  for state in {row["availability"] for row in rows}}
+        if data.get("availability_counts") != counts:
+            raise SnapshotError("colonial_availability_counts_invalid")
     return data
 
 
