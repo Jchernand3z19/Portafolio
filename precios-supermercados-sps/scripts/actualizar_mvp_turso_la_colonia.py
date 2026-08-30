@@ -169,6 +169,8 @@ def _mutation_steps(
 ) -> list[tuple[str, str, tuple[object, ...]]]:
     # Preparar el snapshot en TEMP antes de abrir la transacción persistente evita
     # consumir la ventana transaccional mientras SQLite expande ~9.5k filas JSON.
+    # El índice de identidad evita un scan completo de incoming por cada periodo
+    # en close_history, incluso cuando no hay cambios comerciales.
     return [
         (
             "incoming_table",
@@ -178,7 +180,8 @@ def _mutation_steps(
                 reference TEXT, ean TEXT, name TEXT NOT NULL, brand TEXT,
                 presentation TEXT, category TEXT, current_price_minor INTEGER NOT NULL,
                 reported_regular_price_minor INTEGER, is_promotion INTEGER NOT NULL,
-                availability TEXT NOT NULL) STRICT""",
+                availability TEXT NOT NULL,
+                UNIQUE(source_key_type, source_key)) STRICT""",
             (),
         ),
         (

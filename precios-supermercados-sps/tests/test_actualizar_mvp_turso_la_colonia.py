@@ -191,3 +191,46 @@ def test_exact_replay_short_circuits_remote_mutation(monkeypatch: pytest.MonkeyP
         auth_token="token", run_id="run-2",
     )
     assert result["replayed"] is True
+
+
+def test_unchanged_catalog_history_check_has_bounded_sql_work(tmp_path: Path) -> None:
+    """No volver a recorrer todo incoming por cada periodo sin cambios (N²)."""
+    path = database(tmp_path / "mvp.db")
+    count = 512
+    rows = [product(f"sku-{i}", f"product-{i}", f"item-{i}") for i in range(count)]
+    initial = snapshot("2026-08-28T01:00:00Z", rows)
+    apply_remote_sql_locally(path, initial, run_id="run-1")
+    unchanged = snapshot("2026-08-28T02:00:00Z", rows)
+    snap = sqlite_updater.validate_snapshot_bytes(unchanged)
+    steps = turso_updater._mutation_steps(
+        turso_updater._normalised_json(snap),
+        location_id="la_colonia_sps", observed_at=snap["observed_at_utc"],
+        run_id="run-2", sku_count=count, catalog_count=count,
+        artifact_id=None, digest=hashlib.sha256(unchanged).hexdigest(),
+    )
+    instructions = 0
+
+    def budget() -> int:
+        nonlocal instructions
+        instructions += 100
+        return int(instructions > count * 100)
+
+    con = sqlite3.connect(path, isolation_level=None)
+    try:
+        for name, sql, args in steps:
+            if name == "close_history":
+                # Trabajo real de la VM; no depende de latencia del runner ni de
+                # nombres de índices en EXPLAIN. El scan correlacionado agota el límite.
+                con.set_progress_handler(budget, 100)
+            try:
+                con.execute(sql, args)
+            finally:
+                con.set_progress_handler(None, 0)
+        assert instructions > 0
+        assert con.execute("SELECT COUNT(*) FROM price_history").fetchone() == (count,)
+        assert con.execute("SELECT COUNT(*) FROM scrape_runs").fetchone() == (2,)
+        assert con.execute(
+            "SELECT COUNT(*) FROM price_history WHERE valid_to_utc IS NOT NULL"
+        ).fetchone() == (0,)
+    finally:
+        con.close()
