@@ -60,6 +60,13 @@ antiguo del selector: su timer de 1.8 s podía vencer antes del primer click.
 Se reprodujo offline y se cambió sólo el fixture para que el primer click siempre
 sea noop; se mantienen las aserciones de reintento y el código productivo intacto.
 
+Revisión adicional de convivencia: el verificador diario de La Colonia filtraba
+periodos abiertos de todas las cadenas y los comparaba con sólo SPS/TGU. Se acota
+esa consulta por `supermarket_id='la_colonia'` para que `colonial_sps` no provoque
+un falso fallo después de persistir. La prueba ejecuta el SQL extraído del YAML
+contra ambas cadenas: falla antes del filtro y pasa con él. Revisión de seguridad:
+sin nuevos triggers, permisos, secretos, acciones, requests ni workflow Colonial.
+
 Bloqueo reconfirmado: Turso plan Starter, 713.7 M / 500 M lecturas (143%), overages
 deshabilitados. Reset anunciado 31/8/2026 18:00 CST, después del vencimiento live
 (31/8 14:10:18 CST). No se cambió facturación ni se intentó sortear el bloqueo.

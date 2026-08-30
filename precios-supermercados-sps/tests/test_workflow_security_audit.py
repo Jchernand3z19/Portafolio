@@ -704,6 +704,33 @@ def test_ci_paths_cover_project_policy_and_every_sps_workflow():
     assert push["branches"] == ["main"]
 
 
+def test_la_colonia_daily_verifier_counts_only_its_locations_in_shared_database():
+    import ast
+    import sqlite3
+
+    workflow = load_workflow(WORKFLOW_DIR / MVP_UPDATE_WORKFLOW)
+    verification = next(step for job in workflow["jobs"].values() for step in job_steps(job)
+                        if step.get("name") == "Verificar commits exactos en Turso")
+    script = verification["run"].split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+    statements = [node for node in ast.walk(ast.parse(script))
+                  if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                  and node.func.id == "_stmt" and isinstance(node.args[0], ast.Constant)
+                  and str(node.args[0].value).startswith("SELECT location_id,COUNT(*)")]
+    assert len(statements) == 1
+    statement = statements[0]
+    args = ast.literal_eval(statement.args[1]) if len(statement.args) > 1 else ()
+    with sqlite3.connect(":memory:") as con:
+        con.execute("CREATE TABLE price_history(supermarket_id TEXT, location_id TEXT, valid_to_utc TEXT)")
+        con.executemany("INSERT INTO price_history VALUES(?,?,?)", [
+            ("la_colonia", "la_colonia_sps", None), ("la_colonia", "la_colonia_sps", None),
+            ("la_colonia", "la_colonia_tgu", None), ("la_colonia", "la_colonia_sps", "closed"),
+            ("colonial", "colonial_sps", None),
+        ])
+        assert con.execute(statement.args[0].value, args).fetchall() == [
+            ("la_colonia_sps", 2), ("la_colonia_tgu", 1),
+        ]
+
+
 @pytest.mark.parametrize("suffix", [".yml", ".yaml"])
 def test_renamed_sps_workflow_is_still_classified(tmp_path: Path, suffix: str):
     fake = tmp_path / f"backdoor{suffix}"
