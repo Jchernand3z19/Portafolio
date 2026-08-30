@@ -2,8 +2,8 @@
 """Ejecuta el catálogo operativo existente de La Colonia para Tegucigalpa.
 
 No duplica el scraper: adapta únicamente la ciudad/ubicación del runner SPS ya
-probado. Reintenta de forma acotada sólo errores GraphQL transitorios de páginas
-de producto y conserva fail-closed para cualquier otro fallo.
+probado. Reintenta de forma acotada sólo errores transitorios de páginas de
+producto y conserva fail-closed para cualquier otro fallo.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Callable
+
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -30,7 +32,7 @@ def _with_product_graphql_retry(
     fetch_page: Callable[..., int],
     **kwargs: Any,
 ) -> int:
-    """Reintenta sólo el envelope GraphQL transitorio observado en TGU."""
+    """Reintenta sólo fallos transitorios observados en productSearchV3 de TGU."""
 
     for attempt in range(MAX_GRAPHQL_RETRIES + 1):
         try:
@@ -40,6 +42,10 @@ def _with_product_graphql_retry(
                 exc.reason != "product_search_graphql_errors"
                 or attempt >= MAX_GRAPHQL_RETRIES
             ):
+                raise
+            time.sleep(GRAPHQL_RETRY_DELAY_SECONDS)
+        except PlaywrightTimeoutError:
+            if attempt >= MAX_GRAPHQL_RETRIES:
                 raise
             time.sleep(GRAPHQL_RETRY_DELAY_SECONDS)
     raise AssertionError("unreachable")
