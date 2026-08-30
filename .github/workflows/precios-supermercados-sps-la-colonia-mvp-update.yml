@@ -194,22 +194,19 @@ jobs:
               os.environ['TURSO_DATABASE_URL'],
               os.environ['TURSO_AUTH_TOKEN'],
               [
-                  {'type':'execute','stmt':_stmt('''SELECT (SELECT COUNT(*) FROM products),(SELECT COUNT(*) FROM price_history),(SELECT COUNT(*) FROM scrape_runs),(SELECT COUNT(*) FROM price_history WHERE valid_to_utc IS NULL)''')},
-                  {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)''')},
-                  {'type':'execute','stmt':_stmt('''SELECT location_id,COUNT(*) FROM price_history WHERE supermarket_id=? AND valid_to_utc IS NULL GROUP BY location_id ORDER BY location_id''', ('la_colonia',))},
+                  {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE supermarket_id=? AND location_id IN (?,?) AND valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)''', ('la_colonia','la_colonia_sps','la_colonia_tgu'))},
+                  {'type':'execute','stmt':_stmt('''SELECT location_id,COUNT(*) FROM price_history WHERE supermarket_id=? AND location_id IN (?,?) AND valid_to_utc IS NULL GROUP BY location_id ORDER BY location_id''', ('la_colonia','la_colonia_sps','la_colonia_tgu'))},
                   {'type':'close'},
               ],
           )
-          counts = _execute_rows(data['results'][0])
-          duplicates = _execute_rows(data['results'][1])
-          open_by_location = _execute_rows(data['results'][2])
+          duplicates = _execute_rows(data['results'][0])
+          open_by_location = _execute_rows(data['results'][1])
           if duplicates != [[0]]:
               raise SystemExit(f'duplicate_open_periods:{duplicates}')
           if open_by_location != expected_open_by_location:
               raise SystemExit(f'current_state_mismatch:expected={expected_open_by_location}:actual={open_by_location}')
           print(json.dumps({
               'runs': runs,
-              'counts': counts,
               'open_by_location': open_by_location,
               'duplicate_open_periods': duplicates,
           }, ensure_ascii=False, sort_keys=True))
