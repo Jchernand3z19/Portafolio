@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aplica snapshots completos de La Colonia o Colonial a las cinco tablas Turso."""
+"""Aplica snapshots completos por supermercado a las cinco tablas Turso."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from actualizar_mvp_sqlite_la_colonia import (  # noqa: E402
     LOCATIONS,
     COLONIAL_LOCATIONS,
+    WALMART_LOCATIONS,
     SUPERMARKET_ID,
     SnapshotError,
     _minor,
@@ -109,9 +110,9 @@ def _normalised_json(snapshot: dict[str, Any]) -> str:
             "brand": row["brand"],
             "presentation": row["presentation"],
             "category": row["category"],
-            "current_price_minor": _minor(row["current_price"], True),
+            "current_price_minor": _minor(row["current_price"], snapshot["supermarket_id"] != "walmart"),
             "reported_regular_price_minor": _minor(row["reported_regular_price"]),
-            "is_promotion": int(row["is_promotion"]),
+            "is_promotion": None if row["is_promotion"] is None else int(row["is_promotion"]),
             "availability": row["availability"],
         })
     return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
@@ -136,6 +137,8 @@ def _preflight(
             (run_id,),
         ),
     ]
+    if supermarket_id == "walmart":
+        queries.append(("SELECT name,sql FROM sqlite_master WHERE name IN ('locations','price_history','idx_locations_city_legacy') ORDER BY name", ()))
     data = _pipeline(
         url,
         token,
@@ -147,9 +150,13 @@ def _preflight(
         raise SnapshotError("turso_preflight_response_invalid")
     if {str(row[0]) for row in _execute_rows(results[0])} != EXPECTED_TABLES:
         raise SnapshotError("turso_schema_mismatch")
-    locations = LOCATIONS if supermarket_id == SUPERMARKET_ID else COLONIAL_LOCATIONS
+    locations = {SUPERMARKET_ID: LOCATIONS, "colonial": COLONIAL_LOCATIONS, "walmart": WALMART_LOCATIONS}[supermarket_id]
+    if supermarket_id == "walmart":
+        from migrar_mvp_walmart import schema_ready
+        if len(results) < 4 or not schema_ready(_execute_rows(results[3])):
+            raise SnapshotError("walmart_schema_migration_required")
     found = _execute_rows(results[1])
-    if found != [[supermarket_id, locations[location_id]]] and not (supermarket_id == "colonial" and not found):
+    if found != [[supermarket_id, locations[location_id]]] and not (supermarket_id in {"colonial", "walmart"} and not found):
         raise SnapshotError("turso_location_mismatch")
     rows = _execute_rows(results[2])
     if not rows:
@@ -181,8 +188,8 @@ def _mutation_steps(
                 source_key_type TEXT NOT NULL, source_key TEXT NOT NULL,
                 source_catalog_product_id TEXT NOT NULL, source_item_id TEXT NOT NULL,
                 reference TEXT, ean TEXT, name TEXT NOT NULL, brand TEXT,
-                presentation TEXT, category TEXT, current_price_minor INTEGER NOT NULL,
-                reported_regular_price_minor INTEGER, is_promotion INTEGER NOT NULL,
+                presentation TEXT, category TEXT, current_price_minor INTEGER,
+                reported_regular_price_minor INTEGER, is_promotion INTEGER,
                 availability TEXT NOT NULL,
                 UNIQUE(source_key_type, source_key)) STRICT""",
             (),
@@ -251,9 +258,9 @@ def _mutation_steps(
                 had_current INTEGER NOT NULL CHECK(had_current IN (0,1)),
                 changed INTEGER NOT NULL CHECK(changed IN (0,1)),
                 previous_valid_from_utc TEXT,
-                current_price_minor INTEGER NOT NULL,
+                current_price_minor INTEGER,
                 reported_regular_price_minor INTEGER,
-                is_promotion INTEGER NOT NULL,
+                is_promotion INTEGER,
                 availability TEXT NOT NULL) STRICT""",
             (),
         ),
@@ -352,16 +359,18 @@ def _mutation_steps(
         ("commit", "COMMIT", ()),
     ]
 
-    if supermarket_id == "colonial":
+    if supermarket_id in {"colonial", "walmart"}:
+        name = "Supermercados Colonial" if supermarket_id == "colonial" else "Walmart Honduras"
+        city = (COLONIAL_LOCATIONS if supermarket_id == "colonial" else WALMART_LOCATIONS)[location_id]
         begin = next(i for i, step in enumerate(steps) if step[0] == "begin")
         steps[begin + 1:begin + 1] = [
-            ("register_supermarket", "INSERT OR IGNORE INTO supermarkets VALUES('colonial','Supermercados Colonial','HN')", ()),
-            ("register_location", "INSERT OR IGNORE INTO locations VALUES('colonial_sps','colonial','San Pedro Sula','HN')", ()),
+            ("register_supermarket", "INSERT OR IGNORE INTO supermarkets VALUES(?,?,'HN')", (supermarket_id, name)),
+            ("register_location", "INSERT OR IGNORE INTO locations VALUES(?,?,?,'HN')", (location_id, supermarket_id, city)),
             ("guard_registered_scope", """INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=1 THEN 0 ELSE 1 END
                 FROM locations l JOIN supermarkets s ON s.supermarket_id=l.supermarket_id
-                WHERE l.location_id='colonial_sps' AND l.supermarket_id='colonial'
-                  AND l.city_name='San Pedro Sula' AND l.country_code='HN'
-                  AND s.name='Supermercados Colonial' AND s.country_code='HN'""", ()),
+                WHERE l.location_id=? AND l.supermarket_id=?
+                  AND l.city_name=? AND l.country_code='HN'
+                  AND s.name=? AND s.country_code='HN'""", (location_id, supermarket_id, city, name)),
         ]
     return steps
 
@@ -509,7 +518,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("snapshot_json", type=Path)
     parser.add_argument("--run-id", required=True)
-    parser.add_argument("--supermarket", choices=(SUPERMARKET_ID, "colonial"), default=SUPERMARKET_ID)
+    parser.add_argument("--supermarket", choices=(SUPERMARKET_ID, "colonial", "walmart"), default=SUPERMARKET_ID)
     parser.add_argument("--source-artifact-id")
     args = parser.parse_args()
     url = os.environ.get("TURSO_DATABASE_URL", "")

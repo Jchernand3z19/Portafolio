@@ -1,16 +1,23 @@
-# Walmart Honduras — auditoría, probe y frontera full
+# Walmart Honduras — auditoría y avance del full
 
-Actualización: 2026-08-31 UTC. Fuente y contexto: **GO**; catálogo/persistencia:
-**CONDITIONAL**, todavía no aceptados. El primer probe fue autorizado por 24 horas
-y ejecutado: 20 GET, 19 éxitos y un 400 de límite, cero retries, 436.847 segundos.
-Se demostraron SPS y dos TGU con diferencia regular/promoción reproducible.
+Actualización: 2026-08-31 UTC. **GO técnico: tres catálogos aceptados y SQL productivo
+validado offline.** El [reporte full](../../reports/walmart/2026-08-31-full/README.md)
+sustituye la frontera anterior: autorización propia de 24 horas desde 00:48:01 UTC,
+514 GET/0 retries/concurrencia 1/1,327.921 s, dentro de 1,000 GET/45 minutos.
+SPS 13,656 productos; FFAA 14,083; El Sauce 13,989. Se conservan ambos TGU por la
+diferencia comercial demostrada antes del full. RAW y tres snapshots reproducibles,
+41,752 observaciones SKU, 1,597 ofertas sin precio conservadas como NULL.
 
-La frontera actual es autorización **full**, no autorización del primer probe.
-El [reporte reproducible](../../reports/walmart/2026-08-31-probe/README.md) incluye
-RAW, 41 SKU TGU compartidos, control de región, cuatro ofertas agotadas sin precio,
-particiones y preflight de hasta 1,000 GET/20 retries/concurrencia 1/45 minutos.
-El contrato persistible para ofertas sin precio aún requiere adaptación y pruebas;
-no se ha modificado SQL ni ejecutado Turso. Esta documentación no concede permiso.
+El updater existente admite Walmart después de una migración puntual de dos
+restricciones reales: dos TGU por ciudad y ofertas agotadas sin precio/promoción.
+La migración y el SQL productivo pasaron offline junto a La Colonia y Colonial,
+sin alterar sus filas. Cinco tablas, delta único, costo lineal e independiente de
+histórico cerrado. No SQL Turso, billing, segunda observación ni workflow Walmart.
+[Estado y frontera de primera carga](../PROJECT_STATE.md).
+
+Las secciones siguientes conservan la **auditoría y preflight históricos anteriores
+al full**. Sus menciones a autorización, catálogo o SQL pendientes describen ese
+momento, no el estado actual ni permiso para repetir el adquirente archivado.
 
 ## Auditoría inicial contra GitHub — 2026-08-30
 

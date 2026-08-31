@@ -1,0 +1,116 @@
+{
+  "scope": "Walmart SPS + TGU FFAA + TGU El Sauce; first full observation only",
+  "authorization": {
+    "authorized_from": "2026-08-31T00:48:01Z",
+    "authorized_until": "2026-09-01T00:48:01Z",
+    "max_requests": 1000,
+    "max_retries": 20,
+    "max_seconds": 2700,
+    "concurrency": 1,
+    "retries": 0,
+    "cache_hits": 0,
+    "stopped": false,
+    "started_at_utc": "2026-08-31T00:50:13.656091+00:00",
+    "elapsed_seconds": 1327.921,
+    "closed": true,
+    "resumptions": 1
+  },
+  "requests": 514,
+  "raw_bytes": 447930150,
+  "status_counts": {
+    "200": 513,
+    "400": 1
+  },
+  "first_request_at": "2026-08-31T00:50:13.656516+00:00",
+  "last_request_at": "2026-08-31T01:12:21.513882+00:00",
+  "snapshots": [
+    {
+      "location_id": "walmart_sps",
+      "seller_id": "walmarthnwm947",
+      "city": "San Pedro Sula",
+      "catalog_products_reported": 13656,
+      "skus_extracted": 13664,
+      "skus_with_price": 13386,
+      "availability_counts": {
+        "in_stock": 13162,
+        "out_of_stock": 502
+      },
+      "membership_sha256": "9768d5b8f68f6b68394163487a9372da798f282bd085ccf2bc343ebd105f20d1",
+      "observation_started_at_utc": "2026-08-31T00:52:36Z",
+      "observed_at_utc": "2026-08-31T01:11:28Z",
+      "file": "walmart_sps.json.gz",
+      "json_sha256": "d4cf99b9745779eaf86a448ce5411b0ba1df45450879cbe3e4a7a6139dd72753",
+      "accepted_pages": 159
+    },
+    {
+      "location_id": "walmart_tgu_el_sauce",
+      "seller_id": "walmarthnwm4410",
+      "city": "Tegucigalpa",
+      "catalog_products_reported": 13989,
+      "skus_extracted": 13997,
+      "skus_with_price": 13663,
+      "availability_counts": {
+        "in_stock": 13322,
+        "out_of_stock": 675
+      },
+      "membership_sha256": "9b4fd65dbb7b12dfb72219c25c70aef7275a2c0b54699a1fcb0c8c64d0279439",
+      "observation_started_at_utc": "2026-08-31T00:58:44Z",
+      "observed_at_utc": "2026-08-31T01:04:45Z",
+      "file": "walmart_tgu_el_sauce.json.gz",
+      "json_sha256": "d9352cd3d137d78455cb566a4deadbf37563b81628820df3a75d11c7e43c3232",
+      "accepted_pages": 161
+    },
+    {
+      "location_id": "walmart_tgu_ffaa",
+      "seller_id": "walmarthnwm4041",
+      "city": "Tegucigalpa",
+      "catalog_products_reported": 14083,
+      "skus_extracted": 14091,
+      "skus_with_price": 13106,
+      "availability_counts": {
+        "in_stock": 13106,
+        "out_of_stock": 985
+      },
+      "membership_sha256": "ad3eb568fff369ddbdfeef01dd10dc8f7fc328892a81900e53651bbc02f43e57",
+      "observation_started_at_utc": "2026-08-31T00:55:48Z",
+      "observed_at_utc": "2026-08-31T00:58:43Z",
+      "file": "walmart_tgu_ffaa.json.gz",
+      "json_sha256": "f8dccd164fb3838fa27d55274cbbd81ffa21174270e30290455d668fa6cd47c3",
+      "accepted_pages": 158
+    }
+  ],
+  "artifacts": {
+    "raw-capture.tar.gz": {
+      "bytes": 50517915,
+      "sha256": "704bee833cc1cf6d3d3f35e00910a50c3da761264a4f0af0072004d821330ed7"
+    },
+    "walmart_sps.json.gz": {
+      "bytes": 861684,
+      "sha256": "1f6b6a7808fb95c5c77a4a310f785729d4591bd8f467dcfcc7af2b21fcca952a"
+    },
+    "walmart_tgu_el_sauce.json.gz": {
+      "bytes": 875304,
+      "sha256": "f1dd79b450351267792f2748d0bc96835594936c826cc31bd713328ce41e2da9"
+    },
+    "walmart_tgu_ffaa.json.gz": {
+      "bytes": 874714,
+      "sha256": "203bb3d267bb7cca0f486b6fcbd6aa850bf266144bc9a4c771301f4d75f709b8"
+    }
+  },
+  "metrics": {
+    "product_observations": 41728,
+    "sku_observations": 41752,
+    "distinct_catalog_products": 16024,
+    "distinct_skus": 16032,
+    "product_observations_per_request": 81.1828793774319,
+    "requests_per_product_observation": 0.01231786809815951,
+    "mean_requests_per_complete_catalog": 171.33333333333334,
+    "duplicate_requests_avoided": 0,
+    "requests_by_scope": {
+      "store_configuration": 1,
+      "walmarthnwm947": 185,
+      "walmarthnwm4041": 162,
+      "walmarthnwm4410": 166
+    }
+  }
+}

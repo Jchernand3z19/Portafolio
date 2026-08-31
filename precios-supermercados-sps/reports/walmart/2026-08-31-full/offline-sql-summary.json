@@ -1,0 +1,548 @@
+{
+  "evidence_level": "OFFLINE_PRODUCTIVE_SQL_NOT_TURSO_NOT_SECOND_OBSERVATION",
+  "source_database_sha256": "094532be3c0551a30ffdbc91a835b672721a6912bdfe835546edd3992c9f9358",
+  "baseline_market_sha256": {
+    "la_colonia": "5d23ae608c5be9eb3bc526f71e14ebe52364eeb5df2d4f22507eb38c53926f09",
+    "colonial": "62245309e612759f1a6a54c8a7e1128499c7fca50ae37f84cf12961781aa55fe"
+  },
+  "migration": {
+    "migrated": true,
+    "schema_fingerprint": "f09ea1cf63f3de159c87872f842babcc42e5d14f8e2c33067782dd272c1a36f4"
+  },
+  "apply": [
+    {
+      "run_id": "walmart_sps.json-offline",
+      "location_id": "walmart_sps",
+      "source_json_sha256": "d4cf99b9745779eaf86a448ce5411b0ba1df45450879cbe3e4a7a6139dd72753",
+      "replayed": false,
+      "products_processed": 13664,
+      "history_opened": 13664,
+      "history_closed": 0,
+      "history_unchanged": 0
+    },
+    {
+      "run_id": "walmart_tgu_el_sauce.json-offline",
+      "location_id": "walmart_tgu_el_sauce",
+      "source_json_sha256": "d9352cd3d137d78455cb566a4deadbf37563b81628820df3a75d11c7e43c3232",
+      "replayed": false,
+      "products_processed": 13997,
+      "history_opened": 13997,
+      "history_closed": 0,
+      "history_unchanged": 0
+    },
+    {
+      "run_id": "walmart_tgu_ffaa.json-offline",
+      "location_id": "walmart_tgu_ffaa",
+      "source_json_sha256": "f8dccd164fb3838fa27d55274cbbd81ffa21174270e30290455d668fa6cd47c3",
+      "replayed": false,
+      "products_processed": 14091,
+      "history_opened": 14091,
+      "history_closed": 0,
+      "history_unchanged": 0
+    }
+  ],
+  "exact_replay": [
+    {
+      "run_id": "walmart_sps.json-offline",
+      "location_id": "walmart_sps",
+      "source_json_sha256": "d4cf99b9745779eaf86a448ce5411b0ba1df45450879cbe3e4a7a6139dd72753",
+      "replayed": true,
+      "products_processed": 0,
+      "history_opened": 0,
+      "history_closed": 0,
+      "history_unchanged": 0
+    },
+    {
+      "run_id": "walmart_tgu_el_sauce.json-offline",
+      "location_id": "walmart_tgu_el_sauce",
+      "source_json_sha256": "d9352cd3d137d78455cb566a4deadbf37563b81628820df3a75d11c7e43c3232",
+      "replayed": true,
+      "products_processed": 0,
+      "history_opened": 0,
+      "history_closed": 0,
+      "history_unchanged": 0
+    },
+    {
+      "run_id": "walmart_tgu_ffaa.json-offline",
+      "location_id": "walmart_tgu_ffaa",
+      "source_json_sha256": "f8dccd164fb3838fa27d55274cbbd81ffa21174270e30290455d668fa6cd47c3",
+      "replayed": true,
+      "products_processed": 0,
+      "history_opened": 0,
+      "history_closed": 0,
+      "history_unchanged": 0
+    }
+  ],
+  "prior_chains_unchanged": true,
+  "every_source_state_matches_database": true,
+  "counts": {
+    "locations": 6,
+    "price_history": 69923,
+    "products": 34746,
+    "scrape_runs": 6,
+    "supermarkets": 3
+  },
+  "locations": [
+    {
+      "location_id": "colonial_sps",
+      "current_rows": 9205,
+      "without_price": 0,
+      "in_stock": 7726,
+      "out_of_stock": 1473
+    },
+    {
+      "location_id": "la_colonia_sps",
+      "current_rows": 9471,
+      "without_price": 0,
+      "in_stock": 7091,
+      "out_of_stock": 2380
+    },
+    {
+      "location_id": "la_colonia_tgu",
+      "current_rows": 9495,
+      "without_price": 0,
+      "in_stock": 7820,
+      "out_of_stock": 1675
+    },
+    {
+      "location_id": "walmart_sps",
+      "current_rows": 13664,
+      "without_price": 278,
+      "in_stock": 13162,
+      "out_of_stock": 502
+    },
+    {
+      "location_id": "walmart_tgu_el_sauce",
+      "current_rows": 13997,
+      "without_price": 334,
+      "in_stock": 13322,
+      "out_of_stock": 675
+    },
+    {
+      "location_id": "walmart_tgu_ffaa",
+      "current_rows": 14091,
+      "without_price": 985,
+      "in_stock": 13106,
+      "out_of_stock": 985
+    }
+  ],
+  "integrity": "ok",
+  "foreign_key_errors": [],
+  "duplicate_current_periods": 0,
+  "runs": [
+    {
+      "run_id": "colonial-a-offline",
+      "source_json_sha256": "2f7861ff6decd0f7e95a82c321d71e1cd7fe2e6440b6794bbe94c6457b41e2fd"
+    },
+    {
+      "run_id": "existing-lc-sps",
+      "source_json_sha256": "ccf36e969d4c33973125690715d7a12c6c20300cd26d7bcad68a3e47095232e6"
+    },
+    {
+      "run_id": "existing-lc-tgu",
+      "source_json_sha256": "d8c583d112fa3874ba56f44c186fee774b5d32abf0ef51acbbb15c6e606b8a2a"
+    },
+    {
+      "run_id": "walmart_sps.json-offline",
+      "source_json_sha256": "d4cf99b9745779eaf86a448ce5411b0ba1df45450879cbe3e4a7a6139dd72753"
+    },
+    {
+      "run_id": "walmart_tgu_el_sauce.json-offline",
+      "source_json_sha256": "d9352cd3d137d78455cb566a4deadbf37563b81628820df3a75d11c7e43c3232"
+    },
+    {
+      "run_id": "walmart_tgu_ffaa.json-offline",
+      "source_json_sha256": "f8dccd164fb3838fa27d55274cbbd81ffa21174270e30290455d668fa6cd47c3"
+    }
+  ],
+  "synthetic_cost": {
+    "128": {
+      "vm_instructions": 31200,
+      "changes": {
+        "upsert_products": 0,
+        "insert_run": 1,
+        "close_history": 0,
+        "open_history": 0
+      },
+      "plans": {
+        "delta_load": [
+          [
+            7,
+            0,
+            54,
+            "SEARCH p USING COVERING INDEX sqlite_autoindex_products_1 (supermarket_id=?)"
+          ],
+          [
+            13,
+            0,
+            46,
+            "SEARCH i USING INDEX sqlite_autoindex_incoming_1 (source_key_type=? AND source_key=?)"
+          ],
+          [
+            19,
+            0,
+            60,
+            "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?) LEFT-JOIN"
+          ]
+        ],
+        "guard_out_of_order": [
+          [
+            2,
+            0,
+            0,
+            "SCAN CONSTANT ROW"
+          ],
+          [
+            5,
+            0,
+            0,
+            "SCALAR SUBQUERY 1"
+          ],
+          [
+            9,
+            5,
+            216,
+            "SCAN delta"
+          ]
+        ],
+        "close_history": [
+          [
+            5,
+            0,
+            61,
+            "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?)"
+          ],
+          [
+            11,
+            0,
+            0,
+            "LIST SUBQUERY 1"
+          ],
+          [
+            13,
+            11,
+            216,
+            "SCAN delta"
+          ]
+        ],
+        "guard_current": [
+          [
+            2,
+            0,
+            0,
+            "SCAN CONSTANT ROW"
+          ],
+          [
+            5,
+            0,
+            0,
+            "SCALAR SUBQUERY 1"
+          ],
+          [
+            11,
+            5,
+            216,
+            "SCAN d"
+          ],
+          [
+            13,
+            5,
+            60,
+            "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?) LEFT-JOIN"
+          ]
+        ]
+      }
+    },
+    "256": {
+      "vm_instructions": 62400,
+      "changes": {
+        "upsert_products": 0,
+        "insert_run": 1,
+        "close_history": 0,
+        "open_history": 0
+      },
+      "plans": {
+        "delta_load": [
+          [
+            7,
+            0,
+            54,
+            "SEARCH p USING COVERING INDEX sqlite_autoindex_products_1 (supermarket_id=?)"
+          ],
+          [
+            13,
+            0,
+            46,
+            "SEARCH i USING INDEX sqlite_autoindex_incoming_1 (source_key_type=? AND source_key=?)"
+          ],
+          [
+            19,
+            0,
+            60,
+            "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?) LEFT-JOIN"
+          ]
+        ],
+        "guard_out_of_order": [
+          [
+            2,
+            0,
+            0,
+            "SCAN CONSTANT ROW"
+          ],
+          [
+            5,
+            0,
+            0,
+            "SCALAR SUBQUERY 1"
+          ],
+          [
+            9,
+            5,
+            216,
+            "SCAN delta"
+          ]
+        ],
+        "close_history": [
+          [
+            5,
+            0,
+            61,
+            "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?)"
+          ],
+          [
+            11,
+            0,
+            0,
+            "LIST SUBQUERY 1"
+          ],
+          [
+            13,
+            11,
+            216,
+            "SCAN delta"
+          ]
+        ],
+        "guard_current": [
+          [
+            2,
+            0,
+            0,
+            "SCAN CONSTANT ROW"
+          ],
+          [
+            5,
+            0,
+            0,
+            "SCALAR SUBQUERY 1"
+          ],
+          [
+            11,
+            5,
+            216,
+            "SCAN d"
+          ],
+          [
+            13,
+            5,
+            60,
+            "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?) LEFT-JOIN"
+          ]
+        ]
+      }
+    },
+    "512": {
+      "vm_instructions": 125300,
+      "changes": {
+        "upsert_products": 0,
+        "insert_run": 1,
+        "close_history": 0,
+        "open_history": 0
+      },
+      "plans": {
+        "delta_load": [
+          [
+            7,
+            0,
+            54,
+            "SEARCH p USING COVERING INDEX sqlite_autoindex_products_1 (supermarket_id=?)"
+          ],
+          [
+            13,
+            0,
+            46,
+            "SEARCH i USING INDEX sqlite_autoindex_incoming_1 (source_key_type=? AND source_key=?)"
+          ],
+          [
+            19,
+            0,
+            60,
+            "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?) LEFT-JOIN"
+          ]
+        ],
+        "guard_out_of_order": [
+          [
+            2,
+            0,
+            0,
+            "SCAN CONSTANT ROW"
+          ],
+          [
+            5,
+            0,
+            0,
+            "SCALAR SUBQUERY 1"
+          ],
+          [
+            9,
+            5,
+            216,
+            "SCAN delta"
+          ]
+        ],
+        "close_history": [
+          [
+            5,
+            0,
+            61,
+            "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?)"
+          ],
+          [
+            11,
+            0,
+            0,
+            "LIST SUBQUERY 1"
+          ],
+          [
+            13,
+            11,
+            216,
+            "SCAN delta"
+          ]
+        ],
+        "guard_current": [
+          [
+            2,
+            0,
+            0,
+            "SCAN CONSTANT ROW"
+          ],
+          [
+            5,
+            0,
+            0,
+            "SCALAR SUBQUERY 1"
+          ],
+          [
+            11,
+            5,
+            216,
+            "SCAN d"
+          ],
+          [
+            13,
+            5,
+            60,
+            "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?) LEFT-JOIN"
+          ]
+        ]
+      }
+    }
+  },
+  "synthetic_cost_128_with_10000_closed_periods": {
+    "vm_instructions": 31200,
+    "changes": {
+      "upsert_products": 0,
+      "insert_run": 1,
+      "close_history": 0,
+      "open_history": 0
+    },
+    "plans": {
+      "delta_load": [
+        [
+          7,
+          0,
+          54,
+          "SEARCH p USING COVERING INDEX sqlite_autoindex_products_1 (supermarket_id=?)"
+        ],
+        [
+          13,
+          0,
+          46,
+          "SEARCH i USING INDEX sqlite_autoindex_incoming_1 (source_key_type=? AND source_key=?)"
+        ],
+        [
+          19,
+          0,
+          60,
+          "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?) LEFT-JOIN"
+        ]
+      ],
+      "guard_out_of_order": [
+        [
+          2,
+          0,
+          0,
+          "SCAN CONSTANT ROW"
+        ],
+        [
+          5,
+          0,
+          0,
+          "SCALAR SUBQUERY 1"
+        ],
+        [
+          9,
+          5,
+          216,
+          "SCAN delta"
+        ]
+      ],
+      "close_history": [
+        [
+          5,
+          0,
+          61,
+          "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?)"
+        ],
+        [
+          11,
+          0,
+          0,
+          "LIST SUBQUERY 1"
+        ],
+        [
+          13,
+          11,
+          216,
+          "SCAN delta"
+        ]
+      ],
+      "guard_current": [
+        [
+          2,
+          0,
+          0,
+          "SCAN CONSTANT ROW"
+        ],
+        [
+          5,
+          0,
+          0,
+          "SCALAR SUBQUERY 1"
+        ],
+        [
+          11,
+          5,
+          216,
+          "SCAN d"
+        ],
+        [
+          13,
+          5,
+          60,
+          "SEARCH ph USING INDEX idx_price_history_current (location_id=? AND product_id=?) LEFT-JOIN"
+        ]
+      ]
+    }
+  }
+}
