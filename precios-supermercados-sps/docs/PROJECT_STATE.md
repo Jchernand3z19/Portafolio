@@ -31,26 +31,52 @@ No ampliar La Colonia ni construir visualización. Su autorización recurrente n
 cubre Colonial ni Walmart. Ver la
 [fuente, catálogo y frontera operativa Colonial](supermercados/colonial-auditoria-preflight.md).
 
-## Walmart — auditoría y primera frontera live
+## Walmart — fuente y contextos demostrados; full pendiente de autorización
 
-Auditoría sobre `e8da4737476c8166728d320c87c2c471679d0878`: PR #351 fusionado,
-CI de main verde y cero PRs abiertos al comenzar. No existe implementación,
-fixture, snapshot, configuración ni workflow Walmart en el árbol auditado.
+Auditoría inicial sobre `e8da4737476c8166728d320c87c2c471679d0878`: PR #351 fusionado,
+CI de main verde y cero PRs abiertos al comenzar. La auditoría se entregó en PR #352;
+antes de este probe se verificó main `159c99d4b8c6dae422e5372cba5db1b34749550d`
+y ningún PR abierto. No hay scraper productivo, snapshot aceptado ni workflow Walmart.
 La biblioteca reusable está en `252b245e0f416b57c324db97bc9cee868fc8124d`, incluida
 la ampliación de eficiencia de `production-data-engineering`.
 
-La investigación pública muestra recursos de `walmarthn.vtexassets.com`, una pista
-de VTEX; no constituye una respuesta API RAW ni binding comercial demostrado.
-SPS: Boulevard del Norte es candidato, sin unicidad de formato verificada.
-TGU: Fuerzas Armadas/Cascadas y El Sauce/Las Uvas son contextos por verificar;
-no se han comparado precios ni se ha decidido consolidar o separar ubicaciones.
-No se crean IDs de tienda, ubicaciones ni contratos inventados.
+El usuario autorizó el probe propio por 24 horas desde 2026-08-31 00:17:55 UTC.
+Se consumieron sus **20 GET** en **436.847 segundos**, cero retries: 19 éxitos y un
+400 al comprobar el límite de página 51. No queda saldo de ese probe. Sin browser,
+imágenes, login, checkout, carrito, mutaciones de sesión, SQL Turso ni recurrencia.
 
-[Auditoría y preflight Walmart](supermercados/walmart-auditoria-preflight.md):
-primer probe propuesto de hasta 20 GET, incluidos hasta dos retries, concurrencia
-1 y máximo 10 minutos. **No autorizado ni ejecutado.** Sin full, browser, compras,
-login, imágenes, recurrencia ni SQL Turso. Debe demostrar fuente, primer producto,
-muestra inicial y mecanismo de contexto antes de ampliar recorrido.
+El RAW confirma VTEX y API pública, primer producto contrastado con HTML y cuatro
+muestras de 50 filas. El selector publica un contexto SPS (`walmarthnwm947`,
+Boulevard del Norte) y dos TGU (`walmarthnwm4041`, FFAA; `walmarthnwm4410`, Las Uvas /
+El Sauce). Unicidad SPS se limita al selector de este ecommerce, no a un censo físico.
+El binding usa faceta pública de membership y `regionId` construido como el frontend.
+
+TGU comparte **41 SKU de siete departamentos**, normales y promociones. El SKU
+`68100` tiene efectivo 1,895 en ambos, regular 2,195 en FFAA y 1,895 en El Sauce.
+Se reprodujo por búsqueda puntual y cambiando únicamente región. **Conservar dos
+contextos TGU**, por diferencia comercial, no por stock. Nunca precio universal TGU.
+La oferta rotulada seller `1` no identifica ciudad; el control de región sí demuestra
+su efecto. «Cascadas» no se confirma como nombre actual en esta configuración.
+
+[RAW, contrato fuente y preflight full](../reports/walmart/2026-08-31-probe/README.md):
+13,656/14,083/13,989 productos indexados SPS/FFAA/El Sauce; **no descargados completos**.
+La página 51 falla. Particionar por departamentos y subdividir hogar evita truncar;
+la muestra de primera/última página entrega 50/9 para una partición de 409. Usar sólo
+subcategorías globales perdería un producto por contexto. Estimación: 890 páginas,
+preflight full de hasta **1,000 GET**, incluidos 20 retries, concurrencia 1,
+**45 minutos**. **Full no autorizado.** La autoridad de 24 horas no amplía el tipo
+de operación acordado ni elimina la separación probe/full del usuario.
+
+Cuatro ofertas agotadas en páginas de prueba declaran precio cero: se preservan
+como precio/promoción desconocidos, con los ceros fuente, sin convertirlos en gratis
+ni eliminarlos. El contrato y SQL vigentes aún exigen valores no nulos y rechazan
+Walmart; adaptar y probar esa representación antes de persistir es trabajo pendiente,
+no una carga validada. No se modificaron las cinco tablas ni el hot path por el probe.
+El verificador offline reproduce hashes, decisiones y métricas; tests detectan RAW
+alterado y precio cero ambiguo. No existe segunda observación real Walmart.
+
+La [auditoría original](supermercados/walmart-auditoria-preflight.md) conserva su
+presupuesto y antecedentes claramente marcados como históricos.
 
 ## Eficiencia compartida vigente — PR #351
 
