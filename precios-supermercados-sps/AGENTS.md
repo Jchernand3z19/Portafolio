@@ -8,9 +8,24 @@
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
 - Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-# REGLA MAESTRA — CERRAR LA COLONIA SIN SOBREINGENIERÍA
+# Fase activa — Walmart mientras Turso está bloqueado
 
-El objetivo inmediato es una sola cadena:
+La continuación explícita del usuario del 2026-08-30 inicia Walmart Honduras,
+sólo SPS y TGU, hasta catálogo aceptado y persistencia validada offline. No iniciar
+una cuarta cadena ni dashboard. Colonial conserva su catálogo aceptado y sus
+pendientes de Turso/segunda observación. Ver `docs/PROJECT_STATE.md`.
+
+Walmart necesita autorización propia para cada probe/full; no reutilizar permisos
+de Colonial. No SQL remoto mientras Turso bloquee lecturas, no overages ni billing.
+La comparación de precios de los dos contextos TGU precede a su consolidación y
+al full. Mantener cinco tablas y el hot path eficiente de PR #351.
+
+Las secciones siguientes conservan las reglas y evidencia del cierre inicial de
+La Colonia; no prohíben esta fase autorizada ni autorizan sustituir la base actual.
+
+# Referencia — cierre inicial de La Colonia sin sobreingeniería
+
+El objetivo de aquella fase fue una sola cadena:
 
 ```text
 La Colonia
@@ -22,7 +37,7 @@ histórico = cambios comerciales
 operación = ejecución diaria
 ```
 
-Hasta cerrarlo:
+Las restricciones de aquella fase fueron:
 
 - no iniciar supermercado #2;
 - no construir Dashboard/Dash/Plotly;
@@ -32,7 +47,8 @@ Hasta cerrarlo:
 - no limpiar deuda que no bloquee el MVP;
 - no convertir una operación one-shot en un subsistema.
 
-**Código que no acerca directamente SPS + TGU + histórico + Turso + operación diaria no es progreso.**
+En la fase activa, sólo avanzar el alcance Walmart autorizado y corregir defectos
+compartidos que lo bloqueen; no ampliar La Colonia ni Colonial por estética.
 
 ## Definición del MVP
 

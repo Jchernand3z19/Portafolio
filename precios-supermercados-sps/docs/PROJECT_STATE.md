@@ -4,10 +4,15 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 
 ## Objetivo activo
 
-Completar el MVP de Supermercados Colonial solicitado el 2026-08-30. El primer
-catálogo completo está demostrado: 9,199 productos / 9,205 variantes con precio.
-El cierre exige primera persistencia Turso y segunda observación real correcta;
-ambas siguen pendientes por bloqueo de cuota Turso. **Colonial no está cerrado.**
+Avanzar Walmart Honduras, sólo San Pedro Sula y Tegucigalpa, mientras Turso esté
+bloqueado: catálogo completo aceptado y persistencia validada offline, listo para
+primera carga. No iniciar una cuarta cadena ni dashboard. La continuación del
+2026-08-30 exige una autorización Walmart propia antes de cualquier probe nuevo;
+el permiso de Colonial no se extiende a Walmart.
+
+Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
+Su primera persistencia Turso y segunda observación real siguen pendientes.
+**Ni Colonial ni Walmart están cerrados.**
 
 La Colonia conserva el alcance existente:
 
@@ -22,9 +27,47 @@ history = cambios comerciales por ubicación
 dashboard = fuera del MVP actual
 ```
 
-No ampliar La Colonia, iniciar una tercera cadena ni construir visualización.
-La autorización recurrente de La Colonia no cubre Colonial. Ver la
+No ampliar La Colonia ni construir visualización. Su autorización recurrente no
+cubre Colonial ni Walmart. Ver la
 [fuente, catálogo y frontera operativa Colonial](supermercados/colonial-auditoria-preflight.md).
+
+## Walmart — auditoría y primera frontera live
+
+Auditoría sobre `e8da4737476c8166728d320c87c2c471679d0878`: PR #351 fusionado,
+CI de main verde y cero PRs abiertos al comenzar. No existe implementación,
+fixture, snapshot, configuración ni workflow Walmart en el árbol auditado.
+La biblioteca reusable está en `252b245e0f416b57c324db97bc9cee868fc8124d`, incluida
+la ampliación de eficiencia de `production-data-engineering`.
+
+La investigación pública muestra recursos de `walmarthn.vtexassets.com`, una pista
+de VTEX; no constituye una respuesta API RAW ni binding comercial demostrado.
+SPS: Boulevard del Norte es candidato, sin unicidad de formato verificada.
+TGU: Fuerzas Armadas/Cascadas y El Sauce/Las Uvas son contextos por verificar;
+no se han comparado precios ni se ha decidido consolidar o separar ubicaciones.
+No se crean IDs de tienda, ubicaciones ni contratos inventados.
+
+[Auditoría y preflight Walmart](supermercados/walmart-auditoria-preflight.md):
+primer probe propuesto de hasta 20 GET, incluidos hasta dos retries, concurrencia
+1 y máximo 10 minutos. **No autorizado ni ejecutado.** Sin full, browser, compras,
+login, imágenes, recurrencia ni SQL Turso. Debe demostrar fuente, primer producto,
+muestra inicial y mecanismo de contexto antes de ampliar recorrido.
+
+## Eficiencia compartida vigente — PR #351
+
+El [PR #351](https://github.com/Jchernand3z19/Portafolio/pull/351) materializa `delta`
+una vez, evita updates de metadata idéntica y limita la verificación diaria a
+La Colonia SPS/TGU. No añade tablas persistentes ni cambia las cinco existentes.
+Walmart deberá reutilizar esta ruta después de demostrar su contrato fuente.
+
+Revalidación offline de auditoría: 48 tests de persistencia, costo, Colonial RAW
+y seguridad de workflows pasaron. N/2N/4N = 128/256/512 produjo 31,800/63,400/127,300
+instrucciones SQLite (1.99× y 2.01×). Run sin cambios: un `scrape_run`, cero writes
+de productos/histórico. El plan utiliza el índice parcial de periodos actuales;
+no recorre todo `price_history`. Son datos sintéticos del updater existente, no
+validación Walmart ni consumo facturado. Ver [criterio de costo](../reports/turso-cost-aware-persistence.md).
+
+No ejecutar tuning remoto. Tras el reset y con autoridad vigente: medir consumo
+inicial, persistencia controlada, medir consumo final y verificar el ámbito afectado.
 
 ## Colonial: primer catálogo aceptado, Turso bloqueado
 
@@ -405,20 +448,22 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 ## Pendiente operativo
 
 ```text
-1. resolver el bloqueo de lecturas de Turso y verificar estado sin asumir commits
-2. comprobar una ejecución diaria íntegramente correcta de La Colonia
-3. obtener autorización acotada para el primer probe automatizado de Colonial
+1. autorizar primer probe Walmart; demostrar fuente/contexto/muestra y decisión TGU
+2. después de preflight y autorización full, catálogos Walmart + persistencia offline
+3. tras reset Turso, medir consumo y recuperar/cargar observaciones aceptadas bajo autorización vigente
+4. cerrar primera carga y segunda observación Colonial/Walmart sin runs de tuning remotos
+5. comprobar una ejecución diaria íntegramente correcta de La Colonia
 ```
 
-No esperar otra ejecución diaria para preparar Colonial. La corrección SQL es
-puntual; no justifica refactorizar La Colonia ni cambiar su extracción.
+No esperar a Turso para avanzar Walmart dentro de la autorización disponible.
+La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 
 ## Fuera del alcance actual
 
 No trabajar ahora en:
 
 - dashboard;
-- supermercados distintos de La Colonia y Colonial;
+- supermercados distintos de La Colonia, Colonial y Walmart;
 - BigQuery;
 - Google Sheets;
 - Cloudflare;
