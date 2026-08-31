@@ -1,11 +1,18 @@
-# Walmart Honduras — auditoría y primer probe propuesto
+# Walmart Honduras — auditoría, probe y frontera full
 
-Fecha: 2026-08-30. Viabilidad: **CONDITIONAL**. Frontera actual:
-`BLOCKED_HUMAN_AUTHORIZATION` para primer probe automatizado Walmart.
-No hay catálogo Walmart aceptado ni persistencia Walmart validada todavía.
-Esta documentación no es permiso live ni una configuración ejecutable.
+Actualización: 2026-08-31 UTC. Fuente y contexto: **GO**; catálogo/persistencia:
+**CONDITIONAL**, todavía no aceptados. El primer probe fue autorizado por 24 horas
+y ejecutado: 20 GET, 19 éxitos y un 400 de límite, cero retries, 436.847 segundos.
+Se demostraron SPS y dos TGU con diferencia regular/promoción reproducible.
 
-## Auditoría contra GitHub
+La frontera actual es autorización **full**, no autorización del primer probe.
+El [reporte reproducible](../../reports/walmart/2026-08-31-probe/README.md) incluye
+RAW, 41 SKU TGU compartidos, control de región, cuatro ofertas agotadas sin precio,
+particiones y preflight de hasta 1,000 GET/20 retries/concurrencia 1/45 minutos.
+El contrato persistible para ofertas sin precio aún requiere adaptación y pruebas;
+no se ha modificado SQL ni ejecutado Turso. Esta documentación no concede permiso.
+
+## Auditoría inicial contra GitHub — 2026-08-30
 
 - Base auditada: `e8da4737476c8166728d320c87c2c471679d0878`, con
   [PR #351](https://github.com/Jchernand3z19/Portafolio/pull/351) fusionado y
@@ -34,7 +41,7 @@ pipeline, provenance, auditoría, diseño, CI, debugging y entrega no cambiaron
 respecto a la revisión anterior. Se aplica también `documentation-state` para
 separar estado actual de evidencia histórica. No se copiaron skills al proyecto.
 
-## Reconocimiento público permitido y límites
+## Reconocimiento anterior al probe — evidencia histórica
 
 La [portada oficial](https://www.walmart.com.hn/) muestra enlaces a recursos de
 `walmarthn.vtexassets.com` y categorías de ecommerce. Esto es una **pista VTEX**,
@@ -65,7 +72,11 @@ pendientes de comprobación técnica. No se consultaron términos ni documentos 
 | Total, paginación y membership | Desconocidos |
 | Primera muestra y comparación TGU | No ejecutadas |
 
-## Primer probe: presupuesto cerrado, NO AUTORIZADO
+## Primer probe: presupuesto autorizado y ejecutado, conservado como referencia
+
+Autorización del usuario registrada 2026-08-31 00:17:55 UTC, válida por 24 horas.
+Se agotaron las 20 solicitudes durante una sola ejecución; no queda saldo live.
+La especificación siguiente es la que limitó esa captura, no permiso para repetirla.
 
 Objetivo: confirmar fuente pública, obtener primero un producto correcto, luego
 una muestra inicial de 20–50 cuando sea posible, y descubrir el mecanismo que
@@ -111,10 +122,15 @@ relación visible→técnica→scope cuando se pueda demostrar, métricas y resi
 La muestra sin binding no se aceptará como catálogo de SPS ni de TGU.
 
 La autorización de este probe no cubre full, segunda observación ni recurrencia.
-El preflight full (productos, páginas, requests y tiempo) no puede calcularse
-honestamente todavía; se elaborará después de la muestra y decisión TGU.
+El preflight full ya se calculó desde las respuestas: 41,728 observaciones de
+producto entre los tres contextos, aproximadamente 890 páginas a tamaño 50.
+Son estimaciones para captura y reconciliación, no catálogos completos obtenidos.
 
 ## Decisión de Tegucigalpa antes del full
+
+**Decisión ejecutada:** separar FFAA y El Sauce. El SKU `68100` reproduce regular
+2,195 frente a 1,895, mismo efectivo 1,895; cambiar sólo `regionId` reproduce el
+cambio. Las reglas originales siguientes se mantienen para revisar esa decisión.
 
 Comparar las mismas 20–50 identidades compartidas, varias categorías y promociones,
 en ambos contextos técnicos demostrados. Precio efectivo, regular y promoción
