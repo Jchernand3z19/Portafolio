@@ -45,6 +45,23 @@ del Norte; el selector no demuestra un censo físico ni precio universal de ciud
 Binding por faceta `accesscontrollist` y `regionId`, según configuración pública.
 [Probe y control causal de región](../reports/walmart/2026-08-31-probe/README.md).
 
+**Decisión TGU final, después de comparar los fulls offline:** conservar FFAA y
+El Sauce para persistencia productiva. 12,867 SKU compartidos, 12,042 comparables
+con precios/promoción conocidos: 11,787 iguales y **255 con diferencia comercial**
+(218 efectivo, 197 regular, 57 promoción; campos superpuestos). Los 255 figuran
+in_stock en ambos contextos. **331 difieren sólo en disponibilidad** y no justifican
+la separación. Otros 602 tienen precio sólo en El Sauce y 223 carecen de precio
+en ambos: no se cuentan como igualdad ni diferencia comercial. Hay 933 diferencias
+de disponibilidad en total, incluidas las 602 no comparables.
+
+[Comparación completa y decisión](../reports/walmart/2026-08-31-full/TGU-COMPARISON.md):
+28,088 filas TGU contrastadas con 319 páginas RAW, mismos SKU y unidades, cero
+conflictos de identidad. CSV auditable para toda la intersección y evidencia por
+cada diferencia. El control de región del SKU 68100 se reproduce en ambos fulls;
+las capturas no simultáneas no equivalen a 255 experimentos causales individuales.
+No nuevo tráfico live ni SQL Turso. La granularidad, snapshots y migración ya
+preparados permanecen sin cambios; disponibilidad no determina la decisión.
+
 El usuario autorizó expresamente el full por 24 horas desde **2026-08-31 00:48:01
 UTC** hasta **2026-09-01 00:48:01 UTC**, respondiendo al preflight de 1,000 GET,
 20 retries incluidos, concurrencia 1 y 45 minutos. Captura terminada/cerrada:

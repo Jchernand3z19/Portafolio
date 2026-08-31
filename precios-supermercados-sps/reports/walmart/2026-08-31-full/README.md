@@ -38,6 +38,21 @@ SKU `37305` conserva L.9.50 aunque `unitMultiplier=0.25`; el probe contrastó es
 precio visible. Referencias ausentes y disponibilidad no demostrada quedan nulas /
 unknown. El padre y todos sus items se conservan; múltiples sellers ambiguos fallan.
 
+## Comparación exhaustiva posterior de los dos TGU
+
+La [comparación offline de todos los SKU compartidos](TGU-COMPARISON.md) confirma
+la decisión para persistencia productiva: **mantener ambos contextos**. 12,867 SKU
+compartidos, 12,042 comparables, 255 con diferencias comerciales (218 efectivo,
+197 regular, 57 promoción; no son conteos disjuntos). Hay 331 diferencias sólo de
+disponibilidad, excluidas de la justificación; 602 precios conocidos sólo en un
+contexto y 223 desconocidos en ambos, excluidos de la equivalencia comercial.
+
+Se contrastan 28,088 filas con 319 páginas RAW ya capturadas, sin nuevo tráfico.
+CSV de toda la intersección, JSON de diferencias, hashes y control de región del
+SKU 68100 repetido en full. No se afirma causalidad individual para cada diferencia
+entre capturas no simultáneas. La evidencia justifica mantener los dos TGU sin
+modificar el SQL, la migración ni los snapshots aceptados.
+
 ## Tráfico y completitud
 
 514 GET nuevos, 513 HTTP 200 y un HTTP 400 esperado al probar `count=250`;

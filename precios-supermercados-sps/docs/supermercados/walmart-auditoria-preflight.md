@@ -15,6 +15,13 @@ sin alterar sus filas. Cinco tablas, delta único, costo lineal e independiente 
 histórico cerrado. No SQL Turso, billing, segunda observación ni workflow Walmart.
 [Estado y frontera de primera carga](../PROJECT_STATE.md).
 
+Revisión posterior solicitada por el usuario: comparación de los fulls TGU sin
+nuevo tráfico. 12,867 SKU compartidos / 12,042 comparables; 255 diferencias
+comerciales (218 efectivo, 197 regular, 57 promoción) frente a 331 casos sólo de
+disponibilidad. **Se conservan los dos contextos para persistencia productiva**;
+las ofertas sin precio y la disponibilidad no se usan para justificar separarlos.
+[Informe exhaustivo, RAW y límite de atribución](../../reports/walmart/2026-08-31-full/TGU-COMPARISON.md).
+
 Las secciones siguientes conservan la **auditoría y preflight históricos anteriores
 al full**. Sus menciones a autorización, catálogo o SQL pendientes describen ese
 momento, no el estado actual ni permiso para repetir el adquirente archivado.
