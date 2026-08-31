@@ -1,0 +1,501 @@
+{
+  "status": "discovery_candidates_only_not_complete_city_census",
+  "source_locator_entries": 99,
+  "candidate_entries": 29,
+  "geographic_residual": "Source has no city field or authoritative city membership; nearby/municipal edge cases remain unresolved. No catalog of another city requested.",
+  "stores": [
+    {
+      "geographic_candidate_group": "maxi_sps",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "MD SALIDA LA LIMA",
+      "source_format_code": "6",
+      "source_address": "Primera y segunda calle noroeste, salida a La Lima",
+      "source_coordinates": [
+        -88.0064,
+        15.5046
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "maxi_sps",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "MD LAS PALMAS",
+      "source_format_code": "6",
+      "source_address": "AVENIDA CIRCUNVALACIÓN JUAN PABLO SEGUNDO, 2 CUADRAS ARRIBA DEL CENTRO PENAL, CONTIGUO A PIZZA HUT, 18 CALLE.",
+      "source_coordinates": [
+        -88.019,
+        15.4894
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "maxi_sps",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "MD SALIDA A CORTES",
+      "source_format_code": "6",
+      "source_address": "BLVD. DEL NORTE, SALIDA A PUERTO CORTÉS, KM.5, COL. LOS CASTAÑOS, CENTRO COMERCIAL LOS CASTAÑOS.",
+      "source_coordinates": [
+        -88.0016,
+        15.5499
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "maxi_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "MD ARTURO QUESADA",
+      "source_format_code": "6",
+      "source_address": "Anillo Periferico, Entrada a la Colonia Israel Norte",
+      "source_coordinates": [
+        -87.2371739625876,
+        14.0780304015086
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "maxi_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "MD LOARQUE",
+      "source_format_code": "6",
+      "source_address": "COLONIA LOARQUE, SALIDA A LOARQUE",
+      "source_coordinates": [
+        -87.2121682266201,
+        14.0444212390499
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "maxi_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "MD LOS LLANOS",
+      "source_format_code": "6",
+      "source_address": "Entrada Principal a Residencial Plaza, Calle que conduce a Residencial Los Llanos ",
+      "source_coordinates": [
+        -87.1898537691771,
+        14.0613156420254
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "maxi_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "MD TOROCAGUA",
+      "source_format_code": "6",
+      "source_address": "Blvd. Del Norte, Frente a Mall Premier, antiguo local de Aserradero Sansone",
+      "source_coordinates": [
+        -87.2349157202208,
+        14.1070310591839
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "maxi_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "MD 21 DE OCTUBRE",
+      "source_format_code": "6",
+      "source_address": "Paseo Manchen, Frente a Colonia Las Joyas y Contiguo al Instituto Evangelico Virginia Sapp",
+      "source_coordinates": [
+        -87.1615361695962,
+        14.1063444851201
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "maxi_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "MD KENNEDY",
+      "source_format_code": "6",
+      "source_address": "Quinta Entrada Colonia Kennedy, Lote de Terreno contiguo a oficinas de Fosovi 150 metros del Instituto Tecnico Honduras",
+      "source_coordinates": [
+        -87.1768265932915,
+        14.0618090483509
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_sps",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF SIETE CALLE",
+      "source_format_code": "4",
+      "source_address": "Bo. Lempira, 7 calle, entre 5 y 6 Ave. sur oeste.",
+      "source_coordinates": [
+        -88.0260765875355,
+        15.5003792741702
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_sps",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF MEDINA",
+      "source_format_code": "4",
+      "source_address": "Bo. Medina, 7 calle, 9 Ave. S.E. Fte. Mercado Dandy",
+      "source_coordinates": [
+        -88.0156222567208,
+        15.4995612465456
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_sps",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF SATELITE",
+      "source_format_code": "4",
+      "source_address": "Colonia Satélite, Blv. Las Torres",
+      "source_coordinates": [
+        -87.9834435377253,
+        15.482023463876
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_sps",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF EL CARMEN",
+      "source_format_code": "4",
+      "source_address": "Entrada Principal a Colonia El Carmen, Contiguo A Residencial Santa Isabel, Frente a plantel de Williams & Molina",
+      "source_coordinates": [
+        -87.9865488847695,
+        15.4998556687917
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_sps",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF CHAMELECON",
+      "source_format_code": "4",
+      "source_address": "Chamelecon, al sur de la ciudad de San Pedro Sula en el Barrio Santa Ana Sobre la Calle Pavimentada.",
+      "source_coordinates": [
+        -88.0178,
+        15.4281
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_sps",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF RIVERA HERNANDEZ",
+      "source_format_code": "4",
+      "source_address": "Col. Central, Zona Rivera hernández, Avenida Principal, entre 2  y 3 Calle, frente a Clínicas Herrera",
+      "source_coordinates": [
+        -87.9427413266823,
+        15.4713439179136
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF GUANACASTE",
+      "source_format_code": "4",
+      "source_address": "Barrio Guanacaste, frente a Banco Atlántida.",
+      "source_coordinates": [
+        -87.1983,
+        14.1061
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF ZONAL BELEN",
+      "source_format_code": "4",
+      "source_address": "Col. Las Mercedes, Boulevard del Norte fte. A Electrodomesticos Popular, Comayagüela",
+      "source_coordinates": [
+        -87.2217012426713,
+        14.0969887527253
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF SAN FRANCISCO",
+      "source_format_code": "4",
+      "source_address": "Col. 21 de Febrero, entrada a Col. La Fuente",
+      "source_coordinates": [
+        -87.2311,
+        14.0864
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF HATO DE ENMEDIO",
+      "source_format_code": "4",
+      "source_address": "Colonia Hato de Enmedio,Sector 7, Calle Principal del Hato de En Medio, Tegucigalpa",
+      "source_coordinates": [
+        -87.1675,
+        14.0734
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF KENNEDY",
+      "source_format_code": "4",
+      "source_address": "Calle del Comercio, contiguo al IHSS y Banco Atántida",
+      "source_coordinates": [
+        -87.1789,
+        14.0645
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF PEDREGAL",
+      "source_format_code": "4",
+      "source_address": "Calle Principal. Col El Pedregal, Comayagüela",
+      "source_coordinates": [
+        -87.2062997531873,
+        14.0632547619756
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF SANTA FE",
+      "source_format_code": "4",
+      "source_address": "Calle Principal. Col. Santa Fe, contiguo al comercial Gallo mas Gallo.",
+      "source_coordinates": [
+        -87.2246,
+        14.0981
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF SEXTA AVENIDA",
+      "source_format_code": "4",
+      "source_address": "6a. Ave., entre 4ta y 5ta calle, esquina opuesta a Banco Atlántida",
+      "source_coordinates": [
+        -87.2084735244427,
+        14.0981443628365
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF PROCERES",
+      "source_format_code": "4",
+      "source_address": "Ave. Los Próceres, antiguo local Roma, San Felipe",
+      "source_coordinates": [
+        -87.1787,
+        14.1026
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF PRIMERA CALLE",
+      "source_format_code": "4",
+      "source_address": "1era calle entre 2 y 3 avenida Comayaguela frente a Ministerio de Educación.",
+      "source_coordinates": [
+        -87.2069427776748,
+        14.1025595833436
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF SAN MIGUEL TEGUCIGALPA",
+      "source_format_code": "4",
+      "source_address": "Col. San Miguel, Calle principal contigo a Mercado El Dolar, frente a terminal de buses.",
+      "source_coordinates": [
+        -87.1573,
+        14.0994
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF VILLADELA",
+      "source_format_code": "4",
+      "source_address": "Col Villadela, Contiguo a Transporte Mi Esperanza",
+      "source_coordinates": [
+        -87.2112124717028,
+        14.0848253163156
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF LA CAÑADA",
+      "source_format_code": "4",
+      "source_address": "Calle Principal La Cañada, Frente Estación de Buses y 200 Metros de La Escuela La Cañada, Lote de Terreno donde Actualmente Funciona Ferretería Gomesa",
+      "source_coordinates": [
+        -87.1933604102306,
+        14.0532191034222
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    },
+    {
+      "geographic_candidate_group": "df_tgu",
+      "city_assignment_status": "inference_from_source_coordinates_and_address_not_authoritative_membership",
+      "source_title": "DF LA PRADERA",
+      "source_format_code": "4",
+      "source_address": "Calle los Alcaldes, entrada principal a la colonia La Pradera, Lote de terreno contiguo a Iglesia Católica de la zona",
+      "source_coordinates": [
+        -87.2196121416901,
+        14.0684633573314
+      ],
+      "raw_index": 3,
+      "store_id": null,
+      "commercial_context": null,
+      "sample_evaluated": false,
+      "price_group": null,
+      "representative": null
+    }
+  ]
+}
