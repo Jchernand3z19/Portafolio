@@ -4,18 +4,19 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 
 ## Objetivo activo
 
-Cerrar Maxi Despensa y Despensa Familiar como **NO-GO TEMPORAL PARA PRICE TRACKING
-WEB** y avanzar sólo el reconocimiento del siguiente candidato con precios digitales.
-PriceSmart Honduras es el candidato seleccionado; su primer probe automatizado aún
-requiere autorización propia y presupuesto explícito. No iniciar Paiz, otras ciudades
-ni dashboard. Probe, full y recurrencia son gates separados.
+Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE TRACKING
+WEB**. PriceSmart Honduras es el siguiente candidato: el probe GET demostró contrato
+GraphQL y clubes, y quedó pausado antes del primer POST de sólo lectura. Ese método
+y dominio requieren autorización explícita separada. No iniciar Paiz, otras ciudades
+ni dashboard. GET, POST, full y recurrencia son gates separados.
 
 Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
 Su primera persistencia Turso y segunda observación real siguen pendientes.
 Walmart conserva tres catálogos aceptados y SQL validado offline, incluidos dos
 TGU por diferencias comerciales. **Ni Colonial ni Walmart están cerrados** en
 operación remota. Maxi/DF quedan detenidos sin scraper, persistencia ni catálogo.
-PriceSmart todavía no tiene contrato técnico, muestra comparable ni integración.
+PriceSmart tiene contrato técnico observado, pero aún no respuesta aceptada de
+precio, binding causal, muestra comparable ni integración.
 
 La Colonia conserva el alcance existente:
 
@@ -82,26 +83,33 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — siguiente candidato, preflight sin probe
+## PriceSmart Honduras — GET demostrado, pausa antes de GraphQL POST
 
-La web oficial pública muestra productos con precio en HNL, identidad de artículo,
-disponibilidad y paginación de búsqueda. Una página oficial de producto muestra el
-artículo `516411` a `L 407.95` y disponibilidad diferenciada para Florencia, San
-Pedro Sula y El Sauce. PriceSmart también identifica oficialmente clubes en
-Tegucigalpa, San Pedro Sula y El Sauce. Esta evidencia basta para escoger la cadena,
-pero todavía no prueba API/JSON/GraphQL, binding reproducible del club, completitud,
-precio regular ni semántica de promoción. Florencia no se equipara automáticamente
-con todo Tegucigalpa.
+Autorización registrada por 24 horas: 2026-08-31T21:53:50Z a
+2026-09-01T21:53:50Z. El probe cerró su tramo GET en 8 intentos: 7 HTTP 200, un
+fallo CA antes de respuesta seguido de un retry, cero redirects, cuatro assets,
+concurrencia 1 y 303.054 s. No browser, POST, mutación, login, carrito, full,
+persistencia ni SQL Turso.
 
-No se hizo tráfico automatizado, browser, captura RAW, scraper, persistencia ni SQL.
-El primer probe propuesto tiene techo de 30 GET —incluidos hasta dos redirects y
-tres retries transitorios—, concurrencia 1, pausa mínima de un segundo, timeout de
-20 s y máximo 15 minutos. Sólo superficie pública Honduras, HTML inicial,
-búsqueda/producto y hasta cuatro assets/config esenciales enlazados; sin login,
-membresía, carrito, checkout, mutaciones, imágenes, PDF, OCR, otros países ni full.
-Si el acceso técnico requiere POST/GraphQL de sólo lectura o mutar estado anónimo,
-se detiene y se solicita una extensión precisa. Falta autorización explícita para
-ejecutarlo. [Evidencia y presupuesto](supermercados/pricesmart-auditoria-preflight.md).
+El estado Nuxt identifica `https://graphql-commerce.bloomreach.io`, tenant
+`pricesmart`, país `HND` y consultas públicas `channels`,
+`productProjectionsSearch`, `inventoryEntries` y `products`. El esquema incluye
+precio base/descontado, moneda/centavos, `discount.isActive` y disponibilidad por
+channel. Clubes: `6602` Florencia (default), `6603` San Pedro Sula y `6604` El
+Sauce; ecommerce habilitado en los tres.
+
+Los HTML GET de búsqueda no son aceptables como datos: `Bolsas` devolvió estado de
+`Huevos` y `page=3&q=Vegetables` devolvió página 1 de `jabon dove`. La ficha GET
+conserva identidad `516411`, pero no contiene el precio `407.95`. Cero SKU con
+precio comparable por club; diferencias de efectivo, regular, promoción y sólo
+availability siguen `null`. No decidir granularidad TGU por availability.
+
+El probe se detuvo conforme al preflight antes del POST externo. El siguiente gate
+propuesto permite hasta 8 POST de sólo lectura, incluidos dos retries, a la base
+GraphQL observada; primero `channels`, después `products` y
+`productProjectionsSearch` para HN/HNL, tres clubes, SKU `516411` y hasta 50
+identidades. Sin mutaciones ni credenciales privadas. Requiere autorización
+explícita. [RAW, contrato, redacciones y gate](../reports/pricesmart/2026-08-31-probe/README.md).
 
 Última consulta de cuenta (auditoría previa): Starter, overages deshabilitados,
 713.7 M / 500 M lecturas (143%). La CLI mostró reset **30/9/2026 18:00 CST**, frente
@@ -606,9 +614,9 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 ```
 
 En paralelo, Maxi/DF queda cerrado como NO-GO temporal. Obtener autorización propia
-para el probe PriceSmart de 30 GET; después demostrar contrato, club y muestra
-comparable antes de plantear código o full. No esperar a Turso ni reutilizar
-autorizaciones de cadenas anteriores.
+para el gate PriceSmart de hasta 8 POST GraphQL read-only; después demostrar precio,
+binding por club y muestra comparable antes de plantear código o full. No esperar
+a Turso ni reutilizar autorizaciones de cadenas anteriores.
 La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 
 ## Fuera del alcance actual

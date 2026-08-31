@@ -8,7 +8,7 @@
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
 - Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-# Fase activa — cierre Maxi/DF y preflight PriceSmart
+# Fase activa — PriceSmart pausado en gate GraphQL
 
 Maxi Despensa y Despensa Familiar se clasifican **NO-GO TEMPORAL PARA PRICE
 TRACKING WEB**: el probe público no demostró precios activos, API de precios ni
@@ -17,13 +17,14 @@ full crawl, imágenes, PDF, OCR, fuentes indirectas ni cambios de modelo para es
 dos cadenas. Sólo reabrirlas ante una fuente digital pública nueva y una instrucción
 explícita. Ver `docs/supermercados/maxi-df-auditoria-preflight.md`.
 
-El siguiente candidato es PriceSmart Honduras porque su web oficial publica precios
-en HNL, identidad de artículo y disponibilidad por club. La fase actual es únicamente
-reconocimiento y preflight. No ejecutar un probe automatizado sin autorización
-propia y presupuesto explícito; tampoco crear scraper, persistencia, full crawl,
-workflow o cambios de esquema antes de demostrar el contrato público y el binding
-de SPS/TGU. Paiz permanece excluido. Ver
-`docs/supermercados/pricesmart-auditoria-preflight.md`.
+PriceSmart Honduras demostró estado Nuxt, contrato GraphQL de comercio y tres clubes
+(`6602` Florencia, `6603` SPS, `6604` El Sauce). El probe GET autorizado por 24
+horas se pausó tras 8 intentos porque el precio requiere POST al dominio externo
+`graphql-commerce.bloomreach.io`. No ejecutar POST ni cambiar contexto hasta recibir
+autorización explícita para el gate documentado. No crear scraper, persistencia,
+full crawl, workflow o cambios de esquema antes de demostrar respuesta de precio,
+binding y muestra comparable. Paiz permanece excluido. Ver
+`reports/pricesmart/2026-08-31-probe/README.md`.
 
 Colonial y Walmart conservan sus catálogos aceptados y validación SQL offline;
 primera carga Turso y segunda observación real siguen pendientes. Walmart conserva
@@ -59,8 +60,8 @@ Las restricciones de aquella fase fueron:
 - no limpiar deuda que no bloquee el MVP;
 - no convertir una operación one-shot en un subsistema.
 
-En la fase activa, sólo avanzar el preflight PriceSmart dentro de la autorización
-disponible y mantener cerrado Maxi/DF.
+En la fase activa, mantener cerrado Maxi/DF y avanzar PriceSmart sólo dentro del
+gate autorizado. GET, POST, full y recurrencia son permisos separados.
 No modificar scrapers, parsers ni fixtures de La Colonia, Colonial o Walmart salvo
 bug compartido demostrado que bloquee el trabajo; no refactorizar por estética.
 

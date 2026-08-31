@@ -1,5 +1,20 @@
 # PriceSmart Honduras — auditoría y preflight
 
+## Resultado del probe GET autorizado
+
+Autorización de 24 horas registrada 2026-08-31T21:53:50Z. El tramo GET se pausó
+después de 8 intentos / 7 HTTP 200 / un retry / cuatro assets / 303.054 s. Demostró
+Nuxt/Vue Storefront, GraphQL de comercio, esquema de precio/descuento/disponibilidad
+y clubes `6602` Florencia, `6603` SPS, `6604` El Sauce. Los HTML de búsqueda
+mostraron respuestas de caché incompatibles con sus queries y la ficha GET no
+incluyó precio numérico.
+
+El precio requiere POST de sólo lectura a `graphql-commerce.bloomreach.io`, fuera
+del método/dominio inicialmente autorizado. El probe se detuvo antes de ejecutarlo.
+[Reporte, RAW y extensión exacta pendiente](../../reports/pricesmart/2026-08-31-probe/README.md).
+No scraper, full, persistencia, modelo ni Turso. Las secciones siguientes conservan
+el preflight histórico anterior a la autorización.
+
 ## Decisión de candidato
 
 PriceSmart Honduras es el siguiente candidato para price tracking web. La selección
