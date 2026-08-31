@@ -1,5 +1,10 @@
 # PriceSmart Honduras — probe GET pausado en gate GraphQL
 
+Continuación: el POST `channels` al endpoint raíz autorizado recibió HTTP 404
+`Cannot POST /` y se detuvo antes de otro path. Ver
+[probe GraphQL y gate actualizado](../2026-08-31-graphql-probe/README.md). Las
+secciones siguientes conservan el cierre del tramo GET anterior.
+
 ## Resultado
 
 **Candidato viable para continuar la radiografía, todavía no apto para full ni

@@ -5,10 +5,11 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 ## Objetivo activo
 
 Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE TRACKING
-WEB**. PriceSmart Honduras es el siguiente candidato: el probe GET demostró contrato
-GraphQL y clubes, y quedó pausado antes del primer POST de sólo lectura. Ese método
-y dominio requieren autorización explícita separada. No iniciar Paiz, otras ciudades
-ni dashboard. GET, POST, full y recurrencia son gates separados.
+WEB**. PriceSmart Honduras es el siguiente candidato: GET demostró contrato GraphQL
+y clubes; el POST `channels` al único endpoint autorizado respondió 404
+`Cannot POST /`. Probar `/graphql` u otro path requiere autorización explícita
+separada. No iniciar Paiz, otras ciudades ni dashboard. Endpoint, full y recurrencia
+son gates separados.
 
 Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
 Su primera persistencia Turso y segunda observación real siguen pendientes.
@@ -104,12 +105,16 @@ conserva identidad `516411`, pero no contiene el precio `407.95`. Cero SKU con
 precio comparable por club; diferencias de efectivo, regular, promoción y sólo
 availability siguen `null`. No decidir granularidad TGU por availability.
 
-El probe se detuvo conforme al preflight antes del POST externo. El siguiente gate
-propuesto permite hasta 8 POST de sólo lectura, incluidos dos retries, a la base
-GraphQL observada; primero `channels`, después `products` y
-`productProjectionsSearch` para HN/HNL, tres clubes, SKU `516411` y hasta 50
-identidades. Sin mutaciones ni credenciales privadas. Requiere autorización
-explícita. [RAW, contrato, redacciones y gate](../reports/pricesmart/2026-08-31-probe/README.md).
+La extensión POST fue autorizada y cerró temprano: **1/8 POST, cero retries,
+concurrencia 1, 0.2964 s**. `channels` con headers públicos Bloomreach recibió
+HTTP 404 `Cannot POST /`; la petición no alcanzó GraphQL. No se probaron otros
+paths, signin, token ni operación. Sigue habiendo cero SKU comparables y ninguna
+decisión de granularidad TGU.
+
+La próxima extensión mínima debe nombrar
+`https://graphql-commerce.bloomreach.io/graphql`, inferido pero no verificado, con
+hasta 7 POST restantes. Si exige Authorization, `/signin`, cookie, otro endpoint o
+credencial no pública, detenerse. [RAW y gate de path](../reports/pricesmart/2026-08-31-graphql-probe/README.md).
 
 Última consulta de cuenta (auditoría previa): Starter, overages deshabilitados,
 713.7 M / 500 M lecturas (143%). La CLI mostró reset **30/9/2026 18:00 CST**, frente
@@ -614,9 +619,9 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 ```
 
 En paralelo, Maxi/DF queda cerrado como NO-GO temporal. Obtener autorización propia
-para el gate PriceSmart de hasta 8 POST GraphQL read-only; después demostrar precio,
-binding por club y muestra comparable antes de plantear código o full. No esperar
-a Turso ni reutilizar autorizaciones de cadenas anteriores.
+para probar el path `/graphql` con hasta 7 POST read-only restantes; después
+demostrar precio, binding por club y muestra comparable antes de plantear código o
+full. No esperar a Turso ni reutilizar autorizaciones de cadenas anteriores.
 La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 
 ## Fuera del alcance actual

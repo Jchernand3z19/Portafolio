@@ -18,13 +18,12 @@ dos cadenas. Sólo reabrirlas ante una fuente digital pública nueva y una instr
 explícita. Ver `docs/supermercados/maxi-df-auditoria-preflight.md`.
 
 PriceSmart Honduras demostró estado Nuxt, contrato GraphQL de comercio y tres clubes
-(`6602` Florencia, `6603` SPS, `6604` El Sauce). El probe GET autorizado por 24
-horas se pausó tras 8 intentos porque el precio requiere POST al dominio externo
-`graphql-commerce.bloomreach.io`. No ejecutar POST ni cambiar contexto hasta recibir
-autorización explícita para el gate documentado. No crear scraper, persistencia,
-full crawl, workflow o cambios de esquema antes de demostrar respuesta de precio,
-binding y muestra comparable. Paiz permanece excluido. Ver
-`reports/pricesmart/2026-08-31-probe/README.md`.
+(`6602` Florencia, `6603` SPS, `6604` El Sauce). La extensión POST autorizada se
+detuvo tras `channels`: el endpoint raíz exclusivo respondió 404 `Cannot POST /`.
+No probar `/graphql`, `/signin` u otro path sin autorización explícita nueva. No
+crear scraper, persistencia, full crawl, workflow o cambios de esquema antes de
+demostrar respuesta de precio, binding y muestra comparable. Paiz permanece
+excluido. Ver `reports/pricesmart/2026-08-31-graphql-probe/README.md`.
 
 Colonial y Walmart conservan sus catálogos aceptados y validación SQL offline;
 primera carga Turso y segunda observación real siguen pendientes. Walmart conserva
