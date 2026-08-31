@@ -8,17 +8,28 @@
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
 - Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-# Fase activa — Walmart mientras Turso está bloqueado
+# Fase activa — Maxi Despensa y Despensa Familiar mientras Turso está bloqueado
 
-La continuación explícita del usuario del 2026-08-30 inicia Walmart Honduras,
-sólo SPS y TGU, hasta catálogo aceptado y persistencia validada offline. No iniciar
-una cuarta cadena ni dashboard. Colonial conserva su catálogo aceptado y sus
-pendientes de Turso/segunda observación. Ver `docs/PROJECT_STATE.md`.
+La continuación explícita del usuario inicia conjuntamente Maxi Despensa y
+Despensa Familiar, sólo SPS y TGU, hasta catálogo aceptado y persistencia validada
+offline. No iniciar Paiz, una sexta cadena, otras ciudades ni dashboard.
+Colonial y Walmart conservan sus catálogos aceptados y validación SQL offline;
+primera carga Turso y segunda observación real siguen pendientes. Walmart conserva
+los dos contextos TGU por diferencias comerciales demostradas en RAW completo.
+Ver `docs/PROJECT_STATE.md` y `docs/supermercados/maxi-df-auditoria-preflight.md`.
 
-Walmart necesita autorización propia para cada probe/full; no reutilizar permisos
-de Colonial. No SQL remoto mientras Turso bloquee lecturas, no overages ni billing.
-La comparación de precios de los dos contextos TGU precede a su consolidación y
-al full. Mantener cinco tablas y el hot path eficiente de PR #351.
+El primer probe Maxi/DF necesita autorización propia explícita antes de tráfico:
+los permisos anteriores de Colonial/Walmart no lo cubren. Probe, full y recurrencia
+son permisos distintos. No SQL remoto mientras Turso bloquee lecturas, ni overages,
+billing o cambio de plan. No interpretar una fecha de reset como acceso confirmado.
+
+Primero demostrar fuente y vínculo formato/tienda/contexto; después comparar las
+mismas 20–50 identidades SKU en todas las tiendas relevantes de cada formato/ciudad.
+Agrupar por precio efectivo, regular y promoción antes del full, que cubrirá sólo
+contextos comerciales necesarios. Disponibilidad sola no justifica duplicar.
+No forzar equivalencia con precios desconocidos o paneles incompatibles. Mantener
+marcas independientes aunque compartan IDs/API; no asumir reutilización de Walmart.
+Conservar cinco tablas y el hot path eficiente de PR #351.
 
 Las secciones siguientes conservan las reglas y evidencia del cierre inicial de
 La Colonia; no prohíben esta fase autorizada ni autorizan sustituir la base actual.
@@ -47,8 +58,9 @@ Las restricciones de aquella fase fueron:
 - no limpiar deuda que no bloquee el MVP;
 - no convertir una operación one-shot en un subsistema.
 
-En la fase activa, sólo avanzar el alcance Walmart autorizado y corregir defectos
-compartidos que lo bloqueen; no ampliar La Colonia ni Colonial por estética.
+En la fase activa, sólo avanzar Maxi/DF dentro de la autorización disponible.
+No modificar scrapers, parsers ni fixtures de La Colonia, Colonial o Walmart salvo
+bug compartido demostrado que bloquee el trabajo; no refactorizar por estética.
 
 ## Definición del MVP
 
