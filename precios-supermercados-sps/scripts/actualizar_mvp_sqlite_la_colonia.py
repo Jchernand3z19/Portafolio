@@ -20,6 +20,8 @@ from generar_mvp_sqlite_la_colonia import create_schema  # noqa: E402
 SUPERMARKET_ID = "la_colonia"
 LOCATIONS = {"la_colonia_sps": "San Pedro Sula", "la_colonia_tgu": "Tegucigalpa"}
 COLONIAL_LOCATIONS = {"colonial_sps": "San Pedro Sula"}
+WALMART_LOCATIONS = {"walmart_sps": "San Pedro Sula", "walmart_tgu_ffaa": "Tegucigalpa", "walmart_tgu_el_sauce": "Tegucigalpa"}
+WALMART_SELLERS = {"walmart_sps": "walmarthnwm947", "walmart_tgu_ffaa": "walmarthnwm4041", "walmart_tgu_el_sauce": "walmarthnwm4410"}
 STATE_COLUMNS = ("current_price_minor", "reported_regular_price_minor", "is_promotion", "availability")
 PRODUCT_KEYS = {
     "availability", "brand", "category", "current_price", "ean", "is_promotion",
@@ -59,9 +61,9 @@ def _utc(value: object) -> datetime:
 
 
 def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID) -> dict[str, Any]:
-    if supermarket_id not in (SUPERMARKET_ID, "colonial"):
+    if supermarket_id not in (SUPERMARKET_ID, "colonial", "walmart"):
         raise SnapshotError("snapshot_supermarket_invalid")
-    locations = LOCATIONS if supermarket_id == SUPERMARKET_ID else COLONIAL_LOCATIONS
+    locations = {SUPERMARKET_ID: LOCATIONS, "colonial": COLONIAL_LOCATIONS, "walmart": WALMART_LOCATIONS}[supermarket_id]
     try:
         data = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -84,7 +86,9 @@ def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID)
     rows = data.get("products")
     if not isinstance(rows, list) or not rows:
         raise SnapshotError("snapshot_products_invalid")
-    if data.get("skus_extracted") != len(rows) or data.get("skus_with_price") != len(rows):
+    priced_count = sum(isinstance(row, dict) and row.get("current_price") is not None for row in rows)
+    if (data.get("skus_extracted") != len(rows) or data.get("skus_with_price") != priced_count
+            or (supermarket_id != "walmart" and priced_count != len(rows))):
         raise SnapshotError("snapshot_sku_count_mismatch")
 
     identities, source_products = set(), set()
@@ -100,9 +104,9 @@ def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID)
         if row["product_id"] is None or row["item_id"] is None:
             raise SnapshotError("snapshot_source_id_missing")
         source_products.add(str(row["product_id"]))
-        _minor(row["current_price"], True)
+        _minor(row["current_price"], supermarket_id != "walmart")
         _minor(row["reported_regular_price"])
-        if type(row["is_promotion"]) is not bool:
+        if type(row["is_promotion"]) is not bool and not (supermarket_id == "walmart" and row["is_promotion"] is None):
             raise SnapshotError("snapshot_promotion_invalid")
         if row["availability"] not in {"in_stock", "out_of_stock", "unknown"}:
             raise SnapshotError("snapshot_availability_invalid")
@@ -128,6 +132,52 @@ def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID)
                   for state in {row["availability"] for row in rows}}
         if data.get("availability_counts") != counts:
             raise SnapshotError("colonial_availability_counts_invalid")
+    if supermarket_id == "walmart":
+        import base64
+        import math
+        seller = WALMART_SELLERS[location_id]
+        if (any(data.get(k) is not True for k in ("catalog_complete", "validation_passed", "location_verified_same_run"))
+                or any(type(data.get(k)) is not int for k in ("skus_extracted", "skus_with_price", "catalog_products_reported", "unique_products_extracted", "membership_count"))
+                or data.get("currency") != "HNL" or data.get("seller_id") != seller
+                or data.get("region_id") != base64.b64encode(("SW#" + seller).encode()).decode()
+                or data.get("sales_channel") != "1"
+                or data.get("scope") != "public_ecommerce_selected_store_not_universal_city_price"
+                or type(data.get("membership_count")) is not int or data["membership_count"] != reported
+                or data.get("membership_sha256") != hashlib.sha256("\n".join(sorted(source_products)).encode()).hexdigest()):
+            raise SnapshotError("walmart_evidence_invalid")
+        details = data.get("source_details")
+        if not isinstance(details, dict) or set(details) != {r["source_key"] for r in rows}:
+            raise SnapshotError("walmart_source_details_invalid")
+        for row in rows:
+            if (row["source_key_type"] != "item_id" or row["source_key"] != row["item_id"]
+                    or any(not isinstance(row[k], str) or not row[k].isdigit() or int(row[k]) <= 0 for k in ("product_id", "item_id"))
+                    or any(row[k] is not None and not isinstance(row[k], str) for k in ("reference", "ean", "brand", "presentation", "category"))):
+                raise SnapshotError("walmart_identity_invalid")
+            detail = details[row["source_key"]]
+            if not isinstance(detail, dict):
+                raise SnapshotError("walmart_source_details_invalid")
+            quantity = detail.get("available_quantity_signal")
+            if quantity is not None and (type(quantity) not in {int, float} or not math.isfinite(quantity) or quantity < 0):
+                raise SnapshotError("walmart_availability_evidence_invalid")
+            availability = "unknown" if quantity is None else "in_stock" if quantity > 0 else "out_of_stock"
+            if row["availability"] != availability:
+                raise SnapshotError("walmart_availability_evidence_invalid")
+            if row["current_price"] is None:
+                if (row["availability"] != "out_of_stock" or row["reported_regular_price"] is not None
+                        or row["is_promotion"] is not None or detail.get("price_status") != "unavailable_zero_offer"
+                        or type(detail.get("available_quantity_signal")) not in {int, float} or detail.get("available_quantity_signal") != 0
+                        or detail.get("source_price") != "0.00" or detail.get("source_list_price") != "0.00"):
+                    raise SnapshotError("walmart_unpriced_offer_invalid")
+            elif (_minor(row["current_price"], True) <= 0 or row["reported_regular_price"] is None
+                    or _minor(row["reported_regular_price"], True) < _minor(row["current_price"], True)
+                    or row["is_promotion"] is not (_minor(row["reported_regular_price"], True) > _minor(row["current_price"], True))
+                    or detail.get("source_price") != row["current_price"]
+                    or detail.get("source_list_price") != row["reported_regular_price"]
+                    or detail.get("price_status") != "observed"):
+                raise SnapshotError("walmart_price_evidence_invalid")
+        counts = {v: sum(r["availability"] == v for r in rows) for v in {r["availability"] for r in rows}}
+        if data.get("availability_counts") != counts:
+            raise SnapshotError("walmart_availability_counts_invalid")
     return data
 
 

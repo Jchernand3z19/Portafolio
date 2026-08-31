@@ -149,7 +149,6 @@ def create_schema(con: sqlite3.Connection) -> None:
             city_name TEXT NOT NULL,
             country_code TEXT NOT NULL CHECK (length(country_code) = 2),
             FOREIGN KEY (supermarket_id) REFERENCES supermarkets(supermarket_id),
-            UNIQUE (supermarket_id, city_name),
             UNIQUE (location_id, supermarket_id)
         ) STRICT;
 
@@ -191,12 +190,12 @@ def create_schema(con: sqlite3.Connection) -> None:
             product_id INTEGER NOT NULL,
             supermarket_id TEXT NOT NULL,
             location_id TEXT NOT NULL,
-            current_price_minor INTEGER NOT NULL CHECK (current_price_minor >= 0),
+            current_price_minor INTEGER CHECK (current_price_minor >= 0),
             reported_regular_price_minor INTEGER CHECK (
                 reported_regular_price_minor IS NULL
                 OR reported_regular_price_minor >= 0
             ),
-            is_promotion INTEGER NOT NULL CHECK (is_promotion IN (0, 1)),
+            is_promotion INTEGER CHECK (is_promotion IN (0, 1)),
             availability TEXT NOT NULL CHECK (
                 availability IN ('in_stock', 'out_of_stock', 'unknown')
             ),
@@ -209,9 +208,17 @@ def create_schema(con: sqlite3.Connection) -> None:
                 REFERENCES products(product_id, supermarket_id),
             FOREIGN KEY (location_id, supermarket_id)
                 REFERENCES locations(location_id, supermarket_id),
-            FOREIGN KEY (scrape_run_id) REFERENCES scrape_runs(scrape_run_id)
+            FOREIGN KEY (scrape_run_id) REFERENCES scrape_runs(scrape_run_id),
+            CHECK (
+                (current_price_minor IS NOT NULL AND is_promotion IS NOT NULL)
+                OR (supermarket_id = 'walmart' AND availability = 'out_of_stock'
+                    AND current_price_minor IS NULL AND reported_regular_price_minor IS NULL
+                    AND is_promotion IS NULL)
+            )
         ) STRICT;
 
+        CREATE UNIQUE INDEX idx_locations_city_legacy
+            ON locations(supermarket_id, city_name) WHERE supermarket_id != 'walmart';
         CREATE INDEX idx_products_name ON products(name);
         CREATE INDEX idx_price_history_current
             ON price_history(location_id, product_id)

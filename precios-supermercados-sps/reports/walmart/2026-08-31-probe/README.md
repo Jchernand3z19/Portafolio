@@ -1,5 +1,9 @@
 # Walmart: probe demostrado, no catálogo completo
 
+Reporte histórico del probe. El full posterior fue autorizado por separado y quedó
+[aceptado con persistencia offline](../2026-08-31-full/README.md). Las referencias
+a full/contrato pendientes en este documento describen el estado al cerrar el probe.
+
 Autorización propia del usuario por 24 horas, registrada conservadoramente desde
 2026-08-31 00:17:55 UTC hasta 2026-09-01 00:17:55 UTC. Respondía al preflight de
 20 GET, hasta dos retries incluidos, concurrencia 1 y diez minutos. **No autoriza

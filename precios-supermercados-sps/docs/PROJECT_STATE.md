@@ -31,59 +31,78 @@ No ampliar La Colonia ni construir visualización. Su autorización recurrente n
 cubre Colonial ni Walmart. Ver la
 [fuente, catálogo y frontera operativa Colonial](supermercados/colonial-auditoria-preflight.md).
 
-## Walmart — fuente y contextos demostrados; full pendiente de autorización
+## Walmart — primer full aceptado y persistencia validada offline
 
-Auditoría inicial sobre `e8da4737476c8166728d320c87c2c471679d0878`: PR #351 fusionado,
-CI de main verde y cero PRs abiertos al comenzar. La auditoría se entregó en PR #352;
-antes de este probe se verificó main `159c99d4b8c6dae422e5372cba5db1b34749550d`
-y ningún PR abierto. No hay scraper productivo, snapshot aceptado ni workflow Walmart.
-La biblioteca reusable está en `252b245e0f416b57c324db97bc9cee868fc8124d`, incluida
-la ampliación de eficiencia de `production-data-engineering`.
+Auditoría previa al full: main `ced0ccff2dabec18f5784dd19c0cbfa635c826b7`, PR #353
+fusionado, CI de main verde (33345451864), sin PRs abiertos. Biblioteca reusable
+`252b245e0f416b57c324db97bc9cee868fc8124d`; se aplican las seis skills web y
+production-data-engineering vigente, sin copiar skills ni construir infraestructura.
 
-El usuario autorizó el probe propio por 24 horas desde 2026-08-31 00:17:55 UTC.
-Se consumieron sus **20 GET** en **436.847 segundos**, cero retries: 19 éxitos y un
-400 al comprobar el límite de página 51. No queda saldo de ese probe. Sin browser,
-imágenes, login, checkout, carrito, mutaciones de sesión, SQL Turso ni recurrencia.
+El probe de 20 GET demostró fuente VTEX pública y una diferencia reproducible de
+regular/promoción en SKU `68100`: FFAA 2,195/sí, El Sauce 1,895/no, efectivo 1,895
+ambos. Se mantienen **dos contextos TGU**, no por stock. SPS corresponde a Boulevard
+del Norte; el selector no demuestra un censo físico ni precio universal de ciudad.
+Binding por faceta `accesscontrollist` y `regionId`, según configuración pública.
+[Probe y control causal de región](../reports/walmart/2026-08-31-probe/README.md).
 
-El RAW confirma VTEX y API pública, primer producto contrastado con HTML y cuatro
-muestras de 50 filas. El selector publica un contexto SPS (`walmarthnwm947`,
-Boulevard del Norte) y dos TGU (`walmarthnwm4041`, FFAA; `walmarthnwm4410`, Las Uvas /
-El Sauce). Unicidad SPS se limita al selector de este ecommerce, no a un censo físico.
-El binding usa faceta pública de membership y `regionId` construido como el frontend.
+El usuario autorizó expresamente el full por 24 horas desde **2026-08-31 00:48:01
+UTC** hasta **2026-09-01 00:48:01 UTC**, respondiendo al preflight de 1,000 GET,
+20 retries incluidos, concurrencia 1 y 45 minutos. Captura terminada/cerrada:
+**514 GET**, 513 éxitos y un 400 de page_size, cero retries, **1,327.921 s**.
+No browser, assets, sesión mutable, consultas Turso ni permiso recurrente.
 
-TGU comparte **41 SKU de siete departamentos**, normales y promociones. El SKU
-`68100` tiene efectivo 1,895 en ambos, regular 2,195 en FFAA y 1,895 en El Sauce.
-Se reprodujo por búsqueda puntual y cambiando únicamente región. **Conservar dos
-contextos TGU**, por diferencia comercial, no por stock. Nunca precio universal TGU.
-La oferta rotulada seller `1` no identifica ciudad; el control de región sí demuestra
-su efecto. «Cascadas» no se confirma como nombre actual en esta configuración.
+| Contexto | Productos | SKU | Con precio | Sin precio |
+| --- | ---: | ---: | ---: | ---: |
+| `walmart_sps` | 13,656 | 13,664 | 13,386 | 278 |
+| `walmart_tgu_ffaa` | 14,083 | 14,091 | 13,106 | 985 |
+| `walmart_tgu_el_sauce` | 13,989 | 13,997 | 13,663 | 334 |
 
-[RAW, contrato fuente y preflight full](../reports/walmart/2026-08-31-probe/README.md):
-13,656/14,083/13,989 productos indexados SPS/FFAA/El Sauce; **no descargados completos**.
-La página 51 falla. Particionar por departamentos y subdividir hogar evita truncar;
-la muestra de primera/última página entrega 50/9 para una partición de 409. Usar sólo
-subcategorías globales perdería un producto por contexto. Estimación: 890 páginas,
-preflight full de hasta **1,000 GET**, incluidos 20 retries, concurrencia 1,
-**45 minutos**. **Full no autorizado.** La autoridad de 24 horas no amplía el tipo
-de operación acordado ni elimina la separación probe/full del usuario.
+41,752 observaciones SKU por ubicación; unión Walmart 16,032 SKU distintos. Las
+ofertas agotadas con precio cero conservan precio/regular/promoción NULL y ceros
+fuente, sin gratis, descarte ni precio prestado. Cantidad disponible es sólo señal,
+no inventario exacto. Se preservan todas las variantes y metadatos ausentes.
 
-Cuatro ofertas agotadas en páginas de prueba declaran precio cero: se preservan
-como precio/promoción desconocidos, con los ceros fuente, sin convertirlos en gratis
-ni eliminarlos. El contrato y SQL vigentes aún exigen valores no nulos y rechazan
-Walmart; adaptar y probar esa representación antes de persistir es trabajo pendiente,
-no una carga validada. No se modificaron las cinco tablas ni el hot path por el probe.
-El verificador offline reproduce hashes, decisiones y métricas; tests detectan RAW
-alterado y precio cero ambiguo. No existe segunda observación real Walmart.
+[Full, RAW, hashes, métricas y límites](../reports/walmart/2026-08-31-full/README.md).
+478 páginas aceptadas contra facetas antes/después, unión por ID y total por tienda.
+Dos residuales quedaron resueltos dentro del presupuesto: una página El Sauce de
+99/100 y ropa SPS de 1,092 filas/1,091 IDs. RAW conserva intentos fallidos y reparación
+mínima; los tests fallan si se elimina cualquiera de las sustituciones necesarias.
+Los tres JSON se reproducen byte a byte sin HTTP. No se recrawleó por bugs del parser.
 
-La [auditoría original](supermercados/walmart-auditoria-preflight.md) conserva su
-presupuesto y antecedentes claramente marcados como históricos.
+Se extiende el updater Turso existente, con exactamente cinco tablas. Migración
+puntual preparada y validada localmente: permitir dos ubicaciones Walmart en TGU
+y nulos de precio/promoción sólo para oferta Walmart agotada; se conservan las
+restricciones de las otras cadenas. Exige huella de esquema conocida, comprueba
+filas/FKs antes de commit y hace rollback ante error. Walmart rechaza el esquema
+antiguo antes de escribir; ninguna migración automática en la operación diaria.
+
+SQL productivo aplicado offline a los catálogos reales junto con La Colonia SPS/TGU
+y Colonial: 3 cadenas, 6 ubicaciones, 34,746 identidades, 69,923 periodos, 6 runs.
+Las filas de ambas cadenas anteriores permanecen iguales; replay exacto sin writes,
+integridad correcta y cero duplicados actuales. Pruebas cubren aislamiento inverso,
+IDs coincidentes, historia, NULL, metadata, incompletos, cronología y rollback.
+
+Costo sintético Walmart N/2N/4N 128/256/512: **31,200/62,400/125,300 instrucciones
+SQLite**. Añadir 10,000 periodos cerrados mantiene 31,200 para N=128. Sin cambios,
+sólo scrape_run; delta una vez e índices existentes. No es consumo facturado Turso.
+[Resultado completo](../reports/walmart/2026-08-31-full/offline-sql-summary.json).
+
+**Objetivo de esta espera cumplido técnicamente: catálogo aceptado y SQL validado
+offline, con datos/migración listos para primera carga controlada.** La verificación
+remota depende del reset, backup, esquema actual y autorización vigente. Migrar una
+vez tiene costo extraordinario separado del hot path. No existe segunda observación
+real ni workflow Walmart. No activar recurrencia implícitamente.
+
+Suite completa local: **1,976 pruebas pasaron** con Python 3.12 y dependencias del
+proyecto. La entrega requiere CI del PR y main verdes; no se interpreta el resultado
+local como ejecución GitHub ni persistencia Turso.
 
 ## Eficiencia compartida vigente — PR #351
 
 El [PR #351](https://github.com/Jchernand3z19/Portafolio/pull/351) materializa `delta`
 una vez, evita updates de metadata idéntica y limita la verificación diaria a
 La Colonia SPS/TGU. No añade tablas persistentes ni cambia las cinco existentes.
-Walmart deberá reutilizar esta ruta después de demostrar su contrato fuente.
+Walmart reutiliza esta ruta; su evidencia específica se documenta arriba.
 
 Revalidación offline de auditoría: 48 tests de persistencia, costo, Colonial RAW
 y seguridad de workflows pasaron. N/2N/4N = 128/256/512 produjo 31,800/63,400/127,300
@@ -474,10 +493,10 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 ## Pendiente operativo
 
 ```text
-1. autorizar primer probe Walmart; demostrar fuente/contexto/muestra y decisión TGU
-2. después de preflight y autorización full, catálogos Walmart + persistencia offline
-3. tras reset Turso, medir consumo y recuperar/cargar observaciones aceptadas bajo autorización vigente
-4. cerrar primera carga y segunda observación Colonial/Walmart sin runs de tuning remotos
+1. tras reset Turso, medir consumo, comprobar esquema/cronología y preservar backup
+2. migrar una vez las restricciones demostradas y cargar observaciones aceptadas bajo autorización vigente
+3. verificar primera carga y consumo de Colonial/Walmart, sin runs de tuning remotos
+4. obtener segunda observación real posterior bajo autorización propia; recurrencia separada
 5. comprobar una ejecución diaria íntegramente correcta de La Colonia
 ```
 
