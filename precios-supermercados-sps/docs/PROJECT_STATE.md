@@ -5,19 +5,20 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 ## Objetivo activo
 
 Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE TRACKING
-WEB**. PriceSmart Honduras es el siguiente candidato: GET demostró contrato GraphQL
-y clubes; el POST `channels` al único endpoint autorizado respondió 404
-`Cannot POST /`. Probar `/graphql` u otro path requiere autorización explícita
-separada. No iniciar Paiz, otras ciudades ni dashboard. Endpoint, full y recurrencia
-son gates separados.
+WEB**. PriceSmart Honduras sigue como candidato técnico pausado: GET demostró
+contrato GraphQL y clubes; el endpoint raíz respondió 404 y el `/graphql`
+posteriormente autorizado rechazó `channels`, `Locale` y `Point` con HTTP 400 de
+validación, proponiendo `findChannels`. Adaptar la operación o inspeccionar otro
+esquema requiere autorización explícita separada. No iniciar Paiz, otras ciudades
+ni dashboard. Endpoint, operación, full y recurrencia son gates separados.
 
 Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
 Su primera persistencia Turso y segunda observación real siguen pendientes.
 Walmart conserva tres catálogos aceptados y SQL validado offline, incluidos dos
 TGU por diferencias comerciales. **Ni Colonial ni Walmart están cerrados** en
 operación remota. Maxi/DF quedan detenidos sin scraper, persistencia ni catálogo.
-PriceSmart tiene contrato técnico observado, pero aún no respuesta aceptada de
-precio, binding causal, muestra comparable ni integración.
+PriceSmart tiene contrato técnico observado en el cliente, pero aún no respuesta
+aceptada de precio, binding causal, muestra comparable ni integración.
 
 La Colonia conserva el alcance existente:
 
@@ -84,7 +85,7 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — GET demostrado, pausa antes de GraphQL POST
+## PriceSmart Honduras — contrato del cliente incompatible con `/graphql`
 
 Autorización registrada por 24 horas: 2026-08-31T21:53:50Z a
 2026-09-01T21:53:50Z. El probe cerró su tramo GET en 8 intentos: 7 HTTP 200, un
@@ -105,16 +106,23 @@ conserva identidad `516411`, pero no contiene el precio `407.95`. Cero SKU con
 precio comparable por club; diferencias de efectivo, regular, promoción y sólo
 availability siguen `null`. No decidir granularidad TGU por availability.
 
-La extensión POST fue autorizada y cerró temprano: **1/8 POST, cero retries,
-concurrencia 1, 0.2964 s**. `channels` con headers públicos Bloomreach recibió
-HTTP 404 `Cannot POST /`; la petición no alcanzó GraphQL. No se probaron otros
-paths, signin, token ni operación. Sigue habiendo cero SKU comparables y ninguna
-decisión de granularidad TGU.
+El endpoint raíz se probó primero y cerró temprano: **1/8 POST, cero retries,
+concurrencia 1, 0.2964 s**. `channels` recibió HTTP 404 `Cannot POST /`; esa
+petición no alcanzó GraphQL.
 
-La próxima extensión mínima debe nombrar
-`https://graphql-commerce.bloomreach.io/graphql`, inferido pero no verificado, con
-hasta 7 POST restantes. Si exige Authorization, `/signin`, cookie, otro endpoint o
-credencial no pública, detenerse. [RAW y gate de path](../reports/pricesmart/2026-08-31-graphql-probe/README.md).
+La extensión posterior a `/graphql` también cerró en el primer request: **1/7
+POST, 6 no consumidos, cero retries, concurrencia 1, 0.323184 s**. El servidor sí
+validó GraphQL, pero respondió HTTP 400 `GRAPHQL_VALIDATION_FAILED`: no reconoce
+`channels`, `Locale` ni `Point` y propone `findChannels`. No fue un error de auth
+ni catálogo vacío. `findChannels` y una consulta adaptada no estaban autorizados,
+por lo que no se enviaron `products` ni `productProjectionsSearch`.
+
+Sigue habiendo cero SKU comparables y ninguna decisión de granularidad TGU. Precio
+efectivo, regular, promoción, availability y paginación permanecen no evaluables.
+No scraper, fixture comercial, full, persistencia, modelo ni Turso. Continuar
+requiere un alcance nuevo para el esquema realmente expuesto, como `findChannels`
+o introspección read-only acotada; los seis POST no usados no se trasladan
+automáticamente. [RAW y cierre de esquema](../reports/pricesmart/2026-08-31-graphql-path-probe/README.md).
 
 Última consulta de cuenta (auditoría previa): Starter, overages deshabilitados,
 713.7 M / 500 M lecturas (143%). La CLI mostró reset **30/9/2026 18:00 CST**, frente
@@ -618,10 +626,12 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 5. comprobar una ejecución diaria íntegramente correcta de La Colonia
 ```
 
-En paralelo, Maxi/DF queda cerrado como NO-GO temporal. Obtener autorización propia
-para probar el path `/graphql` con hasta 7 POST read-only restantes; después
-demostrar precio, binding por club y muestra comparable antes de plantear código o
-full. No esperar a Turso ni reutilizar autorizaciones de cadenas anteriores.
+En paralelo, Maxi/DF queda cerrado como NO-GO temporal. PriceSmart está pausado
+porque `/graphql` expone un esquema distinto al contrato del cliente; obtener una
+autorización nueva y exacta antes de probar `findChannels`, introspección u otra
+operación. Después demostrar precio, binding por club y muestra comparable antes de
+plantear código o full. No esperar a Turso ni reutilizar autorizaciones o POST no
+consumidos de alcances anteriores.
 La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 
 ## Fuera del alcance actual

@@ -62,23 +62,13 @@ No se crea parser o fixture vacío: sin una respuesta GraphQL exitosa no existe
 estructura fuente que validar. El request preserva el documento `channels` real y
 servirá como fixture de entrada cuando el endpoint correcto entregue datos.
 
-## Próxima extensión mínima
+## Continuación resuelta
 
-La inferencia técnica habitual es el path `/graphql`, pero **no se verificó**. El
-siguiente permiso debe nombrar exactamente:
-
-```text
-endpoint = https://graphql-commerce.bloomreach.io/graphql
-método = POST read-only
-primer intento = channels
-máximo propuesto = 7 POST restantes, incluidos hasta 2 retries
-concurrencia = 1
-duración máxima = 10 minutos
-```
-
-Si `/graphql` exige `Authorization`, `/signin`, cookie, otro endpoint o credencial
-no pública, detenerse sin intentarlo. Sólo tras `channels` exitoso continuar con
-`products` y `productProjectionsSearch` dentro del alcance ya descrito.
+La extensión posterior autorizó exactamente `/graphql`. El primer `channels`
+llegó a un servidor GraphQL, pero recibió HTTP 400 porque el esquema no contiene
+`channels`, `Locale` ni `Point` y sugiere `findChannels`. El alcance volvió a
+cerrarse sin retry ni adaptación. Ver el
+[reporte, RAW y decisión final de este gate](../2026-08-31-graphql-path-probe/README.md).
 
 ## Evidencia
 

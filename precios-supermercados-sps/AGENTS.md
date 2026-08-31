@@ -8,7 +8,7 @@
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
 - Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-# Fase activa — PriceSmart pausado en gate GraphQL
+# Fase activa — PriceSmart pausado por incompatibilidad de esquema
 
 Maxi Despensa y Despensa Familiar se clasifican **NO-GO TEMPORAL PARA PRICE
 TRACKING WEB**: el probe público no demostró precios activos, API de precios ni
@@ -18,12 +18,15 @@ dos cadenas. Sólo reabrirlas ante una fuente digital pública nueva y una instr
 explícita. Ver `docs/supermercados/maxi-df-auditoria-preflight.md`.
 
 PriceSmart Honduras demostró estado Nuxt, contrato GraphQL de comercio y tres clubes
-(`6602` Florencia, `6603` SPS, `6604` El Sauce). La extensión POST autorizada se
-detuvo tras `channels`: el endpoint raíz exclusivo respondió 404 `Cannot POST /`.
-No probar `/graphql`, `/signin` u otro path sin autorización explícita nueva. No
-crear scraper, persistencia, full crawl, workflow o cambios de esquema antes de
-demostrar respuesta de precio, binding y muestra comparable. Paiz permanece
-excluido. Ver `reports/pricesmart/2026-08-31-graphql-probe/README.md`.
+(`6602` Florencia, `6603` SPS, `6604` El Sauce). Dos extensiones POST cerraron sin
+datos: el endpoint raíz respondió 404 y `/graphql` devolvió 400 porque su esquema
+no contiene `channels`, `Locale` ni `Point`; sugirió `findChannels`. Se usó 1/7
+POST de la segunda extensión, sin retry. No adaptar la consulta a `findChannels`,
+introspección, otro endpoint, `/signin` o credenciales sin autorización explícita
+nueva. No crear scraper, persistencia, full crawl, workflow o cambios de esquema
+antes de demostrar respuesta de precio, binding y muestra comparable. Paiz
+permanece excluido. Ver
+`reports/pricesmart/2026-08-31-graphql-path-probe/README.md`.
 
 Colonial y Walmart conservan sus catálogos aceptados y validación SQL offline;
 primera carga Turso y segunda observación real siguen pendientes. Walmart conserva
