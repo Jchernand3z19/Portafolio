@@ -1,11 +1,14 @@
 # PriceSmart Honduras — auditoría y preflight
 
-## Resultado del probe GET autorizado
+## Resultado de los probes autorizados
 
-Continuación GraphQL: la extensión POST fue autorizada, pero `channels` al endpoint
-raíz respondió HTTP 404 `Cannot POST /`. Se consumió 1/8 POST, sin retry, y se
-detuvo antes de `/graphql` u otro path. Ver
-[RAW y siguiente extensión](../../reports/pricesmart/2026-08-31-graphql-probe/README.md).
+La primera extensión POST envió `channels` al endpoint raíz y recibió HTTP 404
+`Cannot POST /`: 1/8 POST, sin retry. La segunda extensión autorizó `/graphql`,
+que sí validó GraphQL pero rechazó el contrato observado con HTTP 400: no existen
+`channels`, `Locale` ni `Point` en ese esquema y el servidor sugiere
+`findChannels`. Se consumió 1/7 POST, sin retry; 6 quedaron sin usar. Como
+`findChannels` no estaba autorizado, el tráfico se cerró sin adaptar la consulta.
+Ver [RAW y cierre de esquema](../../reports/pricesmart/2026-08-31-graphql-path-probe/README.md).
 
 Autorización de 24 horas registrada 2026-08-31T21:53:50Z. El tramo GET se pausó
 después de 8 intentos / 7 HTTP 200 / un retry / cuatro assets / 303.054 s. Demostró
@@ -14,10 +17,13 @@ y clubes `6602` Florencia, `6603` SPS, `6604` El Sauce. Los HTML de búsqueda
 mostraron respuestas de caché incompatibles con sus queries y la ficha GET no
 incluyó precio numérico.
 
-El tramo GET había demostrado que el precio requiere un POST GraphQL externo.
+El tramo GET había demostrado que el precio requiere un POST GraphQL externo, pero
+ninguno de los dos paths probados expuso el contrato comercial observado.
 [Reporte GET, RAW y contrato](../../reports/pricesmart/2026-08-31-probe/README.md).
-No scraper, full, persistencia, modelo ni Turso. Las secciones siguientes conservan
-el preflight histórico anterior a la autorización.
+No parser comercial, scraper, full, persistencia, modelo ni Turso. Continuar
+requiere autorización nueva para el esquema real, por ejemplo `findChannels` o una
+introspección read-only acotada. Las secciones siguientes conservan el preflight
+histórico anterior a la autorización.
 
 ## Decisión de candidato
 

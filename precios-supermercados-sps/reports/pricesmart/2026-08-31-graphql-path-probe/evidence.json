@@ -1,0 +1,92 @@
+{
+  "authorization": {
+    "authorized_at_utc": "2026-08-31T23:14:29Z",
+    "concurrency": 1,
+    "duration_max_seconds": 600,
+    "endpoint": "https://graphql-commerce.bloomreach.io/graphql",
+    "live_deadline_utc": "2026-08-31T23:26:21.978621Z",
+    "live_started_at_utc": "2026-08-31T23:16:21.978621Z",
+    "operations": [
+      "channels",
+      "products",
+      "productProjectionsSearch"
+    ],
+    "post_budget_lineage": {
+      "original_max": 8,
+      "remaining_extension_max": 7,
+      "root_path_used": 1
+    },
+    "post_total_max": 7,
+    "retries_included_max": 2
+  },
+  "capture": {
+    "closed_reason": "authorized_channels_operation_absent_from_endpoint_schema",
+    "concurrency": 1,
+    "elapsed_seconds": 0.323184,
+    "graphql_error_codes": [
+      "GRAPHQL_VALIDATION_FAILED"
+    ],
+    "graphql_error_messages": [
+      "Unknown type \"Locale\".",
+      "Cannot query field \"channels\" on type \"Query\". Did you mean \"findChannels\"?",
+      "Unknown type \"Point\". Did you mean \"Int\", \"Link\", or \"Price\"?"
+    ],
+    "http_status": 400,
+    "operation": "channels",
+    "post_attempts": 1,
+    "post_unused": 6,
+    "redirects": 0,
+    "response_content_type": "application/json; charset=utf-8",
+    "retries": 0
+  },
+  "decision": {
+    "full_crawl": false,
+    "model_change": false,
+    "next_operation_observed": "findChannels",
+    "next_operation_was_authorized": false,
+    "persistence": false,
+    "production_scraper": false,
+    "reason": "authorized_channels_field_absent_and_adapting_to_findChannels_requires_new_scope",
+    "status": "STOPPED_UNAUTHORIZED_SCHEMA_OPERATION_REQUIRED",
+    "turso_access": false
+  },
+  "raw_archive": {
+    "bytes": 1618,
+    "published_files": 2,
+    "redactions": {},
+    "sha256": "83dde6d9a1a65fc0d9aeb7ab1887a0642c527d67faf769794e3215bcf42c88ba"
+  },
+  "request": {
+    "endpoint": "https://graphql-commerce.bloomreach.io/graphql",
+    "headers_public": {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "Origin": "https://www.pricesmart.com",
+      "br-acct-env": "pricesmart",
+      "connector": "commercetools"
+    },
+    "mutation": false,
+    "request_sha256": "2ff1c12c75b92104c9d6906781c6c0613c92e07c2fcb0dab8694ba552c74aa61",
+    "response_sha256": "c9f5e9350a802900157c9024e82561defbb60ea18fe7f91cb25322ad81aba3bf",
+    "variables": {
+      "acceptLanguage": [
+        "en-HN"
+      ],
+      "limit": 3,
+      "offset": 0,
+      "where": "key in (\"6602\",\"6603\",\"6604\")"
+    }
+  },
+  "result": {
+    "availability_only_differences": null,
+    "club_binding_demonstrated": false,
+    "current_price_differences": null,
+    "graphql_data": false,
+    "graphql_reached": true,
+    "pagination_demonstrated": false,
+    "price_comparable_skus": 0,
+    "promotion_differences": null,
+    "reported_regular_price_differences": null
+  },
+  "schema_version": 1
+}
