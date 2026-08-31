@@ -1,0 +1,160 @@
+{
+  "authorization": {
+    "authorized_at_utc": "2026-08-31T21:53:50Z",
+    "expires_at_utc": "2026-09-01T21:53:50Z",
+    "scope": "pricesmart_honduras_get_only_probe"
+  },
+  "budget": {
+    "asset_gets_max": 4,
+    "concurrency": 1,
+    "duration_max_seconds": 900,
+    "get_total_max": 30,
+    "minimum_pacing_seconds": 1,
+    "redirects_max": 2,
+    "timeout_seconds": 20,
+    "transient_retries_max": 3
+  },
+  "capture": {
+    "asset_gets": 4,
+    "closed_reason": "read_only_graphql_post_and_external_domain_require_precise_extension",
+    "concurrency": 1,
+    "elapsed_seconds": 303.05415,
+    "get_attempts": 8,
+    "http_200": 7,
+    "minimum_observed_gap_seconds": 8.849209,
+    "pre_response_errors": 1,
+    "redirect_responses": 0,
+    "transient_retries": 1
+  },
+  "clubs": {
+    "availability_only_differences": null,
+    "default_source_club_key": "6602",
+    "price_comparable_skus": 0,
+    "price_differences": null,
+    "promotion_differences": null,
+    "reported_regular_price_differences": null,
+    "rows": [
+      {
+        "ecommerce_enabled": true,
+        "name": "Florencia",
+        "source_club_key": "6602"
+      },
+      {
+        "ecommerce_enabled": true,
+        "name": "San Pedro Sula",
+        "source_club_key": "6603"
+      },
+      {
+        "ecommerce_enabled": true,
+        "name": "El Sauce",
+        "source_club_key": "6604"
+      }
+    ]
+  },
+  "decision": {
+    "candidate": "GO_TO_READ_ONLY_GRAPHQL_EXTENSION_GATE",
+    "full_crawl": false,
+    "model_change": false,
+    "persistence": false,
+    "probe_status": "PAUSED_PENDING_EXPLICIT_POST_AND_DOMAIN_AUTHORIZATION",
+    "production_scraper": false,
+    "reason": "public_get_proves_contract_and_clubs_but_not_a_price_response_or_context_binding",
+    "turso_access": false
+  },
+  "get_surface": {
+    "frontend": "Nuxt_Vue_Storefront_2",
+    "mismatch_assertions": {
+      "bags_response_contains_bolsas": false,
+      "bags_response_contains_huevos": true,
+      "vegetables_response_contains_jabon_dove": true,
+      "vegetables_response_contains_vegetables": false
+    },
+    "mismatches": [
+      {
+        "observed_embedded_query": "q=Huevos",
+        "requested": "q=Bolsas"
+      },
+      {
+        "observed_embedded_query": "page=1&q=jabon dove",
+        "requested": "page=3&q=Vegetables"
+      }
+    ],
+    "product_page": {
+      "identity_and_title_present": true,
+      "numeric_price_407_95_present_in_get_body": false,
+      "requested_sku": "516411"
+    },
+    "requested_searches_bound_to_response": false
+  },
+  "raw_archive": {
+    "bytes": 731684,
+    "published_files": 8,
+    "sha256": "d0aec577880268de9633ac94eeec1802a31d54afcbdbb47d1206ced9794e3a7f"
+  },
+  "redactions": {
+    "brDiscoveryAuthKey": 3,
+    "googleMapsApiKey": 3,
+    "paypalSdkClientId": 3,
+    "segmentKey": 3
+  },
+  "schema_version": 1,
+  "structured_source": {
+    "base_url": "https://graphql-commerce.bloomreach.io",
+    "country_alpha3": "HND",
+    "country_club_params": [
+      "availability",
+      "price",
+      "inventory"
+    ],
+    "country_params": [
+      "inventory",
+      "promoid"
+    ],
+    "discovery_account_id": "7024",
+    "discovery_domain_key": "pricesmart_bloomreach_io_en",
+    "discovery_realm": "PRODUCTION",
+    "discovery_view_id": "HN",
+    "fields": [
+      "pid",
+      "title",
+      "price",
+      "thumb_image",
+      "brand",
+      "slug",
+      "skuid",
+      "currency",
+      "fractionDigits",
+      "master_sku",
+      "sold_by_weight_",
+      "weight_",
+      "weight_uom_description_",
+      "sign_price_",
+      "price_per_uom_",
+      "uom_description_",
+      "saving_amount_",
+      "original_price_without_saving_"
+    ],
+    "kind": "GraphQL_client_contract_embedded_in_public_Nuxt_state_and_assets",
+    "locale": "en_HN",
+    "operations_observed": [
+      "channels",
+      "productProjectionsSearch",
+      "inventoryEntries",
+      "products"
+    ],
+    "price_contract": {
+      "effective_candidate": "discounted.value_when_active_else_value",
+      "money": [
+        "currencyCode",
+        "centAmount",
+        "fractionDigits"
+      ],
+      "promotion_candidate": "discount.isActive",
+      "regular_candidate": "value_when_discounted_is_present",
+      "status": "schema_observed_response_not_yet_called"
+    },
+    "public_auth_config_redacted": true,
+    "tenant": "pricesmart",
+    "territory_id": "17418"
+  }
+}
