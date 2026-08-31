@@ -4,15 +4,19 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 
 ## Objetivo activo
 
-Avanzar Walmart Honduras, sólo San Pedro Sula y Tegucigalpa, mientras Turso esté
-bloqueado: catálogo completo aceptado y persistencia validada offline, listo para
-primera carga. No iniciar una cuarta cadena ni dashboard. La continuación del
-2026-08-30 exige una autorización Walmart propia antes de cualquier probe nuevo;
-el permiso de Colonial no se extiende a Walmart.
+Avanzar conjuntamente Maxi Despensa y Despensa Familiar, sólo San Pedro Sula y
+Tegucigalpa, mientras Turso esté bloqueado: demostrar fuente y comparar tiendas
+antes de agrupar contextos comerciales y capturar únicamente los necesarios.
+Meta: catálogo aceptado y persistencia validada offline, listo para primera carga.
+No iniciar Paiz, una sexta cadena, otras ciudades ni dashboard. La continuación
+explícita exige autorización propia para el primer probe Maxi/DF; los permisos
+anteriores de Colonial/Walmart no lo cubren. Full y recurrencia son gates separados.
 
 Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
 Su primera persistencia Turso y segunda observación real siguen pendientes.
-**Ni Colonial ni Walmart están cerrados.**
+Walmart conserva tres catálogos aceptados y SQL validado offline, incluidos dos
+TGU por diferencias comerciales. **Ni Colonial ni Walmart están cerrados** en
+operación remota; Maxi/DF aún no tienen fuente, muestra ni catálogo demostrados.
 
 La Colonia conserva el alcance existente:
 
@@ -28,8 +32,36 @@ dashboard = fuera del MVP actual
 ```
 
 No ampliar La Colonia ni construir visualización. Su autorización recurrente no
-cubre Colonial ni Walmart. Ver la
+cubre Colonial, Walmart, Maxi ni DF. Ver la
 [fuente, catálogo y frontera operativa Colonial](supermercados/colonial-auditoria-preflight.md).
+
+## Maxi Despensa + Despensa Familiar — auditoría y frontera del primer probe
+
+Auditoría 2026-08-31 UTC: main `3e77145c237102f835ae147d4923119597c3cb5e`,
+[PR #355](https://github.com/Jchernand3z19/Portafolio/pull/355) fusionado,
+[CI main verde, 1,985 pruebas](https://github.com/Jchernand3z19/Portafolio/actions/runs/33352854520),
+cero PRs abiertos. Sin integración Maxi/DF en código, configuración, fixtures ni
+workflows. Revisión reusable `252b245e0f416b57c324db97bc9cee868fc8124d`: seis
+skills web y `production-data-engineering` aplicadas explícitamente, sin copiarlas.
+
+**Cero requests nuevos a Maxi/DF.** El dominio compartido indicado por el usuario
+es una hipótesis de entrada, no prueba de API, identidad, formato ni contexto.
+No se inventan store IDs ni se extiende el parser Walmart sin contrato demostrado.
+Regresión local del SQL existente: **53 pruebas pasaron**; esto protege las tres
+cadenas anteriores, no demuestra persistencia de las dos nuevas.
+
+[Auditoría, probe propuesto y criterios de aceptación](supermercados/maxi-df-auditoria-preflight.md):
+hasta 40 GET totales, incluyendo redirects/retries, concurrencia 1 y 15 minutos;
+**pendiente de autorización**. Después de probar la fuente, evaluar todas las
+tiendas relevantes mediante panel común de 20–50 SKU por formato/ciudad. Separar
+disponibilidad; mantener desconocidos y residuales explícitos. Full sólo tras
+decidir representantes y obtener autorización con presupuesto medido.
+
+Consulta read-only de cuenta en esta auditoría: Starter, overages deshabilitados,
+713.7 M / 500 M lecturas (143%). **La CLI ahora muestra reset el 30/9/2026 a las
+18:00 CST**, mientras consultas anteriores mostraron 31/8. Es una discrepancia
+observada, no confirmación de que el servicio haya pospuesto el reset ni de que
+SQL esté habilitado. No se ejecutó SQL, se cambió plan ni se activaron cobros.
 
 ## Walmart — primer full aceptado y persistencia validada offline
 
@@ -172,9 +204,11 @@ un falso fallo después de persistir. La prueba ejecuta el SQL extraído del YAM
 contra ambas cadenas: falla antes del filtro y pasa con él. Revisión de seguridad:
 sin nuevos triggers, permisos, secretos, acciones, requests ni workflow Colonial.
 
-Bloqueo reconfirmado: Turso plan Starter, 713.7 M / 500 M lecturas (143%), overages
-deshabilitados. Reset anunciado 31/8/2026 18:00 CST, después del vencimiento live
+Bloqueo observado durante el cierre Colonial: Turso plan Starter, 713.7 M / 500 M
+lecturas (143%), overages deshabilitados. Entonces la CLI anunció reset
+31/8/2026 18:00 CST, después del vencimiento live
 (31/8 14:10:18 CST). No se cambió facturación ni se intentó sortear el bloqueo.
+La auditoría Maxi/DF arriba registra una fecha diferente; no usar ésta como vigente.
 Siguiente: restablecer lecturas, primera carga y verificación, segunda observación
 real autorizada sin cache comercial anterior, persistir/verificar y sólo entonces
 workflow mínimo. No se construyó ni activó workflow Colonial anticipadamente.
@@ -475,9 +509,11 @@ La auditoría del 2026-08-30 sobre `main`
   también fue rechazada. El error precede al batch de mutación; este run no
   demuestra nuevas escrituras ni permite certificar el estado actual de Turso.
 
-La consulta read-only `turso plan show` confirmó plan `starter`, excedentes
-deshabilitados y 713.7M filas leídas sobre una cuota de 500M (143%). La CLI indica
-reinicio el 2026-08-31 a las 18:00 CST. No se cambió billing, storage ni credenciales.
+La consulta read-only `turso plan show` de aquella auditoría confirmó plan `starter`,
+excedentes deshabilitados y 713.7M filas leídas sobre una cuota de 500M (143%). La CLI
+indicó entonces reinicio el 2026-08-31 a las 18:00 CST; la auditoría Maxi/DF registra
+arriba una fecha distinta sin confirmar acceso SQL. No se cambió billing, storage
+ni credenciales.
 El bloqueo afecta también a la futura persistencia de Colonial. `turso db inspect
 precios-supermercados --queries` no devolvió estadísticas por consulta; no permite
 atribuir una cifra exacta facturada a cada sentencia.
@@ -517,7 +553,10 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 5. comprobar una ejecución diaria íntegramente correcta de La Colonia
 ```
 
-No esperar a Turso para avanzar Walmart dentro de la autorización disponible.
+En paralelo, continuar Maxi/DF offline y obtener permiso propio antes del primer
+probe: demostrar fuente, comparar todas las tiendas, elegir representantes y pedir
+full acotado; después validar persistencia/aislamiento de las cinco cadenas offline.
+No esperar a Turso ni reutilizar autorizaciones de cadenas anteriores.
 La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 
 ## Fuera del alcance actual
@@ -525,7 +564,9 @@ La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 No trabajar ahora en:
 
 - dashboard;
-- supermercados distintos de La Colonia, Colonial y Walmart;
+- supermercados distintos de La Colonia, Colonial, Walmart, Maxi Despensa y Despensa Familiar;
+- ciudades distintas de SPS/TGU;
+- recurrencia nueva para Colonial, Walmart, Maxi Despensa o Despensa Familiar;
 - BigQuery;
 - Google Sheets;
 - Cloudflare;
