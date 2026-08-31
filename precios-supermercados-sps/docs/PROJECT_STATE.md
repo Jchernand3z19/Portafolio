@@ -16,7 +16,8 @@ Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
 Su primera persistencia Turso y segunda observación real siguen pendientes.
 Walmart conserva tres catálogos aceptados y SQL validado offline, incluidos dos
 TGU por diferencias comerciales. **Ni Colonial ni Walmart están cerrados** en
-operación remota; Maxi/DF aún no tienen fuente, muestra ni catálogo demostrados.
+operación remota; Maxi/DF aún no tienen fuente comercial con precios, muestra
+comparable por tienda ni catálogo aceptado.
 
 La Colonia conserva el alcance existente:
 
@@ -35,33 +36,54 @@ No ampliar La Colonia ni construir visualización. Su autorización recurrente n
 cubre Colonial, Walmart, Maxi ni DF. Ver la
 [fuente, catálogo y frontera operativa Colonial](supermercados/colonial-auditoria-preflight.md).
 
-## Maxi Despensa + Despensa Familiar — auditoría y frontera del primer probe
+## Maxi Despensa + Despensa Familiar — probe cerrado, fuente comercial pendiente
 
-Auditoría 2026-08-31 UTC: main `3e77145c237102f835ae147d4923119597c3cb5e`,
-[PR #355](https://github.com/Jchernand3z19/Portafolio/pull/355) fusionado,
-[CI main verde, 1,985 pruebas](https://github.com/Jchernand3z19/Portafolio/actions/runs/33352854520),
-cero PRs abiertos. Sin integración Maxi/DF en código, configuración, fixtures ni
-workflows. Revisión reusable `252b245e0f416b57c324db97bc9cee868fc8124d`: seis
-skills web y `production-data-engineering` aplicadas explícitamente, sin copiarlas.
+Auditoría previa: main `9592901c95aa2cb447effe1c514fe85eb5e74265`,
+[PR #356](https://github.com/Jchernand3z19/Portafolio/pull/356) fusionado,
+[CI main verde, 1,985 pruebas](https://github.com/Jchernand3z19/Portafolio/actions/runs/33355963991),
+cero PRs abiertos. Biblioteca reusable sin cambios en
+`252b245e0f416b57c324db97bc9cee868fc8124d`; seis skills web y
+`production-data-engineering` aplicadas, sin copiar skills ni generalizar Walmart.
 
-**Cero requests nuevos a Maxi/DF.** El dominio compartido indicado por el usuario
-es una hipótesis de entrada, no prueba de API, identidad, formato ni contexto.
-No se inventan store IDs ni se extiende el parser Walmart sin contrato demostrado.
-Regresión local del SQL existente: **53 pruebas pasaron**; esto protege las tres
-cadenas anteriores, no demuestra persistencia de las dos nuevas.
+El usuario autorizó el primer probe conjunto por 24 horas, registrado
+2026-08-31T04:20:37Z a 2026-09-01T04:20:37Z, dentro del techo de 40 GET/15 minutos.
+**Probe cerrado temprano: 21 GET, 17 HTTP 200, dos 301 al inicio ya capturado,
+dos timeouts al destino externo de compra, un retry, concurrencia 1, 273.325 s.**
+No full, browser, imágenes, login, mutaciones ni SQL Turso.
 
-[Auditoría, probe propuesto y criterios de aceptación](supermercados/maxi-df-auditoria-preflight.md):
-hasta 40 GET totales, incluyendo redirects/retries, concurrencia 1 y 15 minutos;
-**pendiente de autorización**. Después de probar la fuente, evaluar todas las
-tiendas relevantes mediante panel común de 20–50 SKU por formato/ciudad. Separar
-disponibilidad; mantener desconocidos y residuales explícitos. Full sólo tras
-decidir representantes y obtener autorización con presupuesto medido.
+La web comparte HTML y localizador de formatos: `4` Despensa / `6` Maxi Despensa,
+71/28 entradas. Son marcadores de mapa sin store_id ni vínculo a precios. Hay
+**97 filas candidatas / 96 códigos distintos** entre campaña y categoría regular,
+pero ningún precio activo utilizable ni comparación de tienda. Los precios de
+plantilla comentados `Q20.00`/`Q30.50` no son ofertas. **Cero productos aceptados.**
+No se ha demostrado API común con Walmart, formato comercial por SKU, disponibilidad,
+paginación ni completitud. El enlace público Compra en línea agotó un retry por
+timeout; no se concluye login obligatorio ni bloqueo anti-bot.
 
-Consulta read-only de cuenta en esta auditoría: Starter, overages deshabilitados,
-713.7 M / 500 M lecturas (143%). **La CLI ahora muestra reset el 30/9/2026 a las
-18:00 CST**, mientras consultas anteriores mostraron 31/8. Es una discrepancia
-observada, no confirmación de que el servicio haya pospuesto el reset ni de que
-SQL esté habilitado. No se ejecutó SQL, se cambió plan ni se activaron cobros.
+**Granularidad pendiente:** cero SKU comparables por tienda; diferencias de precio,
+regular, promoción y sólo disponibilidad no evaluables, no cero diferencias. Los
+29 candidatos geográficos son inferencias por dirección/coordenadas, no un censo
+SPS/TGU cerrado. Ninguna tienda se consolida o separa ni se convierte en location
+productiva. Las cuatro combinaciones de formato/ciudad siguen sin catálogo válido.
+
+[RAW, evidencia reproducible y límites](../reports/maxi-df/2026-08-31-probe/README.md).
+Ocho tests offline protegen la evidencia contra precio comentado, unknown como
+igualdad, identidad inconsistente y RAW alterado. Se redactaron 28 valores CSRF de
+formularios al publicar, con hashes originales/publicados separados. No cambios
+a scraper, parser, fixture, SQL, esquema o workflow de las tres cadenas anteriores.
+La regresión previa de persistencia pasó 53 tests; no valida persistencia Maxi/DF.
+
+**No pedir full todavía:** hace falta fuente pública con precio y contexto, o
+resolver el acceso público al destino enlazado. Más páginas sin precio no solucionan
+el bloqueo. [Preflight y auditoría anteriores](supermercados/maxi-df-auditoria-preflight.md).
+Después: probar contrato, evaluar todas las tiendas con panel común, agrupar,
+pedir full medido y validar persistencia/aislamiento offline. No reusar el ledger
+cerrado ni interpretar las 24 horas como permiso de full/recurrencia.
+
+Última consulta de cuenta (auditoría previa): Starter, overages deshabilitados,
+713.7 M / 500 M lecturas (143%). La CLI mostró reset **30/9/2026 18:00 CST**, frente
+al 31/8 anterior: discrepancia sin causa ni habilitación SQL confirmadas. No se
+repitió la consulta en este probe; no SQL, cambio de plan ni cobros.
 
 ## Walmart — primer full aceptado y persistencia validada offline
 
@@ -553,9 +575,10 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 5. comprobar una ejecución diaria íntegramente correcta de La Colonia
 ```
 
-En paralelo, continuar Maxi/DF offline y obtener permiso propio antes del primer
-probe: demostrar fuente, comparar todas las tiendas, elegir representantes y pedir
-full acotado; después validar persistencia/aislamiento de las cinco cadenas offline.
+En paralelo, Maxi/DF conserva el probe cerrado y evidencia offline. Resolver la
+fuente pública con precio/contexto antes de otro probe acotado; después comparar
+todas las tiendas, elegir representantes y pedir full. Validar persistencia y
+aislamiento de las cinco cadenas offline sólo con datos/contrato aceptados.
 No esperar a Turso ni reutilizar autorizaciones de cadenas anteriores.
 La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 

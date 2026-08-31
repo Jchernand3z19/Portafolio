@@ -1,10 +1,18 @@
-# Maxi Despensa + Despensa Familiar — auditoría y primer probe pendiente
+# Maxi Despensa + Despensa Familiar — auditoría y frontera técnica
 
-Auditoría: 2026-08-31 UTC. **Viabilidad técnica aún no evaluada.** No hay fuente,
-muestra, comparación de tiendas, catálogo ni persistencia Maxi/DF aceptados.
-El trabajo se detiene únicamente antes del primer tráfico automatizado, tal como
-exige la continuación explícita del usuario. No aplica la autorización de Walmart
-ni la de Colonial. Este documento propone un probe; no concede permiso.
+Actualización: el usuario autorizó el probe por 24 horas desde el registro
+2026-08-31T04:20:37Z. **Probe cerrado: 21 GET/273.325 s, un retry, concurrencia 1**,
+dentro del máximo 40 GET/15 minutos. Web y formatos demostrados; precio/contexto
+comercial no demostrados. 97 filas / 96 códigos candidatos, cero aceptados.
+**No apto para full ni persistencia con la fuente observada.**
+
+[Reporte actual, RAW, comparación pendiente y siguiente frontera](../../reports/maxi-df/2026-08-31-probe/README.md).
+Sin SQL Turso ni cambios productivos. Hace falta fuente pública con precios y
+contexto antes de comparar tiendas o pedir full. No se afirma inviabilidad universal.
+
+Las secciones siguientes conservan la **auditoría y el preflight históricos**, de
+antes de la autorización y captura. Sus frases «pendiente», «cero requests» y
+«no demostrado» describen ese momento, no permiso para repetir el probe cerrado.
 
 ## Estado comprobado antes de implementar
 
