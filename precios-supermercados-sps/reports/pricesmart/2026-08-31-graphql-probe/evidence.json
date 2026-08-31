@@ -1,0 +1,79 @@
+{
+  "authorization": {
+    "authorized_at_utc": "2026-08-31T22:47:02Z",
+    "concurrency": 1,
+    "duration_max_seconds": 600,
+    "endpoint": "https://graphql-commerce.bloomreach.io/",
+    "live_deadline_utc": "2026-08-31T22:59:02Z",
+    "live_started_at_utc": "2026-08-31T22:49:02.292225Z",
+    "operations": [
+      "channels",
+      "products",
+      "productProjectionsSearch"
+    ],
+    "post_total_max": 8,
+    "retries_included_max": 2
+  },
+  "capture": {
+    "closed_reason": "root_path_returned_404_other_path_not_authorized",
+    "concurrency": 1,
+    "elapsed_seconds": 0.2964,
+    "http_status": 404,
+    "operation": "channels",
+    "post_attempts": 1,
+    "redirects": 0,
+    "response_body": "Cannot POST /",
+    "response_content_type": "text/html; charset=utf-8",
+    "retries": 0
+  },
+  "decision": {
+    "full_crawl": false,
+    "model_change": false,
+    "next_path_inference": "/graphql",
+    "next_path_verified": false,
+    "persistence": false,
+    "production_scraper": false,
+    "reason": "authorized_root_path_returned_404_and_other_paths_were_not_authorized",
+    "status": "STOPPED_OTHER_ENDPOINT_PATH_REQUIRED",
+    "turso_access": false
+  },
+  "raw_archive": {
+    "bytes": 1520,
+    "published_files": 2,
+    "redactions": {},
+    "sha256": "018f3921d6e542d5329d456f380f44113101d45b92d1e5809903ddae63349798"
+  },
+  "request": {
+    "endpoint": "https://graphql-commerce.bloomreach.io/",
+    "headers_public": {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "Origin": "https://www.pricesmart.com",
+      "br-acct-env": "pricesmart",
+      "connector": "commercetools"
+    },
+    "mutation": false,
+    "request_sha256": "2ff1c12c75b92104c9d6906781c6c0613c92e07c2fcb0dab8694ba552c74aa61",
+    "response_sha256": "be67a54afe4110e7bca6f045e5230e5af3645f8aab4bd06e0269287bfbd8d83e",
+    "variables": {
+      "acceptLanguage": [
+        "en-HN"
+      ],
+      "limit": 3,
+      "offset": 0,
+      "where": "key in (\"6602\",\"6603\",\"6604\")"
+    }
+  },
+  "result": {
+    "availability_only_differences": null,
+    "club_binding_demonstrated": false,
+    "current_price_differences": null,
+    "graphql_data": false,
+    "graphql_reached": false,
+    "pagination_demonstrated": false,
+    "price_comparable_skus": 0,
+    "promotion_differences": null,
+    "reported_regular_price_differences": null
+  },
+  "schema_version": 1
+}
