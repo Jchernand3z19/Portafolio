@@ -1,9 +1,18 @@
 # Maxi Despensa + Despensa Familiar — probe conjunto cerrado
 
-**No apto para full ni persistencia con la fuente observada.** Se demuestran web
-compartida, formatos y un directorio, pero no precio efectivo/regular/promoción ni
-binding comercial de tienda. No se crean catálogos ficticios, ubicaciones productivas
-ni integración SQL. Esto no prueba que jamás exista otra fuente pública útil.
+## Decisión final
+
+**NO-GO TEMPORAL PARA PRICE TRACKING WEB.** La corrección explícita del usuario
+confirma que la web pública no muestra precios de producto y ordena detener ambas
+cadenas si la radiografía mínima no demuestra otra fuente pública reproducible.
+La evidencia capturada demuestra web compartida, formatos y directorio, pero no
+precio efectivo/regular/promoción, API de precios ni binding comercial de tienda.
+
+Se detiene Maxi Despensa y Despensa Familiar: no más búsqueda de fuente, scraper,
+persistencia, full crawl, imágenes, PDF, OCR, fuente indirecta ni cambio de modelo.
+No se crean catálogos ficticios o ubicaciones productivas. La clasificación es
+temporal: una fuente pública digital nueva y demostrable permitiría reevaluarla
+como un trabajo nuevo, sin reinterpretar este probe cerrado.
 
 Base auditada: main `9592901c95aa2cb447effe1c514fe85eb5e74265`, PR #356 fusionado,
 [CI main verde](https://github.com/Jchernand3z19/Portafolio/actions/runs/33355963991),
@@ -87,6 +96,15 @@ No se modificaron cookies/contextos manualmente ni se ejecutó browser para obse
 storage. Presencia de logo/formato, texto «Disponible en» y campañas no sustituyen
 precio, stock ni binding. Todos esos campos comerciales quedan desconocidos.
 
+| Pregunta de la radiografía | Respuesta con la evidencia RAW |
+| --- | --- |
+| ¿Fuente pública estructurada con precios reales? | No encontrada |
+| ¿API/JSON/GraphQL/estado embebido con precio por producto/tienda? | No encontrado |
+| ¿Catálogo/promociones sin precio digital utilizable? | Sí, en la superficie pública observada |
+
+La respuesta se limita a la fuente pública reproducible capturada; no afirma que
+una integración privada o futura sea imposible.
+
 ## Tiendas y decisión de granularidad
 
 [Candidatos geográficos](store-candidates.json): 29 entradas, localizadas a partir
@@ -112,7 +130,8 @@ colisionantes como `/kennedy`; no se usarán como identidad común sin prueba.
 sólo disponibilidad: **no evaluables (`null`), no cero diferencias**. No existen
 20–50 SKU válidos comparables por formato/ciudad. No se consolida ninguna tienda,
 no se justifica separarlas por stock y no se fabrican cuatro locations nominales.
-La decisión de granularidad queda pendiente de fuente comercial demostrada.
+No se adopta granularidad productiva para estas cadenas porque no existe price
+tracking web aceptado. Availability no intervino en la decisión.
 
 ## Evidencia, seguridad y reproducción offline
 
@@ -137,16 +156,13 @@ python precios-supermercados-sps/reports/maxi-df/2026-08-31-probe/verify.py
 
 ## Siguiente frontera
 
-**No solicitar full con esta evidencia.** Hace falta una URL/fuente pública que
-muestre precio de producto y permita demostrar su formato/contexto, o resolver el
-acceso público al destino de compra enlazado. No afirmar que un timeout exige login
-ni intentar otro método para sortear un control. Una URL aportada por el usuario
-permitirá precisar el siguiente probe; no extender alcance a otra cadena.
+**No solicitar full ni otro probe Maxi/DF con esta evidencia.** Dos timeouts no
+prueban login obligatorio ni justifican forzar el destino, browser pesado o fuente
+indirecta. La decisión no se basa en disponibilidad: no existen precios comparables.
 
-Después de esa prueba: misma muestra entre todas las tiendas relevantes, grupos
-por efectivo/regular/promoción (availability aparte), full sólo de representantes
-con autorización específica y presupuesto medido. Persistencia y matriz de
-aislamiento/escala se validarán offline sólo después de contrato y catálogo reales.
-Hoy no hay bug compartido demostrado que justifique cambiar SQL, esquema, parsers
-o fixtures anteriores. Turso permanece sin consultas; su bloqueo no causa ni
-resuelve la falta de precios en esta fuente.
+El siguiente paso cambia de cadena. PriceSmart Honduras queda como candidato de
+reconocimiento separado porque su web oficial sí publica precios digitales; ver
+[preflight PriceSmart](../../../docs/supermercados/pricesmart-auditoria-preflight.md).
+Hoy no hay bug compartido que justifique cambiar SQL, esquema, parsers o fixtures
+anteriores. Turso permanece sin consultas; su bloqueo no causa ni resuelve la falta
+de precios en esta fuente.

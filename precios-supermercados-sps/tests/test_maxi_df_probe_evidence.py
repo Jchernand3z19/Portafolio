@@ -27,6 +27,7 @@ def test_reproduce_with_network_forbidden(monkeypatch):
     assert evidence == json.loads((REPORT / "evidence.json").read_text())
     assert evidence["metrics"]["unique_code_candidates"] == 96
     assert evidence["codes_shared_between_listing_templates"] == ["70751700208"]
+    assert evidence["technical_verdict"] == "NO-GO TEMPORAL PARA PRICE TRACKING WEB"
 
 
 def test_unpriced_campaign_does_not_become_promotion_or_stock():

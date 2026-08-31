@@ -1,14 +1,21 @@
 # Maxi Despensa + Despensa Familiar — auditoría y frontera técnica
 
-Actualización: el usuario autorizó el probe por 24 horas desde el registro
+Decisión posterior: **NO-GO TEMPORAL PARA PRICE TRACKING WEB**. El usuario confirmó
+que la web pública no muestra precios y ordenó detener scraper, persistencia y full
+crawl si la radiografía mínima no encontraba otra fuente pública reproducible. La
+captura no encontró precio/API/contexto comercial utilizable. Maxi/DF quedan cerrados
+temporalmente; no se buscan precios en imágenes, PDF, OCR o fuentes indirectas.
+
+El usuario autorizó el probe por 24 horas desde el registro
 2026-08-31T04:20:37Z. **Probe cerrado: 21 GET/273.325 s, un retry, concurrencia 1**,
 dentro del máximo 40 GET/15 minutos. Web y formatos demostrados; precio/contexto
 comercial no demostrados. 97 filas / 96 códigos candidatos, cero aceptados.
 **No apto para full ni persistencia con la fuente observada.**
 
 [Reporte actual, RAW, comparación pendiente y siguiente frontera](../../reports/maxi-df/2026-08-31-probe/README.md).
-Sin SQL Turso ni cambios productivos. Hace falta fuente pública con precios y
-contexto antes de comparar tiendas o pedir full. No se afirma inviabilidad universal.
+Sin SQL Turso ni cambios productivos. No continuar estas cadenas. La clasificación
+temporal puede revisarse sólo ante una fuente digital pública nueva y demostrable;
+no se afirma inviabilidad universal.
 
 Las secciones siguientes conservan la **auditoría y el preflight históricos**, de
 antes de la autorización y captura. Sus frases «pendiente», «cero requests» y

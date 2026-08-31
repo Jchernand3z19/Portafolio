@@ -4,20 +4,18 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 
 ## Objetivo activo
 
-Avanzar conjuntamente Maxi Despensa y Despensa Familiar, sólo San Pedro Sula y
-Tegucigalpa, mientras Turso esté bloqueado: demostrar fuente y comparar tiendas
-antes de agrupar contextos comerciales y capturar únicamente los necesarios.
-Meta: catálogo aceptado y persistencia validada offline, listo para primera carga.
-No iniciar Paiz, una sexta cadena, otras ciudades ni dashboard. La continuación
-explícita exige autorización propia para el primer probe Maxi/DF; los permisos
-anteriores de Colonial/Walmart no lo cubren. Full y recurrencia son gates separados.
+Cerrar Maxi Despensa y Despensa Familiar como **NO-GO TEMPORAL PARA PRICE TRACKING
+WEB** y avanzar sólo el reconocimiento del siguiente candidato con precios digitales.
+PriceSmart Honduras es el candidato seleccionado; su primer probe automatizado aún
+requiere autorización propia y presupuesto explícito. No iniciar Paiz, otras ciudades
+ni dashboard. Probe, full y recurrencia son gates separados.
 
 Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
 Su primera persistencia Turso y segunda observación real siguen pendientes.
 Walmart conserva tres catálogos aceptados y SQL validado offline, incluidos dos
 TGU por diferencias comerciales. **Ni Colonial ni Walmart están cerrados** en
-operación remota; Maxi/DF aún no tienen fuente comercial con precios, muestra
-comparable por tienda ni catálogo aceptado.
+operación remota. Maxi/DF quedan detenidos sin scraper, persistencia ni catálogo.
+PriceSmart todavía no tiene contrato técnico, muestra comparable ni integración.
 
 La Colonia conserva el alcance existente:
 
@@ -36,7 +34,7 @@ No ampliar La Colonia ni construir visualización. Su autorización recurrente n
 cubre Colonial, Walmart, Maxi ni DF. Ver la
 [fuente, catálogo y frontera operativa Colonial](supermercados/colonial-auditoria-preflight.md).
 
-## Maxi Despensa + Despensa Familiar — probe cerrado, fuente comercial pendiente
+## Maxi Despensa + Despensa Familiar — NO-GO temporal cerrado
 
 Auditoría previa: main `9592901c95aa2cb447effe1c514fe85eb5e74265`,
 [PR #356](https://github.com/Jchernand3z19/Portafolio/pull/356) fusionado,
@@ -60,8 +58,12 @@ No se ha demostrado API común con Walmart, formato comercial por SKU, disponibi
 paginación ni completitud. El enlace público Compra en línea agotó un retry por
 timeout; no se concluye login obligatorio ni bloqueo anti-bot.
 
-**Granularidad pendiente:** cero SKU comparables por tienda; diferencias de precio,
-regular, promoción y sólo disponibilidad no evaluables, no cero diferencias. Los
+**Radiografía mínima:** no existe una fuente estructurada pública observada que
+entregue precios reales; tampoco API, JSON, GraphQL o estado embebido con precio
+por producto/tienda. La superficie observada funciona como catálogo de campañas,
+productos y localizador, sin precio digital utilizable. Cero SKU comparables por
+tienda; diferencias de precio, regular, promoción y sólo disponibilidad no son
+evaluables, no equivalen a cero diferencias. Los
 29 candidatos geográficos son inferencias por dirección/coordenadas, no un censo
 SPS/TGU cerrado. Ninguna tienda se consolida o separa ni se convierte en location
 productiva. Las cuatro combinaciones de formato/ciudad siguen sin catálogo válido.
@@ -73,12 +75,33 @@ formularios al publicar, con hashes originales/publicados separados. No cambios
 a scraper, parser, fixture, SQL, esquema o workflow de las tres cadenas anteriores.
 La regresión previa de persistencia pasó 53 tests; no valida persistencia Maxi/DF.
 
-**No pedir full todavía:** hace falta fuente pública con precio y contexto, o
-resolver el acceso público al destino enlazado. Más páginas sin precio no solucionan
-el bloqueo. [Preflight y auditoría anteriores](supermercados/maxi-df-auditoria-preflight.md).
-Después: probar contrato, evaluar todas las tiendas con panel común, agrupar,
-pedir full medido y validar persistencia/aislamiento offline. No reusar el ledger
-cerrado ni interpretar las 24 horas como permiso de full/recurrencia.
+**Decisión final: NO-GO TEMPORAL PARA PRICE TRACKING WEB.** No buscar otra ruta en
+el mismo sitio, forzar el destino enlazado, usar browser pesado, reconstruir precios
+desde imágenes/PDF/OCR/fuentes indirectas, crear scraper vacío, persistencia, full
+crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostrable,
+tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
+[Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
+
+## PriceSmart Honduras — siguiente candidato, preflight sin probe
+
+La web oficial pública muestra productos con precio en HNL, identidad de artículo,
+disponibilidad y paginación de búsqueda. Una página oficial de producto muestra el
+artículo `516411` a `L 407.95` y disponibilidad diferenciada para Florencia, San
+Pedro Sula y El Sauce. PriceSmart también identifica oficialmente clubes en
+Tegucigalpa, San Pedro Sula y El Sauce. Esta evidencia basta para escoger la cadena,
+pero todavía no prueba API/JSON/GraphQL, binding reproducible del club, completitud,
+precio regular ni semántica de promoción. Florencia no se equipara automáticamente
+con todo Tegucigalpa.
+
+No se hizo tráfico automatizado, browser, captura RAW, scraper, persistencia ni SQL.
+El primer probe propuesto tiene techo de 30 GET —incluidos hasta dos redirects y
+tres retries transitorios—, concurrencia 1, pausa mínima de un segundo, timeout de
+20 s y máximo 15 minutos. Sólo superficie pública Honduras, HTML inicial,
+búsqueda/producto y hasta cuatro assets/config esenciales enlazados; sin login,
+membresía, carrito, checkout, mutaciones, imágenes, PDF, OCR, otros países ni full.
+Si el acceso técnico requiere POST/GraphQL de sólo lectura o mutar estado anónimo,
+se detiene y se solicita una extensión precisa. Falta autorización explícita para
+ejecutarlo. [Evidencia y presupuesto](supermercados/pricesmart-auditoria-preflight.md).
 
 Última consulta de cuenta (auditoría previa): Starter, overages deshabilitados,
 713.7 M / 500 M lecturas (143%). La CLI mostró reset **30/9/2026 18:00 CST**, frente
@@ -530,6 +553,13 @@ La auditoría del 2026-08-30 sobre `main`
   de Turso `BLOCKED`: `SQL read operations are forbidden`. La verificación final
   también fue rechazada. El error precede al batch de mutación; este run no
   demuestra nuevas escrituras ni permite certificar el estado actual de Turso.
+- [33422772623](https://github.com/Jchernand3z19/Portafolio/actions/runs/33422772623):
+  ambos downloads SPS/TGU terminaron, pero la aceptación falló antes de persistir
+  con `SnapshotError("snapshot_sku_count_mismatch")`. Todas las etapas Turso y sus
+  verificaciones quedaron omitidas. Artifact `9770327081`, digest
+  `b9a7978055290e0e8a535c333beeebe6709c58ae5397be67fdfcf7dc37221d3`.
+  Este estado no autoriza inferir cuota restablecida ni corregir el incidente dentro
+  del cierre Maxi/DF/PriceSmart.
 
 La consulta read-only `turso plan show` de aquella auditoría confirmó plan `starter`,
 excedentes deshabilitados y 713.7M filas leídas sobre una cuota de 500M (143%). La CLI
@@ -575,11 +605,10 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 5. comprobar una ejecución diaria íntegramente correcta de La Colonia
 ```
 
-En paralelo, Maxi/DF conserva el probe cerrado y evidencia offline. Resolver la
-fuente pública con precio/contexto antes de otro probe acotado; después comparar
-todas las tiendas, elegir representantes y pedir full. Validar persistencia y
-aislamiento de las cinco cadenas offline sólo con datos/contrato aceptados.
-No esperar a Turso ni reutilizar autorizaciones de cadenas anteriores.
+En paralelo, Maxi/DF queda cerrado como NO-GO temporal. Obtener autorización propia
+para el probe PriceSmart de 30 GET; después demostrar contrato, club y muestra
+comparable antes de plantear código o full. No esperar a Turso ni reutilizar
+autorizaciones de cadenas anteriores.
 La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 
 ## Fuera del alcance actual
@@ -587,9 +616,11 @@ La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 No trabajar ahora en:
 
 - dashboard;
-- supermercados distintos de La Colonia, Colonial, Walmart, Maxi Despensa y Despensa Familiar;
+- supermercados distintos de La Colonia, Colonial, Walmart y el preflight PriceSmart;
 - ciudades distintas de SPS/TGU;
-- recurrencia nueva para Colonial, Walmart, Maxi Despensa o Despensa Familiar;
+- recurrencia nueva para Colonial, Walmart o PriceSmart;
+- reabrir Maxi Despensa o Despensa Familiar sin fuente digital pública nueva;
+- Paiz;
 - BigQuery;
 - Google Sheets;
 - Cloudflare;

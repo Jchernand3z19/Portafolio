@@ -173,7 +173,7 @@ def reproduce(archive_path):
                                       "reported_regular_price_differences": None, "promotion_differences": None,
                                       "availability_only_differences": None,
                                       "decision": "unresolved_no_comparable_commercial_contexts"},
-            "technical_verdict": "NO_GO_full_or_persistence_on_observed_source",
+            "technical_verdict": "NO-GO TEMPORAL PARA PRICE TRACKING WEB",
             "online_destination": "unresolved_two_timeouts_no_authentication_conclusion",
             "remote_persistence": False, "new_production_integration": False}
 

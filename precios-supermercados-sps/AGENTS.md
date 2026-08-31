@@ -8,28 +8,29 @@
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
 - Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-# Fase activa — Maxi Despensa y Despensa Familiar mientras Turso está bloqueado
+# Fase activa — cierre Maxi/DF y preflight PriceSmart
 
-La continuación explícita del usuario inicia conjuntamente Maxi Despensa y
-Despensa Familiar, sólo SPS y TGU, hasta catálogo aceptado y persistencia validada
-offline. No iniciar Paiz, una sexta cadena, otras ciudades ni dashboard.
+Maxi Despensa y Despensa Familiar se clasifican **NO-GO TEMPORAL PARA PRICE
+TRACKING WEB**: el probe público no demostró precios activos, API de precios ni
+contexto comercial reproducible. No continuar búsqueda, scraper, persistencia,
+full crawl, imágenes, PDF, OCR, fuentes indirectas ni cambios de modelo para estas
+dos cadenas. Sólo reabrirlas ante una fuente digital pública nueva y una instrucción
+explícita. Ver `docs/supermercados/maxi-df-auditoria-preflight.md`.
+
+El siguiente candidato es PriceSmart Honduras porque su web oficial publica precios
+en HNL, identidad de artículo y disponibilidad por club. La fase actual es únicamente
+reconocimiento y preflight. No ejecutar un probe automatizado sin autorización
+propia y presupuesto explícito; tampoco crear scraper, persistencia, full crawl,
+workflow o cambios de esquema antes de demostrar el contrato público y el binding
+de SPS/TGU. Paiz permanece excluido. Ver
+`docs/supermercados/pricesmart-auditoria-preflight.md`.
+
 Colonial y Walmart conservan sus catálogos aceptados y validación SQL offline;
 primera carga Turso y segunda observación real siguen pendientes. Walmart conserva
 los dos contextos TGU por diferencias comerciales demostradas en RAW completo.
-Ver `docs/PROJECT_STATE.md` y `docs/supermercados/maxi-df-auditoria-preflight.md`.
-
-El primer probe Maxi/DF necesita autorización propia explícita antes de tráfico:
-los permisos anteriores de Colonial/Walmart no lo cubren. Probe, full y recurrencia
-son permisos distintos. No SQL remoto mientras Turso bloquee lecturas, ni overages,
-billing o cambio de plan. No interpretar una fecha de reset como acceso confirmado.
-
-Primero demostrar fuente y vínculo formato/tienda/contexto; después comparar las
-mismas 20–50 identidades SKU en todas las tiendas relevantes de cada formato/ciudad.
-Agrupar por precio efectivo, regular y promoción antes del full, que cubrirá sólo
-contextos comerciales necesarios. Disponibilidad sola no justifica duplicar.
-No forzar equivalencia con precios desconocidos o paneles incompatibles. Mantener
-marcas independientes aunque compartan IDs/API; no asumir reutilización de Walmart.
-Conservar cinco tablas y el hot path eficiente de PR #351.
+No SQL remoto mientras Turso siga bloqueado, ni overages, billing o cambio de plan.
+No interpretar una fecha de reset como acceso confirmado. Probe, full y recurrencia
+son permisos distintos. Conservar cinco tablas y el hot path eficiente de PR #351.
 
 Las secciones siguientes conservan las reglas y evidencia del cierre inicial de
 La Colonia; no prohíben esta fase autorizada ni autorizan sustituir la base actual.
@@ -58,7 +59,8 @@ Las restricciones de aquella fase fueron:
 - no limpiar deuda que no bloquee el MVP;
 - no convertir una operación one-shot en un subsistema.
 
-En la fase activa, sólo avanzar Maxi/DF dentro de la autorización disponible.
+En la fase activa, sólo avanzar el preflight PriceSmart dentro de la autorización
+disponible y mantener cerrado Maxi/DF.
 No modificar scrapers, parsers ni fixtures de La Colonia, Colonial o Walmart salvo
 bug compartido demostrado que bloquee el trabajo; no refactorizar por estética.
 
