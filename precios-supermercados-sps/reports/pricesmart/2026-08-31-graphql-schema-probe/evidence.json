@@ -1,0 +1,75 @@
+{
+  "authorization": {
+    "authorized_at_utc": "2026-08-31T23:49:09Z",
+    "concurrency": 1,
+    "duration_max_seconds": 300,
+    "endpoint": "https://graphql-commerce.bloomreach.io/graphql",
+    "live_deadline_utc": "2026-08-31T23:54:54.467853Z",
+    "live_started_at_utc": "2026-08-31T23:49:54.467853Z",
+    "operations": [
+      "limited __type introspection",
+      "findChannels"
+    ],
+    "post_total_max": 3,
+    "retries_included_max": 1
+  },
+  "capture": {
+    "closed_reason": "public_graphql_route_uses_unbound_changeme_commercetools_project",
+    "concurrency": 1,
+    "elapsed_seconds": 17.432829,
+    "find_channels_graphql_code": "BAD_USER_INPUT",
+    "find_channels_http_status": 200,
+    "introspection_graphql_code": "GRAPHQL_VALIDATION_FAILED",
+    "introspection_http_status": 400,
+    "post_attempts": 2,
+    "post_unused": 1,
+    "redirects": 0,
+    "retries": 0,
+    "upstream_status": 404,
+    "upstream_url": "https://api.sphere.io/changeme/channels?offset=0&limit=500"
+  },
+  "decision": {
+    "full_crawl": false,
+    "model_change": false,
+    "persistence": false,
+    "production_scraper": false,
+    "public_price_tracking_viable": false,
+    "reason": "public_graphql_resolver_is_not_bound_to_pricesmart_tenant",
+    "status": "BLOCKED_PUBLIC_GRAPHQL_TENANT_BINDING",
+    "turso_access": false
+  },
+  "raw_archive": {
+    "bytes": 1699,
+    "published_files": 4,
+    "redactions": {},
+    "sha256": "34f0c772a1e8988de8cd29df5219539084628faa17ac0fb0c715c9eefe3196e8"
+  },
+  "requests": [
+    {
+      "endpoint": "https://graphql-commerce.bloomreach.io/graphql",
+      "mutation": false,
+      "operation": "QueryTypeProbe",
+      "request_sha256": "da0cdfc9cae4509a2c9cd0d867e38eab76bedca4482db36c6a7c9fe4f8df63e2",
+      "response_sha256": "25074c19814452b611bd0bce3a51914e60dc80c803d774168a2ad2423f5b1240"
+    },
+    {
+      "endpoint": "https://graphql-commerce.bloomreach.io/graphql",
+      "mutation": false,
+      "operation": "FindChannelsProbe",
+      "request_sha256": "2c770a80114c306e418d02e180598d1ef771df7e3ec7acf8d379b9688345992d",
+      "response_sha256": "99a744f1415e7d9f6753c2df2dcf048b7762a0cb7cb089771cd0411e3ca45c26"
+    }
+  ],
+  "result": {
+    "availability_only_differences": null,
+    "club_binding_demonstrated": false,
+    "current_price_differences": null,
+    "find_channels_data": null,
+    "pagination_demonstrated": false,
+    "price_comparable_skus": 0,
+    "promotion_differences": null,
+    "reported_regular_price_differences": null,
+    "tgu_granularity": null
+  },
+  "schema_version": 1
+}

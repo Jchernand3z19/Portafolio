@@ -10,6 +10,14 @@ que sí validó GraphQL pero rechazó el contrato observado con HTTP 400: no exi
 `findChannels` no estaba autorizado, el tráfico se cerró sin adaptar la consulta.
 Ver [RAW y cierre de esquema](../../reports/pricesmart/2026-08-31-graphql-path-probe/README.md).
 
+La tercera extensión autorizó introspección limitada y `findChannels`: 2/3 POST,
+sin retry. Apollo Server bloqueó introspección y `findChannels` resolvió contra
+`https://api.sphere.io/changeme/channels?offset=0&limit=500`, que devolvió 404.
+El placeholder `changeme` demuestra que la ruta pública no está vinculada al
+tenant PriceSmart. El último POST quedó sin usar porque cambiar argumentos no
+puede corregir ese binding. Ver
+[RAW y cierre de binding](../../reports/pricesmart/2026-08-31-graphql-schema-probe/README.md).
+
 Autorización de 24 horas registrada 2026-08-31T21:53:50Z. El tramo GET se pausó
 después de 8 intentos / 7 HTTP 200 / un retry / cuatro assets / 303.054 s. Demostró
 Nuxt/Vue Storefront, GraphQL de comercio, esquema de precio/descuento/disponibilidad
@@ -20,10 +28,11 @@ incluyó precio numérico.
 El tramo GET había demostrado que el precio requiere un POST GraphQL externo, pero
 ninguno de los dos paths probados expuso el contrato comercial observado.
 [Reporte GET, RAW y contrato](../../reports/pricesmart/2026-08-31-probe/README.md).
-No parser comercial, scraper, full, persistencia, modelo ni Turso. Continuar
-requiere autorización nueva para el esquema real, por ejemplo `findChannels` o una
-introspección read-only acotada. Las secciones siguientes conservan el preflight
-histórico anterior a la autorización.
+No parser comercial, scraper, full, persistencia, modelo ni Turso. PriceSmart queda
+bloqueado para price tracking web público con la superficie observada. Reabrirlo
+requiere una fuente pública nueva con binding real o autorización específica para
+un mecanismo distinto. Las secciones siguientes conservan el preflight histórico
+anterior a la autorización.
 
 ## Decisión de candidato
 

@@ -64,17 +64,13 @@ antes de resolver datos. Availability no influyó en la decisión.
 No se crea parser, fixture de producto, scraper ni presupuesto de full. Sin una
 respuesta comercial exitosa, hacerlo inventaría una fuente que no se observó.
 
-## Bloqueo y siguiente gate
+## Continuación resuelta
 
-El bloqueo actual es una incompatibilidad reproducible entre el documento del
-cliente PriceSmart y el esquema público expuesto por `/graphql`. Para continuar
-haría falta una autorización nueva que defina expresamente qué mecanismo puede
-investigarse, por ejemplo `findChannels` y las operaciones equivalentes del esquema
-real, o una introspección GraphQL read-only acotada. No se debe reutilizar los seis
-POST no consumidos para esas operaciones distintas.
-
-Si ese camino exige `Authorization`, `/signin`, cookie, credencial no pública,
-otro endpoint o un control técnico, se debe detener sin intentar evadirlo.
+La extensión posterior autorizó introspección limitada y `findChannels`. Apollo
+Server bloqueó la introspección y el resolver consultó el upstream placeholder
+`api.sphere.io/changeme/channels`, que devolvió 404. Se cerró sin producto,
+credenciales ni otro mecanismo. Ver el
+[reporte, RAW y decisión final de binding](../2026-08-31-graphql-schema-probe/README.md).
 
 ## Evidencia
 

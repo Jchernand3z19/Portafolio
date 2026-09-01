@@ -5,20 +5,20 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 ## Objetivo activo
 
 Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE TRACKING
-WEB**. PriceSmart Honduras sigue como candidato técnico pausado: GET demostró
-contrato GraphQL y clubes; el endpoint raíz respondió 404 y el `/graphql`
-posteriormente autorizado rechazó `channels`, `Locale` y `Point` con HTTP 400 de
-validación, proponiendo `findChannels`. Adaptar la operación o inspeccionar otro
-esquema requiere autorización explícita separada. No iniciar Paiz, otras ciudades
-ni dashboard. Endpoint, operación, full y recurrencia son gates separados.
+WEB**. PriceSmart Honduras queda bloqueado para price tracking web público: GET
+demostró contrato y clubes sólo en el cliente; el endpoint raíz respondió 404,
+`/graphql` expuso otro esquema, la introspección está deshabilitada y
+`findChannels` resolvió contra el proyecto placeholder `changeme`, no PriceSmart.
+No iniciar Paiz, otras ciudades ni dashboard. Fuente, full y recurrencia son gates
+separados.
 
 Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
 Su primera persistencia Turso y segunda observación real siguen pendientes.
 Walmart conserva tres catálogos aceptados y SQL validado offline, incluidos dos
 TGU por diferencias comerciales. **Ni Colonial ni Walmart están cerrados** en
 operación remota. Maxi/DF quedan detenidos sin scraper, persistencia ni catálogo.
-PriceSmart tiene contrato técnico observado en el cliente, pero aún no respuesta
-aceptada de precio, binding causal, muestra comparable ni integración.
+PriceSmart tiene contrato técnico observado en el cliente, pero ninguna respuesta
+pública aceptada de precio, binding causal, muestra comparable o integración.
 
 La Colonia conserva el alcance existente:
 
@@ -85,7 +85,7 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — contrato del cliente incompatible con `/graphql`
+## PriceSmart Honduras — GraphQL público sin binding de tenant
 
 Autorización registrada por 24 horas: 2026-08-31T21:53:50Z a
 2026-09-01T21:53:50Z. El probe cerró su tramo GET en 8 intentos: 7 HTTP 200, un
@@ -117,12 +117,21 @@ validó GraphQL, pero respondió HTTP 400 `GRAPHQL_VALIDATION_FAILED`: no recono
 ni catálogo vacío. `findChannels` y una consulta adaptada no estaban autorizados,
 por lo que no se enviaron `products` ni `productProjectionsSearch`.
 
+La tercera extensión consumió **2/3 POST, cero retries, concurrencia 1 y 17.432829
+s**. La introspección limitada recibió HTTP 400 porque Apollo Server la deshabilita.
+`findChannels { __typename }` recibió HTTP 200 con `BAD_USER_INPUT`,
+`data.findChannels = null` y upstream 404 a
+`https://api.sphere.io/changeme/channels?offset=0&limit=500`. El placeholder
+`changeme` demuestra ausencia de binding al proyecto PriceSmart con los headers
+públicos observados; cambiar argumentos no lo corrige. El tercer POST quedó sin
+usar.
+
 Sigue habiendo cero SKU comparables y ninguna decisión de granularidad TGU. Precio
 efectivo, regular, promoción, availability y paginación permanecen no evaluables.
-No scraper, fixture comercial, full, persistencia, modelo ni Turso. Continuar
-requiere un alcance nuevo para el esquema realmente expuesto, como `findChannels`
-o introspección read-only acotada; los seis POST no usados no se trasladan
-automáticamente. [RAW y cierre de esquema](../reports/pricesmart/2026-08-31-graphql-path-probe/README.md).
+**PriceSmart queda bloqueado para price tracking web público con esta superficie.**
+No parser, fixture comercial, scraper, full, persistencia, modelo ni Turso. Sólo
+una fuente pública nueva que vincule el tenant, o autorización específica para un
+mecanismo distinto, permite reabrirlo. [RAW y cierre de binding](../reports/pricesmart/2026-08-31-graphql-schema-probe/README.md).
 
 Última consulta de cuenta (auditoría previa): Starter, overages deshabilitados,
 713.7 M / 500 M lecturas (143%). La CLI mostró reset **30/9/2026 18:00 CST**, frente
@@ -626,11 +635,10 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 5. comprobar una ejecución diaria íntegramente correcta de La Colonia
 ```
 
-En paralelo, Maxi/DF queda cerrado como NO-GO temporal. PriceSmart está pausado
-porque `/graphql` expone un esquema distinto al contrato del cliente; obtener una
-autorización nueva y exacta antes de probar `findChannels`, introspección u otra
-operación. Después demostrar precio, binding por club y muestra comparable antes de
-plantear código o full. No esperar a Turso ni reutilizar autorizaciones o POST no
+En paralelo, Maxi/DF queda cerrado como NO-GO temporal y PriceSmart bloqueado sin
+binding público del tenant. No probar productos, credenciales, configuración u otro
+endpoint de PriceSmart sin una fuente pública nueva o autorización específica para
+un mecanismo distinto. No esperar a Turso ni reutilizar autorizaciones o POST no
 consumidos de alcances anteriores.
 La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 
