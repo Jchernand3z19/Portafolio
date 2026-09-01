@@ -5,19 +5,22 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 ## Objetivo activo
 
 Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE TRACKING
-WEB**. PriceSmart Honduras tiene una fuente pública de catálogo país reproducida
-desde la petición real del navegador, pero sigue bloqueado por club: la petición
-usa `view_id=HN`, no `6603`, y el probe excedió 27.919 s su ventana. No iniciar
-Paiz, otras ciudades ni dashboard. Fuente país, binding de club, full y recurrencia
-son gates separados.
+WEB**. PriceSmart Honduras ya tiene binding causal reproducible para SPS, Florencia
+y El Sauce mediante la petición real del navegador. Once de 12 SKU compartidos
+tienen precio comparable e idéntico en los tres clubes; no se declararon precio
+regular ni promoción. Conservar SPS y un solo contexto TGU representativo,
+Florencia; availability no justifica conservar El Sauce como segundo catálogo
+comercial TGU. No iniciar Paiz, otras ciudades ni dashboard. Probe, full,
+persistencia y recurrencia son gates separados.
 
 Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
 Su primera persistencia Turso y segunda observación real siguen pendientes.
 Walmart conserva tres catálogos aceptados y SQL validado offline, incluidos dos
 TGU por diferencias comerciales. **Ni Colonial ni Walmart están cerrados** en
 operación remota. Maxi/DF quedan detenidos sin scraper, persistencia ni catálogo.
-PriceSmart tiene una respuesta pública aceptada como evidencia técnica de precio
-HN, pero no binding causal de club, muestra comparable entre clubes ni integración.
+PriceSmart tiene fuente, identidad, binding, muestra comparable, semántica y
+paginación demostrados. Su full, scraper productivo, persistencia e integración
+siguen sin autorizar ni implementar.
 
 La Colonia conserva el alcance existente:
 
@@ -84,7 +87,69 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — fuente HN reproducida, club sin demostrar
+## PriceSmart Honduras — binding demostrado y un solo contexto TGU
+
+Probe CDP aceptado del `2026-09-01`, dentro de la autorización live de 24 horas:
+una sesión anónima, una carga, tres clubes guardados por UI, cuatro XHR comerciales
+retenidas, seis replays/probes directos, cero retries, concurrencia 1 y 246.272 s
+de navegador. No hubo 403, 429 ni CAPTCHA. El navegador se cerró antes del análisis
+offline; no GraphQL, login, dirección, carrito, checkout, full, persistencia ni
+Turso.
+
+El flujo público real quedó reproducido:
+
+```text
+Recoger en club
+→ lápiz / editar
+→ seleccionar 6603 / 6602 / 6604
+→ Guardar Club Preferido
+→ POST /api/br_discovery/getProductsByKeyword
+```
+
+El estado visible, cookies y channel final vinculan `6603` con San Pedro Sula,
+`6602` con Florencia y `6604` con El Sauce. `view_id` sigue siendo `HN`; el request
+transporta el club solicitando `price_HN_<club>`, `availability_HN_<club>` e
+`inventory_HN_<club>` en `fl`, y la respuesta devuelve esos campos por SKU. Tres
+replays exactos sin cookie recibieron HTTP 200 y JSON semánticamente idéntico al
+navegador; Florencia y El Sauce también coincidieron byte a byte. El cookie
+`vsf-channel` todavía tenía el contexto anterior cuando se disparó cada XHR, así
+que no se usa como prueba del binding contemporáneo de esta operación.
+
+Las tres respuestas comparten las mismas 12 identidades `pid = master_sku` y 11
+tienen precio comparable en los tres clubes. Resultado comercial:
+
+```text
+current_price differences = 0 / 11 comparables
+reported_regular_price values declared = 0
+reported_regular_price differences observed = 0
+is_promotion values declared = 0
+is_promotion differences observed = 0
+```
+
+El SKU control `479223` declara L 359.95 e `in_stock` en los tres clubes. Los
+campaign IDs no prueban promoción de precio. El SKU `464663` carece de precio en
+SPS y Florencia mientras está agotado y sí tiene precio/stock en El Sauce; no se
+cuenta como igualdad ni como diferencia comparable.
+
+Florencia vs El Sauce: 12 SKU compartidos, 11 comparables, cero diferencias de
+precio/regular/promoción, tres diferencias de availability y dos diferencias
+exclusivamente de availability entre SKU comercialmente comparables. **Decisión
+TGU: conservar sólo Florencia `6602` como contexto comercial representativo.**
+SPS `6603` queda demostrado como contexto independiente. El Sauce `6604` no se
+conserva como tercer catálogo; availability puede analizarse aparte.
+
+Paginación validada con tres requests acotados: SPS y Florencia `start=12`
+devolvieron 12 SKU sin solape con página 1; Florencia `start=1116` devolvió los
+ocho finales. Total 1,124, `rows=12`, 94 páginas por contexto. Presupuesto de un
+eventual full para SPS + Florencia: **188 POST base, 20 retries, máximo 208 POST,
+concurrencia 1, 30 minutos y aproximadamente 10.64 MB RAW sin comprimir**. Es sólo
+preflight; full requiere autorización separada.
+
+[RAW, comparación, hashes, paginación y decisión](../reports/pricesmart/2026-09-01-club-binding-probe/README.md).
+No crear aún scraper productivo, fixture comercial, locations, persistencia,
+workflow, recurrencia ni cambio de modelo.
+
+### Captura anterior — fuente HN reproducida sin binding
 
 La captura CDP del `2026-09-01` observó la petición comercial real:
 `POST https://www.pricesmart.com/api/br_discovery/getProductsByKeyword`. La carga
@@ -660,11 +725,11 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 5. comprobar una ejecución diaria íntegramente correcta de La Colonia
 ```
 
-En paralelo, Maxi/DF queda cerrado como NO-GO temporal y PriceSmart bloqueado sin
-binding público del tenant. No probar productos, credenciales, configuración u otro
-endpoint de PriceSmart sin una fuente pública nueva o autorización específica para
-un mecanismo distinto. No esperar a Turso ni reutilizar autorizaciones o POST no
-consumidos de alcances anteriores.
+En paralelo, Maxi/DF queda cerrado como NO-GO temporal y PriceSmart queda listo
+para solicitar por separado el full medido de SPS + Florencia. La superficie
+GraphQL `changeme` permanece cerrada; no probar credenciales, configuración u otro
+endpoint. No esperar a Turso ni reutilizar autorizaciones o POST no consumidos de
+alcances anteriores.
 La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 
 ## Fuera del alcance actual
