@@ -2,6 +2,28 @@
 
 ## Resultado de los probes autorizados
 
+### Captura posterior de la petición real del navegador
+
+Una sesión CDP anónima encontró y reprodujo la fuente pública que faltaba:
+`POST https://www.pricesmart.com/api/br_discovery/getProductsByKeyword`. El
+navegador y un replay con sólo `Accept`, `Content-Type` y `Referer`, sin cookie,
+recibieron HTTP 200 y bodies idénticos. La muestra contiene 12 de 1,124 productos;
+el SKU `479223` conserva identidad completa, `price_HN=35995` (HNL 359.95) y
+availability `true/in stock`. No se devolvió precio regular y las etiquetas de
+campaña no prueban promoción de precio.
+
+La petición está vinculada a `HN`, no a un club: la página mostraba `Seleccionar
+entrega`, no se envió `6603` y los productos no incluyeron valores `price_HN_6603`.
+Los nombres de facets por club sólo demuestran dimensiones del índice. Además, el
+replay terminó 27.919 s después del máximo de cinco minutos. Resultado: **fuente
+HN demostrada, binding SPS no demostrado, protocolo no conforme**. No parser,
+fixture, scraper, full, presupuesto, persistencia ni Turso. Ver
+[captura CDP, RAW y decisión](../../reports/pricesmart/2026-09-01-browser-request-probe/README.md).
+
+Las conclusiones GraphQL siguientes siguen siendo hechos históricos sobre otra
+superficie, pero ya no justifican afirmar que PriceSmart carece de toda fuente
+pública de precio.
+
 La primera extensión POST envió `channels` al endpoint raíz y recibió HTTP 404
 `Cannot POST /`: 1/8 POST, sin retry. La segunda extensión autorizó `/graphql`,
 que sí validó GraphQL pero rechazó el contrato observado con HTTP 400: no existen
@@ -28,11 +50,10 @@ incluyó precio numérico.
 El tramo GET había demostrado que el precio requiere un POST GraphQL externo, pero
 ninguno de los dos paths probados expuso el contrato comercial observado.
 [Reporte GET, RAW y contrato](../../reports/pricesmart/2026-08-31-probe/README.md).
-No parser comercial, scraper, full, persistencia, modelo ni Turso. PriceSmart queda
-bloqueado para price tracking web público con la superficie observada. Reabrirlo
-requiere una fuente pública nueva con binding real o autorización específica para
-un mecanismo distinto. Las secciones siguientes conservan el preflight histórico
-anterior a la autorización.
+Esos probes no crearon parser comercial, scraper, full, persistencia, modelo ni
+Turso. Su bloqueo aplica a la superficie GraphQL externa; la captura CDP posterior
+demostró una API pública HN distinta, pero todavía no una fuente por club. Las
+secciones siguientes conservan el preflight histórico anterior a la autorización.
 
 ## Decisión de candidato
 

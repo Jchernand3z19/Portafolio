@@ -8,7 +8,7 @@
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
 - Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-# Fase activa — PriceSmart bloqueado sin binding GraphQL público
+# Fase activa — PriceSmart con fuente HN, sin binding de club aceptado
 
 Maxi Despensa y Despensa Familiar se clasifican **NO-GO TEMPORAL PARA PRICE
 TRACKING WEB**: el probe público no demostró precios activos, API de precios ni
@@ -17,16 +17,17 @@ full crawl, imágenes, PDF, OCR, fuentes indirectas ni cambios de modelo para es
 dos cadenas. Sólo reabrirlas ante una fuente digital pública nueva y una instrucción
 explícita. Ver `docs/supermercados/maxi-df-auditoria-preflight.md`.
 
-PriceSmart Honduras demostró estado Nuxt, contrato GraphQL de comercio y tres clubes
-(`6602` Florencia, `6603` SPS, `6604` El Sauce), pero no una fuente pública
-ejecutable. El endpoint raíz respondió 404; `/graphql` expuso otro esquema; la
-introspección está deshabilitada; y `findChannels` intentó el upstream
-`api.sphere.io/changeme/channels`, 404. La ruta pública no está vinculada al tenant
-PriceSmart con los headers observados. No probar productos, otro endpoint,
-`/signin`, configuración o credenciales sin una fuente pública nueva o autorización
-específica. No crear parser, scraper, persistencia, full crawl, workflow o cambios
-de esquema. Paiz permanece excluido. Ver
-`reports/pricesmart/2026-08-31-graphql-schema-probe/README.md`.
+PriceSmart Honduras ya demostró una fuente pública ejecutable de catálogo país en
+`POST /api/br_discovery/getProductsByKeyword`: 12/1,124 productos, respuesta CDP y
+replay idénticos, SKU `479223` a HNL 359.95 y availability separada. No hubo cookie
+ni login. La petición sólo usa `view_id=HN` y campos `*_HN`; no fija club ni prueba
+SPS. Los facets `price_HN_6602/6603/6604` no equivalen a valores de producto por
+club. El replay excedió 27.919 s la ventana autorizada, así que el resultado es
+parcial y no conforme. No crear parser, fixture comercial, scraper, persistencia,
+full crawl, presupuesto, workflow o cambios de esquema. Un nuevo probe de club
+requiere autorización específica y una sesión dentro de límites. Paiz permanece
+excluido. Ver
+`reports/pricesmart/2026-09-01-browser-request-probe/README.md`.
 
 Colonial y Walmart conservan sus catálogos aceptados y validación SQL offline;
 primera carga Turso y segunda observación real siguen pendientes. Walmart conserva

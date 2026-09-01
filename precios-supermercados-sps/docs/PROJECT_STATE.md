@@ -5,20 +5,19 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 ## Objetivo activo
 
 Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE TRACKING
-WEB**. PriceSmart Honduras queda bloqueado para price tracking web público: GET
-demostró contrato y clubes sólo en el cliente; el endpoint raíz respondió 404,
-`/graphql` expuso otro esquema, la introspección está deshabilitada y
-`findChannels` resolvió contra el proyecto placeholder `changeme`, no PriceSmart.
-No iniciar Paiz, otras ciudades ni dashboard. Fuente, full y recurrencia son gates
-separados.
+WEB**. PriceSmart Honduras tiene una fuente pública de catálogo país reproducida
+desde la petición real del navegador, pero sigue bloqueado por club: la petición
+usa `view_id=HN`, no `6603`, y el probe excedió 27.919 s su ventana. No iniciar
+Paiz, otras ciudades ni dashboard. Fuente país, binding de club, full y recurrencia
+son gates separados.
 
 Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
 Su primera persistencia Turso y segunda observación real siguen pendientes.
 Walmart conserva tres catálogos aceptados y SQL validado offline, incluidos dos
 TGU por diferencias comerciales. **Ni Colonial ni Walmart están cerrados** en
 operación remota. Maxi/DF quedan detenidos sin scraper, persistencia ni catálogo.
-PriceSmart tiene contrato técnico observado en el cliente, pero ninguna respuesta
-pública aceptada de precio, binding causal, muestra comparable o integración.
+PriceSmart tiene una respuesta pública aceptada como evidencia técnica de precio
+HN, pero no binding causal de club, muestra comparable entre clubes ni integración.
 
 La Colonia conserva el alcance existente:
 
@@ -85,7 +84,34 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — GraphQL público sin binding de tenant
+## PriceSmart Honduras — fuente HN reproducida, club sin demostrar
+
+La captura CDP del `2026-09-01` observó la petición comercial real:
+`POST https://www.pricesmart.com/api/br_discovery/getProductsByKeyword`. La carga
+de una página devolvió 12/1,124 productos y un replay directo produjo el mismo body
+SHA-256. Sólo fueron necesarios `Accept`, `Content-Type` y `Referer`; no hubo
+cookie, login, membresía ni carrito. El SKU `479223` enlaza PID, master SKU y
+variant SKU, declara HNL con dos decimales, `price_HN=35995`, y coincide con el
+precio visible L 359.95. `availability_HN=true` e `inventory_HN=in stock` se
+registran aparte. Los campos solicitados de precio regular/ahorro no aparecieron y
+los campaign IDs no se interpretan como promoción de precio.
+
+La página anónima mostraba `Seleccionar entrega` y el payload sólo tenía
+`view_id=HN`; no existe `6603`, club ni channel en la petición. La respuesta sí
+expone facets `price_HN_6602`, `price_HN_6603` y `price_HN_6604`, con 1,072, 1,078
+y 1,061 productos en buckets respectivamente, pero los documentos no contienen
+esos valores por SKU. No hay SKU comparable por club, diferencias comerciales ni
+decisión TGU. Availability no cambia esa conclusión.
+
+Ledger: una sesión, una carga de dos permitidas, una XHR comercial, un replay de
+tres permitidos, cero retries y concurrencia 1. La ventana empezó
+`03:29:20.765Z` y venció `03:34:20.765Z`; el replay terminó `03:34:48.684Z`,
+27.919 s tarde. **Outcome B: fuente pública HN demostrada; binding SPS no
+demostrado y protocolo temporal no conforme.** No parser, fixture, scraper, full,
+presupuesto, persistencia, modelo, workflow ni Turso.
+[RAW y decisión](../reports/pricesmart/2026-09-01-browser-request-probe/README.md).
+
+### Historial GraphQL
 
 Autorización registrada por 24 horas: 2026-08-31T21:53:50Z a
 2026-09-01T21:53:50Z. El probe cerró su tramo GET en 8 intentos: 7 HTTP 200, un
@@ -128,10 +154,9 @@ usar.
 
 Sigue habiendo cero SKU comparables y ninguna decisión de granularidad TGU. Precio
 efectivo, regular, promoción, availability y paginación permanecen no evaluables.
-**PriceSmart queda bloqueado para price tracking web público con esta superficie.**
-No parser, fixture comercial, scraper, full, persistencia, modelo ni Turso. Sólo
-una fuente pública nueva que vincule el tenant, o autorización específica para un
-mecanismo distinto, permite reabrirlo. [RAW y cierre de binding](../reports/pricesmart/2026-08-31-graphql-schema-probe/README.md).
+**La superficie GraphQL externa queda bloqueada.** La captura CDP posterior
+encontró otra API pública de catálogo país, pero no corrige el binding de esa ruta
+ni demuestra un club. [RAW y cierre GraphQL](../reports/pricesmart/2026-08-31-graphql-schema-probe/README.md).
 
 Última consulta de cuenta (auditoría previa): Starter, overages deshabilitados,
 713.7 M / 500 M lecturas (143%). La CLI mostró reset **30/9/2026 18:00 CST**, frente
