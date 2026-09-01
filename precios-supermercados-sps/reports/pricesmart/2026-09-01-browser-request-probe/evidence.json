@@ -1,0 +1,149 @@
+{
+  "authorization": {
+    "browser_sessions_max": 1,
+    "concurrency": 1,
+    "direct_replays_max": 3,
+    "duration_max_seconds": 300,
+    "live_deadline_utc": "2026-09-01T03:34:20.765Z",
+    "live_finished_at_utc": "2026-09-01T03:34:48.684Z",
+    "live_started_at_utc": "2026-09-01T03:29:20.765Z",
+    "page": "https://www.pricesmart.com/es-hn/categoria/Alimentos-G10D03/G10D03",
+    "page_loads_max": 2,
+    "read_only": true,
+    "scope": "pricesmart_real_browser_request_capture_sps_initial_context"
+  },
+  "capture": {
+    "browser_sessions": 1,
+    "captcha_or_rate_limit": false,
+    "captured_network_requests_on_load": 135,
+    "concurrency": 1,
+    "cookies_sent_on_selected_requests": 0,
+    "direct_replays": 1,
+    "duration_cap_compliant": false,
+    "duration_overrun_seconds": 27.919,
+    "elapsed_seconds": 327.919,
+    "page_loads": 1,
+    "redirects_on_selected_requests": 0,
+    "request_body_sha256": "ac44c6d56b4b2e4daf8923816f770db0bb68328805c455d343fa317f28c8b14e",
+    "response_body_sha256": "70c92230d5d77ea85e842c043e4d0aa4dfea44a149ebaa477e768376a0cbe296",
+    "response_exact_match": true,
+    "retained_relevant_response_bodies": 24,
+    "retries": 0,
+    "selected_browser_xhr": 1
+  },
+  "club_assessment": {
+    "club_specific_price_facet_names_observed": true,
+    "club_specific_price_values_returned_for_products": false,
+    "comparable_skus_between_clubs": 0,
+    "facet_counts_do_not_prove_product_price_binding": true,
+    "known_public_clubs": {
+      "6602": "Florencia",
+      "6603": "San Pedro Sula",
+      "6604": "El Sauce"
+    },
+    "page_selected_delivery_context": null,
+    "sps_request_binding_demonstrated": false,
+    "tgu_granularity": null
+  },
+  "control_product": {
+    "availability": "in_stock",
+    "availability_source": {
+      "availability_HN": "true",
+      "inventory_HN": "in stock"
+    },
+    "campaign_ids": [
+      "free-delivery",
+      "new arrival",
+      "pantry-refresh"
+    ],
+    "campaign_ids_are_not_price_promotion_proof": true,
+    "currency": "HNL",
+    "current_price": 359.95,
+    "current_price_minor": 35995,
+    "is_promotion": null,
+    "master_sku": "479223",
+    "pid": "479223",
+    "price_promotion_declared": false,
+    "reported_regular_price": null,
+    "reported_regular_price_declared": false,
+    "sku": "479223",
+    "title": "King Cheese Feta con Sabores 2 Unidades / 227 g / 8 oz",
+    "visible_browser_price": "L 359.95"
+  },
+  "decision": {
+    "additional_live_traffic": false,
+    "full_crawl": false,
+    "full_crawl_budget": null,
+    "model_change": false,
+    "outcome": "B",
+    "parser_or_fixture": false,
+    "persistence": false,
+    "production_scraper": false,
+    "public_hn_catalog_price_source_demonstrated": true,
+    "reason": "request_is_country_bound_not_club_bound_and_replay_exceeded_duration_cap",
+    "sps_club_price_source_demonstrated": false,
+    "status": "PARTIAL_GO_PUBLIC_HN_PRICE_SPS_BINDING_UNPROVEN_PROTOCOL_NONCONFORMING",
+    "turso_access": false
+  },
+  "raw_archive": {
+    "bytes": 20188,
+    "published_files": 7,
+    "redactions": {
+      "body_fields_removed": [],
+      "cookies_removed": 0,
+      "note": "El auth_key anónimo se conserva porque el navegador público lo envió dentro del payload y la reproducción lo requirió.",
+      "removed_client_fingerprint_headers": [
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "User-Agent"
+      ],
+      "removed_request_headers": [
+        "newrelic",
+        "traceparent",
+        "tracestate"
+      ]
+    },
+    "sha256": "cc6374a104f84eb2bf44ac9e4aa2123e052584a676debeb293f7e5cd13d5492c"
+  },
+  "request": {
+    "anonymous_public_auth_key_retained": true,
+    "body": {
+      "account_id": "7024",
+      "auth_key": "ev7libhybjg5h1d1",
+      "domain_key": "pricesmart_bloomreach_io_es",
+      "fl": "pid,title,price,thumb_image,brand,slug,skuid,currency,fractionDigits,master_sku,sold_by_weight_HN,weight_HN,weight_uom_description_HN,sign_price_HN,price_per_uom_HN,uom_description_HN,saving_amount_HN,original_price_without_saving_HN,availability_HN,price_HN,inventory_HN,inventory_HN,promoid_HN",
+      "fq": [],
+      "q": "G10D03",
+      "request_id": 1788233361440,
+      "rows": 12,
+      "search_type": "category",
+      "start": 0,
+      "url": "https://www.pricesmart.com/es-hn/categoria/Alimentos-G10D03/G10D03",
+      "view_id": "HN"
+    },
+    "club_binding": null,
+    "cookie_required": false,
+    "country_binding": "HN",
+    "endpoint": "https://www.pricesmart.com/api/br_discovery/getProductsByKeyword",
+    "headers": {
+      "Accept": "application/json, text/plain, */*",
+      "Content-Type": "application/json",
+      "Referer": "https://www.pricesmart.com/es-hn/categoria/Alimentos-G10D03/G10D03"
+    },
+    "method": "POST",
+    "resource_type": "XHR"
+  },
+  "response": {
+    "catalog_total": 1124,
+    "club_price_facet_counts": {
+      "6602": 1072,
+      "6603": 1078,
+      "6604": 1061
+    },
+    "content_type": "application/json; charset=utf-8",
+    "http_status": 200,
+    "returned_products": 12
+  },
+  "schema_version": 1
+}
