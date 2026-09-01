@@ -1,0 +1,1121 @@
+{
+  "authorization": {
+    "browser_finished_at_utc": "2026-09-01T20:41:15.393Z",
+    "concurrency": 1,
+    "duration_hours": 24,
+    "full_crawl": false,
+    "live_started_at_utc": "2026-09-01T20:37:09.121Z",
+    "persistence": false,
+    "read_only_commercial_requests": true,
+    "replays_finished_at_utc": "2026-09-01T20:49:01.737487+00:00",
+    "scope": "pricesmart_public_club_selector_binding_and_small_same_sku_comparison",
+    "turso": false,
+    "ui_preference_cookie_changes_only": true
+  },
+  "binding": {
+    "channel_cookie_lags_triggering_request": true,
+    "club_body_binding_replays_without_cookie": true,
+    "club_field_pattern": "<field>_HN_<club_id>",
+    "country_view_id": "HN",
+    "demonstrated": true,
+    "endpoint": "https://www.pricesmart.com/api/br_discovery/getProductsByKeyword",
+    "known_public_clubs": {
+      "6602": {
+        "channel_id": "93a6de43-d3c7-4887-a824-44c565dc3101",
+        "city": "TGU",
+        "name": "Florencia"
+      },
+      "6603": {
+        "channel_id": "83a01076-4a4e-4163-9786-c59ef7c7c1a6",
+        "city": "SPS",
+        "name": "San Pedro Sula"
+      },
+      "6604": {
+        "channel_id": "03544f88-d635-4711-b10c-e040ece7cfe6",
+        "city": "TGU",
+        "name": "El Sauce"
+      }
+    },
+    "preference_cookies": [
+      "vsf-selected-club",
+      "vsf-provider-club-id",
+      "vsf-selected-shipping-method"
+    ],
+    "request_club_field_examples": {
+      "6602": [
+        "price_HN_6602",
+        "availability_HN_6602",
+        "inventory_HN_6602"
+      ],
+      "6603": [
+        "price_HN_6603",
+        "availability_HN_6603",
+        "inventory_HN_6603"
+      ],
+      "6604": [
+        "price_HN_6604",
+        "availability_HN_6604",
+        "inventory_HN_6604"
+      ]
+    }
+  },
+  "capture": {
+    "application_api_request_events": 20,
+    "browser_elapsed_seconds": 246.272,
+    "browser_sessions": 1,
+    "captcha_or_rate_limit": false,
+    "concurrency": 1,
+    "direct_replays": 6,
+    "exact_club_replays": 3,
+    "network_responses": 57,
+    "observed_request_events_including_blocked_resources": 289,
+    "page_loads": 1,
+    "pagination_probes": 3,
+    "redirects_on_selected_requests": 0,
+    "response_hosts": {
+      "www.pricesmart.com": 57
+    },
+    "retries": 0,
+    "selected_browser_xhr": 4,
+    "ui_club_saves": 3
+  },
+  "comparison_rows": [
+    {
+      "6602": {
+        "availability": "in_stock",
+        "current_price_minor": 18995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "b2b-main",
+            "b2b-oils",
+            "bakery-heros",
+            "bakery-story2",
+            "bakery-story3",
+            "cart-add-on-horizontal",
+            "christmas-dinner",
+            "dessert- for-sharing",
+            "donuts-cupcakes-and-muffins",
+            "friends-giving",
+            "ms-b5k3ry",
+            "new-years-eve",
+            "s3s0nal1t3ms",
+            "bakery-story1",
+            "bakery-shop-facet",
+            "b2b-heroes"
+          ],
+          "inventory": "in stock",
+          "price": 18995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "in_stock",
+        "current_price_minor": 18995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "b2b-main",
+            "b2b-oils",
+            "bakery-heros",
+            "bakery-story2",
+            "bakery-story3",
+            "cart-add-on-horizontal",
+            "christmas-dinner",
+            "dessert- for-sharing",
+            "donuts-cupcakes-and-muffins",
+            "friends-giving",
+            "ms-b5k3ry",
+            "new-years-eve",
+            "s3s0nal1t3ms",
+            "bakery-story1",
+            "bakery-shop-facet",
+            "b2b-heroes"
+          ],
+          "inventory": "in stock",
+          "price": 18995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 18995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "b2b-main",
+            "b2b-oils",
+            "bakery-heros",
+            "bakery-story2",
+            "bakery-story3",
+            "cart-add-on-horizontal",
+            "christmas-dinner",
+            "dessert- for-sharing",
+            "donuts-cupcakes-and-muffins",
+            "friends-giving",
+            "ms-b5k3ry",
+            "new-years-eve",
+            "s3s0nal1t3ms",
+            "bakery-story1",
+            "bakery-shop-facet",
+            "b2b-heroes"
+          ],
+          "inventory": "in stock",
+          "price": 18995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "227994",
+      "title": "Member’s Selection Donas Surtidas Recién Preparadas 12 Unidades"
+    },
+    {
+      "6602": {
+        "availability": "out_of_stock",
+        "current_price_minor": 99995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "ms-b5k3ry",
+            "seasonal-bakery",
+            "b2b-heroes"
+          ],
+          "inventory": "out of stock",
+          "price": 99995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "in_stock",
+        "current_price_minor": 99995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "ms-b5k3ry",
+            "seasonal-bakery",
+            "b2b-heroes"
+          ],
+          "inventory": "in stock",
+          "price": 99995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 99995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "ms-b5k3ry",
+            "seasonal-bakery",
+            "b2b-heroes"
+          ],
+          "inventory": "in stock",
+          "price": 99995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "276418",
+      "title": "Member's Selection Pastel de Vainilla Dulce y Cremoso Recién Horneado 80 a 100 Porciones"
+    },
+    {
+      "6602": {
+        "availability": "in_stock",
+        "current_price_minor": 17995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "b2b-oils",
+            "bakery-heros",
+            "ms-b5k3ry",
+            "b2b-heroes"
+          ],
+          "inventory": "in stock",
+          "price": 17995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "in_stock",
+        "current_price_minor": 17995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "b2b-oils",
+            "bakery-heros",
+            "ms-b5k3ry",
+            "b2b-heroes"
+          ],
+          "inventory": "in stock",
+          "price": 17995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 17995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "b2b-oils",
+            "bakery-heros",
+            "ms-b5k3ry",
+            "b2b-heroes"
+          ],
+          "inventory": "in stock",
+          "price": 17995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "290993",
+      "title": "Member's Selection Galletas de Chispas de Chocolate Recién Horneadas 24 Unidades"
+    },
+    {
+      "6602": {
+        "availability": "in_stock",
+        "current_price_minor": 20495,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "bakery-heros",
+            "ms-b5k3ry",
+            "bakery-story1"
+          ],
+          "inventory": "in stock",
+          "price": 20495,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "in_stock",
+        "current_price_minor": 20495,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "bakery-heros",
+            "ms-b5k3ry",
+            "bakery-story1"
+          ],
+          "inventory": "in stock",
+          "price": 20495,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 20495,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "bakery-heros",
+            "ms-b5k3ry",
+            "bakery-story1"
+          ],
+          "inventory": "in stock",
+          "price": 20495,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "415590",
+      "title": "Member's Selection Croissants Grandes de Mantequilla Recién Horneados 6 Unidades"
+    },
+    {
+      "6602": {
+        "availability": "out_of_stock",
+        "current_price_minor": null,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": null,
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": null,
+          "price": null,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "out_of_stock",
+        "current_price_minor": null,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": null,
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": null,
+          "price": null,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 15752,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 15752,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "464663",
+      "title": "El Camino Real Bakery Mini Rollos de Canela Elaborados con Masa Tradicional 16 Unidades"
+    },
+    {
+      "6602": {
+        "availability": "in_stock",
+        "current_price_minor": 26995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 26995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "out_of_stock",
+        "current_price_minor": 26995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "out of stock",
+          "price": 26995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 26995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 26995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "468333",
+      "title": "Chobani Yogurt Griego Vainilla 1.13 kg / 40 oz"
+    },
+    {
+      "6602": {
+        "availability": "out_of_stock",
+        "current_price_minor": 37495,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "new arrival",
+            "pantry-refresh",
+            "free-delivery"
+          ],
+          "inventory": "out of stock",
+          "price": 37495,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "out_of_stock",
+        "current_price_minor": 37495,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "new arrival",
+            "pantry-refresh",
+            "free-delivery"
+          ],
+          "inventory": "out of stock",
+          "price": 37495,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 37495,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "new arrival",
+            "pantry-refresh",
+            "free-delivery"
+          ],
+          "inventory": "in stock",
+          "price": 37495,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "468388",
+      "title": "Florida's Natural Jugo Durazno y Mango 2 Unidades / 1.75 L / 59 oz "
+    },
+    {
+      "6602": {
+        "availability": "in_stock",
+        "current_price_minor": 54995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 54995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "in_stock",
+        "current_price_minor": 54995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 54995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 54995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 54995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "468433",
+      "title": "Smithfield Cubos de Paleta de Cerdo Ahumados y Caramelizados 454 g / 1 lb"
+    },
+    {
+      "6602": {
+        "availability": "in_stock",
+        "current_price_minor": 27995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 27995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "in_stock",
+        "current_price_minor": 27995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 27995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 27995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 27995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "478169",
+      "title": "Riceworks Patatas de Aguacate 453 g / 16 oz"
+    },
+    {
+      "6602": {
+        "availability": "in_stock",
+        "current_price_minor": 35995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 35995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "in_stock",
+        "current_price_minor": 35995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 35995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 35995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 35995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "479223",
+      "title": "King Cheese Feta con Sabores 2 Unidades / 227 g / 8 oz"
+    },
+    {
+      "6602": {
+        "availability": "in_stock",
+        "current_price_minor": 18495,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 18495,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "out_of_stock",
+        "current_price_minor": 18495,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "out of stock",
+          "price": 18495,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 18495,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 18495,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "516652",
+      "title": "Rojitos Frijoles Rojos Volteados 3 Unidades / 1.2 kg / 42.33 oz"
+    },
+    {
+      "6602": {
+        "availability": "in_stock",
+        "current_price_minor": 27995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 27995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6603": {
+        "availability": "in_stock",
+        "current_price_minor": 27995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 27995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "6604": {
+        "availability": "in_stock",
+        "current_price_minor": 27995,
+        "is_promotion": null,
+        "reported_regular_price_minor": null,
+        "source": {
+          "availability": "true",
+          "campaign_ids": [
+            "free-delivery",
+            "new arrival",
+            "pantry-refresh"
+          ],
+          "inventory": "in stock",
+          "price": 27995,
+          "regular_price": null,
+          "saving_amount": null
+        }
+      },
+      "sku": "523611",
+      "title": "El Dorao Café Hondureño Miraflores Molido Tueste Medio 2 Unidades / 340 g"
+    }
+  ],
+  "control_product": {
+    "6602": {
+      "availability": "in_stock",
+      "current_price_minor": 35995,
+      "is_promotion": null,
+      "reported_regular_price_minor": null,
+      "source": {
+        "availability": "true",
+        "campaign_ids": [
+          "free-delivery",
+          "new arrival",
+          "pantry-refresh"
+        ],
+        "inventory": "in stock",
+        "price": 35995,
+        "regular_price": null,
+        "saving_amount": null
+      }
+    },
+    "6603": {
+      "availability": "in_stock",
+      "current_price_minor": 35995,
+      "is_promotion": null,
+      "reported_regular_price_minor": null,
+      "source": {
+        "availability": "true",
+        "campaign_ids": [
+          "free-delivery",
+          "new arrival",
+          "pantry-refresh"
+        ],
+        "inventory": "in stock",
+        "price": 35995,
+        "regular_price": null,
+        "saving_amount": null
+      }
+    },
+    "6604": {
+      "availability": "in_stock",
+      "current_price_minor": 35995,
+      "is_promotion": null,
+      "reported_regular_price_minor": null,
+      "source": {
+        "availability": "true",
+        "campaign_ids": [
+          "free-delivery",
+          "new arrival",
+          "pantry-refresh"
+        ],
+        "inventory": "in stock",
+        "price": 35995,
+        "regular_price": null,
+        "saving_amount": null
+      }
+    },
+    "sku": "479223",
+    "title": "King Cheese Feta con Sabores 2 Unidades / 227 g / 8 oz"
+  },
+  "decision": {
+    "additional_live_traffic": false,
+    "availability_does_not_justify_extra_tgu_context": true,
+    "club_binding_demonstrated": true,
+    "el_sauce_separate_commercial_context": false,
+    "full_crawl": false,
+    "model_change": false,
+    "outcome": "B",
+    "persistence": false,
+    "price_equivalent_across_all_clubs_in_sample": true,
+    "production_contexts_recommended": [
+      "6603",
+      "6602"
+    ],
+    "production_scraper": false,
+    "sps_independent_binding_demonstrated": true,
+    "status": "GO_CLUB_BINDING_PRICE_EQUIVALENT_SAMPLE_AVAILABILITY_VARIES",
+    "tgu_granularity": "ONE_REPRESENTATIVE_CONTEXT",
+    "tgu_representative_club": "6602",
+    "tgu_representative_name": "Florencia",
+    "turso_access": false
+  },
+  "full_crawl_preflight": {
+    "authorized": false,
+    "base_post_requests": 188,
+    "concurrency": 1,
+    "contexts": [
+      "6603",
+      "6602"
+    ],
+    "estimated_raw_response_bytes_before_compression": 10643996,
+    "full_crawl_requires_separate_authorization": true,
+    "maximum_post_requests": 208,
+    "pages_per_context": 94,
+    "proposed_duration_minutes": 30,
+    "retry_budget": 20
+  },
+  "pagination": {
+    "catalog_total": 1124,
+    "last_page_products": 8,
+    "last_start": 1116,
+    "mean_non_last_response_bytes": 56617,
+    "measured_request_seconds_max": 0.4928314579999551,
+    "measured_request_seconds_median": 0.2887057915000355,
+    "measured_request_seconds_min": 0.11353833400005442,
+    "model": "start_offset_plus_rows",
+    "pages_per_context": 94,
+    "probes": [
+      {
+        "catalog_total": 1124,
+        "club": "6603",
+        "elapsed_seconds": 0.4928314579999551,
+        "http_status": 200,
+        "page_1_overlap": 0,
+        "response_bytes": 57187,
+        "returned_products": 12,
+        "rows": 12,
+        "start": 12
+      },
+      {
+        "catalog_total": 1124,
+        "club": "6602",
+        "elapsed_seconds": 0.3221750830000474,
+        "http_status": 200,
+        "page_1_overlap": 0,
+        "response_bytes": 57185,
+        "returned_products": 12,
+        "rows": 12,
+        "start": 12
+      },
+      {
+        "catalog_total": 1124,
+        "club": "6602",
+        "elapsed_seconds": 0.3424477080000088,
+        "http_status": 200,
+        "page_1_overlap": 0,
+        "response_bytes": 52835,
+        "returned_products": 8,
+        "rows": 12,
+        "start": 1116
+      }
+    ],
+    "rows_per_request": 12,
+    "validated": true
+  },
+  "pairwise_comparison": {
+    "florencia_vs_el_sauce": {
+      "availability_difference_skus": [
+        "276418",
+        "464663",
+        "468388"
+      ],
+      "availability_differences": 3,
+      "availability_only_differences": 2,
+      "availability_only_skus": [
+        "276418",
+        "468388"
+      ],
+      "commercially_uncomparable_skus": 1,
+      "price_comparable_skus": 11,
+      "price_difference_skus": [],
+      "price_differences": 0,
+      "promotion_differences": 0,
+      "regular_price_differences": 0,
+      "shared_skus": 12
+    },
+    "sps_vs_el_sauce": {
+      "availability_difference_skus": [
+        "464663",
+        "468333",
+        "468388",
+        "516652"
+      ],
+      "availability_differences": 4,
+      "availability_only_differences": 3,
+      "availability_only_skus": [
+        "468333",
+        "468388",
+        "516652"
+      ],
+      "commercially_uncomparable_skus": 1,
+      "price_comparable_skus": 11,
+      "price_difference_skus": [],
+      "price_differences": 0,
+      "promotion_differences": 0,
+      "regular_price_differences": 0,
+      "shared_skus": 12
+    },
+    "sps_vs_florencia": {
+      "availability_difference_skus": [
+        "276418",
+        "468333",
+        "516652"
+      ],
+      "availability_differences": 3,
+      "availability_only_differences": 3,
+      "availability_only_skus": [
+        "276418",
+        "468333",
+        "516652"
+      ],
+      "commercially_uncomparable_skus": 1,
+      "price_comparable_skus": 11,
+      "price_difference_skus": [],
+      "price_differences": 0,
+      "promotion_differences": 0,
+      "regular_price_differences": 0,
+      "shared_skus": 12
+    }
+  },
+  "raw_archive": {
+    "bytes": 95140,
+    "published_files": 18,
+    "redactions": {
+      "anonymous_public_auth_key_retained": true,
+      "removed_client_fingerprint_headers": [
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "user-agent"
+      ],
+      "removed_cookie_names": [
+        "__cf_bm"
+      ],
+      "removed_request_headers": [
+        "newrelic",
+        "traceparent",
+        "tracestate"
+      ],
+      "retained_preference_cookie_names": [
+        "vsf-channel",
+        "vsf-country",
+        "vsf-currency",
+        "vsf-locale",
+        "vsf-provider-club-id",
+        "vsf-selected-club",
+        "vsf-selected-shipping-method",
+        "vsf-store"
+      ],
+      "unrelated_request_events_omitted": 285,
+      "unrelated_response_bodies_omitted": 18
+    },
+    "sha256": "a9015896b76372d86a33b5c5785c5a012520e57c6ae3afe066bc73897e9b1c30"
+  },
+  "replays": [
+    {
+      "browser_body_sha256": "5bfdf450236037afe3323355c7f90de1580f842ba4389617d72acca5c440741f",
+      "byte_exact_match": false,
+      "canonical_json_sha256": "72c49bedd137f074912e8c02ba233a966596afb8c82aba75fefd5855ac605616",
+      "club": "6603",
+      "cookie_header_present": false,
+      "http_status": 200,
+      "replay_body_sha256": "50c9070fb6c2eaa29a596fae7408ad76e2610e2a04de32422a39c9d470e294c2",
+      "semantic_json_match": true
+    },
+    {
+      "browser_body_sha256": "482cf6babd075f98935b6e77aadde3383ad8ab9d228263a216adad60d51cff23",
+      "byte_exact_match": true,
+      "canonical_json_sha256": "2eed59dec0fca7f8d8c5111d751b5abdd975c7c0cd2d6d213a16da3526ac66d6",
+      "club": "6602",
+      "cookie_header_present": false,
+      "http_status": 200,
+      "replay_body_sha256": "482cf6babd075f98935b6e77aadde3383ad8ab9d228263a216adad60d51cff23",
+      "semantic_json_match": true
+    },
+    {
+      "browser_body_sha256": "864c68706549e62078c1749f19f1691738a2e59d05394c00ba1a9604377007bb",
+      "byte_exact_match": true,
+      "canonical_json_sha256": "45a6a73feb987f6fd813024564943d67fb687397efdd50a04bc489b422ec0236",
+      "club": "6604",
+      "cookie_header_present": false,
+      "http_status": 200,
+      "replay_body_sha256": "864c68706549e62078c1749f19f1691738a2e59d05394c00ba1a9604377007bb",
+      "semantic_json_match": true
+    }
+  ],
+  "response": {
+    "all_three_price_comparable_skus": 11,
+    "all_three_price_differences": 0,
+    "campaign_ids_are_not_price_promotion_proof": true,
+    "catalog_total": 1124,
+    "promotion_differences": 0,
+    "promotion_values_declared": 0,
+    "regular_price_differences": 0,
+    "regular_price_values_declared": 0,
+    "returned_products_per_context": 12,
+    "shared_sku_identities": 12
+  },
+  "schema_version": 1
+}
