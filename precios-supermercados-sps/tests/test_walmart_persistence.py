@@ -161,6 +161,13 @@ def test_migration_preserves_data_and_is_one_time(tmp_path):
             con.execute("UPDATE price_history SET current_price_minor=NULL,is_promotion=NULL")
 
 
+def test_migration_cleans_guard_left_by_reused_turso_session():
+    steps = migration.migration_steps()
+    cleanup = next(i for i, step in enumerate(steps) if step[0] == "drop_guard_table")
+    guard = next(i for i, step in enumerate(steps) if step[0] == "guard_table")
+    assert cleanup < guard
+
+
 def test_migration_rolls_back_ddl_and_rejects_unrecognized_schema(tmp_path, monkeypatch):
     path = tmp_path / "legacy.db"
     legacy_database(path)

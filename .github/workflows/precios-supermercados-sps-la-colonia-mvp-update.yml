@@ -153,7 +153,7 @@ jobs:
           from actualizar_mvp_turso_la_colonia import _execute_rows, _pipeline, _stmt
 
           expected_runs = []
-          expected_open_by_location = []
+          expected_min_open_by_location = []
           for city, location_id in (
               ('sps', 'la_colonia_sps'),
               ('tgu', 'la_colonia_tgu'),
@@ -169,9 +169,9 @@ jobs:
                   snapshot['catalog_products_reported'],
                   digest,
               ])
-              expected_open_by_location.append([location_id, snapshot['skus_extracted']])
+              expected_min_open_by_location.append([location_id, snapshot['skus_extracted']])
           expected_runs.sort()
-          expected_open_by_location.sort()
+          expected_min_open_by_location.sort()
 
           run_sql = '''SELECT scrape_run_id,location_id,run_status,sku_count,catalog_product_count,source_json_sha256 FROM scrape_runs WHERE scrape_run_id IN (?,?) ORDER BY scrape_run_id'''
           run_args = (f"{os.environ['GITHUB_RUN_ID']}-sps", f"{os.environ['GITHUB_RUN_ID']}-tgu")
@@ -203,11 +203,18 @@ jobs:
           open_by_location = _execute_rows(data['results'][1])
           if duplicates != [[0]]:
               raise SystemExit(f'duplicate_open_periods:{duplicates}')
-          if open_by_location != expected_open_by_location:
-              raise SystemExit(f'current_state_mismatch:expected={expected_open_by_location}:actual={open_by_location}')
+          if [row[0] for row in open_by_location] != [row[0] for row in expected_min_open_by_location]:
+              raise SystemExit(f'current_location_mismatch:expected={expected_min_open_by_location}:actual={open_by_location}')
+          if any(actual[1] < expected[1] for actual, expected in zip(open_by_location, expected_min_open_by_location, strict=True)):
+              raise SystemExit(f'current_state_incomplete:minimum={expected_min_open_by_location}:actual={open_by_location}')
+          retained_absent_by_location = [
+              [actual[0], actual[1] - expected[1]]
+              for actual, expected in zip(open_by_location, expected_min_open_by_location, strict=True)
+          ]
           print(json.dumps({
               'runs': runs,
               'open_by_location': open_by_location,
+              'retained_absent_by_location': retained_absent_by_location,
               'duplicate_open_periods': duplicates,
           }, ensure_ascii=False, sort_keys=True))
           PY

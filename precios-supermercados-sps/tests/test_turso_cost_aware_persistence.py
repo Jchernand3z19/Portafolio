@@ -175,3 +175,5 @@ def test_daily_workflow_avoids_global_database_counts() -> None:
     assert "SELECT (SELECT COUNT(*) FROM products)" not in workflow
     assert "FROM price_history WHERE valid_to_utc IS NULL GROUP BY" not in workflow
     assert "supermarket_id=? AND location_id IN (?,?)" in workflow
+    assert "actual[1] < expected[1]" in workflow
+    assert "open_by_location != expected_open_by_location" not in workflow
