@@ -2,24 +2,32 @@
 
 GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad técnica.
 
-## Objetivo activo
+## Estado productivo verificado — 2026-09-02
+
+Turso `precios-supermercados` contiene las cuatro cadenas terminadas y ocho
+ubicaciones aceptadas: La Colonia SPS/TGU, Colonial SPS, Walmart SPS/TGU FFAA/TGU
+El Sauce y PriceSmart SPS 6603/Florencia 6602. Las primeras cargas de Colonial,
+Walmart y PriceSmart se ejecutaron exclusivamente desde snapshots versionados y
+con SHA comprobado; no hubo recrawl. PriceSmart conserva el alcance demostrado
+`G10D03 / Alimentos`, no todo el sitio.
+
+La huella final del esquema es
+`c971e706a2de9872b2351a1546041ef7c607f263afef39c3776c72b9bee1a46e`:
+cinco tablas, cuatro supermercados, ocho ubicaciones, 35,873 productos, 74,328
+periodos históricos y 13 runs. Hay cero periodos actuales duplicados, cero fallos
+FK e `integrity_check=ok`. La comparación exacta de checkpoints encontró cero
+cambios en La Colonia y Colonial durante las cargas posteriores; los seis
+snapshots nuevos tienen cero faltantes, extras o diferencias comerciales frente
+al estado productivo.
+
+La operación consumió 1,788,011 filas leídas y 513,705 filas escritas. El cierre
+real quedó en 2,029,820/500,000,000 lecturas y 545,341/10,000,000 escrituras, plan
+`starter`, overages deshabilitados y reset indicado para el 2026-09-30 18:00 CST.
+Ver [evidencia, hashes, run IDs y deltas medidos](../reports/turso-production/2026-09-02-all-completed/README.md).
 
 Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE TRACKING
-WEB**. PriceSmart Honduras completó el full autorizado del universo público
-`G10D03 / Alimentos` para SPS 6603 y Florencia 6602: 1,124 productos / 1,127 SKU
-por contexto, RAW y snapshots validados, parser terminado y persistencia productiva
-probada offline. El Sauce 6604 permanece excluido. PriceSmart queda listo para su
-primera carga Turso bajo autorización separada; no iniciar Paiz, otras ciudades,
-recurrencia ni dashboard.
-
-Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
-Su primera persistencia Turso y segunda observación real siguen pendientes.
-Walmart conserva tres catálogos aceptados y SQL validado offline, incluidos dos
-TGU por diferencias comerciales. **Ni Colonial ni Walmart están cerrados** en
-operación remota. Maxi/DF quedan detenidos sin scraper, persistencia ni catálogo.
-PriceSmart tiene fuente, identidad, binding, full acotado, semántica, paginación,
-parser, snapshots, migración e integración SQL offline demostrados. Turso no fue
-ejecutado y la recurrencia no fue creada.
+WEB**. No existen ubicaciones productivas de esas cadenas, Paiz ni PriceSmart El
+Sauce 6604. No se creó recurrencia nueva ni dashboard.
 
 La Colonia conserva el alcance existente:
 
