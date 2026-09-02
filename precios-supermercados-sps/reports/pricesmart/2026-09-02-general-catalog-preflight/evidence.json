@@ -1,0 +1,1667 @@
+{
+  "decision": {
+    "existing_alimentos_reusable_without_recrawl": true,
+    "full_request_budget_calculable": false,
+    "g10d03_complete": true,
+    "general_catalog_complete": false,
+    "minimal_partitions_determined": false,
+    "next_gate": "small live taxonomy/count probe authorization",
+    "root_taxonomy_demonstrated": false
+  },
+  "discovery_observations": {
+    "q_values": [
+      "G10D03"
+    ],
+    "query_count": 194,
+    "response_count": 194,
+    "response_num_found_values": [
+      1124
+    ],
+    "response_page_sizes": {
+      "12": 192,
+      "8": 2
+    },
+    "rows_values": [
+      12
+    ],
+    "search_type_values": [
+      "category"
+    ],
+    "unfiltered_or_root_query_observed": false,
+    "url_values": [
+      "https://www.pricesmart.com/es-hn/categoria/Alimentos-G10D03/G10D03"
+    ],
+    "view_id_values": [
+      "HN"
+    ]
+  },
+  "g10d03_taxonomy": {
+    "count_snapshot_variants": 3,
+    "leaf_count": 98,
+    "max_level": 3,
+    "node_count": 117,
+    "nodes": [
+      {
+        "category_id": "Fresh_Bakery",
+        "crumb": "/G10D03/Fresh_Bakery",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Panadería y repostería",
+        "observed_count_values": [
+          64
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería"
+      },
+      {
+        "category_id": "Fresh_cookies",
+        "crumb": "/G10D03/Fresh_Bakery/Fresh_cookies",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Galletas horneadas",
+        "observed_count_values": [
+          7
+        ],
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/Fresh_cookies,Galletas horneadas"
+      },
+      {
+        "category_id": "G10D01021",
+        "crumb": "/G10D03/G10D07017/G10D01021",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Comida vegetariana",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D01021,Comida vegetariana"
+      },
+      {
+        "category_id": "G10D02004",
+        "crumb": "/G10D03/G10D02004",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Dulces, chocolates y chicles",
+        "observed_count_values": [
+          46
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D02004,Dulces, chocolates y chicles"
+      },
+      {
+        "category_id": "G10D02004001",
+        "crumb": "/G10D03/G10D02004/G10D02004001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Chocolates",
+        "observed_count_values": [
+          21
+        ],
+        "parent_id": "G10D02004",
+        "tree_path": "/G10D03,Alimentos/G10D02004,Dulces, chocolates y chicles/G10D02004001,Chocolates"
+      },
+      {
+        "category_id": "G10D02004002",
+        "crumb": "/G10D03/G10D02004/G10D02004002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Chicles y mentas",
+        "observed_count_values": [
+          5
+        ],
+        "parent_id": "G10D02004",
+        "tree_path": "/G10D03,Alimentos/G10D02004,Dulces, chocolates y chicles/G10D02004002,Chicles y mentas"
+      },
+      {
+        "category_id": "G10D02004004",
+        "crumb": "/G10D03/G10D02004/G10D02004004",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Dulces",
+        "observed_count_values": [
+          20
+        ],
+        "parent_id": "G10D02004",
+        "tree_path": "/G10D03,Alimentos/G10D02004,Dulces, chocolates y chicles/G10D02004004,Dulces"
+      },
+      {
+        "category_id": "G10D02008003",
+        "crumb": "/G10D03/G10D63008/G10D02008003",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Galletas",
+        "observed_count_values": [
+          32
+        ],
+        "parent_id": "G10D63008",
+        "tree_path": "/G10D03,Alimentos/G10D63008,Galletas, postres, y helados/G10D02008003,Galletas"
+      },
+      {
+        "category_id": "G10D02008012",
+        "crumb": "/G10D03/G10D63008/G10D02008012",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pastelitos y gelatina",
+        "observed_count_values": [
+          6
+        ],
+        "parent_id": "G10D63008",
+        "tree_path": "/G10D03,Alimentos/G10D63008,Galletas, postres, y helados/G10D02008012,Pastelitos y gelatina"
+      },
+      {
+        "category_id": "G10D02019",
+        "crumb": "/G10D03/G10D02019",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Snacks",
+        "observed_count_values": [
+          83
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks"
+      },
+      {
+        "category_id": "G10D02019001",
+        "crumb": "/G10D03/G10D02019/G10D02019001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Papas fritas",
+        "observed_count_values": [
+          28
+        ],
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D02019001,Papas fritas"
+      },
+      {
+        "category_id": "G10D02019006",
+        "crumb": "/G10D03/G10D02019/G10D02019006",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Nueces y semillas",
+        "observed_count_values": [
+          24
+        ],
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D02019006,Nueces y semillas"
+      },
+      {
+        "category_id": "G10D02019007",
+        "crumb": "/G10D03/G10D02019/G10D02019007",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Palomitas de maíz",
+        "observed_count_values": [
+          2
+        ],
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D02019007,Palomitas de maíz"
+      },
+      {
+        "category_id": "G10D02019008",
+        "crumb": "/G10D03/G10D02019/G10D02019008",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Barritas",
+        "observed_count_values": [
+          8
+        ],
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D02019008,Barritas"
+      },
+      {
+        "category_id": "G10D03",
+        "crumb": "/G10D03",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 1,
+        "name": "Alimentos",
+        "observed_count_values": [
+          1124
+        ],
+        "parent_id": null,
+        "tree_path": "/G10D03,Alimentos"
+      },
+      {
+        "category_id": "G10D03003",
+        "crumb": "/G10D03/G10D03003",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 2,
+        "name": "Cereales y granolas",
+        "observed_count_values": [
+          24
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D03003,Cereales y granolas"
+      },
+      {
+        "category_id": "G10D03007",
+        "crumb": "/G10D03/G10D03007",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Café y té",
+        "observed_count_values": [
+          25
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D03007,Café y té"
+      },
+      {
+        "category_id": "G10D03007001",
+        "crumb": "/G10D03/G10D03007/G10D03007001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Café",
+        "observed_count_values": [
+          15
+        ],
+        "parent_id": "G10D03007",
+        "tree_path": "/G10D03,Alimentos/G10D03007,Café y té/G10D03007001,Café"
+      },
+      {
+        "category_id": "G10D03007003",
+        "crumb": "/G10D03/G10D03007/G10D03007003",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Crema",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D03007",
+        "tree_path": "/G10D03,Alimentos/G10D03007,Café y té/G10D03007003,Crema"
+      },
+      {
+        "category_id": "G10D03007004",
+        "crumb": "/G10D03/G10D03007/G10D03007004",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Té",
+        "observed_count_values": [
+          6
+        ],
+        "parent_id": "G10D03007",
+        "tree_path": "/G10D03,Alimentos/G10D03007,Café y té/G10D03007004,Té"
+      },
+      {
+        "category_id": "G10D03008011",
+        "crumb": "/G10D03/G10D63008/G10D03008011",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Budines",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D63008",
+        "tree_path": "/G10D03,Alimentos/G10D63008,Galletas, postres, y helados/G10D03008011,Budines"
+      },
+      {
+        "category_id": "G10D03009",
+        "crumb": "/G10D03/G10D03009",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Aceites, harinas y condimentos",
+        "observed_count_values": [
+          133
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos"
+      },
+      {
+        "category_id": "G10D03009001",
+        "crumb": "/G10D03/G10D03009/G10D03009001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Chocolate para hornear",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009001,Chocolate para hornear"
+      },
+      {
+        "category_id": "G10D03009002",
+        "crumb": "/G10D03/G10D03009/G10D03009002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Mezclas para hornear",
+        "observed_count_values": [
+          5
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009002,Mezclas para hornear"
+      },
+      {
+        "category_id": "G10D03009008",
+        "crumb": "/G10D03/G10D03009/G10D03009008",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Aceites de cocina",
+        "observed_count_values": [
+          30
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009008,Aceites de cocina"
+      },
+      {
+        "category_id": "G10D03009012",
+        "crumb": "/G10D03/G10D03009/G10D03009012",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Jarabes para saborizar",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009012,Jarabes para saborizar"
+      },
+      {
+        "category_id": "G10D03009013",
+        "crumb": "/G10D03/G10D03009/G10D03009013",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Harinas",
+        "observed_count_values": [
+          8
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009013,Harinas"
+      },
+      {
+        "category_id": "G10D03009014",
+        "crumb": "/G10D03/G10D03009/G10D03009014",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Jaleas y untables",
+        "observed_count_values": [
+          9
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009014,Jaleas y untables"
+      },
+      {
+        "category_id": "G10D03009016",
+        "crumb": "/G10D03/G10D03009/G10D03009016",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Salsas",
+        "observed_count_values": [
+          24
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009016,Salsas"
+      },
+      {
+        "category_id": "G10D03009017",
+        "crumb": "/G10D03/G10D03009/G10D03009017",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Especias",
+        "observed_count_values": [
+          19
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009017,Especias"
+      },
+      {
+        "category_id": "G10D03009018",
+        "crumb": "/G10D03/G10D03009/G10D03009018",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Azúcar y endulzantes",
+        "observed_count_values": [
+          11
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009018,Azúcar y endulzantes"
+      },
+      {
+        "category_id": "G10D03010005",
+        "crumb": "/G10D03/G10D07010/G10D03010005",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Huevos",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D03010005,Huevos"
+      },
+      {
+        "category_id": "G10D03010006",
+        "crumb": "/G10D03/G10D07010/G10D03010006",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Leche",
+        "observed_count_values": [
+          22
+        ],
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D03010006,Leche"
+      },
+      {
+        "category_id": "G10D03019003",
+        "crumb": "/G10D03/G10D02019/G10D03019003",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Frutos secos",
+        "observed_count_values": [
+          9
+        ],
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D03019003,Frutos secos"
+      },
+      {
+        "category_id": "G10D04018",
+        "crumb": "/G10D03/G10D04018",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Frutas y vegetales",
+        "observed_count_values": [
+          88
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D04018,Frutas y vegetales"
+      },
+      {
+        "category_id": "G10D04018001",
+        "crumb": "/G10D03/G10D04018/G10D04018001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Fruta fresca",
+        "observed_count_values": [
+          47
+        ],
+        "parent_id": "G10D04018",
+        "tree_path": "/G10D03,Alimentos/G10D04018,Frutas y vegetales/G10D04018001,Fruta fresca"
+      },
+      {
+        "category_id": "G10D04018002",
+        "crumb": "/G10D03/G10D04018/G10D04018002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Verduras frescas",
+        "observed_count_values": [
+          41
+        ],
+        "parent_id": "G10D04018",
+        "tree_path": "/G10D03,Alimentos/G10D04018,Frutas y vegetales/G10D04018002,Verduras frescas"
+      },
+      {
+        "category_id": "G10D06001006",
+        "crumb": "/G10D03/G10D06011/G10D06001006",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Verduras congeladas",
+        "observed_count_values": [
+          3
+        ],
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06001006,Verduras congeladas"
+      },
+      {
+        "category_id": "G10D06008007",
+        "crumb": "/G10D03/G10D63008/G10D06008007",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Helado",
+        "observed_count_values": [
+          7
+        ],
+        "parent_id": "G10D63008",
+        "tree_path": "/G10D03,Alimentos/G10D63008,Galletas, postres, y helados/G10D06008007,Helado"
+      },
+      {
+        "category_id": "G10D06008010",
+        "crumb": "/G10D03/Fresh_Bakery/G10D06008010",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Tartas",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D06008010,Tartas"
+      },
+      {
+        "category_id": "G10D06011",
+        "crumb": "/G10D03/G10D06011",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Comida congelada",
+        "observed_count_values": [
+          37
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada"
+      },
+      {
+        "category_id": "G10D06011001",
+        "crumb": "/G10D03/G10D06011/G10D06011001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Aperitivos congelados",
+        "observed_count_values": [
+          16
+        ],
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06011001,Aperitivos congelados"
+      },
+      {
+        "category_id": "G10D06011002",
+        "crumb": "/G10D03/G10D06011/G10D06011002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Entradas congeladas",
+        "observed_count_values": [
+          8
+        ],
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06011002,Entradas congeladas"
+      },
+      {
+        "category_id": "G10D06011003",
+        "crumb": "/G10D03/G10D06011/G10D06011003",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Frutas congeladas",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06011003,Frutas congeladas"
+      },
+      {
+        "category_id": "G10D06011004",
+        "crumb": "/G10D03/G10D06011/G10D06011004",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Mariscos congelados",
+        "observed_count_values": [
+          5
+        ],
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06011004,Mariscos congelados"
+      },
+      {
+        "category_id": "G10D06011005",
+        "crumb": "/G10D03/G10D06011/G10D06011005",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Guarniciones congeladas",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06011005,Guarniciones congeladas"
+      },
+      {
+        "category_id": "G10D06015002",
+        "crumb": "/G10D03/G10D59015/G10D06015002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Carne",
+        "observed_count_values": [
+          69
+        ],
+        "parent_id": "G10D59015",
+        "tree_path": "/G10D03,Alimentos/G10D59015,Carnes/G10D06015002,Carne"
+      },
+      {
+        "category_id": "G10D07002001",
+        "crumb": "/G10D03/G10D63002/G10D07002001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Bagels",
+        "observed_count_values": [
+          2
+        ],
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002001,Bagels"
+      },
+      {
+        "category_id": "G10D07002002",
+        "crumb": "/G10D03/Fresh_Bakery/G10D07002002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Hogazas de pan",
+        "observed_count_values": [
+          3
+        ],
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D07002002,Hogazas de pan"
+      },
+      {
+        "category_id": "G10D07002003",
+        "crumb": "/G10D03/Fresh_Bakery/G10D07002003",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pan de maíz",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D07002003,Pan de maíz"
+      },
+      {
+        "category_id": "G10D07002006",
+        "crumb": "/G10D03/G10D63002/G10D07002006",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Panes para hamburguesas y para hot-dogs",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002006,Panes para hamburguesas y para hot-dogs"
+      },
+      {
+        "category_id": "G10D07002009",
+        "crumb": "/G10D03/G10D63002/G10D07002009",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pan pita",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002009,Pan pita"
+      },
+      {
+        "category_id": "G10D07002012",
+        "crumb": "/G10D03/G10D63002/G10D07002012",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pan de sandwich",
+        "observed_count_values": [
+          5
+        ],
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002012,Pan de sandwich"
+      },
+      {
+        "category_id": "G10D07002013",
+        "crumb": "/G10D03/G10D63002/G10D07002013",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pan tostado",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002013,Pan tostado"
+      },
+      {
+        "category_id": "G10D07002014",
+        "crumb": "/G10D03/G10D63002/G10D07002014",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Tortillas",
+        "observed_count_values": [
+          3
+        ],
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002014,Tortillas"
+      },
+      {
+        "category_id": "G10D07008005",
+        "crumb": "/G10D03/Fresh_Bakery/G10D07008005",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Donas y churros",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D07008005,Donas y churros"
+      },
+      {
+        "category_id": "G10D07010",
+        "crumb": "/G10D03/G10D07010",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Lácteos y Huevos",
+        "observed_count_values": [
+          120,
+          121
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos"
+      },
+      {
+        "category_id": "G10D07010001",
+        "crumb": "/G10D03/G10D07010/G10D07010001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Mantequilla y margarina",
+        "observed_count_values": [
+          10
+        ],
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010001,Mantequilla y margarina"
+      },
+      {
+        "category_id": "G10D07010002",
+        "crumb": "/G10D03/G10D07010/G10D07010002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Quesos",
+        "observed_count_values": [
+          53
+        ],
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010002,Quesos"
+      },
+      {
+        "category_id": "G10D07010004",
+        "crumb": "/G10D03/G10D07010/G10D07010004",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Queso crema",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010004,Queso crema"
+      },
+      {
+        "category_id": "G10D07010007",
+        "crumb": "/G10D03/G10D07010/G10D07010007",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Crema agria",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010007,Crema agria"
+      },
+      {
+        "category_id": "G10D07010008",
+        "crumb": "/G10D03/G10D07010/G10D07010008",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Crema batida",
+        "observed_count_values": [
+          3,
+          4
+        ],
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010008,Crema batida"
+      },
+      {
+        "category_id": "G10D07010010",
+        "crumb": "/G10D03/G10D07010/G10D07010010",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Yogurt",
+        "observed_count_values": [
+          14
+        ],
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010010,Yogurt"
+      },
+      {
+        "category_id": "G10D07015001",
+        "crumb": "/G10D03/deli_meat/G10D07015001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Tocino",
+        "observed_count_values": [
+          5
+        ],
+        "parent_id": "deli_meat",
+        "tree_path": "/G10D03,Alimentos/deli_meat,Embutidos/G10D07015001,Tocino"
+      },
+      {
+        "category_id": "G10D07015007",
+        "crumb": "/G10D03/deli_meat/G10D07015007",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Hot dogs",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "deli_meat",
+        "tree_path": "/G10D03,Alimentos/deli_meat,Embutidos/G10D07015007,Hot dogs"
+      },
+      {
+        "category_id": "G10D07015009",
+        "crumb": "/G10D03/deli_meat/G10D07015009",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Jamones",
+        "observed_count_values": [
+          28
+        ],
+        "parent_id": "deli_meat",
+        "tree_path": "/G10D03,Alimentos/deli_meat,Embutidos/G10D07015009,Jamones"
+      },
+      {
+        "category_id": "G10D07015011",
+        "crumb": "/G10D03/deli_meat/G10D07015011",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Salchichas",
+        "observed_count_values": [
+          22
+        ],
+        "parent_id": "deli_meat",
+        "tree_path": "/G10D03,Alimentos/deli_meat,Embutidos/G10D07015011,Salchichas"
+      },
+      {
+        "category_id": "G10D07017",
+        "crumb": "/G10D03/G10D07017",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Comidas preparadas",
+        "observed_count_values": [
+          26
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas"
+      },
+      {
+        "category_id": "G10D07017004",
+        "crumb": "/G10D03/G10D07017/G10D07017004",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Salsas y untables",
+        "observed_count_values": [
+          12
+        ],
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017004,Salsas y untables"
+      },
+      {
+        "category_id": "G10D07017005",
+        "crumb": "/G10D03/G10D07017/G10D07017005",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Entradas y Aperitivos",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017005,Entradas y Aperitivos"
+      },
+      {
+        "category_id": "G10D07017006",
+        "crumb": "/G10D03/G10D07017/G10D07017006",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Bandejas para fiestas",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017006,Bandejas para fiestas"
+      },
+      {
+        "category_id": "G10D07017008",
+        "crumb": "/G10D03/G10D07017/G10D07017008",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Ensaladas",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017008,Ensaladas"
+      },
+      {
+        "category_id": "G10D07017009",
+        "crumb": "/G10D03/G10D07017/G10D07017009",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Guarniciones",
+        "observed_count_values": [
+          2
+        ],
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017009,Guarniciones"
+      },
+      {
+        "category_id": "G10D07017010",
+        "crumb": "/G10D03/G10D07017/G10D07017010",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Sopas",
+        "observed_count_values": [
+          2
+        ],
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017010,Sopas"
+      },
+      {
+        "category_id": "G10D32001001",
+        "crumb": "/G10D03/G10D53001/G10D32001001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Mezclas en polvo",
+        "observed_count_values": [
+          14
+        ],
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D32001001,Mezclas en polvo"
+      },
+      {
+        "category_id": "G10D32001002",
+        "crumb": "/G10D03/G10D53001/G10D32001002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Jugos",
+        "observed_count_values": [
+          50
+        ],
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D32001002,Jugos"
+      },
+      {
+        "category_id": "G10D32001004",
+        "crumb": "/G10D03/G10D53001/G10D32001004",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Bebidas deportivas",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D32001004,Bebidas deportivas"
+      },
+      {
+        "category_id": "G10D33005",
+        "crumb": "/G10D03/G10D33005",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Enlatados",
+        "observed_count_values": [
+          38
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados"
+      },
+      {
+        "category_id": "G10D34006001",
+        "crumb": "/G10D03/G10D33005/G10D34006001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Frijoles enlatados",
+        "observed_count_values": [
+          2
+        ],
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006001,Frijoles enlatados"
+      },
+      {
+        "category_id": "G10D34006002",
+        "crumb": "/G10D03/G10D33005/G10D34006002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Frutas enlatadas",
+        "observed_count_values": [
+          5
+        ],
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006002,Frutas enlatadas"
+      },
+      {
+        "category_id": "G10D34006004",
+        "crumb": "/G10D03/G10D33005/G10D34006004",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Aceitunas enlatadas",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006004,Aceitunas enlatadas"
+      },
+      {
+        "category_id": "G10D34006007",
+        "crumb": "/G10D03/G10D33005/G10D34006007",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Tomates enlatados",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006007,Tomates enlatados"
+      },
+      {
+        "category_id": "G10D34006008",
+        "crumb": "/G10D03/G10D33005/G10D34006008",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Vegetales enlatados",
+        "observed_count_values": [
+          7
+        ],
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006008,Vegetales enlatados"
+      },
+      {
+        "category_id": "G10D34006009",
+        "crumb": "/G10D03/G10D33005/G10D34006009",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pepinillos",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006009,Pepinillos"
+      },
+      {
+        "category_id": "G10D35006003",
+        "crumb": "/G10D03/G10D33005/G10D35006003",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Carne enlatada",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D35006003,Carne enlatada"
+      },
+      {
+        "category_id": "G10D35006006",
+        "crumb": "/G10D03/G10D33005/G10D35006006",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Mariscos enlatados",
+        "observed_count_values": [
+          11
+        ],
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D35006006,Mariscos enlatados"
+      },
+      {
+        "category_id": "G10D35013",
+        "crumb": "/G10D03/G10D35013",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Granos y pasta",
+        "observed_count_values": [
+          31
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D35013,Granos y pasta"
+      },
+      {
+        "category_id": "G10D35013001",
+        "crumb": "/G10D03/G10D35013/G10D35013001",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Frijoles secos",
+        "observed_count_values": [
+          3
+        ],
+        "parent_id": "G10D35013",
+        "tree_path": "/G10D03,Alimentos/G10D35013,Granos y pasta/G10D35013001,Frijoles secos"
+      },
+      {
+        "category_id": "G10D35013002",
+        "crumb": "/G10D03/G10D35013/G10D35013002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pasta",
+        "observed_count_values": [
+          15
+        ],
+        "parent_id": "G10D35013",
+        "tree_path": "/G10D03,Alimentos/G10D35013,Granos y pasta/G10D35013002,Pasta"
+      },
+      {
+        "category_id": "G10D35013003",
+        "crumb": "/G10D03/G10D35013/G10D35013003",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Arroz",
+        "observed_count_values": [
+          13
+        ],
+        "parent_id": "G10D35013",
+        "tree_path": "/G10D03,Alimentos/G10D35013,Granos y pasta/G10D35013003,Arroz"
+      },
+      {
+        "category_id": "G10D36019002",
+        "crumb": "/G10D03/G10D02019/G10D36019002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Galletas saladas",
+        "observed_count_values": [
+          8
+        ],
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D36019002,Galletas saladas"
+      },
+      {
+        "category_id": "G10D36019004",
+        "crumb": "/G10D03/G10D02019/G10D36019004",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Bocadillos de frutas",
+        "observed_count_values": [
+          3
+        ],
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D36019004,Bocadillos de frutas"
+      },
+      {
+        "category_id": "G10D36019005",
+        "crumb": "/G10D03/G10D02019/G10D36019005",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Granola",
+        "observed_count_values": [
+          1
+        ],
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D36019005,Granola"
+      },
+      {
+        "category_id": "G10D37017002",
+        "crumb": "/G10D03/G10D03009/G10D37017002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Condimentos",
+        "observed_count_values": [
+          15
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D37017002,Condimentos"
+      },
+      {
+        "category_id": "G10D37017007",
+        "crumb": "/G10D03/G10D03009/G10D37017007",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Aderezos para ensalada",
+        "observed_count_values": [
+          10
+        ],
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D37017007,Aderezos para ensalada"
+      },
+      {
+        "category_id": "G10D53001",
+        "crumb": "/G10D03/G10D53001",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Bebidas",
+        "observed_count_values": [
+          115
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas"
+      },
+      {
+        "category_id": "G10D53001003",
+        "crumb": "/G10D03/G10D53001/G10D53001003",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Gaseosas",
+        "observed_count_values": [
+          32
+        ],
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D53001003,Gaseosas"
+      },
+      {
+        "category_id": "G10D53001005",
+        "crumb": "/G10D03/G10D53001/G10D53001005",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Agua",
+        "observed_count_values": [
+          9
+        ],
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D53001005,Agua"
+      },
+      {
+        "category_id": "G10D53001006",
+        "crumb": "/G10D03/G10D07010/G10D53001006",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Sustitutos de lácteos",
+        "observed_count_values": [
+          9
+        ],
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D53001006,Sustitutos de lácteos"
+      },
+      {
+        "category_id": "G10D53001007",
+        "crumb": "/G10D03/G10D53001/G10D53001007",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Bebidas energéticas",
+        "observed_count_values": [
+          6
+        ],
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D53001007,Bebidas energéticas"
+      },
+      {
+        "category_id": "G10D57015012",
+        "crumb": "/G10D03/Seafood/G10D57015012",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pescado",
+        "observed_count_values": [
+          13,
+          14
+        ],
+        "parent_id": "Seafood",
+        "tree_path": "/G10D03,Alimentos/Seafood,Mariscos y pescado/G10D57015012,Pescado"
+      },
+      {
+        "category_id": "G10D57015013",
+        "crumb": "/G10D03/Seafood/G10D57015013",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Mariscos",
+        "observed_count_values": [
+          6
+        ],
+        "parent_id": "Seafood",
+        "tree_path": "/G10D03,Alimentos/Seafood,Mariscos y pescado/G10D57015013,Mariscos"
+      },
+      {
+        "category_id": "G10D59015",
+        "crumb": "/G10D03/G10D59015",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Carnes",
+        "observed_count_values": [
+          110
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D59015,Carnes"
+      },
+      {
+        "category_id": "G10D59015003",
+        "crumb": "/G10D03/Poultry/G10D59015003",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pollo",
+        "observed_count_values": [
+          24
+        ],
+        "parent_id": "Poultry",
+        "tree_path": "/G10D03,Alimentos/Poultry,Aves/G10D59015003,Pollo"
+      },
+      {
+        "category_id": "G10D59015014",
+        "crumb": "/G10D03/Poultry/G10D59015014",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pavo",
+        "observed_count_values": [
+          2
+        ],
+        "parent_id": "Poultry",
+        "tree_path": "/G10D03,Alimentos/Poultry,Aves/G10D59015014,Pavo"
+      },
+      {
+        "category_id": "G10D63002",
+        "crumb": "/G10D03/G10D63002",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Panes y tortillas",
+        "observed_count_values": [
+          16
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas"
+      },
+      {
+        "category_id": "G10D63002007",
+        "crumb": "/G10D03/Fresh_Bakery/G10D63002007",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Muffins",
+        "observed_count_values": [
+          4
+        ],
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D63002007,Muffins"
+      },
+      {
+        "category_id": "G10D63002008",
+        "crumb": "/G10D03/Fresh_Bakery/G10D63002008",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Repostería",
+        "observed_count_values": [
+          14
+        ],
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D63002008,Repostería"
+      },
+      {
+        "category_id": "G10D63002011",
+        "crumb": "/G10D03/Fresh_Bakery/G10D63002011",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Panecillos, rollos y pan estilo francés",
+        "observed_count_values": [
+          8
+        ],
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D63002011,Panecillos, rollos y pan estilo francés"
+      },
+      {
+        "category_id": "G10D63008",
+        "crumb": "/G10D03/G10D63008",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Galletas, postres, y helados",
+        "observed_count_values": [
+          49
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D63008,Galletas, postres, y helados"
+      },
+      {
+        "category_id": "G10D63008002",
+        "crumb": "/G10D03/Fresh_Bakery/G10D63008002",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Pasteles",
+        "observed_count_values": [
+          20
+        ],
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D63008002,Pasteles"
+      },
+      {
+        "category_id": "G10D63008004",
+        "crumb": "/G10D03/Fresh_Bakery/G10D63008004",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Cupcakes",
+        "observed_count_values": [
+          2
+        ],
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D63008004,Cupcakes"
+      },
+      {
+        "category_id": "G10D65015010",
+        "crumb": "/G10D03/G10D59015/G10D65015010",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 3,
+        "name": "Cerdo",
+        "observed_count_values": [
+          41
+        ],
+        "parent_id": "G10D59015",
+        "tree_path": "/G10D03,Alimentos/G10D59015,Carnes/G10D65015010,Cerdo"
+      },
+      {
+        "category_id": "Poultry",
+        "crumb": "/G10D03/Poultry",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Aves",
+        "observed_count_values": [
+          26
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/Poultry,Aves"
+      },
+      {
+        "category_id": "Seafood",
+        "crumb": "/G10D03/Seafood",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Mariscos y pescado",
+        "observed_count_values": [
+          19,
+          20
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/Seafood,Mariscos y pescado"
+      },
+      {
+        "category_id": "deli_meat",
+        "crumb": "/G10D03/deli_meat",
+        "is_leaf": false,
+        "is_parent": true,
+        "level": 2,
+        "name": "Embutidos",
+        "observed_count_values": [
+          56
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/deli_meat,Embutidos"
+      },
+      {
+        "category_id": "ready_to_eat",
+        "crumb": "/G10D03/ready_to_eat",
+        "is_leaf": true,
+        "is_parent": false,
+        "level": 2,
+        "name": "Listo para comer",
+        "observed_count_values": [
+          17
+        ],
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/ready_to_eat,Listo para comer"
+      }
+    ],
+    "parent_count": 19,
+    "root_count": 1,
+    "scope": "G10D03 / Alimentos only",
+    "structure_sha256_values": [
+      "583ca6818ad8523a77e02120c72a6b3c75b0d8d8a71bfae58129eee5eade21f2"
+    ]
+  },
+  "generated_offline": true,
+  "live_pricesmart_requests": 0,
+  "offline_application_contract": {
+    "category_query_fields": [
+      "id",
+      "key",
+      "slug",
+      "name",
+      "metaDescription",
+      "ancestors",
+      "parent"
+    ],
+    "configured_category_limit": 200,
+    "inferred_public_route_from_client_proxy": "/api/ct/getFacetCategories",
+    "middleware_url": "/api/",
+    "read_operation": "getFacetCategories",
+    "root_filter_expression": "parent is not defined",
+    "route_status": "derived_from_captured_client_code_not_live_probed",
+    "source_asset": "reports/pricesmart/2026-08-31-probe/raw-capture.tar.gz:raw/08-asset_commerce_vendor.html",
+    "source_asset_sha256": "2700ea981da1cc2f0735d6e06b5c89c35b6664087cc0cd676a8e4bae1a0b6d41",
+    "supported_filters_observed_in_code": [
+      "onlyParent",
+      "ancestor",
+      "catIds",
+      "key",
+      "slug",
+      "slugs"
+    ]
+  },
+  "product_document_category_fields": {
+    "documents_with_category_field": 0,
+    "fields_observed": [],
+    "pdp_control_sku": "516411",
+    "pdp_declared_leaf_categories": [
+      {
+        "id": "de0aa943-5dda-486f-818b-9c4f5f27835e",
+        "key": "G10D53001003",
+        "name": "Soft Drinks",
+        "slug": "Soft-Drinks"
+      }
+    ]
+  },
+  "raw_archives": [
+    {
+      "bytes": 1618,
+      "path": "reports/pricesmart/2026-08-31-graphql-path-probe/raw-capture.tar.gz",
+      "report": "2026-08-31-graphql-path-probe",
+      "sha256": "83dde6d9a1a65fc0d9aeb7ab1887a0642c527d67faf769794e3215bcf42c88ba"
+    },
+    {
+      "bytes": 1520,
+      "path": "reports/pricesmart/2026-08-31-graphql-probe/raw-capture.tar.gz",
+      "report": "2026-08-31-graphql-probe",
+      "sha256": "018f3921d6e542d5329d456f380f44113101d45b92d1e5809903ddae63349798"
+    },
+    {
+      "bytes": 1699,
+      "path": "reports/pricesmart/2026-08-31-graphql-schema-probe/raw-capture.tar.gz",
+      "report": "2026-08-31-graphql-schema-probe",
+      "sha256": "34f0c772a1e8988de8cd29df5219539084628faa17ac0fb0c715c9eefe3196e8"
+    },
+    {
+      "bytes": 731684,
+      "path": "reports/pricesmart/2026-08-31-probe/raw-capture.tar.gz",
+      "report": "2026-08-31-probe",
+      "sha256": "d0aec577880268de9633ac94eeec1802a31d54afcbdbb47d1206ced9794e3a7f"
+    },
+    {
+      "bytes": 20188,
+      "path": "reports/pricesmart/2026-09-01-browser-request-probe/raw-capture.tar.gz",
+      "report": "2026-09-01-browser-request-probe",
+      "sha256": "cc6374a104f84eb2bf44ac9e4aa2123e052584a676debeb293f7e5cd13d5492c"
+    },
+    {
+      "bytes": 95140,
+      "path": "reports/pricesmart/2026-09-01-club-binding-probe/raw-capture.tar.gz",
+      "report": "2026-09-01-club-binding-probe",
+      "sha256": "a9015896b76372d86a33b5c5785c5a012520e57c6ae3afe066bc73897e9b1c30"
+    },
+    {
+      "bytes": 1769114,
+      "path": "reports/pricesmart/2026-09-01-full/raw-capture.tar.gz",
+      "report": "2026-09-01-full",
+      "sha256": "4613c634f584cc3ba157504f5b40cbb04aa94c7c14e65984672babe9e27d1b05"
+    }
+  ],
+  "repository_main_audited": "00e26d8d6cd637ee45ed623047eef124aee6d325",
+  "reusable_skills_commit": "252b245e0f416b57c324db97bc9cee868fc8124d",
+  "schema_version": 1,
+  "turso_operations": 0
+}

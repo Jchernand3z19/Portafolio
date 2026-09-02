@@ -1,5 +1,9 @@
 # PriceSmart Honduras — auditoría y preflight
 
+> Documento histórico de los probes iniciales. El estado operativo vigente está
+> en [`PROJECT_STATE.md`](../PROJECT_STATE.md); el preflight del catálogo general
+> está en [su reporte reproducible](../../reports/pricesmart/2026-09-02-general-catalog-preflight/README.md).
+
 ## Resultado de los probes autorizados
 
 ### Captura posterior de la petición real del navegador

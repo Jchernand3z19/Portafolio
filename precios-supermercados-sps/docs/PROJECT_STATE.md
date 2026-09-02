@@ -94,7 +94,27 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — full G10D03 completo, listo para primera carga
+## PriceSmart Honduras — Alimentos completo y persistido; catálogo general incompleto
+
+La auditoría offline del catálogo general revisó los siete RAW PriceSmart, 194
+requests y 194 respuestas de productos. Todas las consultas existentes usan
+`q=G10D03`, `search_type=category`; no existe una consulta raíz o sin filtro. El
+facet estructurado tiene 117 nodos, pero todos pertenecen al árbol explícito de
+`G10D03 / Alimentos`: una raíz, 19 padres y 98 hojas. La estructura es estable;
+los documentos no incluyen membership de categoría y el estado PDP de control sólo
+declara una hoja. Por tanto:
+
+```text
+PRICESMART G10D03 / ALIMENTOS COMPLETO
+CATÁLOGO GENERAL PRICESMART INCOMPLETO
+```
+
+El código cliente capturado deriva una operación pública de lectura
+`POST /api/ct/getFacetCategories`, con `onlyParent` y límite configurado de 200,
+pero esa ruta aún no fue probada live. Hace falta una autorización nueva y acotada
+antes del primer POST. No se puede calcular el full restante hasta demostrar las
+raíces y medir `numFound` por padre. El snapshot Alimentos existente es reutilizable
+sin recrawl. [Preflight, árbol y gate reproducible](../reports/pricesmart/2026-09-02-general-catalog-preflight/README.md).
 
 Full controlado del `2026-09-01`, limitado a SPS 6603 y Florencia 6602. El Sauce
 6604 no fue consultado. Se ejecutaron **188 POST HTTP, 94 por club, todos 200,
@@ -132,8 +152,9 @@ ya admitida para Walmart y preserva el estado previo. Fingerprint destino:
 La suite completa pasó localmente: 2,012 tests, con 21 skips esperados.
 
 [RAW, hashes, snapshots, parser y SQL offline](../reports/pricesmart/2026-09-01-full/README.md).
-PriceSmart queda **READY FOR FIRST TURSO LOAD** bajo un gate nuevo; no ejecutar
-SQL remoto ni recurrencia reutilizando la autorización del full.
+Ese alcance Alimentos ya fue cargado y verificado en Turso por la operación
+productiva del 2026-09-02. Completar el catálogo debe aplicar más adelante un delta
+incremental; no borrar ni recrear el historial existente.
 
 ### Probe de binding previo y decisión TGU
 
@@ -766,18 +787,19 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 ## Pendiente operativo
 
 ```text
-1. tras reset Turso, medir consumo, comprobar esquema/cronología y preservar backup
-2. migrar una vez las restricciones demostradas y cargar observaciones aceptadas bajo autorización vigente
-3. verificar primera carga y consumo de Colonial/Walmart, sin runs de tuning remotos
-4. obtener segunda observación real posterior bajo autorización propia; recurrencia separada
-5. comprobar una ejecución diaria íntegramente correcta de La Colonia
+1. ejecutar el probe mínimo autorizado de taxonomía raíz PriceSmart;
+2. medir `numFound` por padre y calcular las particiones y presupuesto full exactos;
+3. capturar sólo el catálogo PriceSmart restante bajo autorización separada;
+4. consolidar y validar offline contra Alimentos existente y contra Turso;
+5. persistir únicamente el delta PriceSmart bajo una autorización productiva nueva;
+6. mantener recurrencia separada hasta terminar el catálogo general.
 ```
 
-En paralelo, Maxi/DF queda cerrado como NO-GO temporal y PriceSmart queda listo
-para su primera carga Turso bajo autorización separada. La superficie
-GraphQL `changeme` permanece cerrada; no probar credenciales, configuración u otro
-endpoint. Los 20 POST no consumidos del full PriceSmart no se reutilizan.
-La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
+Maxi/DF queda cerrado como NO-GO temporal. PriceSmart Alimentos ya está persistido,
+pero el catálogo general permanece incompleto. La superficie GraphQL `changeme`
+permanece cerrada; no probar credenciales ni configuración. Los 20 POST no
+consumidos del full anterior no se reutilizan. No activar cobros ni ampliar la
+arquitectura.
 
 ## Fuera del alcance actual
 
