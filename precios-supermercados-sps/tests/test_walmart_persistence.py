@@ -161,6 +161,13 @@ def test_migration_preserves_data_and_is_one_time(tmp_path):
             con.execute("UPDATE price_history SET current_price_minor=NULL,is_promotion=NULL")
 
 
+def test_migration_target_is_frozen_before_pricesmart():
+    assert migration.fingerprint(migration.target_schema()) == migration.TARGET_FINGERPRINT
+    assert migration.TARGET_FINGERPRINT == (
+        "f09ea1cf63f3de159c87872f842babcc42e5d14f8e2c33067782dd272c1a36f4"
+    )
+
+
 def test_migration_cleans_guard_left_by_reused_turso_session():
     steps = migration.migration_steps()
     cleanup = next(i for i, step in enumerate(steps) if step[0] == "drop_guard_table")

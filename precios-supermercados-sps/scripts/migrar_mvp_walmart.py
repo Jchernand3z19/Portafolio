@@ -9,6 +9,7 @@ from pathlib import Path
 from generar_mvp_sqlite_la_colonia import create_schema
 
 LEGACY_FINGERPRINT = "d00fa5e684c68b4e6e9b28679d95cc816d40f089df6f4e212484a2e524bc3133"
+TARGET_FINGERPRINT = "f09ea1cf63f3de159c87872f842babcc42e5d14f8e2c33067782dd272c1a36f4"
 SCHEMA_QUERY = "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY name"
 
 
@@ -24,15 +25,42 @@ def target_schema():
     con = sqlite3.connect(":memory:")
     try:
         create_schema(con)
-        return con.execute(SCHEMA_QUERY).fetchall()
+        # Freeze this one-time migration at the Walmart-era schema.  The shared
+        # schema later added PriceSmart to the nullable out-of-stock constraint;
+        # allowing that later change to leak in here silently skips the explicit
+        # PriceSmart migration in a clean production rollout.
+        rows = [
+            (
+                name,
+                sql.replace(
+                    "supermarket_id IN ('walmart', 'pricesmart')",
+                    "supermarket_id = 'walmart'",
+                ),
+            )
+            for name, sql in con.execute(SCHEMA_QUERY).fetchall()
+        ]
+        if fingerprint(rows) != TARGET_FINGERPRINT:
+            raise ValueError("walmart_target_schema_drift")
+        return rows
     finally:
         con.close()
 
 
 def schema_ready(rows):
-    expected = [(name, sql) for name, sql in target_schema()
-                if name in {"locations", "price_history", "idx_locations_city_legacy"}]
-    return _normalized(rows) == _normalized(expected)
+    names = {"locations", "price_history", "idx_locations_city_legacy"}
+    walmart = [(name, sql) for name, sql in target_schema() if name in names]
+    con = sqlite3.connect(":memory:")
+    try:
+        create_schema(con)
+        current = [
+            (name, sql)
+            for name, sql in con.execute(SCHEMA_QUERY).fetchall()
+            if name in names
+        ]
+    finally:
+        con.close()
+    normalized = _normalized(rows)
+    return normalized == _normalized(walmart) or normalized == _normalized(current)
 
 
 def migration_steps():

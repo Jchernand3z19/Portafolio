@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "operation": {
+    "started_at_utc": "2026-09-02T17:00:46Z",
+    "final_checkpoint_at_utc": "2026-09-02T17:16:02Z",
+    "source_main_commit": "462a3a325f9ae4fa29bafa64210b674df97eadeb",
+    "database": "precios-supermercados",
+    "recrawl": false,
+    "billing_changed": false,
+    "overages_enabled": false
+  },
+  "quota": {
+    "plan": "starter",
+    "rows_read_limit": 500000000,
+    "rows_written_limit": 10000000,
+    "reset_at": "2026-09-30T18:00:00-06:00",
+    "before": {
+      "rows_read": 241809,
+      "rows_written": 31636,
+      "storage": "6.9 MB"
+    },
+    "after": {
+      "rows_read": 2029820,
+      "rows_written": 545341,
+      "storage": "25 MB",
+      "rows_read_remaining": 497970180,
+      "rows_written_remaining": 9454659
+    },
+    "measured_deltas": {
+      "colonial_load_and_checkpoint": {
+        "rows_read": 224826,
+        "rows_written": 92073
+      },
+      "walmart_migration_and_checkpoint": {
+        "rows_read": 120420,
+        "rows_written": 88857
+      },
+      "walmart_three_loads_and_scoped_checks": {
+        "rows_read": 559922,
+        "rows_written": 228879
+      },
+      "pricesmart_two_loads_and_final_verification": {
+        "rows_read": 882843,
+        "rows_written": 103896
+      },
+      "total": {
+        "rows_read": 1788011,
+        "rows_written": 513705
+      }
+    },
+    "attribution_limit": "Turso exposes aggregate counters; each delta includes its immediately adjacent scoped verification and checkpoint where named."
+  },
+  "backup": {
+    "sql_dump_bytes": 5311501,
+    "sql_dump_sha256": "dc60f8ceb3aa94935d193426e01b39e27731dcc27f51180aa42e2ae46d104c16",
+    "offline_restore_integrity": "ok",
+    "foreign_key_violations": 0,
+    "initial_schema_fingerprint": "d00fa5e684c68b4e6e9b28679d95cc816d40f089df6f4e212484a2e524bc3133"
+  },
+  "migrations": {
+    "walmart": {
+      "committed_once": true,
+      "input_fingerprint": "d00fa5e684c68b4e6e9b28679d95cc816d40f089df6f4e212484a2e524bc3133",
+      "observed_target_fingerprint": "c971e706a2de9872b2351a1546041ef7c607f263afef39c3776c72b9bee1a46e",
+      "rows_preserved": true,
+      "note": "At source commit 462a3a3 the Walmart target was derived from the latest shared schema and therefore already included the PriceSmart constraint."
+    },
+    "pricesmart": {
+      "committed": false,
+      "no_op": true,
+      "reason": "The exact production fingerprint already equaled the current PriceSmart target; no second table rebuild was executed.",
+      "target_fingerprint": "c971e706a2de9872b2351a1546041ef7c607f263afef39c3776c72b9bee1a46e"
+    }
+  },
+  "loads": [
+    {
+      "supermarket_id": "colonial",
+      "location_id": "colonial_sps",
+      "run_id": "colonial-first-20260830-2f7861ff6dec",
+      "sku_count": 9205,
+      "source_json_sha256": "2f7861ff6decd0f7e95a82c321d71e1cd7fe2e6440b6794bbe94c6457b41e2fd"
+    },
+    {
+      "supermarket_id": "walmart",
+      "location_id": "walmart_sps",
+      "run_id": "walmart-first-20260831-sps-d4cf99b97457",
+      "sku_count": 13664,
+      "source_json_sha256": "d4cf99b9745779eaf86a448ce5411b0ba1df45450879cbe3e4a7a6139dd72753"
+    },
+    {
+      "supermarket_id": "walmart",
+      "location_id": "walmart_tgu_ffaa",
+      "run_id": "walmart-first-20260831-tgu-ffaa-f8dccd164fb3",
+      "sku_count": 14091,
+      "source_json_sha256": "f8dccd164fb3838fa27d55274cbbd81ffa21174270e30290455d668fa6cd47c3"
+    },
+    {
+      "supermarket_id": "walmart",
+      "location_id": "walmart_tgu_el_sauce",
+      "run_id": "walmart-first-20260831-tgu-el-sauce-d9352cd3d137",
+      "sku_count": 13997,
+      "source_json_sha256": "d9352cd3d137d78455cb566a4deadbf37563b81628820df3a75d11c7e43c3232"
+    },
+    {
+      "supermarket_id": "pricesmart",
+      "location_id": "pricesmart_sps",
+      "club_id": "6603",
+      "scope": "G10D03 / Alimentos",
+      "run_id": "pricesmart-first-20260901-sps-6603-9a352afa72b2",
+      "sku_count": 1127,
+      "source_json_sha256": "9a352afa72b2bef89404b03d81ef22494cee7c02af262098a89730b58bdbbff3"
+    },
+    {
+      "supermarket_id": "pricesmart",
+      "location_id": "pricesmart_tgu",
+      "club_id": "6602",
+      "scope": "G10D03 / Alimentos",
+      "run_id": "pricesmart-first-20260901-tgu-6602-9b65f2451f02",
+      "sku_count": 1127,
+      "source_json_sha256": "9b65f2451f026e6591650e585fb14e9da5f1e206852e94869d4514734f092213"
+    }
+  ],
+  "final_state": {
+    "schema_fingerprint": "c971e706a2de9872b2351a1546041ef7c607f263afef39c3776c72b9bee1a46e",
+    "tables": [
+      "locations",
+      "price_history",
+      "products",
+      "scrape_runs",
+      "supermarkets"
+    ],
+    "table_counts": {
+      "supermarkets": 4,
+      "locations": 8,
+      "products": 35873,
+      "price_history": 74328,
+      "scrape_runs": 13
+    },
+    "current_rows_by_location": {
+      "la_colonia_sps": 9472,
+      "la_colonia_tgu": 9495,
+      "colonial_sps": 9205,
+      "walmart_sps": 13664,
+      "walmart_tgu_ffaa": 14091,
+      "walmart_tgu_el_sauce": 13997,
+      "pricesmart_sps": 1127,
+      "pricesmart_tgu": 1127
+    },
+    "duplicate_current_groups": 0,
+    "foreign_key_violations": 0,
+    "integrity_check": "ok",
+    "prior_chain_row_differences": {
+      "la_colonia": 0,
+      "colonial": 0
+    },
+    "snapshot_commercial_mismatches": 0,
+    "excluded_location_count": 0,
+    "final_dump_bytes": 20252313,
+    "final_dump_sha256": "4618269c8407df35bcfcda5b1fd15e5ac41ec4a5ae9bd4af1e03ef674003a04e"
+  }
+}
