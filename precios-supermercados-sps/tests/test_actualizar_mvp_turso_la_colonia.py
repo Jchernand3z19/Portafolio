@@ -112,6 +112,36 @@ def test_set_based_turso_sql_matches_sqlite_updater(tmp_path: Path) -> None:
         assert dump(candidate) == dump(reference)
 
 
+def test_sequential_locations_clean_temp_staging_in_reused_session(tmp_path: Path) -> None:
+    """Regression for Turso run 33646585900: Hrana retained TEMP names after close."""
+    path = database(tmp_path / "mvp.db")
+    con = sqlite3.connect(path, isolation_level=None)
+    try:
+        observations = [
+            snapshot("2026-09-02T01:00:00Z", [product()], "la_colonia_sps"),
+            snapshot("2026-09-02T01:01:00Z", [product()], "la_colonia_tgu"),
+        ]
+        for index, raw in enumerate(observations, start=1):
+            snap = sqlite_updater.validate_snapshot_bytes(raw)
+            steps = turso_updater._mutation_steps(
+                turso_updater._normalised_json(snap),
+                location_id=str(snap["location_id"]),
+                observed_at=str(snap["observed_at_utc"]),
+                run_id=f"sequential-{index}",
+                sku_count=1,
+                catalog_count=1,
+                artifact_id=None,
+                digest=hashlib.sha256(raw).hexdigest(),
+            )
+            for _, sql, args in steps:
+                con.execute(sql, args)
+        assert con.execute(
+            "SELECT location_id FROM scrape_runs ORDER BY scrape_run_id"
+        ).fetchall() == [("la_colonia_sps",), ("la_colonia_tgu",)]
+    finally:
+        con.close()
+
+
 def test_mutation_batch_is_atomic_chain() -> None:
     raw = snapshot("2026-08-28T02:00:00Z", [product()])
     snap = sqlite_updater.validate_snapshot_bytes(raw)

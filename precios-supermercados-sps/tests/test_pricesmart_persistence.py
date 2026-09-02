@@ -188,3 +188,10 @@ def test_migration_rolls_back_after_ddl_failure(tmp_path, monkeypatch):
     with sqlite3.connect(path) as con:
         assert migration.fingerprint(con.execute(migration.SCHEMA_QUERY).fetchall()) == migration.PRE_PRICESMART_FINGERPRINT
         assert con.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_migration_cleans_guard_left_by_reused_turso_session():
+    steps = migration.migration_steps()
+    cleanup = next(index for index, step in enumerate(steps) if step[0] == "drop_guard_table")
+    guard = next(index for index, step in enumerate(steps) if step[0] == "guard_table")
+    assert cleanup < guard

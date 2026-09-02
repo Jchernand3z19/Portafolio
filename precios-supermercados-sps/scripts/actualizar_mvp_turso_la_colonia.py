@@ -193,6 +193,12 @@ def _mutation_steps(
     # materializa delta para no repetir la misma comparación current-vs-snapshot
     # en guardas, cierre y apertura de histórico.
     steps = [
+        # Turso puede reutilizar la misma sesión Hrana aun después de `close`.
+        # Limpiar staging residual evita que una segunda ubicación falle por
+        # nombres TEMP conservados por esa sesión.
+        ("drop_incoming_table", "DROP TABLE IF EXISTS temp.incoming", ()),
+        ("drop_guard_table", "DROP TABLE IF EXISTS temp.guard_ok", ()),
+        ("drop_delta_table", "DROP TABLE IF EXISTS temp.delta", ()),
         (
             "incoming_table",
             """CREATE TEMP TABLE incoming(

@@ -34,6 +34,7 @@ def migration_steps():
     )
     return [
         ("foreign_keys_off", "PRAGMA foreign_keys=OFF", ()),
+        ("drop_guard_table", "DROP TABLE IF EXISTS temp.migration_guard", ()),
         ("guard_table", "CREATE TEMP TABLE migration_guard(value INTEGER NOT NULL CHECK(value=0)) STRICT", ()),
         ("begin", "BEGIN IMMEDIATE", ()),
         ("create_price_history", ddl, ()),
