@@ -1,0 +1,190 @@
+{
+  "club": "6602",
+  "derived_without_modifying_documents": true,
+  "documents": [
+    {
+      "brand": "Kinder",
+      "currency": "HNL",
+      "fractionDigits": 2,
+      "inventory_HN": "in stock",
+      "inventory_HN_6602": "in stock",
+      "master_sku": "317825-8000500142943",
+      "pid": "317825",
+      "price": 0,
+      "promoid_HN": [
+        "free-delivery",
+        "b2b-snacks"
+      ],
+      "slug": "kinder-sorpresa-12-unidades-20-g-317825",
+      "thumb_image": "https://d31f1ehqijlcua.cloudfront.net/n/b/3/1/7/b3173e90d32942e76a7a440ab49c4911e2287ed7_CandyOrange_317825_01.jpg",
+      "title": "Kinder Sorpresa 12 Unidades / 20 g",
+      "variants": [
+        {
+          "inventory_HN_6602": [
+            "in stock"
+          ],
+          "skuid": "317825"
+        },
+        {
+          "availability_HN_6602": [
+            "true"
+          ],
+          "inventory_HN_6602": [
+            "in stock"
+          ],
+          "price_HN_6602": [
+            49995
+          ],
+          "skuid": "317825-8000500142943"
+        },
+        {
+          "availability_HN_6602": [
+            "true"
+          ],
+          "inventory_HN_6602": [
+            "in stock"
+          ],
+          "price_HN_6602": [
+            49995
+          ],
+          "skuid": "317825-8000500142967"
+        },
+        {
+          "availability_HN_6602": [
+            "true"
+          ],
+          "inventory_HN_6602": [
+            "in stock"
+          ],
+          "price_HN_6602": [
+            49995
+          ],
+          "skuid": "317825-8000500142981"
+        }
+      ]
+    },
+    {
+      "brand": "El Camino Real Bakery",
+      "currency": "HNL",
+      "fractionDigits": 2,
+      "inventory_HN": "in stock",
+      "master_sku": "464663",
+      "pid": "464663",
+      "price": 0,
+      "promoid_HN": [
+        "free-delivery",
+        "new arrival",
+        "pantry-refresh"
+      ],
+      "slug": "el-camino-real-bakery-mini-rollos-de-canela-elaborados-con-masa-tradicional-16-unidades-464663",
+      "thumb_image": "https://d31f1ehqijlcua.cloudfront.net/n/e/1/8/1/e1819c6b20fd11b67fafa2c97dfcdb374ad8377d_Pastries_464663_01.jpg",
+      "title": "El Camino Real Bakery Mini Rollos de Canela Elaborados con Masa Tradicional 16 Unidades",
+      "variants": [
+        {
+          "skuid": "464663"
+        }
+      ]
+    },
+    {
+      "availability_HN_6602": "true",
+      "brand": "King Cheese",
+      "currency": "HNL",
+      "fractionDigits": 2,
+      "inventory_HN": "in stock",
+      "inventory_HN_6602": "in stock",
+      "master_sku": "479223",
+      "pid": "479223",
+      "price": 0,
+      "price_HN_6602": 35995,
+      "promoid_HN": [
+        "free-delivery",
+        "new arrival",
+        "pantry-refresh"
+      ],
+      "slug": "king-cheese-feta-con-sabores-2-unidades-227-g-8-oz-479223",
+      "thumb_image": "https://d31f1ehqijlcua.cloudfront.net/n/0/8/e/d/08edbf6ae12c12d54651a1518304b0b34b20a8f3_Cheese_479223_01.jpg",
+      "title": "King Cheese Feta con Sabores 2 Unidades / 227 g / 8 oz",
+      "variants": [
+        {
+          "availability_HN_6602": [
+            "true"
+          ],
+          "inventory_HN_6602": [
+            "in stock"
+          ],
+          "price_HN_6602": [
+            35995
+          ],
+          "skuid": "479223"
+        }
+      ]
+    },
+    {
+      "availability_HN_6602": "true",
+      "brand": "Member's Selection",
+      "currency": "HNL",
+      "fractionDigits": 2,
+      "inventory_HN": "in stock",
+      "inventory_HN_6602": "in stock",
+      "master_sku": "99246",
+      "original_price_without_saving_HN_6602": "451.99",
+      "pid": "99246",
+      "price": 0,
+      "price_HN_6602": 38172,
+      "promoid_HN": [
+        "free-delivery",
+        "manufacturer savings",
+        "beef-tacos",
+        "ms-meat"
+      ],
+      "saving_amount_HN_6602": "-70.265",
+      "slug": "members-selection-bistec-de-res-fresco-bandeja-99246",
+      "thumb_image": "https://d31f1ehqijlcua.cloudfront.net/n/1/e/8/a/1e8a5ae0f70ef2485281e9b72c2688a9061b2a06_Meat_99246_01.jpg",
+      "title": "Member's Selection Bistec de Res Fresco Bandeja",
+      "variants": [
+        {
+          "availability_HN_6602": [
+            "true"
+          ],
+          "inventory_HN_6602": [
+            "in stock"
+          ],
+          "original_price_without_saving_HN_6602": [
+            "451.99"
+          ],
+          "price_HN_6602": [
+            38172
+          ],
+          "saving_amount_HN_6602": [
+            "-70.265"
+          ],
+          "skuid": "99246"
+        }
+      ]
+    }
+  ],
+  "source_pages": [
+    {
+      "product_ids": [
+        "464663",
+        "479223"
+      ],
+      "response_body_sha256": "a7d9f812fe747fb80d58e02739ee6a3906483dcc00889849b5ee5a4d731d116a",
+      "start": 0
+    },
+    {
+      "product_ids": [
+        "99246"
+      ],
+      "response_body_sha256": "936755bee62271ed4f7fdf540b4a402d0d2e9f565db7d8cb76d3ebe97a71e8e7",
+      "start": 168
+    },
+    {
+      "product_ids": [
+        "317825"
+      ],
+      "response_body_sha256": "cfdb6146d288077a51fd58355bd37fc9d2f0f5f79b9626c2a425c3b5232e53a1",
+      "start": 984
+    }
+  ]
+}
