@@ -5,22 +5,21 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 ## Objetivo activo
 
 Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE TRACKING
-WEB**. PriceSmart Honduras ya tiene binding causal reproducible para SPS, Florencia
-y El Sauce mediante la petición real del navegador. Once de 12 SKU compartidos
-tienen precio comparable e idéntico en los tres clubes; no se declararon precio
-regular ni promoción. Conservar SPS y un solo contexto TGU representativo,
-Florencia; availability no justifica conservar El Sauce como segundo catálogo
-comercial TGU. No iniciar Paiz, otras ciudades ni dashboard. Probe, full,
-persistencia y recurrencia son gates separados.
+WEB**. PriceSmart Honduras completó el full autorizado del universo público
+`G10D03 / Alimentos` para SPS 6603 y Florencia 6602: 1,124 productos / 1,127 SKU
+por contexto, RAW y snapshots validados, parser terminado y persistencia productiva
+probada offline. El Sauce 6604 permanece excluido. PriceSmart queda listo para su
+primera carga Turso bajo autorización separada; no iniciar Paiz, otras ciudades,
+recurrencia ni dashboard.
 
 Colonial conserva el catálogo demostrado de 9,199 productos / 9,205 variantes.
 Su primera persistencia Turso y segunda observación real siguen pendientes.
 Walmart conserva tres catálogos aceptados y SQL validado offline, incluidos dos
 TGU por diferencias comerciales. **Ni Colonial ni Walmart están cerrados** en
 operación remota. Maxi/DF quedan detenidos sin scraper, persistencia ni catálogo.
-PriceSmart tiene fuente, identidad, binding, muestra comparable, semántica y
-paginación demostrados. Su full, scraper productivo, persistencia e integración
-siguen sin autorizar ni implementar.
+PriceSmart tiene fuente, identidad, binding, full acotado, semántica, paginación,
+parser, snapshots, migración e integración SQL offline demostrados. Turso no fue
+ejecutado y la recurrencia no fue creada.
 
 La Colonia conserva el alcance existente:
 
@@ -87,7 +86,48 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — binding demostrado y un solo contexto TGU
+## PriceSmart Honduras — full G10D03 completo, listo para primera carga
+
+Full controlado del `2026-09-01`, limitado a SPS 6603 y Florencia 6602. El Sauce
+6604 no fue consultado. Se ejecutaron **188 POST HTTP, 94 por club, todos 200,
+cero retries, concurrencia 1 y 107.833 s**; no hubo residual, 403, 429 ni CAPTCHA.
+Quedaron 20 POST sin consumir del máximo 208. No login, carrito, checkout,
+mutación, Turso ni recurrencia.
+
+La frontera completa aceptada es la categoría pública `G10D03 / Alimentos`, cuyo
+facet y `numFound` declaran 1,124 productos. No se afirma cobertura de todos los
+departamentos del sitio. Cada club produjo 1,124 productos únicos / 1,127 SKU,
+con offsets `0..1116`, última página de ocho, cero duplicados y membership idéntico:
+
+```text
+SPS 6603       = 1,080 SKU con precio / 18 promociones / 829 in_stock / 298 out_of_stock
+Florencia 6602 = 1,074 SKU con precio / 17 promociones / 844 in_stock / 283 out_of_stock
+```
+
+El parser sólo acepta promociones cuando regular y ahorro negativo están declarados
+y son consistentes. En ofertas con precio, la ausencia de ambos campos solicitados
+significa `is_promotion=false`; sin precio se conserva promoción `null` y
+`out_of_stock`. Availability exige conjuntamente `availability=true` e
+`inventory=in stock`.
+
+La comparación SPS/TGU contiene 1,040 SKU con precio comparable y 110 diferencias
+de precio, además de tres diferencias de precio regular, 74 de promoción y 203 de
+availability; 130 de estas últimas son sólo availability. Ambos contextos aceptados
+permanecen independientes. Esto no reabre El Sauce.
+
+La persistencia offline cargó 1,127 ofertas por ubicación sobre las cinco tablas,
+sin FK rotas ni periodos abiertos duplicados, con `PRAGMA integrity_check=ok` y
+replay sin escritura. Los hashes lógicos de La Colonia, Colonial y Walmart no
+cambiaron. La migración puntual amplía a PriceSmart la oferta nula `out_of_stock`
+ya admitida para Walmart y preserva el estado previo. Fingerprint destino:
+`c971e706a2de9872b2351a1546041ef7c607f263afef39c3776c72b9bee1a46e`.
+La suite completa pasó localmente: 2,012 tests, con 21 skips esperados.
+
+[RAW, hashes, snapshots, parser y SQL offline](../reports/pricesmart/2026-09-01-full/README.md).
+PriceSmart queda **READY FOR FIRST TURSO LOAD** bajo un gate nuevo; no ejecutar
+SQL remoto ni recurrencia reutilizando la autorización del full.
+
+### Probe de binding previo y decisión TGU
 
 Probe CDP aceptado del `2026-09-01`, dentro de la autorización live de 24 horas:
 una sesión anónima, una carga, tres clubes guardados por UI, cuatro XHR comerciales
@@ -726,10 +766,9 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 ```
 
 En paralelo, Maxi/DF queda cerrado como NO-GO temporal y PriceSmart queda listo
-para solicitar por separado el full medido de SPS + Florencia. La superficie
+para su primera carga Turso bajo autorización separada. La superficie
 GraphQL `changeme` permanece cerrada; no probar credenciales, configuración u otro
-endpoint. No esperar a Turso ni reutilizar autorizaciones o POST no consumidos de
-alcances anteriores.
+endpoint. Los 20 POST no consumidos del full PriceSmart no se reutilizan.
 La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 
 ## Fuera del alcance actual
@@ -737,7 +776,7 @@ La espera de cuota no justifica activar cobros ni ampliar la arquitectura.
 No trabajar ahora en:
 
 - dashboard;
-- supermercados distintos de La Colonia, Colonial, Walmart y el preflight PriceSmart;
+- supermercados distintos de La Colonia, Colonial, Walmart y PriceSmart;
 - ciudades distintas de SPS/TGU;
 - recurrencia nueva para Colonial, Walmart o PriceSmart;
 - reabrir Maxi Despensa o Despensa Familiar sin fuente digital pública nueva;

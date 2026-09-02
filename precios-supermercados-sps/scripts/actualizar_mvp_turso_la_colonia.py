@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from actualizar_mvp_sqlite_la_colonia import (  # noqa: E402
     LOCATIONS,
     COLONIAL_LOCATIONS,
+    PRICESMART_LOCATIONS,
     WALMART_LOCATIONS,
     SUPERMARKET_ID,
     SnapshotError,
@@ -110,7 +111,10 @@ def _normalised_json(snapshot: dict[str, Any]) -> str:
             "brand": row["brand"],
             "presentation": row["presentation"],
             "category": row["category"],
-            "current_price_minor": _minor(row["current_price"], snapshot["supermarket_id"] != "walmart"),
+            "current_price_minor": _minor(
+                row["current_price"],
+                snapshot["supermarket_id"] not in {"walmart", "pricesmart"},
+            ),
             "reported_regular_price_minor": _minor(row["reported_regular_price"]),
             "is_promotion": None if row["is_promotion"] is None else int(row["is_promotion"]),
             "availability": row["availability"],
@@ -137,7 +141,7 @@ def _preflight(
             (run_id,),
         ),
     ]
-    if supermarket_id == "walmart":
+    if supermarket_id in {"walmart", "pricesmart"}:
         queries.append(("SELECT name,sql FROM sqlite_master WHERE name IN ('locations','price_history','idx_locations_city_legacy') ORDER BY name", ()))
     data = _pipeline(
         url,
@@ -150,13 +154,20 @@ def _preflight(
         raise SnapshotError("turso_preflight_response_invalid")
     if {str(row[0]) for row in _execute_rows(results[0])} != EXPECTED_TABLES:
         raise SnapshotError("turso_schema_mismatch")
-    locations = {SUPERMARKET_ID: LOCATIONS, "colonial": COLONIAL_LOCATIONS, "walmart": WALMART_LOCATIONS}[supermarket_id]
+    locations = {
+        SUPERMARKET_ID: LOCATIONS, "colonial": COLONIAL_LOCATIONS,
+        "walmart": WALMART_LOCATIONS, "pricesmart": PRICESMART_LOCATIONS,
+    }[supermarket_id]
     if supermarket_id == "walmart":
         from migrar_mvp_walmart import schema_ready
         if len(results) < 4 or not schema_ready(_execute_rows(results[3])):
             raise SnapshotError("walmart_schema_migration_required")
+    if supermarket_id == "pricesmart":
+        from migrar_mvp_pricesmart import schema_ready
+        if len(results) < 4 or not schema_ready(_execute_rows(results[3])):
+            raise SnapshotError("pricesmart_schema_migration_required")
     found = _execute_rows(results[1])
-    if found != [[supermarket_id, locations[location_id]]] and not (supermarket_id in {"colonial", "walmart"} and not found):
+    if found != [[supermarket_id, locations[location_id]]] and not (supermarket_id in {"colonial", "walmart", "pricesmart"} and not found):
         raise SnapshotError("turso_location_mismatch")
     rows = _execute_rows(results[2])
     if not rows:
@@ -359,9 +370,17 @@ def _mutation_steps(
         ("commit", "COMMIT", ()),
     ]
 
-    if supermarket_id in {"colonial", "walmart"}:
-        name = "Supermercados Colonial" if supermarket_id == "colonial" else "Walmart Honduras"
-        city = (COLONIAL_LOCATIONS if supermarket_id == "colonial" else WALMART_LOCATIONS)[location_id]
+    if supermarket_id in {"colonial", "walmart", "pricesmart"}:
+        name = {
+            "colonial": "Supermercados Colonial",
+            "walmart": "Walmart Honduras",
+            "pricesmart": "PriceSmart Honduras",
+        }[supermarket_id]
+        city = {
+            "colonial": COLONIAL_LOCATIONS,
+            "walmart": WALMART_LOCATIONS,
+            "pricesmart": PRICESMART_LOCATIONS,
+        }[supermarket_id][location_id]
         begin = next(i for i, step in enumerate(steps) if step[0] == "begin")
         steps[begin + 1:begin + 1] = [
             ("register_supermarket", "INSERT OR IGNORE INTO supermarkets VALUES(?,?,'HN')", (supermarket_id, name)),
@@ -518,7 +537,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("snapshot_json", type=Path)
     parser.add_argument("--run-id", required=True)
-    parser.add_argument("--supermarket", choices=(SUPERMARKET_ID, "colonial", "walmart"), default=SUPERMARKET_ID)
+    parser.add_argument("--supermarket", choices=(SUPERMARKET_ID, "colonial", "walmart", "pricesmart"), default=SUPERMARKET_ID)
     parser.add_argument("--source-artifact-id")
     args = parser.parse_args()
     url = os.environ.get("TURSO_DATABASE_URL", "")

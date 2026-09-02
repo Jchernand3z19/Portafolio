@@ -1,0 +1,243 @@
+{
+  "authorization": {
+    "clubs": [
+      "6603",
+      "6602"
+    ],
+    "concurrency": 1,
+    "excluded_club": "6604",
+    "maximum_http_posts": 208,
+    "maximum_minutes": 30,
+    "recurrence": false,
+    "turso": false
+  },
+  "capture": {
+    "aborted_reason": null,
+    "base_pages": 188,
+    "clubs": [
+      "6603",
+      "6602"
+    ],
+    "complete": true,
+    "elapsed_seconds": 107.83339345900004,
+    "excluded_club": "6604",
+    "expected_total_by_club": {
+      "6602": 1124,
+      "6603": 1124
+    },
+    "finished_at_utc": "2026-09-01T21:34:22.515736+00:00",
+    "post_attempts": 188,
+    "remaining_budget": 20,
+    "residual_pages": [],
+    "retries": 0,
+    "successful_pages": 188
+  },
+  "decision": {
+    "all_website_departments_claimed": false,
+    "catalog_scope": "G10D03_ALIMENTOS",
+    "catalog_scope_complete": true,
+    "el_sauce_included": false,
+    "offline_persistence_validated": true,
+    "parser_complete": true,
+    "production_contexts": [
+      "pricesmart_sps",
+      "pricesmart_tgu"
+    ],
+    "recurrence_created": false,
+    "snapshots_validated": true,
+    "status": "READY_FOR_FIRST_TURSO_LOAD_AFTER_SEPARATE_AUTHORIZATION",
+    "turso_executed": false
+  },
+  "offline_persistence": {
+    "artifact": "offline-sql-summary.json",
+    "bytes": 4823,
+    "duplicate_open_periods": 0,
+    "foreign_key_violations": 0,
+    "integrity_check": "ok",
+    "isolation_markets": [
+      "colonial",
+      "la_colonia",
+      "walmart"
+    ],
+    "isolation_unchanged": true,
+    "migration_data_preserved": true,
+    "pricesmart_current_by_location": [
+      {
+        "location_id": "pricesmart_sps",
+        "offers": 1127,
+        "priced": 1080,
+        "promotions": 18,
+        "unpriced": 47
+      },
+      {
+        "location_id": "pricesmart_tgu",
+        "offers": 1127,
+        "priced": 1074,
+        "promotions": 17,
+        "unpriced": 53
+      }
+    ],
+    "replay_unchanged": true,
+    "schema_fingerprint": "c971e706a2de9872b2351a1546041ef7c607f263afef39c3776c72b9bee1a46e",
+    "schema_tables": [
+      "locations",
+      "price_history",
+      "products",
+      "scrape_runs",
+      "supermarkets"
+    ],
+    "sha256": "3ec983edcd42741d78215b9a6d7744a36a813cf3c9aaeb68c09c0b8a859bcf4a",
+    "turso_access": false
+  },
+  "raw_archive": {
+    "bytes": 1769114,
+    "published_files": 382,
+    "redactions": {
+      "anonymous_public_auth_key_retained": true,
+      "authorization_headers_published": false,
+      "cookies_published": false,
+      "login_or_membership_data_published": false,
+      "response_bodies_complete": true
+    },
+    "sha256": "4613c634f584cc3ba157504f5b40cbb04aa94c7c14e65984672babe9e27d1b05"
+  },
+  "schema_version": 1,
+  "snapshots": [
+    {
+      "availability_counts": {
+        "in_stock": 829,
+        "out_of_stock": 298
+      },
+      "catalog_products": 1124,
+      "club_id": "6603",
+      "file": "pricesmart_sps.json.gz",
+      "gzip_bytes": 166359,
+      "gzip_sha256": "6f8354dcf5796efc225d913477e58c224daf3b7624d107af063ebb9494620b0e",
+      "json_bytes": 1028996,
+      "json_sha256": "9a352afa72b2bef89404b03d81ef22494cee7c02af262098a89730b58bdbbff3",
+      "location_id": "pricesmart_sps",
+      "membership_sha256": "633662a55c2904ce18523f6f1c9f88a99e5da8613d1c2f9be55eeee75d991378",
+      "observed_at_utc": "2026-09-01T21:33:26.312398Z",
+      "priced_skus": 1080,
+      "promotion_counts": {
+        "false": 1062,
+        "true": 18,
+        "unknown_unpriced": 47
+      },
+      "sku_membership_sha256": "9179e1275641e7ba4a106d6795b4d4d1662445222148939abfa23dd36cb16e40",
+      "skus": 1127,
+      "unique_products": 1124
+    },
+    {
+      "availability_counts": {
+        "in_stock": 844,
+        "out_of_stock": 283
+      },
+      "catalog_products": 1124,
+      "club_id": "6602",
+      "file": "pricesmart_tgu.json.gz",
+      "gzip_bytes": 166303,
+      "gzip_sha256": "1397a88ae7e1c4a8c98592b462eb140a4a67d962e6990cb5396922ff0dbc5101",
+      "json_bytes": 1028657,
+      "json_sha256": "9b65f2451f026e6591650e585fb14e9da5f1e206852e94869d4514734f092213",
+      "location_id": "pricesmart_tgu",
+      "membership_sha256": "633662a55c2904ce18523f6f1c9f88a99e5da8613d1c2f9be55eeee75d991378",
+      "observed_at_utc": "2026-09-01T21:34:22.403159Z",
+      "priced_skus": 1074,
+      "promotion_counts": {
+        "false": 1057,
+        "true": 17,
+        "unknown_unpriced": 53
+      },
+      "sku_membership_sha256": "9179e1275641e7ba4a106d6795b4d4d1662445222148939abfa23dd36cb16e40",
+      "skus": 1127,
+      "unique_products": 1124
+    }
+  ],
+  "sps_vs_tgu": {
+    "availability_differences": 203,
+    "availability_only_differences": 130,
+    "price_comparable_skus": 1040,
+    "price_difference_examples": [
+      {
+        "name": "Member's Selection Chuleta de Cerdo Fresca Bandeja",
+        "sku": "100187",
+        "sps": "259.57",
+        "tgu": "216.76"
+      },
+      {
+        "name": "Member's Selection Puyaso Entero Fresco Empacado al Vacío",
+        "sku": "101488",
+        "sps": "615.70",
+        "tgu": "537.01"
+      },
+      {
+        "name": "Member's Selection Hígado Fresco Bandeja",
+        "sku": "107641",
+        "sps": "193.70",
+        "tgu": "177.21"
+      },
+      {
+        "name": "Costillas de Cerdo",
+        "sku": "118074",
+        "sps": "292.38",
+        "tgu": "297.53"
+      },
+      {
+        "name": "Member's Selection Hueso Redondo Fresco Bandeja",
+        "sku": "118078",
+        "sps": "299.46",
+        "tgu": "241.10"
+      },
+      {
+        "name": "Mano de Piedra Entera Fresca Empacada al Vacío",
+        "sku": "118079",
+        "sps": "480.51",
+        "tgu": "465.27"
+      },
+      {
+        "name": "Lomo Delmonico Empacado al Vacío",
+        "sku": "118081",
+        "sps": "954.49",
+        "tgu": "917.30"
+      },
+      {
+        "name": "Member's Selection Fajitas de Res Frescas Bandeja",
+        "sku": "122687",
+        "sps": "514.10",
+        "tgu": "516.65"
+      },
+      {
+        "name": "Member's Selection Milanesa de Res Fresca Bandeja",
+        "sku": "122689",
+        "sps": "430.36",
+        "tgu": "419.86"
+      },
+      {
+        "name": "Falda Entera de Res",
+        "sku": "122690",
+        "sps": "389.14",
+        "tgu": "392.83"
+      }
+    ],
+    "price_differences": 110,
+    "promotion_differences": 74,
+    "regular_price_differences": 3,
+    "shared_skus": 1127,
+    "sps_only_priced": 40,
+    "tgu_only_priced": 34
+  },
+  "tls_preflight": {
+    "authorization_accounting": "excluded_from_HTTP_POST_count_because_no_TLS_session_or_HTTP_request_was_established",
+    "finished_at_utc": "2026-09-01T21:30:58.991958+00:00",
+    "http_posts_observed": 0,
+    "http_responses": 0,
+    "reason": "TLS certificate verification failed before HTTP",
+    "request_bodies_delivered": false,
+    "started_at_utc": "2026-09-01T21:30:55.178763+00:00",
+    "tool_attempts": 21,
+    "unique_transport_errors": [
+      "transport_error:URLError:<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1077)>"
+    ]
+  }
+}

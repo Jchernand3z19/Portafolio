@@ -22,6 +22,12 @@ LOCATIONS = {"la_colonia_sps": "San Pedro Sula", "la_colonia_tgu": "Tegucigalpa"
 COLONIAL_LOCATIONS = {"colonial_sps": "San Pedro Sula"}
 WALMART_LOCATIONS = {"walmart_sps": "San Pedro Sula", "walmart_tgu_ffaa": "Tegucigalpa", "walmart_tgu_el_sauce": "Tegucigalpa"}
 WALMART_SELLERS = {"walmart_sps": "walmarthnwm947", "walmart_tgu_ffaa": "walmarthnwm4041", "walmart_tgu_el_sauce": "walmarthnwm4410"}
+PRICESMART_LOCATIONS = {"pricesmart_sps": "San Pedro Sula", "pricesmart_tgu": "Tegucigalpa"}
+PRICESMART_CLUBS = {"pricesmart_sps": "6603", "pricesmart_tgu": "6602"}
+PRICESMART_CHANNELS = {
+    "pricesmart_sps": "83a01076-4a4e-4163-9786-c59ef7c7c1a6",
+    "pricesmart_tgu": "93a6de43-d3c7-4887-a824-44c565dc3101",
+}
 STATE_COLUMNS = ("current_price_minor", "reported_regular_price_minor", "is_promotion", "availability")
 PRODUCT_KEYS = {
     "availability", "brand", "category", "current_price", "ean", "is_promotion",
@@ -61,9 +67,12 @@ def _utc(value: object) -> datetime:
 
 
 def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID) -> dict[str, Any]:
-    if supermarket_id not in (SUPERMARKET_ID, "colonial", "walmart"):
+    if supermarket_id not in (SUPERMARKET_ID, "colonial", "walmart", "pricesmart"):
         raise SnapshotError("snapshot_supermarket_invalid")
-    locations = {SUPERMARKET_ID: LOCATIONS, "colonial": COLONIAL_LOCATIONS, "walmart": WALMART_LOCATIONS}[supermarket_id]
+    locations = {
+        SUPERMARKET_ID: LOCATIONS, "colonial": COLONIAL_LOCATIONS,
+        "walmart": WALMART_LOCATIONS, "pricesmart": PRICESMART_LOCATIONS,
+    }[supermarket_id]
     try:
         data = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -88,7 +97,7 @@ def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID)
         raise SnapshotError("snapshot_products_invalid")
     priced_count = sum(isinstance(row, dict) and row.get("current_price") is not None for row in rows)
     if (data.get("skus_extracted") != len(rows) or data.get("skus_with_price") != priced_count
-            or (supermarket_id != "walmart" and priced_count != len(rows))):
+            or (supermarket_id not in {"walmart", "pricesmart"} and priced_count != len(rows))):
         raise SnapshotError("snapshot_sku_count_mismatch")
 
     identities, source_products = set(), set()
@@ -104,9 +113,9 @@ def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID)
         if row["product_id"] is None or row["item_id"] is None:
             raise SnapshotError("snapshot_source_id_missing")
         source_products.add(str(row["product_id"]))
-        _minor(row["current_price"], supermarket_id != "walmart")
+        _minor(row["current_price"], supermarket_id not in {"walmart", "pricesmart"})
         _minor(row["reported_regular_price"])
-        if type(row["is_promotion"]) is not bool and not (supermarket_id == "walmart" and row["is_promotion"] is None):
+        if type(row["is_promotion"]) is not bool and not (supermarket_id in {"walmart", "pricesmart"} and row["is_promotion"] is None):
             raise SnapshotError("snapshot_promotion_invalid")
         if row["availability"] not in {"in_stock", "out_of_stock", "unknown"}:
             raise SnapshotError("snapshot_availability_invalid")
@@ -178,6 +187,90 @@ def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID)
         counts = {v: sum(r["availability"] == v for r in rows) for v in {r["availability"] for r in rows}}
         if data.get("availability_counts") != counts:
             raise SnapshotError("walmart_availability_counts_invalid")
+    if supermarket_id == "pricesmart":
+        club = PRICESMART_CLUBS[location_id]
+        channel = PRICESMART_CHANNELS[location_id]
+        if (
+            data.get("currency") != "HNL"
+            or data.get("scope") != "public_ecommerce_club_bound_G10D03"
+            or data.get("club_id") != club
+            or data.get("channel_id") != channel
+            or data.get("category_id") != "G10D03"
+            or data.get("category_name") != "Alimentos"
+            or data.get("membership_count") != reported
+            or data.get("membership_sha256") != hashlib.sha256("\n".join(sorted(source_products)).encode()).hexdigest()
+            or data.get("sku_membership_sha256") != hashlib.sha256("\n".join(sorted(row["source_key"] for row in rows)).encode()).hexdigest()
+        ):
+            raise SnapshotError("pricesmart_evidence_invalid")
+        details = data.get("source_details")
+        if not isinstance(details, dict) or set(details) != {row["source_key"] for row in rows}:
+            raise SnapshotError("pricesmart_source_details_invalid")
+        for row in rows:
+            if (
+                row["source_key_type"] != "item_id"
+                or row["source_key"] != row["item_id"]
+                or not isinstance(row["product_id"], str)
+                or not row["product_id"].isdigit()
+                or not isinstance(row["item_id"], str)
+                or not row["item_id"]
+            ):
+                raise SnapshotError("pricesmart_identity_invalid")
+            detail = details[row["source_key"]]
+            if not isinstance(detail, dict) or detail.get("product_id") != row["product_id"]:
+                raise SnapshotError("pricesmart_source_details_invalid")
+            available = detail.get("source_availability")
+            inventory = detail.get("source_inventory")
+            if available not in {None, "true", "false"} or inventory not in {None, "in stock", "out of stock"}:
+                raise SnapshotError("pricesmart_availability_evidence_invalid")
+            expected_availability = "in_stock" if available == "true" and inventory == "in stock" else "out_of_stock"
+            if row["availability"] != expected_availability:
+                raise SnapshotError("pricesmart_availability_evidence_invalid")
+            source_price = detail.get("source_price_minor")
+            if row["current_price"] is None:
+                if (
+                    row["availability"] != "out_of_stock"
+                    or row["reported_regular_price"] is not None
+                    or row["is_promotion"] is not None
+                    or source_price is not None
+                    or detail.get("source_regular_price") is not None
+                    or detail.get("source_saving_amount") is not None
+                    or detail.get("promotion_evidence") != "unpriced"
+                ):
+                    raise SnapshotError("pricesmart_unpriced_offer_invalid")
+            else:
+                if type(source_price) is not int or source_price <= 0 or _minor(row["current_price"], True) != source_price:
+                    raise SnapshotError("pricesmart_price_evidence_invalid")
+                if row["is_promotion"] is True:
+                    regular = _minor(row["reported_regular_price"], True)
+                    saving = detail.get("source_saving_amount")
+                    try:
+                        saving_minor = -Decimal(str(saving)) * 100
+                    except InvalidOperation as exc:
+                        raise SnapshotError("pricesmart_promotion_evidence_invalid") from exc
+                    if (
+                        regular <= source_price
+                        or not isinstance(saving, str)
+                        or not saving_minor.is_finite()
+                        or abs(saving_minor - (regular - source_price)) > 1
+                        or detail.get("promotion_evidence") != "regular_and_negative_saving_declared"
+                    ):
+                        raise SnapshotError("pricesmart_promotion_evidence_invalid")
+                elif (
+                    row["is_promotion"] is not False
+                    or row["reported_regular_price"] is not None
+                    or detail.get("source_regular_price") is not None
+                    or detail.get("source_saving_amount") is not None
+                    or detail.get("promotion_evidence") != "requested_fields_absent"
+                ):
+                    raise SnapshotError("pricesmart_nonpromotion_evidence_invalid")
+        availability_counts = {value: sum(row["availability"] == value for row in rows) for value in {row["availability"] for row in rows}}
+        promotion_counts = {
+            "true": sum(row["is_promotion"] is True for row in rows),
+            "false": sum(row["is_promotion"] is False for row in rows),
+            "unknown_unpriced": sum(row["is_promotion"] is None for row in rows),
+        }
+        if data.get("availability_counts") != availability_counts or data.get("promotion_counts") != promotion_counts:
+            raise SnapshotError("pricesmart_counts_invalid")
     return data
 
 

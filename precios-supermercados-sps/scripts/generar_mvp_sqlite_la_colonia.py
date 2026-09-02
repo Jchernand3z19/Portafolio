@@ -211,7 +211,7 @@ def create_schema(con: sqlite3.Connection) -> None:
             FOREIGN KEY (scrape_run_id) REFERENCES scrape_runs(scrape_run_id),
             CHECK (
                 (current_price_minor IS NOT NULL AND is_promotion IS NOT NULL)
-                OR (supermarket_id = 'walmart' AND availability = 'out_of_stock'
+                OR (supermarket_id IN ('walmart', 'pricesmart') AND availability = 'out_of_stock'
                     AND current_price_minor IS NULL AND reported_regular_price_minor IS NULL
                     AND is_promotion IS NULL)
             )
