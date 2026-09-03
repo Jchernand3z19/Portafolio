@@ -131,11 +131,16 @@ La suma bruta es 2,777 productos por club; el punto estimado por señales facet 
 2,766 únicos y la proyección de variantes es aproximadamente 6,015 SKU por club,
 con baja confianza hasta la captura completa.
 
-El siguiente gate es el full restante. Reutilizar el probe reduce SPS a 21 POST;
-Florencia necesita 25. Presupuesto: 46 base + cinco retries = 51 POST máximo,
-`rows=200`, concurrencia 1 y 10 minutos. No incluye recrawl de Alimentos, El Sauce
-ni Turso. [RAW, árbol, solapamientos y presupuesto página por
-página](../reports/pricesmart/2026-09-02-discovery-probe/README.md).
+El primer intento full comprobó que las ventanas parciales del probe no pueden
+reutilizarse con seguridad. `S10D45 start=12, rows=200` repitió el producto
+`507265`; la unión produjo 57/58 identidades. Se detuvo tras un POST HTTP 200,
+cero retries, cero páginas aceptadas y cero Turso.
+
+El replan conserva únicamente Alimentos como partición completa y empieza cada
+raíz restante en cero. SPS y Florencia requieren 25 POST base cada uno. Con el
+intento ya consumido y cinco retries, el máximo global revisado es 56 POST y 3,352
+documentos retornados; hace falta una extensión explícita. [RAW del stop y replan
+exacto](../reports/pricesmart/2026-09-02-remaining-full-abort/README.md).
 
 Full controlado del `2026-09-01`, limitado a SPS 6603 y Florencia 6602. El Sauce
 6604 no fue consultado. Se ejecutaron **188 POST HTTP, 94 por club, todos 200,

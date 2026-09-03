@@ -1,0 +1,270 @@
+{
+  "attempt": {
+    "aborted_reason": "unexpected_contract_or_pagination:ValueError:unexpected_repeated_product_across_windows",
+    "accepted_pages": 0,
+    "category_key": "S10D45",
+    "club": "6603",
+    "elapsed_seconds": 0.47489370800030883,
+    "endpoint": "https://www.pricesmart.com/api/br_discovery/getProductsByKeyword",
+    "http_200": 1,
+    "post_attempts": 1,
+    "response_body_sha256": "cbd4a4c83f75bf631199b420163644b9a93262ff27f2a80ab438cccda7f2cb77",
+    "retries": 0,
+    "returned_documents": 46,
+    "rows": 200,
+    "start": 12,
+    "turso_operations": 0
+  },
+  "decision": {
+    "full_complete": false,
+    "general_catalog_complete": false,
+    "next_gate": "authorize revised non-reuse full budget"
+  },
+  "failure_evidence": {
+    "cause": "ranking_changed_between_probe_and_full_windows",
+    "combined_unique_products": 57,
+    "continuation_products": 46,
+    "expected_products": 58,
+    "missing_identity_count": 1,
+    "partial_probe_windows_reusable_for_completeness": false,
+    "repeated_product_ids": [
+      "507265"
+    ],
+    "seed_products": 12,
+    "whole_alimentos_snapshot_reusable": true
+  },
+  "linked_discovery_probe_sha256": "b76f3910b19cc29d1c69baa1d70ac90298e8e95a7ba9d2e9be30643b3af5d848",
+  "raw_archive_sha256": "08db4f1aa8ad5cd09db534c2f7f715d9d5b9bf6ea54f9af9a7d4601ac5aa58e6",
+  "revised_plan": {
+    "accepted_documents_expected": 3306,
+    "accepted_prior_pages": 0,
+    "additional_post_attempts_max": 55,
+    "alimentos_recrawl_requests": 0,
+    "concurrency": 1,
+    "discarded_documents_already_returned": 46,
+    "florencia_base_requests": 25,
+    "global_documents_returned_max": 3352,
+    "global_post_attempts_max": 56,
+    "maximum_duration_seconds": 600,
+    "new_base_requests": 50,
+    "prior_consumed_attempts": 1,
+    "requires_authorization_extension": true,
+    "retry_reserve": 5,
+    "root_windows": [
+      {
+        "category_key": "S10D45",
+        "name": "Productos de temporada",
+        "num_found": 58,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "H30D22",
+        "name": "Hogar",
+        "num_found": 315,
+        "offsets": [
+          0,
+          200
+        ],
+        "requests_per_club": 2
+      },
+      {
+        "category_key": "H20D09",
+        "name": "Salud y belleza",
+        "num_found": 186,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "G10D08014",
+        "name": "Licor, cerveza y vino",
+        "num_found": 97,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "P10D51",
+        "name": "Mascotas",
+        "num_found": 37,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "B10D27",
+        "name": "Bebé",
+        "num_found": 42,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "H10D21",
+        "name": "Ferretería y mejoras al hogar",
+        "num_found": 78,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "S30D26",
+        "name": "Deportes y fitness",
+        "num_found": 47,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "O20D30",
+        "name": "Exteriores",
+        "num_found": 80,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "E10D24",
+        "name": "Electrónicos",
+        "num_found": 72,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "S20D23",
+        "name": "Electrodomésticos",
+        "num_found": 83,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "C10D29",
+        "name": "Computadoras, tablets y accesorios",
+        "num_found": 33,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "M10D43",
+        "name": "Línea blanca",
+        "num_found": 32,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "F10D40",
+        "name": "Moda y accesorios",
+        "num_found": 213,
+        "offsets": [
+          0,
+          200
+        ],
+        "requests_per_club": 2
+      },
+      {
+        "category_key": "F20D27",
+        "name": "Muebles",
+        "num_found": 46,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "O10D25",
+        "name": "Oficina",
+        "num_found": 16,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "R10D22",
+        "name": "Suministros para restaurantes",
+        "num_found": 21,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "A10D20",
+        "name": "Automotriz",
+        "num_found": 102,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "T10D46",
+        "name": "Juguetes y juegos",
+        "num_found": 25,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "L10D22",
+        "name": "Equipaje",
+        "num_found": 12,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "U10D72",
+        "name": "Óptica",
+        "num_found": 55,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "T20D42",
+        "name": "Películas, música y libros",
+        "num_found": 1,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      },
+      {
+        "category_key": "V10D79",
+        "name": "Tarjetas de Regalo",
+        "num_found": 2,
+        "offsets": [
+          0
+        ],
+        "requests_per_club": 1
+      }
+    ],
+    "roots_nonempty": 23,
+    "rows": 200,
+    "sps_base_requests": 25,
+    "stop_if_num_found_changes": true
+  },
+  "schema_version": 1
+}

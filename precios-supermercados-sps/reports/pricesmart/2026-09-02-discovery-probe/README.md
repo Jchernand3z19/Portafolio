@@ -1,5 +1,9 @@
 # PriceSmart Honduras — probe Discovery de raíces y page size
 
+> Estado posterior: el intento de reutilizar ventanas parciales detectó un cambio
+> de orden y se detuvo tras un POST. El presupuesto revisado está en
+> [`../2026-09-02-remaining-full-abort/README.md`](../2026-09-02-remaining-full-abort/README.md).
+
 ## Resultado live
 
 El probe autorizado consultó las 25 raíces distintas de `G10D03 / Alimentos`
@@ -115,7 +119,7 @@ los 1,127 SKU exactos de Alimentos. Es una estimación de baja confianza porque 
 muestra de Moda tiene muchos productos con variantes. El full calculará el valor
 exacto.
 
-## Presupuesto exacto del full restante
+## Presupuesto inicial del full restante
 
 ```text
 endpoint                 POST /api/br_discovery/getProductsByKeyword
@@ -142,6 +146,11 @@ anterior, que terminó sin usar ninguno.
 Al ritmo medido por el probe, las 46 páginas base tardarían cerca de 29 segundos.
 El máximo solicitado de 10 minutos cubre los cinco timeouts/retries reservados y
 el guardado RAW sin convertirlo en una autorización recurrente.
+
+Este presupuesto quedó invalidado específicamente en su reutilización de páginas
+parciales: la primera continuación repitió una identidad y dejó un hueco. La
+taxonomía, totales y page size siguen válidos; el full revisado debe comenzar cada
+raíz en `start=0`.
 
 ## Reproducción offline
 
