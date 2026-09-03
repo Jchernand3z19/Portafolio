@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "operation": {
+    "authorization": "single controlled incremental production load",
+    "database": "precios-supermercados",
+    "source_main_commit": "d32d099b94e9a185964317a545a9585d2bd1e1c3",
+    "source_pr": 369,
+    "source_artifact_id": "github-main-d32d099-pr369-pricesmart-complete",
+    "completed_at_utc": "2026-09-03T04:54:51Z",
+    "recrawl": false,
+    "turso_write": true,
+    "recurrence_created": false,
+    "el_sauce_included": false
+  },
+  "preflight": {
+    "plan": "starter",
+    "overages": false,
+    "quota_reset": "2026-09-30T18:00:00-06:00",
+    "schema_tables": 5,
+    "integrity_check": "ok",
+    "foreign_key_violations": 0,
+    "duplicate_current_periods": 0,
+    "counts": {
+      "supermarkets": 4,
+      "locations": 8,
+      "products": 35873,
+      "price_history": 74328,
+      "scrape_runs": 13
+    },
+    "pricesmart_current": {
+      "pricesmart_sps": 1127,
+      "pricesmart_tgu": 1127
+    },
+    "prior_snapshot_hashes": {
+      "pricesmart_sps": "9a352afa72b2bef89404b03d81ef22494cee7c02af262098a89730b58bdbbff3",
+      "pricesmart_tgu": "9b65f2451f026e6591650e585fb14e9da5f1e206852e94869d4514734f092213"
+    }
+  },
+  "loads": [
+    {
+      "club_id": "6603",
+      "location_id": "pricesmart_sps",
+      "run_id": "pricesmart-complete-20260902-sps-6603-eeabfa9f35f9",
+      "snapshot_file": "reports/pricesmart/2026-09-02-complete/pricesmart_sps.json.gz",
+      "snapshot_json_sha256": "eeabfa9f35f9cfce269aa6a196fcbe471654cfb26754431001cf7cc37593aaec",
+      "catalog_products": 2766,
+      "products_processed": 6078,
+      "history_opened": 4951,
+      "history_closed": 0,
+      "history_unchanged": 1127,
+      "replayed": false,
+      "current_after": {
+        "offers": 6078,
+        "priced": 5404,
+        "promotions": 39,
+        "unpriced": 674
+      },
+      "new_periods_bound_to_run": 4951,
+      "prior_alimentos_periods_open": 1127
+    },
+    {
+      "club_id": "6602",
+      "location_id": "pricesmart_tgu",
+      "run_id": "pricesmart-complete-20260902-tgu-6602-2d09bfe3e17f",
+      "snapshot_file": "reports/pricesmart/2026-09-02-complete/pricesmart_tgu.json.gz",
+      "snapshot_json_sha256": "2d09bfe3e17f65197008e9392a16af3e99802a8f3b36753f5c901b14aacc44e6",
+      "catalog_products": 2766,
+      "products_processed": 6078,
+      "history_opened": 4951,
+      "history_closed": 0,
+      "history_unchanged": 1127,
+      "replayed": false,
+      "current_after": {
+        "offers": 6078,
+        "priced": 5232,
+        "promotions": 38,
+        "unpriced": 846
+      },
+      "new_periods_bound_to_run": 4951,
+      "prior_alimentos_periods_open": 1127
+    }
+  ],
+  "usage": {
+    "limits": {
+      "rows_read": 500000000,
+      "rows_written": 10000000,
+      "storage_bytes_label": "5.0 GB"
+    },
+    "before": {
+      "rows_read": 2175665,
+      "rows_written": 545341,
+      "storage_mb": 25
+    },
+    "after_sps_and_scoped_verification": {
+      "rows_read": 2948298,
+      "rows_written": 598248,
+      "storage_mb": 28,
+      "delta_rows_read": 772633,
+      "delta_rows_written": 52907
+    },
+    "after_florencia_and_final_verification": {
+      "rows_read": 3041775,
+      "rows_written": 631351,
+      "storage_mb": 29,
+      "delta_from_sps_rows_read": 93477,
+      "delta_from_sps_rows_written": 33103,
+      "total_delta_rows_read": 866110,
+      "total_delta_rows_written": 86010,
+      "remaining_rows_read": 496958225,
+      "remaining_rows_written": 9368649,
+      "used_rows_read_percent": 0.608355,
+      "used_rows_written_percent": 6.31351
+    },
+    "anomalous": false,
+    "attribution_limit": "Turso counters are aggregate; each interval includes its adjacent scoped verification queries."
+  },
+  "final_state": {
+    "schema_tables": 5,
+    "counts": {
+      "supermarkets": 4,
+      "locations": 8,
+      "products": 40824,
+      "price_history": 84230,
+      "scrape_runs": 15
+    },
+    "pricesmart": {
+      "unique_skus": 6078,
+      "unique_source_products": 2766,
+      "current_periods": 12156,
+      "closed_periods": 0,
+      "runs": 4
+    },
+    "isolation_counts": {
+      "colonial": {
+        "products": 9205,
+        "price_history": 9205,
+        "scrape_runs": 1
+      },
+      "la_colonia": {
+        "products": 9509,
+        "price_history": 21117,
+        "scrape_runs": 7
+      },
+      "walmart": {
+        "products": 16032,
+        "price_history": 41752,
+        "scrape_runs": 3
+      }
+    },
+    "other_supermarkets_preserved": true,
+    "alimentos_periods_preserved_open_per_location": 1127,
+    "artificial_alimentos_history": 0,
+    "duplicate_current_periods": 0,
+    "foreign_key_violations": 0,
+    "integrity_check": "ok"
+  },
+  "decision": {
+    "status": "PRICESMART_COMPLETE_IN_PRODUCTION",
+    "production_contexts": [
+      "pricesmart_sps",
+      "pricesmart_tgu"
+    ],
+    "pending_price_smart_work": [],
+    "token_stored_locally": false
+  }
+}
