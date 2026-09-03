@@ -8,44 +8,29 @@
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
 - Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-# Fase activa — catálogo general PriceSmart, full restante bloqueado por gate
+# Fase activa — catálogo completo PriceSmart listo para gate Turso
 
-Maxi Despensa y Despensa Familiar se clasifican **NO-GO TEMPORAL PARA PRICE
-TRACKING WEB**: el probe público no demostró precios activos, API de precios ni
-contexto comercial reproducible. No continuar búsqueda, scraper, persistencia,
-full crawl, imágenes, PDF, OCR, fuentes indirectas ni cambios de modelo para estas
-dos cadenas. Sólo reabrirlas ante una fuente digital pública nueva y una instrucción
-explícita. Ver `docs/supermercados/maxi-df-auditoria-preflight.md`.
+Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE
+TRACKING WEB**. No reabrir esas cadenas sin una fuente digital pública nueva y
+una instrucción explícita.
 
-PriceSmart Honduras ya tiene binding y full aceptado para SPS 6603 y Florencia
-6602 en `POST /api/br_discovery/getProductsByKeyword`. `G10D03 / Alimentos` está
-completo: 1,124 productos y 1,127 SKU por club. Ese alcance ya fue persistido en
-Turso y no debe borrarse, reconstruirse ni recrawlearse por conveniencia. El Sauce
-6604 permanece excluido.
+PriceSmart Honduras quedó completo para SPS club 6603 y Florencia club 6602. El
+Sauce 6604 permanece excluido. `reports/pricesmart/2026-09-02-complete/` demuestra
+26 raíces, 24 no vacías, 2,766 productos y 6,078 SKU únicos por club. El full
+restante consumió 50 POST HTTP 200, cero retries; Alimentos se reutilizó sin
+recrawl. Los dos clubes conservan contexto separado por 115 diferencias reales de
+precio entre SKU cotizados en ambos.
 
-El catálogo general PriceSmart sigue incompleto. El probe Discovery midió las 25
-raíces fuera de Alimentos: 1,653
-observaciones, 23 raíces no vacías, dos vacías y 546 nodos taxonómicos al unir la
-evidencia existente. `rows=200` entregó 200/315 productos en Hogar y el offset ya
-está demostrado por el full anterior; ningún padre requiere dividirse en hijos.
-La muestra prueba tres productos compartidos y 11 señales de facet transversales.
-El intento full posterior demostró que no es seguro concatenar las páginas
-parciales del probe: `S10D45 start=12` repitió una identidad y la unión quedó en
-57/58. Se detuvo tras un POST, cero páginas aceptadas y cero Turso. El plan
-revisado conserva Alimentos completo, descarta las ventanas parciales para
-completitud y necesita 50 POST base nuevos más cinco retries. Con el intento ya
-consumido, el máximo global debe ampliarse de 51 a 56. Hasta una autorización
-explícita no hacer más tráfico PriceSmart, SQL Turso ni recurrencia. Ver
-`reports/pricesmart/2026-09-02-remaining-full-abort/README.md`.
+El delta offline contra el estado productivo Alimentos es, por ubicación: 1,127
+estados sin cambio y 4,951 ofertas SKU nuevas, agrupadas en 1,642 productos fuente
+y 3,309 variantes adicionales. No hay cambios comerciales previos, cambios sólo
+de metadata ni ausencias. La persistencia offline, replay, aislamiento, FK e
+integridad pasaron sobre las cinco tablas.
 
-La Colonia, Colonial, Walmart y el alcance Alimentos de PriceSmart ya están
-persistidos en Turso. Walmart conserva los dos contextos TGU por diferencias
-comerciales demostradas en RAW completo. No tocar esas cadenas durante el discovery
-PriceSmart ni interpretar autorización de probe, full, persistencia y recurrencia
-como permisos intercambiables. Conservar cinco tablas y el hot path eficiente.
-
-Las secciones siguientes conservan las reglas y evidencia del cierre inicial de
-La Colonia; no prohíben esta fase autorizada ni autorizan sustituir la base actual.
+La única frontera pendiente es la escritura productiva Turso. No ejecutarla sin
+una autorización separada. No recrawlear, no consultar El Sauce, no crear
+recurrencia y no interpretar ausencia como `out_of_stock`. Publicar, corregir CI,
+fusionar y verificar `main` sí están autorizados para esta fase.
 
 # Referencia — cierre inicial de La Colonia sin sobreingeniería
 

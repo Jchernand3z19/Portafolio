@@ -1,0 +1,207 @@
+{
+  "authorization": {
+    "alimentos_recrawled": false,
+    "base_posts": 50,
+    "clubs": [
+      "6603",
+      "6602"
+    ],
+    "concurrency": 1,
+    "endpoint": "https://www.pricesmart.com/api/br_discovery/getProductsByKeyword",
+    "excluded_club": "6604",
+    "retries": 0,
+    "turso": false
+  },
+  "capture": {
+    "complete": true,
+    "elapsed_seconds": 30.850062584000625,
+    "finished_at_utc": "2026-09-03T04:16:56.757287+00:00",
+    "global_post_attempts": 51,
+    "post_attempts_this_run": 50,
+    "prior_fail_closed_posts": 1,
+    "retries": 0,
+    "returned_documents": 3306,
+    "roots_completed_per_club": 23,
+    "started_at_utc": "2026-09-03T04:16:25.907257+00:00",
+    "successful_pages": 50
+  },
+  "completeness": {
+    "all_root_memberships_per_club": 2777,
+    "all_root_sku_memberships_per_club": 6115,
+    "cross_root_products_per_club": 11,
+    "duplicate_product_memberships_per_club": 11,
+    "duplicate_sku_memberships_per_club": 37,
+    "empty_roots": 2,
+    "nonempty_roots": 24,
+    "pagination_holes": 0,
+    "remaining_root_memberships_per_club": 1653,
+    "reused_alimentos_products_per_club": 1124,
+    "taxonomy_roots": 26,
+    "unexpected_page_repeats": 0,
+    "unique_products_per_club": 2766,
+    "unique_skus_per_club": 6078
+  },
+  "decision": {
+    "catalog_complete": true,
+    "catalog_scope": "ALL_PUBLIC_DEPARTMENTS",
+    "el_sauce_included": false,
+    "production_contexts": [
+      "pricesmart_sps",
+      "pricesmart_tgu"
+    ],
+    "reason": "115 reproducible current-price differences among jointly priced SKUs",
+    "status": "READY_FOR_COMPLETE_TURSO_DELTA_AFTER_SEPARATE_AUTHORIZATION",
+    "turso_executed": false
+  },
+  "offline_persistence": {
+    "artifact": "offline-sql-summary.json",
+    "bytes": 3799,
+    "delta_per_location": {
+      "absent_from_new_snapshot": 0,
+      "existing_commercial_change": 0,
+      "existing_unchanged": 1127,
+      "metadata_only": 0,
+      "new_sku_offers": 4951,
+      "new_source_products": 1642,
+      "new_variants_beyond_first": 3309
+    },
+    "duplicate_open_periods": 0,
+    "five_tables": true,
+    "foreign_key_violations": 0,
+    "integrity_check": "ok",
+    "isolation_unchanged": true,
+    "replay_unchanged": true,
+    "sha256": "a5078e2b9739e46e1cd970495450cf8d5a22b482c837e044f4364ef335331b43",
+    "turso_access": false
+  },
+  "raw_archive": {
+    "bytes": 607034,
+    "published_files": 105,
+    "redactions": {
+      "authorization_headers_published": false,
+      "cookies_published": false,
+      "original_request_body_hashes_retained": true,
+      "public_client_key_redacted": true,
+      "response_bodies_complete": true,
+      "tokens_or_credentials_published": false
+    },
+    "sha256": "7455aeac89447851b2fa2197b6b1b1941a2007cc2bfdb24630d6137da0ae04bc"
+  },
+  "schema_version": 1,
+  "snapshots": [
+    {
+      "availability_counts": {
+        "in_stock": 2748,
+        "out_of_stock": 3330
+      },
+      "file": "pricesmart_sps.json.gz",
+      "gzip_bytes": 548386,
+      "gzip_sha256": "998ef03de63296fb2578c6dd9b0bc7e2512b615ad8c7efd6a953f7084dccfc5d",
+      "json_bytes": 7574887,
+      "json_sha256": "eeabfa9f35f9cfce269aa6a196fcbe471654cfb26754431001cf7cc37593aaec",
+      "priced_skus": 5404,
+      "promotion_counts": {
+        "false": 5365,
+        "true": 39,
+        "unknown_unpriced": 674
+      },
+      "skus": 6078,
+      "unique_products": 2766
+    },
+    {
+      "availability_counts": {
+        "in_stock": 2899,
+        "out_of_stock": 3179
+      },
+      "file": "pricesmart_tgu.json.gz",
+      "gzip_bytes": 548049,
+      "gzip_sha256": "737079fe855bfa246a2bc921a0ea8606510e1c22eaa846de8f422f3f4e3e52fd",
+      "json_bytes": 7567862,
+      "json_sha256": "2d09bfe3e17f65197008e9392a16af3e99802a8f3b36753f5c901b14aacc44e6",
+      "priced_skus": 5232,
+      "promotion_counts": {
+        "false": 5194,
+        "true": 38,
+        "unknown_unpriced": 846
+      },
+      "skus": 6078,
+      "unique_products": 2766
+    }
+  ],
+  "sps_vs_florencia": {
+    "availability_differences": 995,
+    "availability_only_differences": 833,
+    "both_priced_price_differences": 115,
+    "current_price_field_differences": 493,
+    "is_promotion_differences": 378,
+    "price_comparable_skus": 5129,
+    "price_difference_examples": [
+      {
+        "name": "Member's Selection Chuleta de Cerdo Fresca Bandeja",
+        "sku": "100187",
+        "sps": "259.57",
+        "tgu": "216.76"
+      },
+      {
+        "name": "Member's Selection Puyaso Entero Fresco Empacado al Vacío",
+        "sku": "101488",
+        "sps": "615.70",
+        "tgu": "537.01"
+      },
+      {
+        "name": "Member's Selection Hígado Fresco Bandeja",
+        "sku": "107641",
+        "sps": "193.70",
+        "tgu": "177.21"
+      },
+      {
+        "name": "Costillas de Cerdo",
+        "sku": "118074",
+        "sps": "292.38",
+        "tgu": "297.53"
+      },
+      {
+        "name": "Member's Selection Hueso Redondo Fresco Bandeja",
+        "sku": "118078",
+        "sps": "299.46",
+        "tgu": "241.10"
+      },
+      {
+        "name": "Mano de Piedra Entera Fresca Empacada al Vacío",
+        "sku": "118079",
+        "sps": "480.51",
+        "tgu": "465.27"
+      },
+      {
+        "name": "Lomo Delmonico Empacado al Vacío",
+        "sku": "118081",
+        "sps": "954.49",
+        "tgu": "917.30"
+      },
+      {
+        "name": "Member's Selection Fajitas de Res Frescas Bandeja",
+        "sku": "122687",
+        "sps": "514.10",
+        "tgu": "516.65"
+      },
+      {
+        "name": "Member's Selection Milanesa de Res Fresca Bandeja",
+        "sku": "122689",
+        "sps": "430.36",
+        "tgu": "419.86"
+      },
+      {
+        "name": "Falda Entera de Res",
+        "sku": "122690",
+        "sps": "389.14",
+        "tgu": "392.83"
+      }
+    ],
+    "reported_regular_price_differences": 3,
+    "shared_skus": 6078,
+    "sps_only_priced": 275,
+    "sps_only_skus": 0,
+    "tgu_only_priced": 103,
+    "tgu_only_skus": 0
+  }
+}
