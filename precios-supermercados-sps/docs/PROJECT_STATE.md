@@ -94,7 +94,7 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — Alimentos completo y persistido; catálogo general incompleto
+## PriceSmart Honduras — Alimentos completo; 26 raíces demostradas
 
 La auditoría offline del catálogo general revisó los siete RAW PriceSmart, 194
 requests y 194 respuestas de productos. Todas las consultas existentes usan
@@ -109,12 +109,20 @@ PRICESMART G10D03 / ALIMENTOS COMPLETO
 CATÁLOGO GENERAL PRICESMART INCOMPLETO
 ```
 
-El código cliente capturado deriva una operación pública de lectura
-`POST /api/ct/getFacetCategories`, con `onlyParent` y límite configurado de 200,
-pero esa ruta aún no fue probada live. Hace falta una autorización nueva y acotada
-antes del primer POST. No se puede calcular el full restante hasta demostrar las
-raíces y medir `numFound` por padre. El snapshot Alimentos existente es reutilizable
-sin recrawl. [Preflight, árbol y gate reproducible](../reports/pricesmart/2026-09-02-general-catalog-preflight/README.md).
+El probe público posterior ejecutó dos POST a `/api/ct/getFacetCategories`: el
+inicial y un retry de recuperación después de perder su worktree efímero. Ambos
+fueron HTTP 200 y sus cuerpos son byte a byte idénticos. Devolvieron 26 categorías
+raíz únicas, todas con `parent=null` y `ancestors=[]`. La página fue terminal por
+devolver 26 de un límite de 200; no se solicitó `offset=200`. No hubo Discovery,
+productos, browser/assets ni Turso. `G10D03 / Alimentos` es una de las 26 raíces;
+las otras 25 todavía no tienen `numFound`, facet ni muestra de identidad observada.
+
+El siguiente gate es un probe Discovery de máximo 31 POST: 25 muestras de
+`start=0`, una por raíz pendiente; hasta tres pruebas adaptativas de tamaño de
+página sobre la raíz pendiente más grande; y tres retries de reserva. No incluye
+G10D03. Sin esa observación no puede calcularse el presupuesto full restante. El
+snapshot Alimentos existente es reutilizable sin recrawl. [RAW, hashes, 26 raíces
+y preflight del siguiente probe](../reports/pricesmart/2026-09-02-taxonomy-probe/README.md).
 
 Full controlado del `2026-09-01`, limitado a SPS 6603 y Florencia 6602. El Sauce
 6604 no fue consultado. Se ejecutaron **188 POST HTTP, 94 por club, todos 200,
@@ -787,8 +795,8 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 ## Pendiente operativo
 
 ```text
-1. ejecutar el probe mínimo autorizado de taxonomía raíz PriceSmart;
-2. medir `numFound` por padre y calcular las particiones y presupuesto full exactos;
+1. medir `numFound` por las 25 raíces PriceSmart pendientes y el tamaño de página;
+2. calcular las particiones y el presupuesto full exactos;
 3. capturar sólo el catálogo PriceSmart restante bajo autorización separada;
 4. consolidar y validar offline contra Alimentos existente y contra Turso;
 5. persistir únicamente el delta PriceSmart bajo una autorización productiva nueva;

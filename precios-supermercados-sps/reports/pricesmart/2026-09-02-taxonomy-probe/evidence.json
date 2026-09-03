@@ -1,0 +1,403 @@
+{
+  "decision": {
+    "full_request_budget_calculable": false,
+    "g10d03_existing_snapshot_reusable": true,
+    "general_catalog_complete": false,
+    "minimal_partitions_determined": false,
+    "next_gate": "bounded Discovery totals and page-size probe for 25 uncaptured roots",
+    "root_category_count": 26,
+    "root_taxonomy_demonstrated": true
+  },
+  "next_probe_preflight": {
+    "already_measured_root_keys": [
+      "G10D03"
+    ],
+    "base_requests_for_one_count_sample_each": 25,
+    "count_sample_rows": 12,
+    "count_sample_start": 0,
+    "endpoint": "https://www.pricesmart.com/api/br_discovery/getProductsByKeyword",
+    "excluded_clubs": [
+      "6602",
+      "6604"
+    ],
+    "g10d03_page_size_fallback_allowed": false,
+    "maximum_post_attempts": 31,
+    "maximum_returned_product_documents": 500,
+    "page_size_candidates_descending": [
+      200,
+      100,
+      50
+    ],
+    "page_size_characterization_requests_max": 3,
+    "page_size_test_selection": "largest_remaining_root_with_numFound_at_least_200",
+    "probe_club": "6603",
+    "remaining_root_count": 25,
+    "remaining_root_keys": [
+      "S10D45",
+      "H30D22",
+      "H20D09",
+      "G10D08014",
+      "P10D51",
+      "B10D27",
+      "H10D21",
+      "S30D26",
+      "O20D30",
+      "E10D24",
+      "S20D23",
+      "C10D29",
+      "M10D43",
+      "F10D40",
+      "F20D27",
+      "O10D25",
+      "R10D22",
+      "A10D20",
+      "T10D46",
+      "L10D22",
+      "U10D72",
+      "U11D13",
+      "T20D42",
+      "V10D79",
+      "J10D44"
+    ],
+    "retry_reserve": 3,
+    "root_categories_total": 26
+  },
+  "raw_archive_sha256": "68267bbe876abc6efea726d23e7aa22bc8254bb3798f0f8a3e018d8bd5b34771",
+  "request": {
+    "body": [
+      {
+        "limit": 200,
+        "offset": 0,
+        "onlyParent": true
+      }
+    ],
+    "body_sha256": "cd65c734f0ffc87c02fab50aa7e753e11556fccb720c03120b1e16a7abcc9700",
+    "endpoint": "https://www.pricesmart.com/api/ct/getFacetCategories",
+    "method": "POST"
+  },
+  "response": {
+    "body_bytes": 5159,
+    "body_sha256": "cd8a01f4b7f774e52c69f9fecd30fda4e778223691c54139c5809a111332e978",
+    "categories_container_keys": [
+      "__typename",
+      "results"
+    ],
+    "status": 200,
+    "top_level_keys": [
+      "data",
+      "loading",
+      "networkStatus"
+    ]
+  },
+  "run": {
+    "authentication_required": false,
+    "byte_identical_recovery": true,
+    "captcha_or_rate_limit": false,
+    "categories_returned": 26,
+    "concurrency": 1,
+    "context": "HN/es-HN",
+    "endpoint": "https://www.pricesmart.com/api/ct/getFacetCategories",
+    "http_200": 2,
+    "initial_response_body_sha256": "cd8a01f4b7f774e52c69f9fecd30fda4e778223691c54139c5809a111332e978",
+    "offset_200_requested": false,
+    "offsets_requested": [
+      0,
+      0
+    ],
+    "operation": "getFacetCategories",
+    "post_attempts": 2,
+    "recovery_elapsed_seconds": 0.23751041600002054,
+    "recovery_finished_at_utc": "2026-09-03T01:24:41.103759+00:00",
+    "recovery_response_body_sha256": "cd8a01f4b7f774e52c69f9fecd30fda4e778223691c54139c5809a111332e978",
+    "recovery_started_at_utc": "2026-09-03T01:24:40.866265+00:00",
+    "remaining_post_budget": 2,
+    "retries": 1,
+    "unexpected_contract": false
+  },
+  "schema_version": 2,
+  "scope_boundary": {
+    "assets_requested": 0,
+    "browser_requests": 0,
+    "child_taxonomy_observed": false,
+    "discovery_requests": 0,
+    "overlap_observed": false,
+    "product_counts_observed": false,
+    "products_requested": 0,
+    "turso_operations": 0
+  },
+  "taxonomy": {
+    "all_ancestors_empty": true,
+    "all_parent_null": true,
+    "categories": [
+      {
+        "ancestors": [],
+        "category_id": "22754ad8-480f-486f-b300-ed4eda82e222",
+        "category_key": "S10D45",
+        "meta_description": null,
+        "name": "Productos de temporada",
+        "parent": null,
+        "slug": "Productos-de-temporada-S10D45",
+        "source_order": 1
+      },
+      {
+        "ancestors": [],
+        "category_id": "318a994e-9cbb-456b-b255-d18e78e4362f",
+        "category_key": "G10D03",
+        "meta_description": null,
+        "name": "Alimentos",
+        "parent": null,
+        "slug": "Alimentos-G10D03",
+        "source_order": 2
+      },
+      {
+        "ancestors": [],
+        "category_id": "ec406635-14e3-445c-a9ad-b8034a5a8e82",
+        "category_key": "H30D22",
+        "meta_description": null,
+        "name": "Hogar",
+        "parent": null,
+        "slug": "Hogar-H30D22",
+        "source_order": 3
+      },
+      {
+        "ancestors": [],
+        "category_id": "7299eed1-5f30-4a59-ab1a-ab01dff1f139",
+        "category_key": "H20D09",
+        "meta_description": null,
+        "name": "Salud y belleza",
+        "parent": null,
+        "slug": "Salud-y-belleza-H20D09",
+        "source_order": 4
+      },
+      {
+        "ancestors": [],
+        "category_id": "1f8505ec-f3bc-42f9-80eb-4bd8db45f707",
+        "category_key": "G10D08014",
+        "meta_description": null,
+        "name": "Licor, cerveza y vino",
+        "parent": null,
+        "slug": "Licor-cerveza-y-vino-G10D08014",
+        "source_order": 5
+      },
+      {
+        "ancestors": [],
+        "category_id": "52c9f22c-90ac-4e1b-be20-641410474155",
+        "category_key": "P10D51",
+        "meta_description": null,
+        "name": "Mascotas",
+        "parent": null,
+        "slug": "Mascotas-P10D51",
+        "source_order": 6
+      },
+      {
+        "ancestors": [],
+        "category_id": "f4d54340-e062-4086-8032-58f39b05d001",
+        "category_key": "B10D27",
+        "meta_description": null,
+        "name": "Bebé",
+        "parent": null,
+        "slug": "Bebe-B10D27",
+        "source_order": 7
+      },
+      {
+        "ancestors": [],
+        "category_id": "90bfa354-acca-4a6c-9259-b71ec0b2a24b",
+        "category_key": "H10D21",
+        "meta_description": null,
+        "name": "Ferretería y mejoras al hogar",
+        "parent": null,
+        "slug": "Ferreteria-y-mejoras-al-hogar-H10D21",
+        "source_order": 8
+      },
+      {
+        "ancestors": [],
+        "category_id": "4cb96525-6903-4267-b6a8-4a587871589a",
+        "category_key": "S30D26",
+        "meta_description": null,
+        "name": "Deportes y fitness",
+        "parent": null,
+        "slug": "Deportes-y-fitness-S30D26",
+        "source_order": 9
+      },
+      {
+        "ancestors": [],
+        "category_id": "cc9a6cb0-6c78-4d1a-8792-3f683bbdc299",
+        "category_key": "O20D30",
+        "meta_description": null,
+        "name": "Exteriores",
+        "parent": null,
+        "slug": "Exteriores-O20D30",
+        "source_order": 10
+      },
+      {
+        "ancestors": [],
+        "category_id": "734b442c-de42-469d-bf12-8719d7ebbaf9",
+        "category_key": "E10D24",
+        "meta_description": null,
+        "name": "Electrónicos",
+        "parent": null,
+        "slug": "Electronicos-E10D24",
+        "source_order": 11
+      },
+      {
+        "ancestors": [],
+        "category_id": "67e595fc-6adc-4ac4-ad57-fb6db9dd8ad7",
+        "category_key": "S20D23",
+        "meta_description": null,
+        "name": "Electrodomésticos",
+        "parent": null,
+        "slug": "Electrodomesticos-S20D23",
+        "source_order": 12
+      },
+      {
+        "ancestors": [],
+        "category_id": "a3389d65-6ac3-4000-9ce7-7511b34f37a9",
+        "category_key": "C10D29",
+        "meta_description": null,
+        "name": "Computadoras, tablets y accesorios",
+        "parent": null,
+        "slug": "Computadoras-tablets-y-accesorios-C10D29",
+        "source_order": 13
+      },
+      {
+        "ancestors": [],
+        "category_id": "a8cfe5ed-0fd1-424b-9ab6-3ef387616840",
+        "category_key": "M10D43",
+        "meta_description": null,
+        "name": "Línea blanca",
+        "parent": null,
+        "slug": "Linea-blanca-M10D43",
+        "source_order": 14
+      },
+      {
+        "ancestors": [],
+        "category_id": "93e97b11-8818-4a3e-8352-8014f70ea60b",
+        "category_key": "F10D40",
+        "meta_description": null,
+        "name": "Moda y accesorios",
+        "parent": null,
+        "slug": "Moda-y-accesorios-F10D40",
+        "source_order": 15
+      },
+      {
+        "ancestors": [],
+        "category_id": "368197de-04c7-4cd7-aadf-69aceb98a05a",
+        "category_key": "F20D27",
+        "meta_description": null,
+        "name": "Muebles",
+        "parent": null,
+        "slug": "Muebles-F20D27",
+        "source_order": 16
+      },
+      {
+        "ancestors": [],
+        "category_id": "207a0b63-fa64-4375-a4f6-573ca627aa13",
+        "category_key": "O10D25",
+        "meta_description": null,
+        "name": "Oficina",
+        "parent": null,
+        "slug": "Oficina-O10D25",
+        "source_order": 17
+      },
+      {
+        "ancestors": [],
+        "category_id": "6755b0f6-90fb-4da3-81a8-503520fdbd9a",
+        "category_key": "R10D22",
+        "meta_description": null,
+        "name": "Suministros para restaurantes",
+        "parent": null,
+        "slug": "Suministros-para-restaurantes-R10D22",
+        "source_order": 18
+      },
+      {
+        "ancestors": [],
+        "category_id": "4069748c-5648-4c37-8237-f60f45b6b730",
+        "category_key": "A10D20",
+        "meta_description": null,
+        "name": "Automotriz",
+        "parent": null,
+        "slug": "Automotriz-A10D20",
+        "source_order": 19
+      },
+      {
+        "ancestors": [],
+        "category_id": "d3138680-2abe-49d3-8d48-dd7ae7c6f02f",
+        "category_key": "T10D46",
+        "meta_description": null,
+        "name": "Juguetes y juegos",
+        "parent": null,
+        "slug": "Juguetes-y-juegos-T10D46",
+        "source_order": 20
+      },
+      {
+        "ancestors": [],
+        "category_id": "ccc0b313-f313-4fb6-bc4b-0b65ba16adb0",
+        "category_key": "L10D22",
+        "meta_description": null,
+        "name": "Equipaje",
+        "parent": null,
+        "slug": "Equipaje-L10D22",
+        "source_order": 21
+      },
+      {
+        "ancestors": [],
+        "category_id": "3dc8309d-8a05-4a5a-ac70-00ee2f1c30c3",
+        "category_key": "U10D72",
+        "meta_description": null,
+        "name": "Óptica",
+        "parent": null,
+        "slug": "Optica-U10D72",
+        "source_order": 22
+      },
+      {
+        "ancestors": [],
+        "category_id": "a234a984-5587-4af0-ab95-c7561ed0f362",
+        "category_key": "U11D13",
+        "meta_description": null,
+        "name": "Audiología",
+        "parent": null,
+        "slug": "Audiologia-U11D13",
+        "source_order": 23
+      },
+      {
+        "ancestors": [],
+        "category_id": "ba6d190c-7757-4e7e-afcd-3f2ee56ff9dd",
+        "category_key": "T20D42",
+        "meta_description": null,
+        "name": "Películas, música y libros",
+        "parent": null,
+        "slug": "Peliculas-musica-y-libros-T20D42",
+        "source_order": 24
+      },
+      {
+        "ancestors": [],
+        "category_id": "e9bbc1e9-7d12-44cb-89bb-d9849283e160",
+        "category_key": "V10D79",
+        "meta_description": null,
+        "name": "Tarjetas de Regalo",
+        "parent": null,
+        "slug": "Tarjetas-de-Regalo-V10D79",
+        "source_order": 25
+      },
+      {
+        "ancestors": [],
+        "category_id": "63f49614-e793-4d11-bbf2-55b54322af6a",
+        "category_key": "J10D44",
+        "meta_description": null,
+        "name": "Joyería y relojes",
+        "parent": null,
+        "slug": "Joyeria-y-relojes-J10D44",
+        "source_order": 26
+      }
+    ],
+    "offset_200_required": false,
+    "requested_limit": 200,
+    "root_categories_returned": 26,
+    "root_ids_sha256": "bbb2c133c5ccac0a7be13403e6e5419c12e52aa9fbd7bc238e2713e3ab2fb9b4",
+    "root_keys_sha256": "cc9961140ab78a523aafee6c45a7be9837a9a45ba20b018809b44193eacd45c9",
+    "short_page_terminal": true,
+    "unique_ids": 26,
+    "unique_keys": 26,
+    "unique_slugs": 26
+  }
+}

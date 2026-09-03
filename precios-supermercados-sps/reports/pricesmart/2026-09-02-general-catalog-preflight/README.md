@@ -1,5 +1,9 @@
 # PriceSmart Honduras — preflight offline del catálogo general
 
+> Estado posterior: el probe autorizado ya demostró 26 categorías raíz. La
+> evidencia live y el siguiente gate están en
+> [`../2026-09-02-taxonomy-probe/README.md`](../2026-09-02-taxonomy-probe/README.md).
+
 ## Resultado
 
 Este preflight no hizo tráfico nuevo a PriceSmart ni operaciones Turso. Recorrió
