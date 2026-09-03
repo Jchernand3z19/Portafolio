@@ -6,24 +6,26 @@ GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad
 
 Turso `precios-supermercados` contiene las cuatro cadenas terminadas y ocho
 ubicaciones aceptadas: La Colonia SPS/TGU, Colonial SPS, Walmart SPS/TGU FFAA/TGU
-El Sauce y PriceSmart SPS 6603/Florencia 6602. Las primeras cargas de Colonial,
-Walmart y PriceSmart se ejecutaron exclusivamente desde snapshots versionados y
-con SHA comprobado; no hubo recrawl. PriceSmart conserva el alcance demostrado
-`G10D03 / Alimentos`, no todo el sitio.
+El Sauce y PriceSmart SPS 6603/Florencia 6602. PriceSmart ya contiene todos los
+departamentos públicos: 2,766 productos fuente y 6,078 SKU actuales por club. Las
+cargas se ejecutaron exclusivamente desde snapshots versionados y con SHA
+comprobado; no hubo recrawl.
 
 La huella final del esquema es
 `c971e706a2de9872b2351a1546041ef7c607f263afef39c3776c72b9bee1a46e`:
-cinco tablas, cuatro supermercados, ocho ubicaciones, 35,873 productos, 74,328
-periodos históricos y 13 runs. Hay cero periodos actuales duplicados, cero fallos
+cinco tablas, cuatro supermercados, ocho ubicaciones, 40,824 productos, 84,230
+periodos históricos y 15 runs. Hay cero periodos actuales duplicados, cero fallos
 FK e `integrity_check=ok`. La comparación exacta de checkpoints encontró cero
 cambios en La Colonia y Colonial durante las cargas posteriores; los seis
 snapshots nuevos tienen cero faltantes, extras o diferencias comerciales frente
 al estado productivo.
 
-La operación consumió 1,788,011 filas leídas y 513,705 filas escritas. El cierre
-real quedó en 2,029,820/500,000,000 lecturas y 545,341/10,000,000 escrituras, plan
+La ampliación PriceSmart consumió 866,110 filas leídas y 86,010 filas escritas,
+incluidas sus verificaciones adyacentes. El cierre real quedó en
+3,041,775/500,000,000 lecturas y 631,351/10,000,000 escrituras, 29 MB, plan
 `starter`, overages deshabilitados y reset indicado para el 2026-09-30 18:00 CST.
-Ver [evidencia, hashes, run IDs y deltas medidos](../reports/turso-production/2026-09-02-all-completed/README.md).
+Ver [evidencia final PriceSmart](../reports/turso-production/2026-09-02-pricesmart-complete/README.md)
+y la [carga inicial de todas las cadenas](../reports/turso-production/2026-09-02-all-completed/README.md).
 
 Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE TRACKING
 WEB**. No existen ubicaciones productivas de esas cadenas, Paiz ni PriceSmart El
@@ -94,14 +96,14 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — catálogo público completo, delta Turso pendiente
+## PriceSmart Honduras — catálogo público completo en Turso
 
 El catálogo público completo quedó capturado y validado para SPS club `6603` y
 Florencia club `6602`. El Sauce `6604` permanece excluido. La captura restante
 usó únicamente `POST /api/br_discovery/getProductsByKeyword`, `rows=200` y
 concurrencia 1: 50 POST, 50 HTTP 200, cero retries, 3,306 documentos y 30.85
-segundos. Sumado al intento fail-closed previo, la fase consumió 51 POST. No hubo
-escritura Turso.
+segundos. Sumado al intento fail-closed previo, la fase consumió 51 POST. Esa
+captura no escribió en Turso.
 
 Alimentos se reutilizó desde el full verificado sin recrawl. Las 23 raíces no
 vacías restantes se reconstruyeron desde `start=0`; Hogar y Moda usaron offsets 0
@@ -123,19 +125,22 @@ La validación offline parte del checkpoint productivo de Alimentos. Por ubicaci
 1,127 estados quedan comercialmente iguales y el delta agrega 4,951 ofertas SKU,
 correspondientes a 1,642 productos fuente y 3,309 variantes adicionales. No hay
 cambios comerciales previos, cambios sólo de metadata ni identidades persistidas
-ausentes. El SQL productivo abrió 4,951 estados por ubicación, dejó 1,127 sin
-cambio y no cerró periodos. Replay, cinco tablas, aislamiento de La Colonia,
-Colonial y Walmart, FK e integridad pasaron. Ausencia no se interpreta como
-`out_of_stock`.
+ausentes. La carga productiva posterior abrió 4,951 estados por ubicación, dejó
+1,127 sin cambio y no cerró periodos. Los 1,127 periodos Alimentos originales por
+ubicación permanecen abiertos y ligados a sus runs anteriores. Cinco tablas,
+aislamiento de La Colonia, Colonial y Walmart, FK e integridad pasaron. Ausencia
+no se interpreta como `out_of_stock`.
 
 Los requests publicados tienen el `auth_key` público redactado y conservan el hash
 del body original; no contienen cookies, Authorization, tokens ni credenciales.
 Ver [RAW, snapshots, hashes, comparación y delta reproducible](../reports/pricesmart/2026-09-02-complete/README.md).
 
-Estado: `READY_FOR_COMPLETE_TURSO_DELTA_AFTER_SEPARATE_AUTHORIZATION`. La única
-frontera pendiente de PriceSmart es persistir en Turso las 4,951 ofertas nuevas
-por ubicación y verificar el estado final. No recrawlear ni crear recurrencia para
-resolver esa frontera.
+Estado: `PRICESMART_COMPLETE_IN_PRODUCTION`. Turso contiene 6,078 periodos
+actuales por ubicación, 12,156 en total, cero cerrados, cero duplicados actuales y
+los hashes exactos de los dos snapshots. La operación consumió 866,110 lecturas y
+86,010 escrituras, incluidas las verificaciones. Ver la
+[evidencia productiva final](../reports/turso-production/2026-09-02-pricesmart-complete/README.md).
+No recrawlear ni crear recurrencia.
 
 ## Walmart — primer full aceptado y persistencia validada offline
 
@@ -627,16 +632,13 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 ## Pendiente operativo
 
 ```text
-1. publicar y fusionar la evidencia del catálogo completo PriceSmart;
-2. con autorización productiva separada, persistir el delta de 4,951 SKU por ubicación;
-3. verificar Turso contra los hashes y conteos aceptados;
-4. mantener recurrencia separada hasta una autorización explícita.
+PriceSmart = cerrado; no quedan cargas, validaciones ni publicaciones pendientes.
+Mantener cualquier recurrencia nueva separada hasta una autorización explícita.
 ```
 
-Maxi/DF queda cerrado como NO-GO temporal. PriceSmart completo está listo para el
-delta productivo, pero la escritura aún no está autorizada. La superficie GraphQL
-`changeme` permanece cerrada; no probar credenciales ni configuración. No activar
-cobros ni ampliar la arquitectura.
+Maxi/DF queda cerrado como NO-GO temporal. La superficie GraphQL `changeme`
+permanece cerrada; no probar credenciales ni configuración. No activar cobros ni
+ampliar la arquitectura.
 
 ## Fuera del alcance actual
 

@@ -8,7 +8,7 @@
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
 - Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-# Fase activa — catálogo completo PriceSmart listo para gate Turso
+# Fase activa — PriceSmart completo en producción
 
 Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE
 TRACKING WEB**. No reabrir esas cadenas sin una fuente digital pública nueva y
@@ -27,10 +27,11 @@ y 3,309 variantes adicionales. No hay cambios comerciales previos, cambios sólo
 de metadata ni ausencias. La persistencia offline, replay, aislamiento, FK e
 integridad pasaron sobre las cinco tablas.
 
-La única frontera pendiente es la escritura productiva Turso. No ejecutarla sin
-una autorización separada. No recrawlear, no consultar El Sauce, no crear
-recurrencia y no interpretar ausencia como `out_of_stock`. Publicar, corregir CI,
-fusionar y verificar `main` sí están autorizados para esta fase.
+El delta quedó persistido en Turso: 4,951 periodos nuevos por ubicación y 1,127
+estados previos sin cambio; cero cierres. PriceSmart termina con 6,078 estados
+actuales por ubicación, 12,156 en total, y los periodos originales de Alimentos
+siguen abiertos. No hay trabajo PriceSmart pendiente. No recrawlear, no consultar
+El Sauce, no crear recurrencia y no interpretar ausencia como `out_of_stock`.
 
 # Referencia — cierre inicial de La Colonia sin sobreingeniería
 
