@@ -1,0 +1,129 @@
+{
+  "absence_policy": "absence_does_not_imply_out_of_stock",
+  "baseline_loads": [
+    {
+      "history_closed": 0,
+      "history_opened": 1127,
+      "history_unchanged": 0,
+      "location_id": "pricesmart_sps",
+      "products_processed": 1127,
+      "replayed": false,
+      "run_id": "baseline-6603",
+      "source_json_sha256": "9a352afa72b2bef89404b03d81ef22494cee7c02af262098a89730b58bdbbff3"
+    },
+    {
+      "history_closed": 0,
+      "history_opened": 1127,
+      "history_unchanged": 0,
+      "location_id": "pricesmart_tgu",
+      "products_processed": 1127,
+      "replayed": false,
+      "run_id": "baseline-6602",
+      "source_json_sha256": "9b65f2451f026e6591650e585fb14e9da5f1e206852e94869d4514734f092213"
+    }
+  ],
+  "complete_loads": [
+    {
+      "history_closed": 0,
+      "history_opened": 4951,
+      "history_unchanged": 1127,
+      "location_id": "pricesmart_sps",
+      "products_processed": 6078,
+      "replayed": false,
+      "run_id": "complete-6603",
+      "source_json_sha256": "eeabfa9f35f9cfce269aa6a196fcbe471654cfb26754431001cf7cc37593aaec"
+    },
+    {
+      "history_closed": 0,
+      "history_opened": 4951,
+      "history_unchanged": 1127,
+      "location_id": "pricesmart_tgu",
+      "products_processed": 6078,
+      "replayed": false,
+      "run_id": "complete-6602",
+      "source_json_sha256": "2d09bfe3e17f65197008e9392a16af3e99802a8f3b36753f5c901b14aacc44e6"
+    }
+  ],
+  "counts": {
+    "locations": 6,
+    "price_history": 12159,
+    "products": 6081,
+    "scrape_runs": 7,
+    "supermarkets": 4
+  },
+  "delta_per_location": {
+    "absent_from_new_snapshot": 0,
+    "existing_commercial_change": 0,
+    "existing_unchanged": 1127,
+    "metadata_only": 0,
+    "new_sku_offers": 4951,
+    "new_source_products": 1642,
+    "new_variants_beyond_first": 3309
+  },
+  "duplicate_open_periods": 0,
+  "foreign_key_violations": 0,
+  "integrity_check": "ok",
+  "isolation": {
+    "after": {
+      "colonial": "453b4288d37682d5cebaea32b3e60fc5f168816f412b9b959f00fba307469edc",
+      "la_colonia": "37be1fccafb2662e2373e03948951b54c18e11063a54d54a49cd6da993afe4d3",
+      "walmart": "3e159661396ebf1ffce45e1ea1a9f54fd4ea48187b24980801e61eb3447bab59"
+    },
+    "before": {
+      "colonial": "453b4288d37682d5cebaea32b3e60fc5f168816f412b9b959f00fba307469edc",
+      "la_colonia": "37be1fccafb2662e2373e03948951b54c18e11063a54d54a49cd6da993afe4d3",
+      "walmart": "3e159661396ebf1ffce45e1ea1a9f54fd4ea48187b24980801e61eb3447bab59"
+    },
+    "unchanged": true
+  },
+  "offline_only": true,
+  "pricesmart_current_by_location": [
+    {
+      "location_id": "pricesmart_sps",
+      "offers": 6078,
+      "priced": 5404,
+      "promotions": 39,
+      "unpriced": 674
+    },
+    {
+      "location_id": "pricesmart_tgu",
+      "offers": 6078,
+      "priced": 5232,
+      "promotions": 38,
+      "unpriced": 846
+    }
+  ],
+  "replay_unchanged": true,
+  "replays": [
+    {
+      "history_closed": 0,
+      "history_opened": 0,
+      "history_unchanged": 0,
+      "location_id": "pricesmart_sps",
+      "products_processed": 0,
+      "replayed": true,
+      "run_id": "complete-6603",
+      "source_json_sha256": "eeabfa9f35f9cfce269aa6a196fcbe471654cfb26754431001cf7cc37593aaec"
+    },
+    {
+      "history_closed": 0,
+      "history_opened": 0,
+      "history_unchanged": 0,
+      "location_id": "pricesmart_tgu",
+      "products_processed": 0,
+      "replayed": true,
+      "run_id": "complete-6602",
+      "source_json_sha256": "2d09bfe3e17f65197008e9392a16af3e99802a8f3b36753f5c901b14aacc44e6"
+    }
+  ],
+  "schema_fingerprint": "c971e706a2de9872b2351a1546041ef7c607f263afef39c3776c72b9bee1a46e",
+  "schema_tables": [
+    "locations",
+    "price_history",
+    "products",
+    "scrape_runs",
+    "supermarkets"
+  ],
+  "table_count": 5,
+  "turso_access": false
+}

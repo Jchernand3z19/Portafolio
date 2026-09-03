@@ -190,13 +190,15 @@ def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID)
     if supermarket_id == "pricesmart":
         club = PRICESMART_CLUBS[location_id]
         channel = PRICESMART_CHANNELS[location_id]
+        alimentos_scope = data.get("scope") == "public_ecommerce_club_bound_G10D03"
+        complete_scope = data.get("scope") == "public_ecommerce_club_bound_all_departments"
         if (
             data.get("currency") != "HNL"
-            or data.get("scope") != "public_ecommerce_club_bound_G10D03"
+            or not (alimentos_scope or complete_scope)
             or data.get("club_id") != club
             or data.get("channel_id") != channel
-            or data.get("category_id") != "G10D03"
-            or data.get("category_name") != "Alimentos"
+            or (alimentos_scope and (data.get("category_id") != "G10D03" or data.get("category_name") != "Alimentos"))
+            or (complete_scope and (data.get("category_id") != "ALL_ROOTS" or data.get("category_name") != "Todos los departamentos"))
             or data.get("membership_count") != reported
             or data.get("membership_sha256") != hashlib.sha256("\n".join(sorted(source_products)).encode()).hexdigest()
             or data.get("sku_membership_sha256") != hashlib.sha256("\n".join(sorted(row["source_key"] for row in rows)).encode()).hexdigest()

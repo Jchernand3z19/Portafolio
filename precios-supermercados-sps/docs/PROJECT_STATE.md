@@ -94,208 +94,48 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — Alimentos completo y persistido; catálogo general incompleto
+## PriceSmart Honduras — catálogo público completo, delta Turso pendiente
 
-La auditoría offline del catálogo general revisó los siete RAW PriceSmart, 194
-requests y 194 respuestas de productos. Todas las consultas existentes usan
-`q=G10D03`, `search_type=category`; no existe una consulta raíz o sin filtro. El
-facet estructurado tiene 117 nodos, pero todos pertenecen al árbol explícito de
-`G10D03 / Alimentos`: una raíz, 19 padres y 98 hojas. La estructura es estable;
-los documentos no incluyen membership de categoría y el estado PDP de control sólo
-declara una hoja. Por tanto:
+El catálogo público completo quedó capturado y validado para SPS club `6603` y
+Florencia club `6602`. El Sauce `6604` permanece excluido. La captura restante
+usó únicamente `POST /api/br_discovery/getProductsByKeyword`, `rows=200` y
+concurrencia 1: 50 POST, 50 HTTP 200, cero retries, 3,306 documentos y 30.85
+segundos. Sumado al intento fail-closed previo, la fase consumió 51 POST. No hubo
+escritura Turso.
 
-```text
-PRICESMART G10D03 / ALIMENTOS COMPLETO
-CATÁLOGO GENERAL PRICESMART INCOMPLETO
-```
+Alimentos se reutilizó desde el full verificado sin recrawl. Las 23 raíces no
+vacías restantes se reconstruyeron desde `start=0`; Hogar y Moda usaron offsets 0
+y 200, las demás sólo 0. Las 24 raíces no vacías suman 2,777 membresías de
+producto y 6,115 membresías SKU por club. La taxonomía se superpone: 11 productos
+y 37 membresías SKU aparecen en más de una raíz. Los documentos repetidos fueron
+idénticos. Después de deduplicar, cada club contiene exactamente 2,766 productos
+y 6,078 SKU. No hubo huecos de paginación, repeticiones inesperadas ni
+solapamiento entre Alimentos y las raíces restantes.
 
-El código cliente capturado deriva una operación pública de lectura
-`POST /api/ct/getFacetCategories`, con `onlyParent` y límite configurado de 200,
-pero esa ruta aún no fue probada live. Hace falta una autorización nueva y acotada
-antes del primer POST. No se puede calcular el full restante hasta demostrar las
-raíces y medir `numFound` por padre. El snapshot Alimentos existente es reutilizable
-sin recrawl. [Preflight, árbol y gate reproducible](../reports/pricesmart/2026-09-02-general-catalog-preflight/README.md).
+Los 6,078 SKU son compartidos entre clubes. Hay 5,129 con precio en ambos y 115
+diferencias reales de `current_price`; por ello SPS y Florencia deben conservarse
+como contextos productivos separados. El campo de precio difiere en 493 SKU al
+incluir casos cotizados en un solo club; hay tres diferencias de precio regular,
+378 de promoción y 995 de disponibilidad. De estas últimas, 833 son únicamente
+de disponibilidad y no intervienen en la decisión de granularidad.
 
-Full controlado del `2026-09-01`, limitado a SPS 6603 y Florencia 6602. El Sauce
-6604 no fue consultado. Se ejecutaron **188 POST HTTP, 94 por club, todos 200,
-cero retries, concurrencia 1 y 107.833 s**; no hubo residual, 403, 429 ni CAPTCHA.
-Quedaron 20 POST sin consumir del máximo 208. No login, carrito, checkout,
-mutación, Turso ni recurrencia.
+La validación offline parte del checkpoint productivo de Alimentos. Por ubicación,
+1,127 estados quedan comercialmente iguales y el delta agrega 4,951 ofertas SKU,
+correspondientes a 1,642 productos fuente y 3,309 variantes adicionales. No hay
+cambios comerciales previos, cambios sólo de metadata ni identidades persistidas
+ausentes. El SQL productivo abrió 4,951 estados por ubicación, dejó 1,127 sin
+cambio y no cerró periodos. Replay, cinco tablas, aislamiento de La Colonia,
+Colonial y Walmart, FK e integridad pasaron. Ausencia no se interpreta como
+`out_of_stock`.
 
-La frontera completa aceptada es la categoría pública `G10D03 / Alimentos`, cuyo
-facet y `numFound` declaran 1,124 productos. No se afirma cobertura de todos los
-departamentos del sitio. Cada club produjo 1,124 productos únicos / 1,127 SKU,
-con offsets `0..1116`, última página de ocho, cero duplicados y membership idéntico:
+Los requests publicados tienen el `auth_key` público redactado y conservan el hash
+del body original; no contienen cookies, Authorization, tokens ni credenciales.
+Ver [RAW, snapshots, hashes, comparación y delta reproducible](../reports/pricesmart/2026-09-02-complete/README.md).
 
-```text
-SPS 6603       = 1,080 SKU con precio / 18 promociones / 829 in_stock / 298 out_of_stock
-Florencia 6602 = 1,074 SKU con precio / 17 promociones / 844 in_stock / 283 out_of_stock
-```
-
-El parser sólo acepta promociones cuando regular y ahorro negativo están declarados
-y son consistentes. En ofertas con precio, la ausencia de ambos campos solicitados
-significa `is_promotion=false`; sin precio se conserva promoción `null` y
-`out_of_stock`. Availability exige conjuntamente `availability=true` e
-`inventory=in stock`.
-
-La comparación SPS/TGU contiene 1,040 SKU con precio comparable y 110 diferencias
-de precio, además de tres diferencias de precio regular, 74 de promoción y 203 de
-availability; 130 de estas últimas son sólo availability. Ambos contextos aceptados
-permanecen independientes. Esto no reabre El Sauce.
-
-La persistencia offline cargó 1,127 ofertas por ubicación sobre las cinco tablas,
-sin FK rotas ni periodos abiertos duplicados, con `PRAGMA integrity_check=ok` y
-replay sin escritura. Los hashes lógicos de La Colonia, Colonial y Walmart no
-cambiaron. La migración puntual amplía a PriceSmart la oferta nula `out_of_stock`
-ya admitida para Walmart y preserva el estado previo. Fingerprint destino:
-`c971e706a2de9872b2351a1546041ef7c607f263afef39c3776c72b9bee1a46e`.
-La suite completa pasó localmente: 2,012 tests, con 21 skips esperados.
-
-[RAW, hashes, snapshots, parser y SQL offline](../reports/pricesmart/2026-09-01-full/README.md).
-Ese alcance Alimentos ya fue cargado y verificado en Turso por la operación
-productiva del 2026-09-02. Completar el catálogo debe aplicar más adelante un delta
-incremental; no borrar ni recrear el historial existente.
-
-### Probe de binding previo y decisión TGU
-
-Probe CDP aceptado del `2026-09-01`, dentro de la autorización live de 24 horas:
-una sesión anónima, una carga, tres clubes guardados por UI, cuatro XHR comerciales
-retenidas, seis replays/probes directos, cero retries, concurrencia 1 y 246.272 s
-de navegador. No hubo 403, 429 ni CAPTCHA. El navegador se cerró antes del análisis
-offline; no GraphQL, login, dirección, carrito, checkout, full, persistencia ni
-Turso.
-
-El flujo público real quedó reproducido:
-
-```text
-Recoger en club
-→ lápiz / editar
-→ seleccionar 6603 / 6602 / 6604
-→ Guardar Club Preferido
-→ POST /api/br_discovery/getProductsByKeyword
-```
-
-El estado visible, cookies y channel final vinculan `6603` con San Pedro Sula,
-`6602` con Florencia y `6604` con El Sauce. `view_id` sigue siendo `HN`; el request
-transporta el club solicitando `price_HN_<club>`, `availability_HN_<club>` e
-`inventory_HN_<club>` en `fl`, y la respuesta devuelve esos campos por SKU. Tres
-replays exactos sin cookie recibieron HTTP 200 y JSON semánticamente idéntico al
-navegador; Florencia y El Sauce también coincidieron byte a byte. El cookie
-`vsf-channel` todavía tenía el contexto anterior cuando se disparó cada XHR, así
-que no se usa como prueba del binding contemporáneo de esta operación.
-
-Las tres respuestas comparten las mismas 12 identidades `pid = master_sku` y 11
-tienen precio comparable en los tres clubes. Resultado comercial:
-
-```text
-current_price differences = 0 / 11 comparables
-reported_regular_price values declared = 0
-reported_regular_price differences observed = 0
-is_promotion values declared = 0
-is_promotion differences observed = 0
-```
-
-El SKU control `479223` declara L 359.95 e `in_stock` en los tres clubes. Los
-campaign IDs no prueban promoción de precio. El SKU `464663` carece de precio en
-SPS y Florencia mientras está agotado y sí tiene precio/stock en El Sauce; no se
-cuenta como igualdad ni como diferencia comparable.
-
-Florencia vs El Sauce: 12 SKU compartidos, 11 comparables, cero diferencias de
-precio/regular/promoción, tres diferencias de availability y dos diferencias
-exclusivamente de availability entre SKU comercialmente comparables. **Decisión
-TGU: conservar sólo Florencia `6602` como contexto comercial representativo.**
-SPS `6603` queda demostrado como contexto independiente. El Sauce `6604` no se
-conserva como tercer catálogo; availability puede analizarse aparte.
-
-Paginación validada con tres requests acotados: SPS y Florencia `start=12`
-devolvieron 12 SKU sin solape con página 1; Florencia `start=1116` devolvió los
-ocho finales. Total 1,124, `rows=12`, 94 páginas por contexto. Presupuesto de un
-eventual full para SPS + Florencia: **188 POST base, 20 retries, máximo 208 POST,
-concurrencia 1, 30 minutos y aproximadamente 10.64 MB RAW sin comprimir**. Es sólo
-preflight; full requiere autorización separada.
-
-[RAW, comparación, hashes, paginación y decisión](../reports/pricesmart/2026-09-01-club-binding-probe/README.md).
-No crear aún scraper productivo, fixture comercial, locations, persistencia,
-workflow, recurrencia ni cambio de modelo.
-
-### Captura anterior — fuente HN reproducida sin binding
-
-La captura CDP del `2026-09-01` observó la petición comercial real:
-`POST https://www.pricesmart.com/api/br_discovery/getProductsByKeyword`. La carga
-de una página devolvió 12/1,124 productos y un replay directo produjo el mismo body
-SHA-256. Sólo fueron necesarios `Accept`, `Content-Type` y `Referer`; no hubo
-cookie, login, membresía ni carrito. El SKU `479223` enlaza PID, master SKU y
-variant SKU, declara HNL con dos decimales, `price_HN=35995`, y coincide con el
-precio visible L 359.95. `availability_HN=true` e `inventory_HN=in stock` se
-registran aparte. Los campos solicitados de precio regular/ahorro no aparecieron y
-los campaign IDs no se interpretan como promoción de precio.
-
-La página anónima mostraba `Seleccionar entrega` y el payload sólo tenía
-`view_id=HN`; no existe `6603`, club ni channel en la petición. La respuesta sí
-expone facets `price_HN_6602`, `price_HN_6603` y `price_HN_6604`, con 1,072, 1,078
-y 1,061 productos en buckets respectivamente, pero los documentos no contienen
-esos valores por SKU. No hay SKU comparable por club, diferencias comerciales ni
-decisión TGU. Availability no cambia esa conclusión.
-
-Ledger: una sesión, una carga de dos permitidas, una XHR comercial, un replay de
-tres permitidos, cero retries y concurrencia 1. La ventana empezó
-`03:29:20.765Z` y venció `03:34:20.765Z`; el replay terminó `03:34:48.684Z`,
-27.919 s tarde. **Outcome B: fuente pública HN demostrada; binding SPS no
-demostrado y protocolo temporal no conforme.** No parser, fixture, scraper, full,
-presupuesto, persistencia, modelo, workflow ni Turso.
-[RAW y decisión](../reports/pricesmart/2026-09-01-browser-request-probe/README.md).
-
-### Historial GraphQL
-
-Autorización registrada por 24 horas: 2026-08-31T21:53:50Z a
-2026-09-01T21:53:50Z. El probe cerró su tramo GET en 8 intentos: 7 HTTP 200, un
-fallo CA antes de respuesta seguido de un retry, cero redirects, cuatro assets,
-concurrencia 1 y 303.054 s. No browser, POST, mutación, login, carrito, full,
-persistencia ni SQL Turso.
-
-El estado Nuxt identifica `https://graphql-commerce.bloomreach.io`, tenant
-`pricesmart`, país `HND` y consultas públicas `channels`,
-`productProjectionsSearch`, `inventoryEntries` y `products`. El esquema incluye
-precio base/descontado, moneda/centavos, `discount.isActive` y disponibilidad por
-channel. Clubes: `6602` Florencia (default), `6603` San Pedro Sula y `6604` El
-Sauce; ecommerce habilitado en los tres.
-
-Los HTML GET de búsqueda no son aceptables como datos: `Bolsas` devolvió estado de
-`Huevos` y `page=3&q=Vegetables` devolvió página 1 de `jabon dove`. La ficha GET
-conserva identidad `516411`, pero no contiene el precio `407.95`. Cero SKU con
-precio comparable por club; diferencias de efectivo, regular, promoción y sólo
-availability siguen `null`. No decidir granularidad TGU por availability.
-
-El endpoint raíz se probó primero y cerró temprano: **1/8 POST, cero retries,
-concurrencia 1, 0.2964 s**. `channels` recibió HTTP 404 `Cannot POST /`; esa
-petición no alcanzó GraphQL.
-
-La extensión posterior a `/graphql` también cerró en el primer request: **1/7
-POST, 6 no consumidos, cero retries, concurrencia 1, 0.323184 s**. El servidor sí
-validó GraphQL, pero respondió HTTP 400 `GRAPHQL_VALIDATION_FAILED`: no reconoce
-`channels`, `Locale` ni `Point` y propone `findChannels`. No fue un error de auth
-ni catálogo vacío. `findChannels` y una consulta adaptada no estaban autorizados,
-por lo que no se enviaron `products` ni `productProjectionsSearch`.
-
-La tercera extensión consumió **2/3 POST, cero retries, concurrencia 1 y 17.432829
-s**. La introspección limitada recibió HTTP 400 porque Apollo Server la deshabilita.
-`findChannels { __typename }` recibió HTTP 200 con `BAD_USER_INPUT`,
-`data.findChannels = null` y upstream 404 a
-`https://api.sphere.io/changeme/channels?offset=0&limit=500`. El placeholder
-`changeme` demuestra ausencia de binding al proyecto PriceSmart con los headers
-públicos observados; cambiar argumentos no lo corrige. El tercer POST quedó sin
-usar.
-
-Sigue habiendo cero SKU comparables y ninguna decisión de granularidad TGU. Precio
-efectivo, regular, promoción, availability y paginación permanecen no evaluables.
-**La superficie GraphQL externa queda bloqueada.** La captura CDP posterior
-encontró otra API pública de catálogo país, pero no corrige el binding de esa ruta
-ni demuestra un club. [RAW y cierre GraphQL](../reports/pricesmart/2026-08-31-graphql-schema-probe/README.md).
-
-Última consulta de cuenta (auditoría previa): Starter, overages deshabilitados,
-713.7 M / 500 M lecturas (143%). La CLI mostró reset **30/9/2026 18:00 CST**, frente
-al 31/8 anterior: discrepancia sin causa ni habilitación SQL confirmadas. No se
-repitió la consulta en este probe; no SQL, cambio de plan ni cobros.
+Estado: `READY_FOR_COMPLETE_TURSO_DELTA_AFTER_SEPARATE_AUTHORIZATION`. La única
+frontera pendiente de PriceSmart es persistir en Turso las 4,951 ofertas nuevas
+por ubicación y verificar el estado final. No recrawlear ni crear recurrencia para
+resolver esa frontera.
 
 ## Walmart — primer full aceptado y persistencia validada offline
 
@@ -787,19 +627,16 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 ## Pendiente operativo
 
 ```text
-1. ejecutar el probe mínimo autorizado de taxonomía raíz PriceSmart;
-2. medir `numFound` por padre y calcular las particiones y presupuesto full exactos;
-3. capturar sólo el catálogo PriceSmart restante bajo autorización separada;
-4. consolidar y validar offline contra Alimentos existente y contra Turso;
-5. persistir únicamente el delta PriceSmart bajo una autorización productiva nueva;
-6. mantener recurrencia separada hasta terminar el catálogo general.
+1. publicar y fusionar la evidencia del catálogo completo PriceSmart;
+2. con autorización productiva separada, persistir el delta de 4,951 SKU por ubicación;
+3. verificar Turso contra los hashes y conteos aceptados;
+4. mantener recurrencia separada hasta una autorización explícita.
 ```
 
-Maxi/DF queda cerrado como NO-GO temporal. PriceSmart Alimentos ya está persistido,
-pero el catálogo general permanece incompleto. La superficie GraphQL `changeme`
-permanece cerrada; no probar credenciales ni configuración. Los 20 POST no
-consumidos del full anterior no se reutilizan. No activar cobros ni ampliar la
-arquitectura.
+Maxi/DF queda cerrado como NO-GO temporal. PriceSmart completo está listo para el
+delta productivo, pero la escritura aún no está autorizada. La superficie GraphQL
+`changeme` permanece cerrada; no probar credenciales ni configuración. No activar
+cobros ni ampliar la arquitectura.
 
 ## Fuera del alcance actual
 

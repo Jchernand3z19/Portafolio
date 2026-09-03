@@ -8,39 +8,29 @@
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
 - Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-# Fase activa — completar catálogo general PriceSmart, discovery bloqueado por gate
+# Fase activa — catálogo completo PriceSmart listo para gate Turso
 
-Maxi Despensa y Despensa Familiar se clasifican **NO-GO TEMPORAL PARA PRICE
-TRACKING WEB**: el probe público no demostró precios activos, API de precios ni
-contexto comercial reproducible. No continuar búsqueda, scraper, persistencia,
-full crawl, imágenes, PDF, OCR, fuentes indirectas ni cambios de modelo para estas
-dos cadenas. Sólo reabrirlas ante una fuente digital pública nueva y una instrucción
-explícita. Ver `docs/supermercados/maxi-df-auditoria-preflight.md`.
+Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE
+TRACKING WEB**. No reabrir esas cadenas sin una fuente digital pública nueva y
+una instrucción explícita.
 
-PriceSmart Honduras ya tiene binding y full aceptado para SPS 6603 y Florencia
-6602 en `POST /api/br_discovery/getProductsByKeyword`. `G10D03 / Alimentos` está
-completo: 1,124 productos y 1,127 SKU por club. Ese alcance ya fue persistido en
-Turso y no debe borrarse, reconstruirse ni recrawlearse por conveniencia. El Sauce
-6604 permanece excluido.
+PriceSmart Honduras quedó completo para SPS club 6603 y Florencia club 6602. El
+Sauce 6604 permanece excluido. `reports/pricesmart/2026-09-02-complete/` demuestra
+26 raíces, 24 no vacías, 2,766 productos y 6,078 SKU únicos por club. El full
+restante consumió 50 POST HTTP 200, cero retries; Alimentos se reutilizó sin
+recrawl. Los dos clubes conservan contexto separado por 115 diferencias reales de
+precio entre SKU cotizados en ambos.
 
-El catálogo general PriceSmart sigue incompleto. La auditoría offline de los siete
-RAW demostró que las 194 consultas de productos existentes están limitadas a
-`G10D03`; su facet de 117 categorías es exclusivamente el árbol de Alimentos. El
-bundle capturado deriva la operación pública de lectura
-`POST /api/ct/getFacetCategories`, pero esa ruta no se ha probado live. El siguiente
-paso es un probe de taxonomía con autorización específica; después se medirán
-totales por raíz y se calculará el full restante. Hasta entonces no hacer tráfico
-PriceSmart, full crawl, SQL Turso ni recurrencia. Ver
-`reports/pricesmart/2026-09-02-general-catalog-preflight/README.md`.
+El delta offline contra el estado productivo Alimentos es, por ubicación: 1,127
+estados sin cambio y 4,951 ofertas SKU nuevas, agrupadas en 1,642 productos fuente
+y 3,309 variantes adicionales. No hay cambios comerciales previos, cambios sólo
+de metadata ni ausencias. La persistencia offline, replay, aislamiento, FK e
+integridad pasaron sobre las cinco tablas.
 
-La Colonia, Colonial, Walmart y el alcance Alimentos de PriceSmart ya están
-persistidos en Turso. Walmart conserva los dos contextos TGU por diferencias
-comerciales demostradas en RAW completo. No tocar esas cadenas durante el discovery
-PriceSmart ni interpretar autorización de probe, full, persistencia y recurrencia
-como permisos intercambiables. Conservar cinco tablas y el hot path eficiente.
-
-Las secciones siguientes conservan las reglas y evidencia del cierre inicial de
-La Colonia; no prohíben esta fase autorizada ni autorizan sustituir la base actual.
+La única frontera pendiente es la escritura productiva Turso. No ejecutarla sin
+una autorización separada. No recrawlear, no consultar El Sauce, no crear
+recurrencia y no interpretar ausencia como `out_of_stock`. Publicar, corregir CI,
+fusionar y verificar `main` sí están autorizados para esta fase.
 
 # Referencia — cierre inicial de La Colonia sin sobreingeniería
 

@@ -28,6 +28,7 @@ CLUBS = {
     },
 }
 SCOPE = "public_ecommerce_club_bound_G10D03"
+COMPLETE_CATALOG_SCOPE = "public_ecommerce_club_bound_all_departments"
 class PriceSmartError(ValueError):
     pass
 def require(condition: object, reason: str) -> None:
@@ -149,6 +150,64 @@ def parse_documents(documents: list[dict], club: str) -> tuple[list[dict], dict[
                 "campaign_ids": doc.get("promoid_HN", []),
             }
     return rows, details
+
+
+def parse_catalog_memberships(
+    category_documents: list[dict], club: str
+) -> tuple[list[dict], dict[str, dict], dict]:
+    """Deduplicate root memberships and parse one complete club catalog.
+
+    The public taxonomy is not a partition: a product can belong to more than one
+    root. Duplicate memberships must carry the exact same source document. The
+    returned rows retain every root name in a deterministic, human-readable
+    category string and every root id/name in source_details.
+    """
+    require(club in CLUBS, "club_invalid")
+    require(isinstance(category_documents, list) and category_documents, "category_documents_invalid")
+    documents_by_pid: dict[str, dict] = {}
+    memberships: dict[str, list[tuple[str, str]]] = {}
+    raw_memberships = 0
+    for group in category_documents:
+        require(isinstance(group, dict), "category_group_invalid")
+        category_id = group.get("category_id")
+        category_name = group.get("category_name")
+        documents = group.get("documents")
+        require(isinstance(category_id, str) and category_id, "category_id_invalid")
+        require(isinstance(category_name, str) and category_name, "category_name_invalid")
+        require(isinstance(documents, list) and documents, "category_documents_invalid")
+        for document in documents:
+            require(isinstance(document, dict), "document_invalid")
+            pid = document.get("pid")
+            require(isinstance(pid, str) and pid, "product_id_invalid")
+            raw_memberships += 1
+            if pid in documents_by_pid:
+                require(documents_by_pid[pid] == document, "cross_category_document_mismatch")
+            else:
+                documents_by_pid[pid] = document
+            pair = (category_id, category_name)
+            memberships.setdefault(pid, [])
+            if pair not in memberships[pid]:
+                memberships[pid].append(pair)
+
+    rows, details = parse_documents(list(documents_by_pid.values()), club)
+    for row in rows:
+        pairs = memberships[row["product_id"]]
+        row["category"] = " | ".join(name for _, name in pairs)
+        detail = details[row["source_key"]]
+        detail["category_ids"] = [category_id for category_id, _ in pairs]
+        detail["category_names"] = [name for _, name in pairs]
+    return rows, details, {
+        "root_memberships": raw_memberships,
+        "unique_products": len(documents_by_pid),
+        "cross_root_products": sum(len(pairs) > 1 for pairs in memberships.values()),
+        "duplicate_product_memberships": raw_memberships - len(documents_by_pid),
+        "sku_memberships": sum(len(document.get("variants") or []) for group in category_documents for document in group["documents"]),
+        "unique_skus": len(rows),
+        "duplicate_sku_memberships": (
+            sum(len(document.get("variants") or []) for group in category_documents for document in group["documents"])
+            - len(rows)
+        ),
+    }
 def _load_hashed(path: Path, expected: str) -> dict:
     require(path.is_file(), "raw_file_missing")
     raw = path.read_bytes()
