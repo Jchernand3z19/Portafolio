@@ -8,7 +8,7 @@
 - `docs/PROJECT_STATE.md` describe el estado operativo vigente.
 - Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
 
-# Fase activa — catálogo general PriceSmart, totales Discovery bloqueados por gate
+# Fase activa — catálogo general PriceSmart, full restante bloqueado por gate
 
 Maxi Despensa y Despensa Familiar se clasifican **NO-GO TEMPORAL PARA PRICE
 TRACKING WEB**: el probe público no demostró precios activos, API de precios ni
@@ -23,15 +23,16 @@ completo: 1,124 productos y 1,127 SKU por club. Ese alcance ya fue persistido en
 Turso y no debe borrarse, reconstruirse ni recrawlearse por conveniencia. El Sauce
 6604 permanece excluido.
 
-El catálogo general PriceSmart sigue incompleto. El probe público autorizado de
-`POST /api/ct/getFacetCategories` demostró 26 categorías raíz únicas; las 26
-declaran `parent=null` y `ancestors=[]`, y la página corta de 26/200 cerró la
-paginación raíz. `G10D03 / Alimentos` es sólo una de ellas. Faltan medir
-`numFound`, facet y muestra de identidad para las otras 25, además del tamaño
-máximo útil de página Discovery. El siguiente paso requiere autorización
-específica y tiene un preflight de hasta 31 POST incluidos tres retries. Hasta
-entonces no hacer más tráfico PriceSmart, full crawl, SQL Turso ni recurrencia.
-Ver `reports/pricesmart/2026-09-02-taxonomy-probe/README.md`.
+El catálogo general PriceSmart sigue incompleto, pero su full restante ya tiene
+presupuesto. El probe Discovery midió las 25 raíces fuera de Alimentos: 1,653
+observaciones, 23 raíces no vacías, dos vacías y 546 nodos taxonómicos al unir la
+evidencia existente. `rows=200` entregó 200/315 productos en Hogar y el offset ya
+está demostrado por el full anterior; ningún padre requiere dividirse en hijos.
+La muestra prueba tres productos compartidos y 11 señales de facet transversales.
+El full mínimo restante requiere 46 POST base más cinco retries, máximo 51, y
+reutiliza Alimentos y el probe SPS sin recrawl. Ese full necesita autorización
+explícita nueva. Hasta entonces no hacer más tráfico PriceSmart, SQL Turso ni
+recurrencia. Ver `reports/pricesmart/2026-09-02-discovery-probe/README.md`.
 
 La Colonia, Colonial, Walmart y el alcance Alimentos de PriceSmart ya están
 persistidos en Turso. Walmart conserva los dos contextos TGU por diferencias

@@ -1,5 +1,9 @@
 # PriceSmart Honduras — probe live de taxonomía raíz
 
+> Estado posterior: el probe Discovery ya midió las 25 raíces pendientes,
+> demostró `rows=200` y calculó el full restante. Ver
+> [`../2026-09-02-discovery-probe/README.md`](../2026-09-02-discovery-probe/README.md).
+
 ## Resultado
 
 El probe autorizado ejecutó **dos POST** públicos de sólo lectura a

@@ -94,7 +94,7 @@ crawl ni modificar el modelo. Sólo una fuente digital pública nueva y demostra
 tratada como trabajo nuevo, permitiría reevaluar ambas cadenas.
 [Preflight y evidencia cerrada](supermercados/maxi-df-auditoria-preflight.md).
 
-## PriceSmart Honduras — Alimentos completo; 26 raíces demostradas
+## PriceSmart Honduras — Alimentos completo; full restante presupuestado
 
 La auditoría offline del catálogo general revisó los siete RAW PriceSmart, 194
 requests y 194 respuestas de productos. Todas las consultas existentes usan
@@ -117,12 +117,25 @@ devolver 26 de un límite de 200; no se solicitó `offset=200`. No hubo Discover
 productos, browser/assets ni Turso. `G10D03 / Alimentos` es una de las 26 raíces;
 las otras 25 todavía no tienen `numFound`, facet ni muestra de identidad observada.
 
-El siguiente gate es un probe Discovery de máximo 31 POST: 25 muestras de
-`start=0`, una por raíz pendiente; hasta tres pruebas adaptativas de tamaño de
-página sobre la raíz pendiente más grande; y tres retries de reserva. No incluye
-G10D03. Sin esa observación no puede calcularse el presupuesto full restante. El
-snapshot Alimentos existente es reutilizable sin recrawl. [RAW, hashes, 26 raíces
-y preflight del siguiente probe](../reports/pricesmart/2026-09-02-taxonomy-probe/README.md).
+El probe Discovery posterior ejecutó 26 POST HTTP 200, cero retries, concurrencia
+1 y 16.381 segundos. Midió las 25 raíces fuera de Alimentos: 1,653 observaciones,
+23 raíces no vacías y dos vacías. `H30D22 / Hogar`, la mayor con 315 productos,
+aceptó `rows=200` y devolvió 200 documentos en el primer intento. No se usaron las
+pruebas de 100/50. Al unir facets y evidencia previa quedan 546 nodos: 26 raíces,
+89 padres, 457 hojas, nivel máximo 3, cero huérfanos y cero colisiones.
+
+La muestra prueba tres productos compartidos entre raíces y 11 SKU compartidos;
+los facets señalan 11 observaciones transversales. Ninguna identidad observada
+coincide con Alimentos, pero el solapamiento exacto sólo se conocerá en el full.
+La suma bruta es 2,777 productos por club; el punto estimado por señales facet es
+2,766 únicos y la proyección de variantes es aproximadamente 6,015 SKU por club,
+con baja confianza hasta la captura completa.
+
+El siguiente gate es el full restante. Reutilizar el probe reduce SPS a 21 POST;
+Florencia necesita 25. Presupuesto: 46 base + cinco retries = 51 POST máximo,
+`rows=200`, concurrencia 1 y 10 minutos. No incluye recrawl de Alimentos, El Sauce
+ni Turso. [RAW, árbol, solapamientos y presupuesto página por
+página](../reports/pricesmart/2026-09-02-discovery-probe/README.md).
 
 Full controlado del `2026-09-01`, limitado a SPS 6603 y Florencia 6602. El Sauce
 6604 no fue consultado. Se ejecutaron **188 POST HTTP, 94 por club, todos 200,
@@ -795,12 +808,10 @@ históricos anteriores siguen siendo evidencia de sus runs, no una lectura actua
 ## Pendiente operativo
 
 ```text
-1. medir `numFound` por las 25 raíces PriceSmart pendientes y el tamaño de página;
-2. calcular las particiones y el presupuesto full exactos;
-3. capturar sólo el catálogo PriceSmart restante bajo autorización separada;
-4. consolidar y validar offline contra Alimentos existente y contra Turso;
-5. persistir únicamente el delta PriceSmart bajo una autorización productiva nueva;
-6. mantener recurrencia separada hasta terminar el catálogo general.
+1. capturar las 23 raíces PriceSmart no vacías restantes bajo autorización full;
+2. consolidar y validar offline contra Alimentos existente y contra Turso;
+3. persistir únicamente el delta PriceSmart bajo una autorización productiva nueva;
+4. mantener recurrencia separada hasta terminar el catálogo general.
 ```
 
 Maxi/DF queda cerrado como NO-GO temporal. PriceSmart Alimentos ya está persistido,

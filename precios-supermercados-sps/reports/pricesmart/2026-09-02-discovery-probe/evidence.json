@@ -1,0 +1,5048 @@
+{
+  "catalog": {
+    "alimentos_num_found": 1124,
+    "gross_product_observations_both_clubs": 5554,
+    "gross_product_observations_per_club": 2777,
+    "remaining_empty_roots": [
+      "U11D13",
+      "J10D44"
+    ],
+    "remaining_nonempty_roots": 23,
+    "remaining_num_found_sum": 1653,
+    "remaining_roots_measured": 25,
+    "root_category_count": 26,
+    "root_plan": [
+      {
+        "category_key": "S10D45",
+        "child_partition_required": false,
+        "facet_nodes": 16,
+        "full_pages_at_rows_200": 1,
+        "name": "Productos de temporada",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 58,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "G10D03",
+        "child_partition_required": false,
+        "full_pages_at_rows_200": null,
+        "name": "Alimentos",
+        "new_sps_requests": 0,
+        "new_tgu_requests": 0,
+        "num_found": 1124,
+        "source": "existing_complete_snapshot",
+        "sps_offsets": [],
+        "tgu_offsets": []
+      },
+      {
+        "category_key": "H30D22",
+        "child_partition_required": false,
+        "facet_nodes": 60,
+        "full_pages_at_rows_200": 2,
+        "name": "Hogar",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 2,
+        "num_found": 315,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          200
+        ],
+        "tgu_offsets": [
+          0,
+          200
+        ]
+      },
+      {
+        "category_key": "H20D09",
+        "child_partition_required": false,
+        "facet_nodes": 36,
+        "full_pages_at_rows_200": 1,
+        "name": "Salud y belleza",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 186,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "G10D08014",
+        "child_partition_required": false,
+        "facet_nodes": 14,
+        "full_pages_at_rows_200": 1,
+        "name": "Licor, cerveza y vino",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 97,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "P10D51",
+        "child_partition_required": false,
+        "facet_nodes": 14,
+        "full_pages_at_rows_200": 1,
+        "name": "Mascotas",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 37,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "B10D27",
+        "child_partition_required": false,
+        "facet_nodes": 11,
+        "full_pages_at_rows_200": 1,
+        "name": "Bebé",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 42,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "H10D21",
+        "child_partition_required": false,
+        "facet_nodes": 29,
+        "full_pages_at_rows_200": 1,
+        "name": "Ferretería y mejoras al hogar",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 78,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "S30D26",
+        "child_partition_required": false,
+        "facet_nodes": 30,
+        "full_pages_at_rows_200": 1,
+        "name": "Deportes y fitness",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 47,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "O20D30",
+        "child_partition_required": false,
+        "facet_nodes": 31,
+        "full_pages_at_rows_200": 1,
+        "name": "Exteriores",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 80,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "E10D24",
+        "child_partition_required": false,
+        "facet_nodes": 25,
+        "full_pages_at_rows_200": 1,
+        "name": "Electrónicos",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 72,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "S20D23",
+        "child_partition_required": false,
+        "facet_nodes": 25,
+        "full_pages_at_rows_200": 1,
+        "name": "Electrodomésticos",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 83,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "C10D29",
+        "child_partition_required": false,
+        "facet_nodes": 12,
+        "full_pages_at_rows_200": 1,
+        "name": "Computadoras, tablets y accesorios",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 33,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "M10D43",
+        "child_partition_required": false,
+        "facet_nodes": 11,
+        "full_pages_at_rows_200": 1,
+        "name": "Línea blanca",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 32,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "F10D40",
+        "child_partition_required": false,
+        "facet_nodes": 44,
+        "full_pages_at_rows_200": 2,
+        "name": "Moda y accesorios",
+        "new_sps_requests": 2,
+        "new_tgu_requests": 2,
+        "num_found": 213,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          0,
+          200
+        ],
+        "tgu_offsets": [
+          0,
+          200
+        ]
+      },
+      {
+        "category_key": "F20D27",
+        "child_partition_required": false,
+        "facet_nodes": 20,
+        "full_pages_at_rows_200": 1,
+        "name": "Muebles",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 46,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "O10D25",
+        "child_partition_required": false,
+        "facet_nodes": 15,
+        "full_pages_at_rows_200": 1,
+        "name": "Oficina",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 16,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "R10D22",
+        "child_partition_required": false,
+        "facet_nodes": 9,
+        "full_pages_at_rows_200": 1,
+        "name": "Suministros para restaurantes",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 21,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "A10D20",
+        "child_partition_required": false,
+        "facet_nodes": 10,
+        "full_pages_at_rows_200": 1,
+        "name": "Automotriz",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 102,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "T10D46",
+        "child_partition_required": false,
+        "facet_nodes": 17,
+        "full_pages_at_rows_200": 1,
+        "name": "Juguetes y juegos",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 25,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "L10D22",
+        "child_partition_required": false,
+        "facet_nodes": 4,
+        "full_pages_at_rows_200": 1,
+        "name": "Equipaje",
+        "new_sps_requests": 0,
+        "new_tgu_requests": 1,
+        "num_found": 12,
+        "source": "discovery_probe",
+        "sps_offsets": [],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "U10D72",
+        "child_partition_required": false,
+        "facet_nodes": 4,
+        "full_pages_at_rows_200": 1,
+        "name": "Óptica",
+        "new_sps_requests": 1,
+        "new_tgu_requests": 1,
+        "num_found": 55,
+        "source": "discovery_probe",
+        "sps_offsets": [
+          12
+        ],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "U11D13",
+        "child_partition_required": false,
+        "facet_nodes": 0,
+        "full_pages_at_rows_200": 0,
+        "name": "Audiología",
+        "new_sps_requests": 0,
+        "new_tgu_requests": 0,
+        "num_found": 0,
+        "source": "discovery_probe",
+        "sps_offsets": [],
+        "tgu_offsets": []
+      },
+      {
+        "category_key": "T20D42",
+        "child_partition_required": false,
+        "facet_nodes": 3,
+        "full_pages_at_rows_200": 1,
+        "name": "Películas, música y libros",
+        "new_sps_requests": 0,
+        "new_tgu_requests": 1,
+        "num_found": 1,
+        "source": "discovery_probe",
+        "sps_offsets": [],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "V10D79",
+        "child_partition_required": false,
+        "facet_nodes": 2,
+        "full_pages_at_rows_200": 1,
+        "name": "Tarjetas de Regalo",
+        "new_sps_requests": 0,
+        "new_tgu_requests": 1,
+        "num_found": 2,
+        "source": "discovery_probe",
+        "sps_offsets": [],
+        "tgu_offsets": [
+          0
+        ]
+      },
+      {
+        "category_key": "J10D44",
+        "child_partition_required": false,
+        "facet_nodes": 0,
+        "full_pages_at_rows_200": 0,
+        "name": "Joyería y relojes",
+        "new_sps_requests": 0,
+        "new_tgu_requests": 0,
+        "num_found": 0,
+        "source": "discovery_probe",
+        "sps_offsets": [],
+        "tgu_offsets": []
+      }
+    ]
+  },
+  "decision": {
+    "full_budget_calculable": true,
+    "general_catalog_complete": false,
+    "next_gate": "explicit remaining full authorization"
+  },
+  "full_budget": {
+    "alimentos_recrawl_requests": 0,
+    "base_post_requests": 46,
+    "clubs": [
+      "6603",
+      "6602"
+    ],
+    "concurrency": 1,
+    "endpoint": "https://www.pricesmart.com/api/br_discovery/getProductsByKeyword",
+    "excluded_club": "6604",
+    "maximum_duration_seconds": 600,
+    "maximum_post_attempts": 51,
+    "new_florencia_base_requests": 25,
+    "new_product_documents_expected": 2875,
+    "new_sps_base_requests_reusing_probe": 21,
+    "retry_reserve": 5,
+    "rows": 200,
+    "stop_if_num_found_changes": true,
+    "turso_operations": 0
+  },
+  "linked_evidence": {
+    "alimentos_full_archive_sha256": "4613c634f584cc3ba157504f5b40cbb04aa94c7c14e65984672babe9e27d1b05",
+    "root_taxonomy_archive_sha256": "68267bbe876abc6efea726d23e7aa22bc8254bb3798f0f8a3e018d8bd5b34771"
+  },
+  "overlap": {
+    "cross_root_product_memberships": {
+      "491504": [
+        "F20D27",
+        "O10D25"
+      ],
+      "502638": [
+        "S10D45",
+        "H30D22"
+      ],
+      "509161": [
+        "S10D45",
+        "O20D30"
+      ]
+    },
+    "cross_root_sku_memberships": {
+      "491504": [
+        "F20D27",
+        "O10D25"
+      ],
+      "502638": [
+        "S10D45",
+        "H30D22"
+      ],
+      "502638-0607766142410": [
+        "S10D45",
+        "H30D22"
+      ],
+      "502638-0607766142427": [
+        "S10D45",
+        "H30D22"
+      ],
+      "502638-0607766142434": [
+        "S10D45",
+        "H30D22"
+      ],
+      "502638-0607766142441": [
+        "S10D45",
+        "H30D22"
+      ],
+      "502638-0607766142458": [
+        "S10D45",
+        "H30D22"
+      ],
+      "502638-0607766142465": [
+        "S10D45",
+        "H30D22"
+      ],
+      "509161": [
+        "S10D45",
+        "O20D30"
+      ],
+      "509161-0086093213268": [
+        "S10D45",
+        "O20D30"
+      ],
+      "509161-0086093974640": [
+        "S10D45",
+        "O20D30"
+      ]
+    },
+    "exact_full_overlap_demonstrated": false,
+    "facet_signal_point_estimate_unique_products_per_club": 2766,
+    "foreign_root_facet_signal_count": 11,
+    "foreign_root_facet_signals": [
+      {
+        "count": 4,
+        "facet_root": "H30D22",
+        "facet_root_name": "Hogar",
+        "query_root": "S10D45"
+      },
+      {
+        "count": 2,
+        "facet_root": "O20D30",
+        "facet_root_name": "Exteriores",
+        "query_root": "S10D45"
+      },
+      {
+        "count": 1,
+        "facet_root": "H30D22",
+        "facet_root_name": "Hogar",
+        "query_root": "P10D51"
+      },
+      {
+        "count": 1,
+        "facet_root": "H10D21",
+        "facet_root_name": "Ferretería y mejoras al hogar",
+        "query_root": "O20D30"
+      },
+      {
+        "count": 3,
+        "facet_root": "F20D27",
+        "facet_root_name": "Muebles",
+        "query_root": "O10D25"
+      }
+    ],
+    "gross_unique_product_upper_bound_per_club": 2777,
+    "identity_proven_cross_root_products": 3,
+    "identity_proven_cross_root_skus": 11,
+    "probe_documents_returned_including_repeated_h30_window": 455,
+    "sampled_product_memberships": 443,
+    "sampled_product_overlap_with_alimentos": 0,
+    "sampled_sku_memberships": 806,
+    "sampled_sku_overlap_with_alimentos": 0,
+    "sampled_unique_products": 440,
+    "sampled_unique_skus": 795
+  },
+  "pagination": {
+    "accepted_on_first_candidate": true,
+    "largest_remaining_num_found": 315,
+    "largest_remaining_root": "H30D22",
+    "prior_offset_pagination_evidence": {
+      "category_key": "G10D03",
+      "maximum_start": 1116,
+      "pages_per_club": 94,
+      "rows": 12
+    },
+    "requested_rows": 200,
+    "returned_documents": 200,
+    "unused_candidates": [
+      100,
+      50
+    ],
+    "useful_page_size_demonstrated": 200
+  },
+  "partition_decision": {
+    "child_partitions_required": [],
+    "empty_roots": [
+      "U11D13",
+      "J10D44"
+    ],
+    "existing_complete_partitions": [
+      "G10D03"
+    ],
+    "productive_root_partitions_total": 24,
+    "reason": "largest root has 315 products, rows=200 is accepted, and prior start pagination advances through a larger parent",
+    "remaining_direct_root_partitions": [
+      "S10D45",
+      "H30D22",
+      "H20D09",
+      "G10D08014",
+      "P10D51",
+      "B10D27",
+      "H10D21",
+      "S30D26",
+      "O20D30",
+      "E10D24",
+      "S20D23",
+      "C10D29",
+      "M10D43",
+      "F10D40",
+      "F20D27",
+      "O10D25",
+      "R10D22",
+      "A10D20",
+      "T10D46",
+      "L10D22",
+      "U10D72",
+      "T20D42",
+      "V10D79"
+    ]
+  },
+  "raw_archive_sha256": "b76f3910b19cc29d1c69baa1d70ac90298e8e95a7ba9d2e9be30643b3af5d848",
+  "run": {
+    "authentication_required": false,
+    "authorization_headers": 0,
+    "captcha_or_rate_limit": false,
+    "club": "6603",
+    "concurrency": 1,
+    "documents_returned": 455,
+    "elapsed_seconds": 16.381348624999987,
+    "endpoint": "https://www.pricesmart.com/api/br_discovery/getProductsByKeyword",
+    "excluded_clubs": [
+      "6602",
+      "6604"
+    ],
+    "finished_at_utc": "2026-09-03T01:35:03.749494+00:00",
+    "http_200": 26,
+    "post_attempts": 26,
+    "remaining_post_budget": 5,
+    "request_auth_key_redacted_in_published_raw": true,
+    "retries": 0,
+    "session_cookies": 0,
+    "started_at_utc": "2026-09-03T01:34:47.367874+00:00",
+    "unexpected_contract": false
+  },
+  "schema_version": 1,
+  "sku_estimate": {
+    "alimentos_exact_skus_per_club": 1127,
+    "confidence": "low_until_full_due_variant_heavy_F10D40_sample",
+    "sample_ratio_projection_sku_observations_per_club": 6015,
+    "sampled_remaining_unique_products": 440,
+    "sampled_remaining_unique_skus": 795
+  },
+  "taxonomy": {
+    "combined_unique_nodes": 546,
+    "facet_nodes_shared_between_root_queries": 14,
+    "maximum_level": 3,
+    "new_facet_observations": 442,
+    "new_facet_unique_nodes": 427,
+    "nodes": [
+      {
+        "category_id": "A10D20",
+        "crumb": "/A10D20",
+        "level": 1,
+        "name": "Automotriz",
+        "parent_id": null,
+        "tree_path": "/A10D20,Automotriz"
+      },
+      {
+        "category_id": "A10D20004",
+        "crumb": "/A10D20/A10D20004",
+        "level": 2,
+        "name": "Gatos, elevadores y soportes para automóvil",
+        "parent_id": "A10D20",
+        "tree_path": "/A10D20,Automotriz/A10D20004,Gatos, elevadores y soportes para automóvil"
+      },
+      {
+        "category_id": "A10D20008",
+        "crumb": "/A10D20/A10D20008",
+        "level": 2,
+        "name": "Arrancadores y cargadores de batería",
+        "parent_id": "A10D20",
+        "tree_path": "/A10D20,Automotriz/A10D20008,Arrancadores y cargadores de batería"
+      },
+      {
+        "category_id": "A10D20011",
+        "crumb": "/A10D20/A10D20011",
+        "level": 2,
+        "name": "Aceites, lubricantes y limpiadores",
+        "parent_id": "A10D20",
+        "tree_path": "/A10D20,Automotriz/A10D20011,Aceites, lubricantes y limpiadores"
+      },
+      {
+        "category_id": "A10D20013",
+        "crumb": "/A10D20/A10D20013",
+        "level": 2,
+        "name": "Ataduras de trinquetes",
+        "parent_id": "A10D20",
+        "tree_path": "/A10D20,Automotriz/A10D20013,Ataduras de trinquetes"
+      },
+      {
+        "category_id": "A10D20014",
+        "crumb": "/A10D20/A10D20014",
+        "level": 2,
+        "name": "Toallas para auto",
+        "parent_id": "A10D20",
+        "tree_path": "/A10D20,Automotriz/A10D20014,Toallas para auto"
+      },
+      {
+        "category_id": "A10D20015",
+        "crumb": "/A10D20/A10D20015",
+        "level": 2,
+        "name": "Infladores de llantas",
+        "parent_id": "A10D20",
+        "tree_path": "/A10D20,Automotriz/A10D20015,Infladores de llantas"
+      },
+      {
+        "category_id": "A10D20018",
+        "crumb": "/A10D20/A10D20018",
+        "level": 2,
+        "name": "Accesorios para vehículos",
+        "parent_id": "A10D20",
+        "tree_path": "/A10D20,Automotriz/A10D20018,Accesorios para vehículos"
+      },
+      {
+        "category_id": "A10D47002",
+        "crumb": "/A10D20/A10D47002",
+        "level": 2,
+        "name": "Baterías para automóvil",
+        "parent_id": "A10D20",
+        "tree_path": "/A10D20,Automotriz/A10D47002,Baterías para automóvil"
+      },
+      {
+        "category_id": "A10D47016",
+        "crumb": "/A10D20/A10D47016",
+        "level": 2,
+        "name": "Llantas",
+        "parent_id": "A10D20",
+        "tree_path": "/A10D20,Automotriz/A10D47016,Llantas"
+      },
+      {
+        "category_id": "B10D03003",
+        "crumb": "/B10D27/B10D03003",
+        "level": 2,
+        "name": "Alimento para bebé",
+        "parent_id": "B10D27",
+        "tree_path": "/B10D27,Bebé/B10D03003,Alimento para bebé"
+      },
+      {
+        "category_id": "B10D09004",
+        "crumb": "/B10D27/B10D09004",
+        "level": 2,
+        "name": "Fórmula para bebé",
+        "parent_id": "B10D27",
+        "tree_path": "/B10D27,Bebé/B10D09004,Fórmula para bebé"
+      },
+      {
+        "category_id": "B10D09010",
+        "crumb": "/B10D27/B10D09010",
+        "level": 2,
+        "name": "Toallitas para bebé",
+        "parent_id": "B10D27",
+        "tree_path": "/B10D27,Bebé/B10D09010,Toallitas para bebé"
+      },
+      {
+        "category_id": "B10D09013",
+        "crumb": "/B10D27/B10D09013",
+        "level": 2,
+        "name": "Pañales",
+        "parent_id": "B10D27",
+        "tree_path": "/B10D27,Bebé/B10D09013,Pañales"
+      },
+      {
+        "category_id": "B10D27",
+        "crumb": "/B10D27",
+        "level": 1,
+        "name": "Bebé",
+        "parent_id": null,
+        "tree_path": "/B10D27,Bebé"
+      },
+      {
+        "category_id": "B10D27008",
+        "crumb": "/B10D27/B10D27008",
+        "level": 2,
+        "name": "Asientos para bebé",
+        "parent_id": "B10D27",
+        "tree_path": "/B10D27,Bebé/B10D27008,Asientos para bebé"
+      },
+      {
+        "category_id": "B10D27014",
+        "crumb": "/B10D27/B10D27014",
+        "level": 2,
+        "name": "Sillas altas",
+        "parent_id": "B10D27",
+        "tree_path": "/B10D27,Bebé/B10D27014,Sillas altas"
+      },
+      {
+        "category_id": "B10D27019",
+        "crumb": "/B10D27/B10D27019",
+        "level": 2,
+        "name": "Cochés para bebé",
+        "parent_id": "B10D27",
+        "tree_path": "/B10D27,Bebé/B10D27019,Cochés para bebé"
+      },
+      {
+        "category_id": "B10D27022",
+        "crumb": "/B10D27/B10D27022",
+        "level": 2,
+        "name": "Pañaleras",
+        "parent_id": "B10D27",
+        "tree_path": "/B10D27,Bebé/B10D27022,Pañaleras"
+      },
+      {
+        "category_id": "B10D27024",
+        "crumb": "/B10D27/B10D27024",
+        "level": 2,
+        "name": "Extractor de leche",
+        "parent_id": "B10D27",
+        "tree_path": "/B10D27,Bebé/B10D27024,Extractor de leche"
+      },
+      {
+        "category_id": "B10D46017",
+        "crumb": "/B10D27/B10D46017",
+        "level": 2,
+        "name": "Corrales",
+        "parent_id": "B10D27",
+        "tree_path": "/B10D27,Bebé/B10D46017,Corrales"
+      },
+      {
+        "category_id": "C10D24016",
+        "crumb": "/C10D29/C10D24016",
+        "level": 2,
+        "name": "UPS",
+        "parent_id": "C10D29",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D24016,UPS"
+      },
+      {
+        "category_id": "C10D25004",
+        "crumb": "/C10D29/C10D25004",
+        "level": 2,
+        "name": "Impresoras",
+        "parent_id": "C10D29",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D25004,Impresoras"
+      },
+      {
+        "category_id": "C10D25011",
+        "crumb": "/C10D29/C10D25011",
+        "level": 2,
+        "name": "Cargadores de dispositivos portátiles",
+        "parent_id": "C10D29",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D25011,Cargadores de dispositivos portátiles"
+      },
+      {
+        "category_id": "C10D29",
+        "crumb": "/C10D29",
+        "level": 1,
+        "name": "Computadoras, tablets y accesorios",
+        "parent_id": null,
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios"
+      },
+      {
+        "category_id": "C10D29002",
+        "crumb": "/C10D29/C10D29002",
+        "level": 2,
+        "name": "Accesorios para computadoras",
+        "parent_id": "C10D29",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D29002,Accesorios para computadoras"
+      },
+      {
+        "category_id": "C10D29002002",
+        "crumb": "/C10D29/C10D29002/C10D29002002",
+        "level": 3,
+        "name": "Teclados para computadoras",
+        "parent_id": "C10D29002",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D29002,Accesorios para computadoras/C10D29002002,Teclados para computadoras"
+      },
+      {
+        "category_id": "C10D29003",
+        "crumb": "/C10D29/C10D29003",
+        "level": 2,
+        "name": "Monitores para computadoras",
+        "parent_id": "C10D29",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D29003,Monitores para computadoras"
+      },
+      {
+        "category_id": "C10D29005",
+        "crumb": "/C10D29/C10D29005",
+        "level": 2,
+        "name": "Computadoras de escritorio",
+        "parent_id": "C10D29",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D29005,Computadoras de escritorio"
+      },
+      {
+        "category_id": "C10D29007",
+        "crumb": "/C10D29/C10D29007",
+        "level": 2,
+        "name": "Tinta y tóner",
+        "parent_id": "C10D29",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D29007,Tinta y tóner"
+      },
+      {
+        "category_id": "C10D29009",
+        "crumb": "/C10D29/C10D29009",
+        "level": 2,
+        "name": "Computadoras portátiles",
+        "parent_id": "C10D29",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D29009,Computadoras portátiles"
+      },
+      {
+        "category_id": "C10D29014",
+        "crumb": "/C10D29/C10D29014",
+        "level": 2,
+        "name": "Discos duros y memorias",
+        "parent_id": "C10D29",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D29014,Discos duros y memorias"
+      },
+      {
+        "category_id": "C10D29015",
+        "crumb": "/C10D29/C10D29015",
+        "level": 2,
+        "name": "Tablets",
+        "parent_id": "C10D29",
+        "tree_path": "/C10D29,Computadoras, tablets y accesorios/C10D29015,Tablets"
+      },
+      {
+        "category_id": "E10D24",
+        "crumb": "/E10D24",
+        "level": 1,
+        "name": "Electrónicos",
+        "parent_id": null,
+        "tree_path": "/E10D24,Electrónicos"
+      },
+      {
+        "category_id": "E10D24001",
+        "crumb": "/E10D24/E10D24001",
+        "level": 2,
+        "name": "Regulador de voltaje",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D24001,Regulador de voltaje"
+      },
+      {
+        "category_id": "E10D24003",
+        "crumb": "/E10D24/E10D24003",
+        "level": 2,
+        "name": "Teléfonos celulares",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D24003,Teléfonos celulares"
+      },
+      {
+        "category_id": "E10D24004",
+        "crumb": "/E10D24/E10D24004",
+        "level": 2,
+        "name": "Equipo para DJ y karaoke",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D24004,Equipo para DJ y karaoke"
+      },
+      {
+        "category_id": "E10D24004001",
+        "crumb": "/E10D24/E10D24004/E10D24004001",
+        "level": 3,
+        "name": "Amplificadores y altavoces",
+        "parent_id": "E10D24004",
+        "tree_path": "/E10D24,Electrónicos/E10D24004,Equipo para DJ y karaoke/E10D24004001,Amplificadores y altavoces"
+      },
+      {
+        "category_id": "E10D24004004",
+        "crumb": "/E10D24/E10D24004/E10D24004004",
+        "level": 3,
+        "name": "Equipo para karaoke",
+        "parent_id": "E10D24004",
+        "tree_path": "/E10D24,Electrónicos/E10D24004,Equipo para DJ y karaoke/E10D24004004,Equipo para karaoke"
+      },
+      {
+        "category_id": "E10D24005",
+        "crumb": "/E10D24/E10D24005",
+        "level": 2,
+        "name": "Accesorios electrónicos",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D24005,Accesorios electrónicos"
+      },
+      {
+        "category_id": "E10D24005002",
+        "crumb": "/E10D24/E10D24005002",
+        "level": 2,
+        "name": "Auriculares y altavoces portátiles",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D24005002,Auriculares y altavoces portátiles"
+      },
+      {
+        "category_id": "E10D24005004",
+        "crumb": "/E10D24/E10D24005/E10D24005004",
+        "level": 3,
+        "name": "Protectores de sobretensión",
+        "parent_id": "E10D24005",
+        "tree_path": "/E10D24,Electrónicos/E10D24005,Accesorios electrónicos/E10D24005004,Protectores de sobretensión"
+      },
+      {
+        "category_id": "E10D24005005",
+        "crumb": "/E10D24/E10D24005/E10D24005005",
+        "level": 3,
+        "name": "Auriculares para teléfono",
+        "parent_id": "E10D24005",
+        "tree_path": "/E10D24,Electrónicos/E10D24005,Accesorios electrónicos/E10D24005005,Auriculares para teléfono"
+      },
+      {
+        "category_id": "E10D24005006",
+        "crumb": "/E10D24/E10D24005/E10D24005006",
+        "level": 3,
+        "name": "Radios de dos vías",
+        "parent_id": "E10D24005",
+        "tree_path": "/E10D24,Electrónicos/E10D24005,Accesorios electrónicos/E10D24005006,Radios de dos vías"
+      },
+      {
+        "category_id": "E10D24005007",
+        "crumb": "/E10D24/E10D24005/E10D24005007",
+        "level": 3,
+        "name": "Adaptadores de energía",
+        "parent_id": "E10D24005",
+        "tree_path": "/E10D24,Electrónicos/E10D24005,Accesorios electrónicos/E10D24005007,Adaptadores de energía"
+      },
+      {
+        "category_id": "E10D24006",
+        "crumb": "/E10D24/E10D24006",
+        "level": 2,
+        "name": "Parlantes y equipo de sonido",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D24006,Parlantes y equipo de sonido"
+      },
+      {
+        "category_id": "E10D24010",
+        "crumb": "/E10D24/E10D24010",
+        "level": 2,
+        "name": "Foto y video",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D24010,Foto y video"
+      },
+      {
+        "category_id": "E10D24010001",
+        "crumb": "/E10D24/E10D24010/E10D24010001",
+        "level": 3,
+        "name": "Cámaras de acción",
+        "parent_id": "E10D24010",
+        "tree_path": "/E10D24,Electrónicos/E10D24010,Foto y video/E10D24010001,Cámaras de acción"
+      },
+      {
+        "category_id": "E10D24010003",
+        "crumb": "/E10D24/E10D24010/E10D24010003",
+        "level": 3,
+        "name": "Cámaras digitales",
+        "parent_id": "E10D24010",
+        "tree_path": "/E10D24,Electrónicos/E10D24010,Foto y video/E10D24010003,Cámaras digitales"
+      },
+      {
+        "category_id": "E10D24010004",
+        "crumb": "/E10D24/E10D24010/E10D24010004",
+        "level": 3,
+        "name": "Palos para selfies",
+        "parent_id": "E10D24010",
+        "tree_path": "/E10D24,Electrónicos/E10D24010,Foto y video/E10D24010004,Palos para selfies"
+      },
+      {
+        "category_id": "E10D24011",
+        "crumb": "/E10D24/E10D24011",
+        "level": 2,
+        "name": "Seguridad y vigilancia",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D24011,Seguridad y vigilancia"
+      },
+      {
+        "category_id": "E10D24011002",
+        "crumb": "/E10D24/E10D24011/E10D24011002",
+        "level": 3,
+        "name": "Sistemas de seguridad",
+        "parent_id": "E10D24011",
+        "tree_path": "/E10D24,Electrónicos/E10D24011,Seguridad y vigilancia/E10D24011002,Sistemas de seguridad"
+      },
+      {
+        "category_id": "E10D24011003",
+        "crumb": "/E10D24/E10D24011/E10D24011003",
+        "level": 3,
+        "name": "Cámara de seguridad",
+        "parent_id": "E10D24011",
+        "tree_path": "/E10D24,Electrónicos/E10D24011,Seguridad y vigilancia/E10D24011003,Cámara de seguridad"
+      },
+      {
+        "category_id": "E10D24015",
+        "crumb": "/E10D24/E10D24015",
+        "level": 2,
+        "name": "Televisores",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D24015,Televisores"
+      },
+      {
+        "category_id": "E10D24016",
+        "crumb": "/E10D24/E10D24016",
+        "level": 2,
+        "name": "Videojuegos y consolas",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D24016,Videojuegos y consolas"
+      },
+      {
+        "category_id": "E10D24016001",
+        "crumb": "/E10D24/E10D24016/E10D24016001",
+        "level": 3,
+        "name": "Accesorios para videojuegos",
+        "parent_id": "E10D24016",
+        "tree_path": "/E10D24,Electrónicos/E10D24016,Videojuegos y consolas/E10D24016001,Accesorios para videojuegos"
+      },
+      {
+        "category_id": "E10D24016002",
+        "crumb": "/E10D24/E10D24016/E10D24016002",
+        "level": 3,
+        "name": "Consolas de videojuegos",
+        "parent_id": "E10D24016",
+        "tree_path": "/E10D24,Electrónicos/E10D24016,Videojuegos y consolas/E10D24016002,Consolas de videojuegos"
+      },
+      {
+        "category_id": "E10D26012",
+        "crumb": "/E10D24/E10D26012",
+        "level": 2,
+        "name": "Relojes inteligentes y para ejercicio",
+        "parent_id": "E10D24",
+        "tree_path": "/E10D24,Electrónicos/E10D26012,Relojes inteligentes y para ejercicio"
+      },
+      {
+        "category_id": "F10D39001004",
+        "crumb": "/F10D40/F10D40001/F10D39001004",
+        "level": 3,
+        "name": "Zapatos para niños",
+        "parent_id": "F10D40001",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40001,Moda y accesorios infantiles/F10D39001004,Zapatos para niños"
+      },
+      {
+        "category_id": "F10D39003001",
+        "crumb": "/F10D40/F10D40003/F10D39003001",
+        "level": 3,
+        "name": "Cinturones para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D39003001,Cinturones para hombres"
+      },
+      {
+        "category_id": "F10D39003002",
+        "crumb": "/F10D40/F10D40003/F10D39003002",
+        "level": 3,
+        "name": "Chaquetas para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D39003002,Chaquetas para hombres"
+      },
+      {
+        "category_id": "F10D39003003",
+        "crumb": "/F10D40/F10D40003/F10D39003003",
+        "level": 3,
+        "name": "Jeans para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D39003003,Jeans para hombres"
+      },
+      {
+        "category_id": "F10D39003005",
+        "crumb": "/F10D40/F10D40003/F10D39003005",
+        "level": 3,
+        "name": "Pantalones para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D39003005,Pantalones para hombres"
+      },
+      {
+        "category_id": "F10D39003006",
+        "crumb": "/F10D40/F10D40003/F10D39003006",
+        "level": 3,
+        "name": "Camisas para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D39003006,Camisas para hombres"
+      },
+      {
+        "category_id": "F10D39003007",
+        "crumb": "/F10D40/F10D40003/F10D39003007",
+        "level": 3,
+        "name": "Zapatos para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D39003007,Zapatos para hombres"
+      },
+      {
+        "category_id": "F10D39003008",
+        "crumb": "/F10D40/F10D40003/F10D39003008",
+        "level": 3,
+        "name": "Shorts para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D39003008,Shorts para hombres"
+      },
+      {
+        "category_id": "F10D39004",
+        "crumb": "/F10D40/F10D39004",
+        "level": 2,
+        "name": "Lentes de sol",
+        "parent_id": "F10D40",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39004,Lentes de sol"
+      },
+      {
+        "category_id": "F10D39005",
+        "crumb": "/F10D40/F10D39005",
+        "level": 2,
+        "name": "Moda y accesorios mujer",
+        "parent_id": "F10D40",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer"
+      },
+      {
+        "category_id": "F10D39005003",
+        "crumb": "/F10D40/F10D39005/F10D39005003",
+        "level": 3,
+        "name": "Vestidos para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D39005003,Vestidos para mujeres"
+      },
+      {
+        "category_id": "F10D39005004",
+        "crumb": "/F10D40/F10D39005/F10D39005004",
+        "level": 3,
+        "name": "Chaquetas para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D39005004,Chaquetas para mujeres"
+      },
+      {
+        "category_id": "F10D39005005",
+        "crumb": "/F10D40/F10D39005/F10D39005005",
+        "level": 3,
+        "name": "Jeans para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D39005005,Jeans para mujeres"
+      },
+      {
+        "category_id": "F10D39005006",
+        "crumb": "/F10D40/F10D39005/F10D39005006",
+        "level": 3,
+        "name": "Leggings para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D39005006,Leggings para mujeres"
+      },
+      {
+        "category_id": "F10D39005008",
+        "crumb": "/F10D40/F10D39005/F10D39005008",
+        "level": 3,
+        "name": "Pantalones para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D39005008,Pantalones para mujeres"
+      },
+      {
+        "category_id": "F10D39005010",
+        "crumb": "/F10D40/F10D39005/F10D39005010",
+        "level": 3,
+        "name": "Zapatos para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D39005010,Zapatos para mujeres"
+      },
+      {
+        "category_id": "F10D39005011",
+        "crumb": "/F10D40/F10D39005/F10D39005011",
+        "level": 3,
+        "name": "Shorts para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D39005011,Shorts para mujeres"
+      },
+      {
+        "category_id": "F10D39005014",
+        "crumb": "/F10D40/F10D39005/F10D39005014",
+        "level": 3,
+        "name": "Suéteres para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D39005014,Suéteres para mujeres"
+      },
+      {
+        "category_id": "F10D39005016",
+        "crumb": "/F10D40/F10D39005/F10D39005016",
+        "level": 3,
+        "name": "Camisetas desmangadas para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D39005016,Camisetas desmangadas para mujeres"
+      },
+      {
+        "category_id": "F10D39005017",
+        "crumb": "/F10D40/F10D39005/F10D39005017",
+        "level": 3,
+        "name": "Tops para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D39005017,Tops para mujeres"
+      },
+      {
+        "category_id": "F10D40",
+        "crumb": "/F10D40",
+        "level": 1,
+        "name": "Moda y accesorios",
+        "parent_id": null,
+        "tree_path": "/F10D40,Moda y accesorios"
+      },
+      {
+        "category_id": "F10D40001",
+        "crumb": "/F10D40/F10D40001",
+        "level": 2,
+        "name": "Moda y accesorios infantiles",
+        "parent_id": "F10D40",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40001,Moda y accesorios infantiles"
+      },
+      {
+        "category_id": "F10D40001002",
+        "crumb": "/F10D40/F10D40001/F10D40001002",
+        "level": 3,
+        "name": "Pijamas para niños",
+        "parent_id": "F10D40001",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40001,Moda y accesorios infantiles/F10D40001002,Pijamas para niños"
+      },
+      {
+        "category_id": "F10D40001005",
+        "crumb": "/F10D40/F10D40001/F10D40001005",
+        "level": 3,
+        "name": "Shorts para niños",
+        "parent_id": "F10D40001",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40001,Moda y accesorios infantiles/F10D40001005,Shorts para niños"
+      },
+      {
+        "category_id": "F10D40001011",
+        "crumb": "/F10D40/F10D40001/F10D40001011",
+        "level": 3,
+        "name": "Onesies para bebés y niños pequeños",
+        "parent_id": "F10D40001",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40001,Moda y accesorios infantiles/F10D40001011,Onesies para bebés y niños pequeños"
+      },
+      {
+        "category_id": "F10D40001013",
+        "crumb": "/F10D40/F10D40001/F10D40001013",
+        "level": 3,
+        "name": "Suéteres para niños",
+        "parent_id": "F10D40001",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40001,Moda y accesorios infantiles/F10D40001013,Suéteres para niños"
+      },
+      {
+        "category_id": "F10D40003",
+        "crumb": "/F10D40/F10D40003",
+        "level": 2,
+        "name": "Moda y accesorios hombres",
+        "parent_id": "F10D40",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres"
+      },
+      {
+        "category_id": "F10D40003004",
+        "crumb": "/F10D40/F10D40003/F10D40003004",
+        "level": 3,
+        "name": "Pijamas para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D40003004,Pijamas para hombres"
+      },
+      {
+        "category_id": "F10D40003009",
+        "crumb": "/F10D40/F10D40003/F10D40003009",
+        "level": 3,
+        "name": "Medias para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D40003009,Medias para hombres"
+      },
+      {
+        "category_id": "F10D40003011",
+        "crumb": "/F10D40/F10D40003/F10D40003011",
+        "level": 3,
+        "name": "Camisetas para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D40003011,Camisetas para hombres"
+      },
+      {
+        "category_id": "F10D40003012",
+        "crumb": "/F10D40/F10D40003/F10D40003012",
+        "level": 3,
+        "name": "Ropa interior para hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/F10D40003012,Ropa interior para hombres"
+      },
+      {
+        "category_id": "F10D40005001",
+        "crumb": "/F10D40/F10D39005/F10D40005001",
+        "level": 3,
+        "name": "Sostenes",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D40005001,Sostenes"
+      },
+      {
+        "category_id": "F10D40005007",
+        "crumb": "/F10D40/F10D39005/F10D40005007",
+        "level": 3,
+        "name": "Pijamas para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D40005007,Pijamas para mujeres"
+      },
+      {
+        "category_id": "F10D40005012",
+        "crumb": "/F10D40/F10D39005/F10D40005012",
+        "level": 3,
+        "name": "Pantuflas para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D40005012,Pantuflas para mujeres"
+      },
+      {
+        "category_id": "F10D40005013",
+        "crumb": "/F10D40/F10D39005/F10D40005013",
+        "level": 3,
+        "name": "Medias para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D40005013,Medias para mujeres"
+      },
+      {
+        "category_id": "F10D40005018",
+        "crumb": "/F10D40/F10D39005/F10D40005018",
+        "level": 3,
+        "name": "Camisetas para Mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D40005018,Camisetas para Mujeres"
+      },
+      {
+        "category_id": "F10D40005019",
+        "crumb": "/F10D40/F10D39005/F10D40005019",
+        "level": 3,
+        "name": "Ropa interior para mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/F10D40005019,Ropa interior para mujeres"
+      },
+      {
+        "category_id": "F10D40006",
+        "crumb": "/F10D40/F10D40006",
+        "level": 2,
+        "name": "Sombreros",
+        "parent_id": "F10D40",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40006,Sombreros"
+      },
+      {
+        "category_id": "F20D27",
+        "crumb": "/F20D27",
+        "level": 1,
+        "name": "Muebles",
+        "parent_id": null,
+        "tree_path": "/F20D27,Muebles"
+      },
+      {
+        "category_id": "F20D27001",
+        "crumb": "/F20D27/F20D27001",
+        "level": 2,
+        "name": "Sillas para bar y cocina",
+        "parent_id": "F20D27",
+        "tree_path": "/F20D27,Muebles/F20D27001,Sillas para bar y cocina"
+      },
+      {
+        "category_id": "F20D27001001",
+        "crumb": "/F20D27/F20D27001/F20D27001001",
+        "level": 3,
+        "name": "Bancos para bar",
+        "parent_id": "F20D27001",
+        "tree_path": "/F20D27,Muebles/F20D27001,Sillas para bar y cocina/F20D27001001,Bancos para bar"
+      },
+      {
+        "category_id": "F20D27002",
+        "crumb": "/F20D27/F20D27002",
+        "level": 2,
+        "name": "Muebles para el dormitorio",
+        "parent_id": "F20D27",
+        "tree_path": "/F20D27,Muebles/F20D27002,Muebles para el dormitorio"
+      },
+      {
+        "category_id": "F20D27002002",
+        "crumb": "/F20D27/F20D27002/F20D27002002",
+        "level": 3,
+        "name": "Cubierta para colchones",
+        "parent_id": "F20D27002",
+        "tree_path": "/F20D27,Muebles/F20D27002,Muebles para el dormitorio/F20D27002002,Cubierta para colchones"
+      },
+      {
+        "category_id": "F20D27002003",
+        "crumb": "/F20D27/F20D27002/F20D27002003",
+        "level": 3,
+        "name": "Colchones",
+        "parent_id": "F20D27002",
+        "tree_path": "/F20D27,Muebles/F20D27002,Muebles para el dormitorio/F20D27002003,Colchones"
+      },
+      {
+        "category_id": "F20D27003",
+        "crumb": "/F20D27/F20D27003",
+        "level": 2,
+        "name": "Ventiladores de techo",
+        "parent_id": "F20D27",
+        "tree_path": "/F20D27,Muebles/F20D27003,Ventiladores de techo"
+      },
+      {
+        "category_id": "F20D27004",
+        "crumb": "/F20D27/F20D27004",
+        "level": 2,
+        "name": "Muebles para niños",
+        "parent_id": "F20D27",
+        "tree_path": "/F20D27,Muebles/F20D27004,Muebles para niños"
+      },
+      {
+        "category_id": "F20D27005",
+        "crumb": "/F20D27/F20D27005",
+        "level": 2,
+        "name": "Juegos de comedor",
+        "parent_id": "F20D27",
+        "tree_path": "/F20D27,Muebles/F20D27005,Juegos de comedor"
+      },
+      {
+        "category_id": "F20D27009",
+        "crumb": "/F20D27/F20D27009",
+        "level": 2,
+        "name": "Muebles para sala",
+        "parent_id": "F20D27",
+        "tree_path": "/F20D27,Muebles/F20D27009,Muebles para sala"
+      },
+      {
+        "category_id": "F20D27009001",
+        "crumb": "/F20D27/F20D27009/F20D27009001",
+        "level": 3,
+        "name": "Bancos",
+        "parent_id": "F20D27009",
+        "tree_path": "/F20D27,Muebles/F20D27009,Muebles para sala/F20D27009001,Bancos"
+      },
+      {
+        "category_id": "F20D27009004",
+        "crumb": "/F20D27/F20D27009/F20D27009004",
+        "level": 3,
+        "name": "Sillas reclinables",
+        "parent_id": "F20D27009",
+        "tree_path": "/F20D27,Muebles/F20D27009,Muebles para sala/F20D27009004,Sillas reclinables"
+      },
+      {
+        "category_id": "F20D27009006",
+        "crumb": "/F20D27/F20D27009/F20D27009006",
+        "level": 3,
+        "name": "Sofás",
+        "parent_id": "F20D27009",
+        "tree_path": "/F20D27,Muebles/F20D27009,Muebles para sala/F20D27009006,Sofás"
+      },
+      {
+        "category_id": "F20D27009008",
+        "crumb": "/F20D27/F20D27009/F20D27009008",
+        "level": 3,
+        "name": "Otomanos",
+        "parent_id": "F20D27009",
+        "tree_path": "/F20D27,Muebles/F20D27009,Muebles para sala/F20D27009008,Otomanos"
+      },
+      {
+        "category_id": "F20D27012",
+        "crumb": "/F20D27/F20D27012",
+        "level": 2,
+        "name": "Soportes para TV montaje",
+        "parent_id": "F20D27",
+        "tree_path": "/F20D27,Muebles/F20D27012,Soportes para TV montaje"
+      },
+      {
+        "category_id": "F20D28011",
+        "crumb": "/F20D27/F20D28011",
+        "level": 2,
+        "name": "Muebles de oficina",
+        "parent_id": "F20D27",
+        "tree_path": "/F20D27,Muebles/F20D28011,Muebles de oficina"
+      },
+      {
+        "category_id": "F20D28011002",
+        "crumb": "/F20D27/F20D28011/F20D28011002",
+        "level": 3,
+        "name": "Sillas de oficina",
+        "parent_id": "F20D28011",
+        "tree_path": "/F20D27,Muebles/F20D28011,Muebles de oficina/F20D28011002,Sillas de oficina"
+      },
+      {
+        "category_id": "F20D28011003",
+        "crumb": "/F20D27/F20D28011/F20D28011003",
+        "level": 3,
+        "name": "Escritorios para oficina",
+        "parent_id": "F20D28011",
+        "tree_path": "/F20D27,Muebles/F20D28011,Muebles de oficina/F20D28011003,Escritorios para oficina"
+      },
+      {
+        "category_id": "F20D28011004",
+        "crumb": "/F20D27/F20D28011/F20D28011004",
+        "level": 3,
+        "name": "Mesas para oficina",
+        "parent_id": "F20D28011",
+        "tree_path": "/F20D27,Muebles/F20D28011,Muebles de oficina/F20D28011004,Mesas para oficina"
+      },
+      {
+        "category_id": "F20D28011005",
+        "crumb": "/F20D27/F20D28011/F20D28011005",
+        "level": 3,
+        "name": "Gabinetes para almacenamiento",
+        "parent_id": "F20D28011",
+        "tree_path": "/F20D27,Muebles/F20D28011,Muebles de oficina/F20D28011005,Gabinetes para almacenamiento"
+      },
+      {
+        "category_id": "Fresh_Bakery",
+        "crumb": "/G10D03/Fresh_Bakery",
+        "level": 2,
+        "name": "Panadería y repostería",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería"
+      },
+      {
+        "category_id": "Fresh_cookies",
+        "crumb": "/G10D03/Fresh_Bakery/Fresh_cookies",
+        "level": 3,
+        "name": "Galletas horneadas",
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/Fresh_cookies,Galletas horneadas"
+      },
+      {
+        "category_id": "G10D01021",
+        "crumb": "/G10D03/G10D07017/G10D01021",
+        "level": 3,
+        "name": "Comida vegetariana",
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D01021,Comida vegetariana"
+      },
+      {
+        "category_id": "G10D02004",
+        "crumb": "/G10D03/G10D02004",
+        "level": 2,
+        "name": "Dulces, chocolates y chicles",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D02004,Dulces, chocolates y chicles"
+      },
+      {
+        "category_id": "G10D02004001",
+        "crumb": "/G10D03/G10D02004/G10D02004001",
+        "level": 3,
+        "name": "Chocolates",
+        "parent_id": "G10D02004",
+        "tree_path": "/G10D03,Alimentos/G10D02004,Dulces, chocolates y chicles/G10D02004001,Chocolates"
+      },
+      {
+        "category_id": "G10D02004002",
+        "crumb": "/G10D03/G10D02004/G10D02004002",
+        "level": 3,
+        "name": "Chicles y mentas",
+        "parent_id": "G10D02004",
+        "tree_path": "/G10D03,Alimentos/G10D02004,Dulces, chocolates y chicles/G10D02004002,Chicles y mentas"
+      },
+      {
+        "category_id": "G10D02004004",
+        "crumb": "/G10D03/G10D02004/G10D02004004",
+        "level": 3,
+        "name": "Dulces",
+        "parent_id": "G10D02004",
+        "tree_path": "/G10D03,Alimentos/G10D02004,Dulces, chocolates y chicles/G10D02004004,Dulces"
+      },
+      {
+        "category_id": "G10D02008003",
+        "crumb": "/G10D03/G10D63008/G10D02008003",
+        "level": 3,
+        "name": "Galletas",
+        "parent_id": "G10D63008",
+        "tree_path": "/G10D03,Alimentos/G10D63008,Galletas, postres, y helados/G10D02008003,Galletas"
+      },
+      {
+        "category_id": "G10D02008012",
+        "crumb": "/G10D03/G10D63008/G10D02008012",
+        "level": 3,
+        "name": "Pastelitos y gelatina",
+        "parent_id": "G10D63008",
+        "tree_path": "/G10D03,Alimentos/G10D63008,Galletas, postres, y helados/G10D02008012,Pastelitos y gelatina"
+      },
+      {
+        "category_id": "G10D02019",
+        "crumb": "/G10D03/G10D02019",
+        "level": 2,
+        "name": "Snacks",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks"
+      },
+      {
+        "category_id": "G10D02019001",
+        "crumb": "/G10D03/G10D02019/G10D02019001",
+        "level": 3,
+        "name": "Papas fritas",
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D02019001,Papas fritas"
+      },
+      {
+        "category_id": "G10D02019006",
+        "crumb": "/G10D03/G10D02019/G10D02019006",
+        "level": 3,
+        "name": "Nueces y semillas",
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D02019006,Nueces y semillas"
+      },
+      {
+        "category_id": "G10D02019007",
+        "crumb": "/G10D03/G10D02019/G10D02019007",
+        "level": 3,
+        "name": "Palomitas de maíz",
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D02019007,Palomitas de maíz"
+      },
+      {
+        "category_id": "G10D02019008",
+        "crumb": "/G10D03/G10D02019/G10D02019008",
+        "level": 3,
+        "name": "Barritas",
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D02019008,Barritas"
+      },
+      {
+        "category_id": "G10D03",
+        "crumb": "/G10D03",
+        "level": 1,
+        "name": "Alimentos",
+        "parent_id": null,
+        "tree_path": "/G10D03,Alimentos"
+      },
+      {
+        "category_id": "G10D03003",
+        "crumb": "/G10D03/G10D03003",
+        "level": 2,
+        "name": "Cereales y granolas",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D03003,Cereales y granolas"
+      },
+      {
+        "category_id": "G10D03007",
+        "crumb": "/G10D03/G10D03007",
+        "level": 2,
+        "name": "Café y té",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D03007,Café y té"
+      },
+      {
+        "category_id": "G10D03007001",
+        "crumb": "/G10D03/G10D03007/G10D03007001",
+        "level": 3,
+        "name": "Café",
+        "parent_id": "G10D03007",
+        "tree_path": "/G10D03,Alimentos/G10D03007,Café y té/G10D03007001,Café"
+      },
+      {
+        "category_id": "G10D03007003",
+        "crumb": "/G10D03/G10D03007/G10D03007003",
+        "level": 3,
+        "name": "Crema",
+        "parent_id": "G10D03007",
+        "tree_path": "/G10D03,Alimentos/G10D03007,Café y té/G10D03007003,Crema"
+      },
+      {
+        "category_id": "G10D03007004",
+        "crumb": "/G10D03/G10D03007/G10D03007004",
+        "level": 3,
+        "name": "Té",
+        "parent_id": "G10D03007",
+        "tree_path": "/G10D03,Alimentos/G10D03007,Café y té/G10D03007004,Té"
+      },
+      {
+        "category_id": "G10D03008011",
+        "crumb": "/G10D03/G10D63008/G10D03008011",
+        "level": 3,
+        "name": "Budines",
+        "parent_id": "G10D63008",
+        "tree_path": "/G10D03,Alimentos/G10D63008,Galletas, postres, y helados/G10D03008011,Budines"
+      },
+      {
+        "category_id": "G10D03009",
+        "crumb": "/G10D03/G10D03009",
+        "level": 2,
+        "name": "Aceites, harinas y condimentos",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos"
+      },
+      {
+        "category_id": "G10D03009001",
+        "crumb": "/G10D03/G10D03009/G10D03009001",
+        "level": 3,
+        "name": "Chocolate para hornear",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009001,Chocolate para hornear"
+      },
+      {
+        "category_id": "G10D03009002",
+        "crumb": "/G10D03/G10D03009/G10D03009002",
+        "level": 3,
+        "name": "Mezclas para hornear",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009002,Mezclas para hornear"
+      },
+      {
+        "category_id": "G10D03009008",
+        "crumb": "/G10D03/G10D03009/G10D03009008",
+        "level": 3,
+        "name": "Aceites de cocina",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009008,Aceites de cocina"
+      },
+      {
+        "category_id": "G10D03009012",
+        "crumb": "/G10D03/G10D03009/G10D03009012",
+        "level": 3,
+        "name": "Jarabes para saborizar",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009012,Jarabes para saborizar"
+      },
+      {
+        "category_id": "G10D03009013",
+        "crumb": "/G10D03/G10D03009/G10D03009013",
+        "level": 3,
+        "name": "Harinas",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009013,Harinas"
+      },
+      {
+        "category_id": "G10D03009014",
+        "crumb": "/G10D03/G10D03009/G10D03009014",
+        "level": 3,
+        "name": "Jaleas y untables",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009014,Jaleas y untables"
+      },
+      {
+        "category_id": "G10D03009016",
+        "crumb": "/G10D03/G10D03009/G10D03009016",
+        "level": 3,
+        "name": "Salsas",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009016,Salsas"
+      },
+      {
+        "category_id": "G10D03009017",
+        "crumb": "/G10D03/G10D03009/G10D03009017",
+        "level": 3,
+        "name": "Especias",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009017,Especias"
+      },
+      {
+        "category_id": "G10D03009018",
+        "crumb": "/G10D03/G10D03009/G10D03009018",
+        "level": 3,
+        "name": "Azúcar y endulzantes",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D03009018,Azúcar y endulzantes"
+      },
+      {
+        "category_id": "G10D03010005",
+        "crumb": "/G10D03/G10D07010/G10D03010005",
+        "level": 3,
+        "name": "Huevos",
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D03010005,Huevos"
+      },
+      {
+        "category_id": "G10D03010006",
+        "crumb": "/G10D03/G10D07010/G10D03010006",
+        "level": 3,
+        "name": "Leche",
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D03010006,Leche"
+      },
+      {
+        "category_id": "G10D03019003",
+        "crumb": "/G10D03/G10D02019/G10D03019003",
+        "level": 3,
+        "name": "Frutos secos",
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D03019003,Frutos secos"
+      },
+      {
+        "category_id": "G10D04018",
+        "crumb": "/G10D03/G10D04018",
+        "level": 2,
+        "name": "Frutas y vegetales",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D04018,Frutas y vegetales"
+      },
+      {
+        "category_id": "G10D04018001",
+        "crumb": "/G10D03/G10D04018/G10D04018001",
+        "level": 3,
+        "name": "Fruta fresca",
+        "parent_id": "G10D04018",
+        "tree_path": "/G10D03,Alimentos/G10D04018,Frutas y vegetales/G10D04018001,Fruta fresca"
+      },
+      {
+        "category_id": "G10D04018002",
+        "crumb": "/G10D03/G10D04018/G10D04018002",
+        "level": 3,
+        "name": "Verduras frescas",
+        "parent_id": "G10D04018",
+        "tree_path": "/G10D03,Alimentos/G10D04018,Frutas y vegetales/G10D04018002,Verduras frescas"
+      },
+      {
+        "category_id": "G10D06001006",
+        "crumb": "/G10D03/G10D06011/G10D06001006",
+        "level": 3,
+        "name": "Verduras congeladas",
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06001006,Verduras congeladas"
+      },
+      {
+        "category_id": "G10D06008007",
+        "crumb": "/G10D03/G10D63008/G10D06008007",
+        "level": 3,
+        "name": "Helado",
+        "parent_id": "G10D63008",
+        "tree_path": "/G10D03,Alimentos/G10D63008,Galletas, postres, y helados/G10D06008007,Helado"
+      },
+      {
+        "category_id": "G10D06008010",
+        "crumb": "/G10D03/Fresh_Bakery/G10D06008010",
+        "level": 3,
+        "name": "Tartas",
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D06008010,Tartas"
+      },
+      {
+        "category_id": "G10D06011",
+        "crumb": "/G10D03/G10D06011",
+        "level": 2,
+        "name": "Comida congelada",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada"
+      },
+      {
+        "category_id": "G10D06011001",
+        "crumb": "/G10D03/G10D06011/G10D06011001",
+        "level": 3,
+        "name": "Aperitivos congelados",
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06011001,Aperitivos congelados"
+      },
+      {
+        "category_id": "G10D06011002",
+        "crumb": "/G10D03/G10D06011/G10D06011002",
+        "level": 3,
+        "name": "Entradas congeladas",
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06011002,Entradas congeladas"
+      },
+      {
+        "category_id": "G10D06011003",
+        "crumb": "/G10D03/G10D06011/G10D06011003",
+        "level": 3,
+        "name": "Frutas congeladas",
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06011003,Frutas congeladas"
+      },
+      {
+        "category_id": "G10D06011004",
+        "crumb": "/G10D03/G10D06011/G10D06011004",
+        "level": 3,
+        "name": "Mariscos congelados",
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06011004,Mariscos congelados"
+      },
+      {
+        "category_id": "G10D06011005",
+        "crumb": "/G10D03/G10D06011/G10D06011005",
+        "level": 3,
+        "name": "Guarniciones congeladas",
+        "parent_id": "G10D06011",
+        "tree_path": "/G10D03,Alimentos/G10D06011,Comida congelada/G10D06011005,Guarniciones congeladas"
+      },
+      {
+        "category_id": "G10D06015002",
+        "crumb": "/G10D03/G10D59015/G10D06015002",
+        "level": 3,
+        "name": "Carne",
+        "parent_id": "G10D59015",
+        "tree_path": "/G10D03,Alimentos/G10D59015,Carnes/G10D06015002,Carne"
+      },
+      {
+        "category_id": "G10D07002001",
+        "crumb": "/G10D03/G10D63002/G10D07002001",
+        "level": 3,
+        "name": "Bagels",
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002001,Bagels"
+      },
+      {
+        "category_id": "G10D07002002",
+        "crumb": "/G10D03/Fresh_Bakery/G10D07002002",
+        "level": 3,
+        "name": "Hogazas de pan",
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D07002002,Hogazas de pan"
+      },
+      {
+        "category_id": "G10D07002003",
+        "crumb": "/G10D03/Fresh_Bakery/G10D07002003",
+        "level": 3,
+        "name": "Pan de maíz",
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D07002003,Pan de maíz"
+      },
+      {
+        "category_id": "G10D07002006",
+        "crumb": "/G10D03/G10D63002/G10D07002006",
+        "level": 3,
+        "name": "Panes para hamburguesas y para hot-dogs",
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002006,Panes para hamburguesas y para hot-dogs"
+      },
+      {
+        "category_id": "G10D07002009",
+        "crumb": "/G10D03/G10D63002/G10D07002009",
+        "level": 3,
+        "name": "Pan pita",
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002009,Pan pita"
+      },
+      {
+        "category_id": "G10D07002012",
+        "crumb": "/G10D03/G10D63002/G10D07002012",
+        "level": 3,
+        "name": "Pan de sandwich",
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002012,Pan de sandwich"
+      },
+      {
+        "category_id": "G10D07002013",
+        "crumb": "/G10D03/G10D63002/G10D07002013",
+        "level": 3,
+        "name": "Pan tostado",
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002013,Pan tostado"
+      },
+      {
+        "category_id": "G10D07002014",
+        "crumb": "/G10D03/G10D63002/G10D07002014",
+        "level": 3,
+        "name": "Tortillas",
+        "parent_id": "G10D63002",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas/G10D07002014,Tortillas"
+      },
+      {
+        "category_id": "G10D07008005",
+        "crumb": "/G10D03/Fresh_Bakery/G10D07008005",
+        "level": 3,
+        "name": "Donas y churros",
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D07008005,Donas y churros"
+      },
+      {
+        "category_id": "G10D07010",
+        "crumb": "/G10D03/G10D07010",
+        "level": 2,
+        "name": "Lácteos y Huevos",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos"
+      },
+      {
+        "category_id": "G10D07010001",
+        "crumb": "/G10D03/G10D07010/G10D07010001",
+        "level": 3,
+        "name": "Mantequilla y margarina",
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010001,Mantequilla y margarina"
+      },
+      {
+        "category_id": "G10D07010002",
+        "crumb": "/G10D03/G10D07010/G10D07010002",
+        "level": 3,
+        "name": "Quesos",
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010002,Quesos"
+      },
+      {
+        "category_id": "G10D07010004",
+        "crumb": "/G10D03/G10D07010/G10D07010004",
+        "level": 3,
+        "name": "Queso crema",
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010004,Queso crema"
+      },
+      {
+        "category_id": "G10D07010007",
+        "crumb": "/G10D03/G10D07010/G10D07010007",
+        "level": 3,
+        "name": "Crema agria",
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010007,Crema agria"
+      },
+      {
+        "category_id": "G10D07010008",
+        "crumb": "/G10D03/G10D07010/G10D07010008",
+        "level": 3,
+        "name": "Crema batida",
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010008,Crema batida"
+      },
+      {
+        "category_id": "G10D07010010",
+        "crumb": "/G10D03/G10D07010/G10D07010010",
+        "level": 3,
+        "name": "Yogurt",
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D07010010,Yogurt"
+      },
+      {
+        "category_id": "G10D07015001",
+        "crumb": "/G10D03/deli_meat/G10D07015001",
+        "level": 3,
+        "name": "Tocino",
+        "parent_id": "deli_meat",
+        "tree_path": "/G10D03,Alimentos/deli_meat,Embutidos/G10D07015001,Tocino"
+      },
+      {
+        "category_id": "G10D07015007",
+        "crumb": "/G10D03/deli_meat/G10D07015007",
+        "level": 3,
+        "name": "Hot dogs",
+        "parent_id": "deli_meat",
+        "tree_path": "/G10D03,Alimentos/deli_meat,Embutidos/G10D07015007,Hot dogs"
+      },
+      {
+        "category_id": "G10D07015009",
+        "crumb": "/G10D03/deli_meat/G10D07015009",
+        "level": 3,
+        "name": "Jamones",
+        "parent_id": "deli_meat",
+        "tree_path": "/G10D03,Alimentos/deli_meat,Embutidos/G10D07015009,Jamones"
+      },
+      {
+        "category_id": "G10D07015011",
+        "crumb": "/G10D03/deli_meat/G10D07015011",
+        "level": 3,
+        "name": "Salchichas",
+        "parent_id": "deli_meat",
+        "tree_path": "/G10D03,Alimentos/deli_meat,Embutidos/G10D07015011,Salchichas"
+      },
+      {
+        "category_id": "G10D07017",
+        "crumb": "/G10D03/G10D07017",
+        "level": 2,
+        "name": "Comidas preparadas",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas"
+      },
+      {
+        "category_id": "G10D07017004",
+        "crumb": "/G10D03/G10D07017/G10D07017004",
+        "level": 3,
+        "name": "Salsas y untables",
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017004,Salsas y untables"
+      },
+      {
+        "category_id": "G10D07017005",
+        "crumb": "/G10D03/G10D07017/G10D07017005",
+        "level": 3,
+        "name": "Entradas y Aperitivos",
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017005,Entradas y Aperitivos"
+      },
+      {
+        "category_id": "G10D07017006",
+        "crumb": "/G10D03/G10D07017/G10D07017006",
+        "level": 3,
+        "name": "Bandejas para fiestas",
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017006,Bandejas para fiestas"
+      },
+      {
+        "category_id": "G10D07017008",
+        "crumb": "/G10D03/G10D07017/G10D07017008",
+        "level": 3,
+        "name": "Ensaladas",
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017008,Ensaladas"
+      },
+      {
+        "category_id": "G10D07017009",
+        "crumb": "/G10D03/G10D07017/G10D07017009",
+        "level": 3,
+        "name": "Guarniciones",
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017009,Guarniciones"
+      },
+      {
+        "category_id": "G10D07017010",
+        "crumb": "/G10D03/G10D07017/G10D07017010",
+        "level": 3,
+        "name": "Sopas",
+        "parent_id": "G10D07017",
+        "tree_path": "/G10D03,Alimentos/G10D07017,Comidas preparadas/G10D07017010,Sopas"
+      },
+      {
+        "category_id": "G10D08014",
+        "crumb": "/G10D08014",
+        "level": 1,
+        "name": "Licor, cerveza y vino",
+        "parent_id": null,
+        "tree_path": "/G10D08014,Licor, cerveza y vino"
+      },
+      {
+        "category_id": "G10D08014001",
+        "crumb": "/G10D08014/G10D08014001",
+        "level": 2,
+        "name": "Cerveza",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014001,Cerveza"
+      },
+      {
+        "category_id": "G10D08014004",
+        "crumb": "/G10D08014/G10D08014004",
+        "level": 2,
+        "name": "Gin",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014004,Gin"
+      },
+      {
+        "category_id": "G10D08014005",
+        "crumb": "/G10D08014/G10D08014005",
+        "level": 2,
+        "name": "Licor",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014005,Licor"
+      },
+      {
+        "category_id": "G10D08014008",
+        "crumb": "/G10D08014/G10D08014008",
+        "level": 2,
+        "name": "Bebidas sin alcohol",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014008,Bebidas sin alcohol"
+      },
+      {
+        "category_id": "G10D08014009",
+        "crumb": "/G10D08014/G10D08014009",
+        "level": 2,
+        "name": "Otros licores",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014009,Otros licores"
+      },
+      {
+        "category_id": "G10D08014011",
+        "crumb": "/G10D08014/G10D08014011",
+        "level": 2,
+        "name": "Vino tinto",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014011,Vino tinto"
+      },
+      {
+        "category_id": "G10D08014012",
+        "crumb": "/G10D08014/G10D08014012",
+        "level": 2,
+        "name": "Vino rosado",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014012,Vino rosado"
+      },
+      {
+        "category_id": "G10D08014013",
+        "crumb": "/G10D08014/G10D08014013",
+        "level": 2,
+        "name": "Ron",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014013,Ron"
+      },
+      {
+        "category_id": "G10D08014014",
+        "crumb": "/G10D08014/G10D08014014",
+        "level": 2,
+        "name": "Vino espumante",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014014,Vino espumante"
+      },
+      {
+        "category_id": "G10D08014015",
+        "crumb": "/G10D08014/G10D08014015",
+        "level": 2,
+        "name": "Tequila",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014015,Tequila"
+      },
+      {
+        "category_id": "G10D08014017",
+        "crumb": "/G10D08014/G10D08014017",
+        "level": 2,
+        "name": "Vodka",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014017,Vodka"
+      },
+      {
+        "category_id": "G10D08014018",
+        "crumb": "/G10D08014/G10D08014018",
+        "level": 2,
+        "name": "Whisky",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014018,Whisky"
+      },
+      {
+        "category_id": "G10D08014019",
+        "crumb": "/G10D08014/G10D08014019",
+        "level": 2,
+        "name": "Vino blanco",
+        "parent_id": "G10D08014",
+        "tree_path": "/G10D08014,Licor, cerveza y vino/G10D08014019,Vino blanco"
+      },
+      {
+        "category_id": "G10D32001001",
+        "crumb": "/G10D03/G10D53001/G10D32001001",
+        "level": 3,
+        "name": "Mezclas en polvo",
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D32001001,Mezclas en polvo"
+      },
+      {
+        "category_id": "G10D32001002",
+        "crumb": "/G10D03/G10D53001/G10D32001002",
+        "level": 3,
+        "name": "Jugos",
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D32001002,Jugos"
+      },
+      {
+        "category_id": "G10D32001004",
+        "crumb": "/G10D03/G10D53001/G10D32001004",
+        "level": 3,
+        "name": "Bebidas deportivas",
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D32001004,Bebidas deportivas"
+      },
+      {
+        "category_id": "G10D33005",
+        "crumb": "/G10D03/G10D33005",
+        "level": 2,
+        "name": "Enlatados",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados"
+      },
+      {
+        "category_id": "G10D34006001",
+        "crumb": "/G10D03/G10D33005/G10D34006001",
+        "level": 3,
+        "name": "Frijoles enlatados",
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006001,Frijoles enlatados"
+      },
+      {
+        "category_id": "G10D34006002",
+        "crumb": "/G10D03/G10D33005/G10D34006002",
+        "level": 3,
+        "name": "Frutas enlatadas",
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006002,Frutas enlatadas"
+      },
+      {
+        "category_id": "G10D34006004",
+        "crumb": "/G10D03/G10D33005/G10D34006004",
+        "level": 3,
+        "name": "Aceitunas enlatadas",
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006004,Aceitunas enlatadas"
+      },
+      {
+        "category_id": "G10D34006007",
+        "crumb": "/G10D03/G10D33005/G10D34006007",
+        "level": 3,
+        "name": "Tomates enlatados",
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006007,Tomates enlatados"
+      },
+      {
+        "category_id": "G10D34006008",
+        "crumb": "/G10D03/G10D33005/G10D34006008",
+        "level": 3,
+        "name": "Vegetales enlatados",
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006008,Vegetales enlatados"
+      },
+      {
+        "category_id": "G10D34006009",
+        "crumb": "/G10D03/G10D33005/G10D34006009",
+        "level": 3,
+        "name": "Pepinillos",
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D34006009,Pepinillos"
+      },
+      {
+        "category_id": "G10D35006003",
+        "crumb": "/G10D03/G10D33005/G10D35006003",
+        "level": 3,
+        "name": "Carne enlatada",
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D35006003,Carne enlatada"
+      },
+      {
+        "category_id": "G10D35006006",
+        "crumb": "/G10D03/G10D33005/G10D35006006",
+        "level": 3,
+        "name": "Mariscos enlatados",
+        "parent_id": "G10D33005",
+        "tree_path": "/G10D03,Alimentos/G10D33005,Enlatados/G10D35006006,Mariscos enlatados"
+      },
+      {
+        "category_id": "G10D35013",
+        "crumb": "/G10D03/G10D35013",
+        "level": 2,
+        "name": "Granos y pasta",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D35013,Granos y pasta"
+      },
+      {
+        "category_id": "G10D35013001",
+        "crumb": "/G10D03/G10D35013/G10D35013001",
+        "level": 3,
+        "name": "Frijoles secos",
+        "parent_id": "G10D35013",
+        "tree_path": "/G10D03,Alimentos/G10D35013,Granos y pasta/G10D35013001,Frijoles secos"
+      },
+      {
+        "category_id": "G10D35013002",
+        "crumb": "/G10D03/G10D35013/G10D35013002",
+        "level": 3,
+        "name": "Pasta",
+        "parent_id": "G10D35013",
+        "tree_path": "/G10D03,Alimentos/G10D35013,Granos y pasta/G10D35013002,Pasta"
+      },
+      {
+        "category_id": "G10D35013003",
+        "crumb": "/G10D03/G10D35013/G10D35013003",
+        "level": 3,
+        "name": "Arroz",
+        "parent_id": "G10D35013",
+        "tree_path": "/G10D03,Alimentos/G10D35013,Granos y pasta/G10D35013003,Arroz"
+      },
+      {
+        "category_id": "G10D36019002",
+        "crumb": "/G10D03/G10D02019/G10D36019002",
+        "level": 3,
+        "name": "Galletas saladas",
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D36019002,Galletas saladas"
+      },
+      {
+        "category_id": "G10D36019004",
+        "crumb": "/G10D03/G10D02019/G10D36019004",
+        "level": 3,
+        "name": "Bocadillos de frutas",
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D36019004,Bocadillos de frutas"
+      },
+      {
+        "category_id": "G10D36019005",
+        "crumb": "/G10D03/G10D02019/G10D36019005",
+        "level": 3,
+        "name": "Granola",
+        "parent_id": "G10D02019",
+        "tree_path": "/G10D03,Alimentos/G10D02019,Snacks/G10D36019005,Granola"
+      },
+      {
+        "category_id": "G10D37017002",
+        "crumb": "/G10D03/G10D03009/G10D37017002",
+        "level": 3,
+        "name": "Condimentos",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D37017002,Condimentos"
+      },
+      {
+        "category_id": "G10D37017007",
+        "crumb": "/G10D03/G10D03009/G10D37017007",
+        "level": 3,
+        "name": "Aderezos para ensalada",
+        "parent_id": "G10D03009",
+        "tree_path": "/G10D03,Alimentos/G10D03009,Aceites, harinas y condimentos/G10D37017007,Aderezos para ensalada"
+      },
+      {
+        "category_id": "G10D53001",
+        "crumb": "/G10D03/G10D53001",
+        "level": 2,
+        "name": "Bebidas",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas"
+      },
+      {
+        "category_id": "G10D53001003",
+        "crumb": "/G10D03/G10D53001/G10D53001003",
+        "level": 3,
+        "name": "Gaseosas",
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D53001003,Gaseosas"
+      },
+      {
+        "category_id": "G10D53001005",
+        "crumb": "/G10D03/G10D53001/G10D53001005",
+        "level": 3,
+        "name": "Agua",
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D53001005,Agua"
+      },
+      {
+        "category_id": "G10D53001006",
+        "crumb": "/G10D03/G10D07010/G10D53001006",
+        "level": 3,
+        "name": "Sustitutos de lácteos",
+        "parent_id": "G10D07010",
+        "tree_path": "/G10D03,Alimentos/G10D07010,Lácteos y Huevos/G10D53001006,Sustitutos de lácteos"
+      },
+      {
+        "category_id": "G10D53001007",
+        "crumb": "/G10D03/G10D53001/G10D53001007",
+        "level": 3,
+        "name": "Bebidas energéticas",
+        "parent_id": "G10D53001",
+        "tree_path": "/G10D03,Alimentos/G10D53001,Bebidas/G10D53001007,Bebidas energéticas"
+      },
+      {
+        "category_id": "G10D57015012",
+        "crumb": "/G10D03/Seafood/G10D57015012",
+        "level": 3,
+        "name": "Pescado",
+        "parent_id": "Seafood",
+        "tree_path": "/G10D03,Alimentos/Seafood,Mariscos y pescado/G10D57015012,Pescado"
+      },
+      {
+        "category_id": "G10D57015013",
+        "crumb": "/G10D03/Seafood/G10D57015013",
+        "level": 3,
+        "name": "Mariscos",
+        "parent_id": "Seafood",
+        "tree_path": "/G10D03,Alimentos/Seafood,Mariscos y pescado/G10D57015013,Mariscos"
+      },
+      {
+        "category_id": "G10D59015",
+        "crumb": "/G10D03/G10D59015",
+        "level": 2,
+        "name": "Carnes",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D59015,Carnes"
+      },
+      {
+        "category_id": "G10D59015003",
+        "crumb": "/G10D03/Poultry/G10D59015003",
+        "level": 3,
+        "name": "Pollo",
+        "parent_id": "Poultry",
+        "tree_path": "/G10D03,Alimentos/Poultry,Aves/G10D59015003,Pollo"
+      },
+      {
+        "category_id": "G10D59015014",
+        "crumb": "/G10D03/Poultry/G10D59015014",
+        "level": 3,
+        "name": "Pavo",
+        "parent_id": "Poultry",
+        "tree_path": "/G10D03,Alimentos/Poultry,Aves/G10D59015014,Pavo"
+      },
+      {
+        "category_id": "G10D63002",
+        "crumb": "/G10D03/G10D63002",
+        "level": 2,
+        "name": "Panes y tortillas",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D63002,Panes y tortillas"
+      },
+      {
+        "category_id": "G10D63002007",
+        "crumb": "/G10D03/Fresh_Bakery/G10D63002007",
+        "level": 3,
+        "name": "Muffins",
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D63002007,Muffins"
+      },
+      {
+        "category_id": "G10D63002008",
+        "crumb": "/G10D03/Fresh_Bakery/G10D63002008",
+        "level": 3,
+        "name": "Repostería",
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D63002008,Repostería"
+      },
+      {
+        "category_id": "G10D63002011",
+        "crumb": "/G10D03/Fresh_Bakery/G10D63002011",
+        "level": 3,
+        "name": "Panecillos, rollos y pan estilo francés",
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D63002011,Panecillos, rollos y pan estilo francés"
+      },
+      {
+        "category_id": "G10D63008",
+        "crumb": "/G10D03/G10D63008",
+        "level": 2,
+        "name": "Galletas, postres, y helados",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/G10D63008,Galletas, postres, y helados"
+      },
+      {
+        "category_id": "G10D63008002",
+        "crumb": "/G10D03/Fresh_Bakery/G10D63008002",
+        "level": 3,
+        "name": "Pasteles",
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D63008002,Pasteles"
+      },
+      {
+        "category_id": "G10D63008004",
+        "crumb": "/G10D03/Fresh_Bakery/G10D63008004",
+        "level": 3,
+        "name": "Cupcakes",
+        "parent_id": "Fresh_Bakery",
+        "tree_path": "/G10D03,Alimentos/Fresh_Bakery,Panadería y repostería/G10D63008004,Cupcakes"
+      },
+      {
+        "category_id": "G10D65015010",
+        "crumb": "/G10D03/G10D59015/G10D65015010",
+        "level": 3,
+        "name": "Cerdo",
+        "parent_id": "G10D59015",
+        "tree_path": "/G10D03,Alimentos/G10D59015,Carnes/G10D65015010,Cerdo"
+      },
+      {
+        "category_id": "H10D01008",
+        "crumb": "/H10D21/H10D01008",
+        "level": 2,
+        "name": "Fósforos y encendedores",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D01008,Fósforos y encendedores"
+      },
+      {
+        "category_id": "H10D20002001",
+        "crumb": "/H10D21/H10D21002/H10D20002001",
+        "level": 3,
+        "name": "Energía alternativa e inversores de energía",
+        "parent_id": "H10D21002",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21002,Equipamiento y suministros eléctricos/H10D20002001,Energía alternativa e inversores de energía"
+      },
+      {
+        "category_id": "H10D21",
+        "crumb": "/H10D21",
+        "level": 1,
+        "name": "Ferretería y mejoras al hogar",
+        "parent_id": null,
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar"
+      },
+      {
+        "category_id": "H10D21001",
+        "crumb": "/H10D21/H10D21001",
+        "level": 2,
+        "name": "Accesorios para el baño y la ducha",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21001,Accesorios para el baño y la ducha"
+      },
+      {
+        "category_id": "H10D21002",
+        "crumb": "/H10D21/H10D21002",
+        "level": 2,
+        "name": "Equipamiento y suministros eléctricos",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21002,Equipamiento y suministros eléctricos"
+      },
+      {
+        "category_id": "H10D21002003",
+        "crumb": "/H10D21/H10D21002/H10D21002003",
+        "level": 3,
+        "name": "Cables de extensión",
+        "parent_id": "H10D21002",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21002,Equipamiento y suministros eléctricos/H10D21002003,Cables de extensión"
+      },
+      {
+        "category_id": "H10D21002004",
+        "crumb": "/H10D21/H10D21002/H10D21002004",
+        "level": 3,
+        "name": "Linternas",
+        "parent_id": "H10D21002",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21002,Equipamiento y suministros eléctricos/H10D21002004,Linternas"
+      },
+      {
+        "category_id": "H10D21002005",
+        "crumb": "/H10D21/H10D21002/H10D21002005",
+        "level": 3,
+        "name": "Bombillas",
+        "parent_id": "H10D21002",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21002,Equipamiento y suministros eléctricos/H10D21002005,Bombillas"
+      },
+      {
+        "category_id": "H10D21002006",
+        "crumb": "/H10D21/H10D21002/H10D21002006",
+        "level": 3,
+        "name": "Accesorios para iluminación",
+        "parent_id": "H10D21002",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21002,Equipamiento y suministros eléctricos/H10D21002006,Accesorios para iluminación"
+      },
+      {
+        "category_id": "H10D21003",
+        "crumb": "/H10D21/H10D21003",
+        "level": 2,
+        "name": "Organización para el garage",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21003,Organización para el garage"
+      },
+      {
+        "category_id": "H10D21003001",
+        "crumb": "/H10D21/H10D21003/H10D21003001",
+        "level": 3,
+        "name": "Gabinetes y estantes para el garage",
+        "parent_id": "H10D21003",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21003,Organización para el garage/H10D21003001,Gabinetes y estantes para el garage"
+      },
+      {
+        "category_id": "H10D21003002",
+        "crumb": "/H10D21/H10D21003/H10D21003002",
+        "level": 3,
+        "name": "Compartimientos de almacenaje",
+        "parent_id": "H10D21003",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21003,Organización para el garage/H10D21003002,Compartimientos de almacenaje"
+      },
+      {
+        "category_id": "H10D21003003",
+        "crumb": "/H10D21/H10D21003/H10D21003003",
+        "level": 3,
+        "name": "Almacenamiento de herramientas",
+        "parent_id": "H10D21003",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21003,Organización para el garage/H10D21003003,Almacenamiento de herramientas"
+      },
+      {
+        "category_id": "H10D21004",
+        "crumb": "/H10D21/H10D21004",
+        "level": 2,
+        "name": "Generadores",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21004,Generadores"
+      },
+      {
+        "category_id": "H10D21005",
+        "crumb": "/H10D21/H10D21005",
+        "level": 2,
+        "name": "Herramientas manuales",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21005,Herramientas manuales"
+      },
+      {
+        "category_id": "H10D21005002",
+        "crumb": "/H10D21/H10D21005/H10D21005002",
+        "level": 3,
+        "name": "Juegos de destornilladores",
+        "parent_id": "H10D21005",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21005,Herramientas manuales/H10D21005002,Juegos de destornilladores"
+      },
+      {
+        "category_id": "H10D21005004",
+        "crumb": "/H10D21/H10D21005/H10D21005004",
+        "level": 3,
+        "name": "Juegos de herramientas",
+        "parent_id": "H10D21005",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21005,Herramientas manuales/H10D21005004,Juegos de herramientas"
+      },
+      {
+        "category_id": "H10D21006",
+        "crumb": "/H10D21/H10D21006",
+        "level": 2,
+        "name": "Carritos",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21006,Carritos"
+      },
+      {
+        "category_id": "H10D21007",
+        "crumb": "/H10D21/H10D21007",
+        "level": 2,
+        "name": "Escaleras",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21007,Escaleras"
+      },
+      {
+        "category_id": "H10D21009",
+        "crumb": "/H10D21/H10D21009",
+        "level": 2,
+        "name": "Herramientas eléctricas",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21009,Herramientas eléctricas"
+      },
+      {
+        "category_id": "H10D21009007",
+        "crumb": "/H10D21/H10D21009/H10D21009007",
+        "level": 3,
+        "name": "Taladros eléctricos",
+        "parent_id": "H10D21009",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21009,Herramientas eléctricas/H10D21009007,Taladros eléctricos"
+      },
+      {
+        "category_id": "H10D21009008",
+        "crumb": "/H10D21/H10D21009/H10D21009008",
+        "level": 3,
+        "name": "Hidrolavadoras",
+        "parent_id": "H10D21009",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21009,Herramientas eléctricas/H10D21009008,Hidrolavadoras"
+      },
+      {
+        "category_id": "H10D21009009",
+        "crumb": "/H10D21/H10D21009/H10D21009009",
+        "level": 3,
+        "name": "Pistolas para pintar",
+        "parent_id": "H10D21009",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21009,Herramientas eléctricas/H10D21009009,Pistolas para pintar"
+      },
+      {
+        "category_id": "H10D21009012",
+        "crumb": "/H10D21/H10D21009/H10D21009012",
+        "level": 3,
+        "name": "Herramientas rotativas",
+        "parent_id": "H10D21009",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21009,Herramientas eléctricas/H10D21009012,Herramientas rotativas"
+      },
+      {
+        "category_id": "H10D21011",
+        "crumb": "/H10D21/H10D21011",
+        "level": 2,
+        "name": "Piletas de cocina",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21011,Piletas de cocina"
+      },
+      {
+        "category_id": "H10D21014",
+        "crumb": "/H10D21/H10D21014",
+        "level": 2,
+        "name": "Lonas protectoras",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21014,Lonas protectoras"
+      },
+      {
+        "category_id": "H10D21017",
+        "crumb": "/H10D21/H10D21017",
+        "level": 2,
+        "name": "Aspiradoras secas y húmedas",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21017,Aspiradoras secas y húmedas"
+      },
+      {
+        "category_id": "H10D21018",
+        "crumb": "/H10D21/H10D21018",
+        "level": 2,
+        "name": "Materiales para Pintar",
+        "parent_id": "H10D21",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21018,Materiales para Pintar"
+      },
+      {
+        "category_id": "H10D25002002",
+        "crumb": "/H10D21/H10D21002/H10D25002002",
+        "level": 3,
+        "name": "Baterías",
+        "parent_id": "H10D21002",
+        "tree_path": "/H10D21,Ferretería y mejoras al hogar/H10D21002,Equipamiento y suministros eléctricos/H10D25002002,Baterías"
+      },
+      {
+        "category_id": "H20D09",
+        "crumb": "/H20D09",
+        "level": 1,
+        "name": "Salud y belleza",
+        "parent_id": null,
+        "tree_path": "/H20D09,Salud y belleza"
+      },
+      {
+        "category_id": "H20D09001",
+        "crumb": "/H20D09/H20D09001",
+        "level": 2,
+        "name": "Pañales para adultos",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09001,Pañales para adultos"
+      },
+      {
+        "category_id": "H20D09003",
+        "crumb": "/H20D09/H20D09003",
+        "level": 2,
+        "name": "Cosméticos",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09003,Cosméticos"
+      },
+      {
+        "category_id": "H20D09005",
+        "crumb": "/H20D09/H20D09005",
+        "level": 2,
+        "name": "Higiene femenina",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09005,Higiene femenina"
+      },
+      {
+        "category_id": "H20D09005001",
+        "crumb": "/H20D09/H20D09005/H20D09005001",
+        "level": 3,
+        "name": "Productos de limpieza",
+        "parent_id": "H20D09005",
+        "tree_path": "/H20D09,Salud y belleza/H20D09005,Higiene femenina/H20D09005001,Productos de limpieza"
+      },
+      {
+        "category_id": "H20D09005002",
+        "crumb": "/H20D09/H20D09005/H20D09005002",
+        "level": 3,
+        "name": "Toallas sanitarias",
+        "parent_id": "H20D09005",
+        "tree_path": "/H20D09,Salud y belleza/H20D09005,Higiene femenina/H20D09005002,Toallas sanitarias"
+      },
+      {
+        "category_id": "H20D09005003",
+        "crumb": "/H20D09/H20D09005/H20D09005003",
+        "level": 3,
+        "name": "Tampones",
+        "parent_id": "H20D09005",
+        "tree_path": "/H20D09,Salud y belleza/H20D09005,Higiene femenina/H20D09005003,Tampones"
+      },
+      {
+        "category_id": "H20D09006",
+        "crumb": "/H20D09/H20D09006",
+        "level": 2,
+        "name": "Primeros auxilios",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09006,Primeros auxilios"
+      },
+      {
+        "category_id": "H20D09006004",
+        "crumb": "/H20D09/H20D09006/H20D09006004",
+        "level": 3,
+        "name": "Guantes y mascarillas",
+        "parent_id": "H20D09006",
+        "tree_path": "/H20D09,Salud y belleza/H20D09006,Primeros auxilios/H20D09006004,Guantes y mascarillas"
+      },
+      {
+        "category_id": "H20D09007",
+        "crumb": "/H20D09/H20D09007",
+        "level": 2,
+        "name": "Cuidado del cabello",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09007,Cuidado del cabello"
+      },
+      {
+        "category_id": "H20D09007002",
+        "crumb": "/H20D09/H20D09007/H20D09007002",
+        "level": 3,
+        "name": "Spray y gel para el cabello",
+        "parent_id": "H20D09007",
+        "tree_path": "/H20D09,Salud y belleza/H20D09007,Cuidado del cabello/H20D09007002,Spray y gel para el cabello"
+      },
+      {
+        "category_id": "H20D09007003",
+        "crumb": "/H20D09/H20D09007/H20D09007003",
+        "level": 3,
+        "name": "Shampoo y acondicionador",
+        "parent_id": "H20D09007",
+        "tree_path": "/H20D09,Salud y belleza/H20D09007,Cuidado del cabello/H20D09007003,Shampoo y acondicionador"
+      },
+      {
+        "category_id": "H20D09008",
+        "crumb": "/H20D09/H20D09008",
+        "level": 2,
+        "name": "Dispositivos y aparatos médicos",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09008,Dispositivos y aparatos médicos"
+      },
+      {
+        "category_id": "H20D09008001",
+        "crumb": "/H20D09/H20D09008/H20D09008001",
+        "level": 3,
+        "name": "Monitores de tensión arterial",
+        "parent_id": "H20D09008",
+        "tree_path": "/H20D09,Salud y belleza/H20D09008,Dispositivos y aparatos médicos/H20D09008001,Monitores de tensión arterial"
+      },
+      {
+        "category_id": "H20D09008002",
+        "crumb": "/H20D09/H20D09008/H20D09008002",
+        "level": 3,
+        "name": "Monitores de glucosa",
+        "parent_id": "H20D09008",
+        "tree_path": "/H20D09,Salud y belleza/H20D09008,Dispositivos y aparatos médicos/H20D09008002,Monitores de glucosa"
+      },
+      {
+        "category_id": "H20D09008003",
+        "crumb": "/H20D09/H20D09008/H20D09008003",
+        "level": 3,
+        "name": "Nebulizadores",
+        "parent_id": "H20D09008",
+        "tree_path": "/H20D09,Salud y belleza/H20D09008,Dispositivos y aparatos médicos/H20D09008003,Nebulizadores"
+      },
+      {
+        "category_id": "H20D09009",
+        "crumb": "/H20D09/H20D09009",
+        "level": 2,
+        "name": "Equipo para movilidad",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09009,Equipo para movilidad"
+      },
+      {
+        "category_id": "H20D09009003",
+        "crumb": "/H20D09/H20D09009/H20D09009003",
+        "level": 3,
+        "name": "Sillas de ruedas",
+        "parent_id": "H20D09009",
+        "tree_path": "/H20D09,Salud y belleza/H20D09009,Equipo para movilidad/H20D09009003,Sillas de ruedas"
+      },
+      {
+        "category_id": "H20D09010",
+        "crumb": "/H20D09/H20D09010",
+        "level": 2,
+        "name": "Suplementos nutricionales",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09010,Suplementos nutricionales"
+      },
+      {
+        "category_id": "H20D09011",
+        "crumb": "/H20D09/H20D09011",
+        "level": 2,
+        "name": "Cuidado oral",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09011,Cuidado oral"
+      },
+      {
+        "category_id": "H20D09011001",
+        "crumb": "/H20D09/H20D09011/H20D09011001",
+        "level": 3,
+        "name": "Enjuague oral",
+        "parent_id": "H20D09011",
+        "tree_path": "/H20D09,Salud y belleza/H20D09011,Cuidado oral/H20D09011001,Enjuague oral"
+      },
+      {
+        "category_id": "H20D09011002",
+        "crumb": "/H20D09/H20D09011/H20D09011002",
+        "level": 3,
+        "name": "Cepillos de dientes",
+        "parent_id": "H20D09011",
+        "tree_path": "/H20D09,Salud y belleza/H20D09011,Cuidado oral/H20D09011002,Cepillos de dientes"
+      },
+      {
+        "category_id": "H20D09011003",
+        "crumb": "/H20D09/H20D09011/H20D09011003",
+        "level": 3,
+        "name": "Pasta dental",
+        "parent_id": "H20D09011",
+        "tree_path": "/H20D09,Salud y belleza/H20D09011,Cuidado oral/H20D09011003,Pasta dental"
+      },
+      {
+        "category_id": "H20D09012",
+        "crumb": "/H20D09/H20D09012",
+        "level": 2,
+        "name": "Medicamentos",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09012,Medicamentos"
+      },
+      {
+        "category_id": "H20D09014",
+        "crumb": "/H20D09/H20D09014",
+        "level": 2,
+        "name": "Higiene personal",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09014,Higiene personal"
+      },
+      {
+        "category_id": "H20D09014001",
+        "crumb": "/H20D09/H20D09014/H20D09014001",
+        "level": 3,
+        "name": "Máquinas para Cortar el Cabello o Afeitar",
+        "parent_id": "H20D09014",
+        "tree_path": "/H20D09,Salud y belleza/H20D09014,Higiene personal/H20D09014001,Máquinas para Cortar el Cabello o Afeitar"
+      },
+      {
+        "category_id": "H20D09014002",
+        "crumb": "/H20D09/H20D09014/H20D09014002",
+        "level": 3,
+        "name": "Desodorante",
+        "parent_id": "H20D09014",
+        "tree_path": "/H20D09,Salud y belleza/H20D09014,Higiene personal/H20D09014002,Desodorante"
+      },
+      {
+        "category_id": "H20D09014003",
+        "crumb": "/H20D09/H20D09014/H20D09014003",
+        "level": 3,
+        "name": "Afeitadoras",
+        "parent_id": "H20D09014",
+        "tree_path": "/H20D09,Salud y belleza/H20D09014,Higiene personal/H20D09014003,Afeitadoras"
+      },
+      {
+        "category_id": "H20D09014004",
+        "crumb": "/H20D09/H20D09014/H20D09014004",
+        "level": 3,
+        "name": "Geles y cremas de afeitar",
+        "parent_id": "H20D09014",
+        "tree_path": "/H20D09,Salud y belleza/H20D09014,Higiene personal/H20D09014004,Geles y cremas de afeitar"
+      },
+      {
+        "category_id": "H20D09014005",
+        "crumb": "/H20D09/H20D09014/H20D09014005",
+        "level": 3,
+        "name": "Hisopos y bolitas de Algodón",
+        "parent_id": "H20D09014",
+        "tree_path": "/H20D09,Salud y belleza/H20D09014,Higiene personal/H20D09014005,Hisopos y bolitas de Algodón"
+      },
+      {
+        "category_id": "H20D09016",
+        "crumb": "/H20D09/H20D09016",
+        "level": 2,
+        "name": "Cuidado de la piel",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09016,Cuidado de la piel"
+      },
+      {
+        "category_id": "H20D09016001",
+        "crumb": "/H20D09/H20D09016/H20D09016001",
+        "level": 3,
+        "name": "Lociones y cremas",
+        "parent_id": "H20D09016",
+        "tree_path": "/H20D09,Salud y belleza/H20D09016,Cuidado de la piel/H20D09016001,Lociones y cremas"
+      },
+      {
+        "category_id": "H20D09016003",
+        "crumb": "/H20D09/H20D09016/H20D09016003",
+        "level": 3,
+        "name": "Jabón",
+        "parent_id": "H20D09016",
+        "tree_path": "/H20D09,Salud y belleza/H20D09016,Cuidado de la piel/H20D09016003,Jabón"
+      },
+      {
+        "category_id": "H20D09016004",
+        "crumb": "/H20D09/H20D09016/H20D09016004",
+        "level": 3,
+        "name": "Filtros solares",
+        "parent_id": "H20D09016",
+        "tree_path": "/H20D09,Salud y belleza/H20D09016,Cuidado de la piel/H20D09016004,Filtros solares"
+      },
+      {
+        "category_id": "H20D09017",
+        "crumb": "/H20D09/H20D09017",
+        "level": 2,
+        "name": "Vitaminas",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H20D09017,Vitaminas"
+      },
+      {
+        "category_id": "H30D05005",
+        "crumb": "/H30D22/H30D05005",
+        "level": 2,
+        "name": "Cubiertos y mantelería descartable",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D05005,Cubiertos y mantelería descartable"
+      },
+      {
+        "category_id": "H30D05005001",
+        "crumb": "/H30D22/H30D05005/H30D05005001",
+        "level": 3,
+        "name": "Copas descartables",
+        "parent_id": "H30D05005",
+        "tree_path": "/H30D22,Hogar/H30D05005,Cubiertos y mantelería descartable/H30D05005001,Copas descartables"
+      },
+      {
+        "category_id": "H30D05005002",
+        "crumb": "/H30D22/H30D05005/H30D05005002",
+        "level": 3,
+        "name": "Cubiertos descartables",
+        "parent_id": "H30D05005",
+        "tree_path": "/H30D22,Hogar/H30D05005,Cubiertos y mantelería descartable/H30D05005002,Cubiertos descartables"
+      },
+      {
+        "category_id": "H30D05005003",
+        "crumb": "/H30D22/H30D05005/H30D05005003",
+        "level": 3,
+        "name": "Platos y bowls descartables",
+        "parent_id": "H30D05005",
+        "tree_path": "/H30D22,Hogar/H30D05005,Cubiertos y mantelería descartable/H30D05005003,Platos y bowls descartables"
+      },
+      {
+        "category_id": "H30D05011",
+        "crumb": "/H30D22/H30D05011",
+        "level": 2,
+        "name": "Productos de papelería para el hogar",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D05011,Productos de papelería para el hogar"
+      },
+      {
+        "category_id": "H30D05011002",
+        "crumb": "/H20D09/H30D05011002",
+        "level": 2,
+        "name": "Pañuelos faciales",
+        "parent_id": "H20D09",
+        "tree_path": "/H20D09,Salud y belleza/H30D05011002,Pañuelos faciales"
+      },
+      {
+        "category_id": "H30D05011004",
+        "crumb": "/H30D22/H30D05011/H30D05011004",
+        "level": 3,
+        "name": "Toallas de papel",
+        "parent_id": "H30D05011",
+        "tree_path": "/H30D22,Hogar/H30D05011,Productos de papelería para el hogar/H30D05011004,Toallas de papel"
+      },
+      {
+        "category_id": "H30D05011005",
+        "crumb": "/H30D22/H30D05011/H30D05011005",
+        "level": 3,
+        "name": "Papel higiénico",
+        "parent_id": "H30D05011",
+        "tree_path": "/H30D22,Hogar/H30D05011,Productos de papelería para el hogar/H30D05011005,Papel higiénico"
+      },
+      {
+        "category_id": "H30D09013005",
+        "crumb": "/H30D22/H30D52013/H30D09013005",
+        "level": 3,
+        "name": "Perchas",
+        "parent_id": "H30D52013",
+        "tree_path": "/H30D22,Hogar/H30D52013,Suministros de lavandería/H30D09013005,Perchas"
+      },
+      {
+        "category_id": "H30D22",
+        "crumb": "/H30D22",
+        "level": 1,
+        "name": "Hogar",
+        "parent_id": null,
+        "tree_path": "/H30D22,Hogar"
+      },
+      {
+        "category_id": "H30D22003",
+        "crumb": "/H30D22/H30D22003",
+        "level": 2,
+        "name": "Utensilios para la cocina",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D22003,Utensilios para la cocina"
+      },
+      {
+        "category_id": "H30D22004",
+        "crumb": "/H30D22/H30D22004",
+        "level": 2,
+        "name": "Cubiertos, vajilla y utensilios para servir",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D22004,Cubiertos, vajilla y utensilios para servir"
+      },
+      {
+        "category_id": "H30D22007",
+        "crumb": "/H30D22/H30D22007",
+        "level": 2,
+        "name": "Recipientes para comida",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D22007,Recipientes para comida"
+      },
+      {
+        "category_id": "H30D22008",
+        "crumb": "/H30D22/H30D22008",
+        "level": 2,
+        "name": "Cristalería",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D22008,Cristalería"
+      },
+      {
+        "category_id": "H30D22009001",
+        "crumb": "/H30D22/H30D41009/H30D22009001",
+        "level": 3,
+        "name": "Plantas artificiales",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D22009001,Plantas artificiales"
+      },
+      {
+        "category_id": "H30D22009008",
+        "crumb": "/H30D22/H30D41009/H30D22009008",
+        "level": 3,
+        "name": "Cortinas",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D22009008,Cortinas"
+      },
+      {
+        "category_id": "H30D22010004",
+        "crumb": "/H30D22/H30D27010/H30D22010004",
+        "level": 3,
+        "name": "Soportes para toallas de papel",
+        "parent_id": "H30D27010",
+        "tree_path": "/H30D22,Hogar/H30D27010,Organización del hogar/H30D22010004,Soportes para toallas de papel"
+      },
+      {
+        "category_id": "H30D22010009",
+        "crumb": "/H30D22/H30D27010/H30D22010009",
+        "level": 3,
+        "name": "Bolsas reutilizables",
+        "parent_id": "H30D27010",
+        "tree_path": "/H30D22,Hogar/H30D27010,Organización del hogar/H30D22010009,Bolsas reutilizables"
+      },
+      {
+        "category_id": "H30D22012",
+        "crumb": "/H30D22/H30D22012",
+        "level": 2,
+        "name": "Accesorios para la cocina",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D22012,Accesorios para la cocina"
+      },
+      {
+        "category_id": "H30D22012004",
+        "crumb": "/H30D22/H30D22012/H30D22012004",
+        "level": 3,
+        "name": "Utensilios de cocina",
+        "parent_id": "H30D22012",
+        "tree_path": "/H30D22,Hogar/H30D22012,Accesorios para la cocina/H30D22012004,Utensilios de cocina"
+      },
+      {
+        "category_id": "H30D22013008",
+        "crumb": "/H30D22/H30D52013/H30D22013008",
+        "level": 3,
+        "name": "Canastas y bolsas para lavandería",
+        "parent_id": "H30D52013",
+        "tree_path": "/H30D22,Hogar/H30D52013,Suministros de lavandería/H30D22013008,Canastas y bolsas para lavandería"
+      },
+      {
+        "category_id": "H30D22013009",
+        "crumb": "/H30D22/H30D52013/H30D22013009",
+        "level": 3,
+        "name": "Rodillos para pelusas",
+        "parent_id": "H30D52013",
+        "tree_path": "/H30D22,Hogar/H30D52013,Suministros de lavandería/H30D22013009,Rodillos para pelusas"
+      },
+      {
+        "category_id": "H30D22016",
+        "crumb": "/H30D22/H30D22016",
+        "level": 2,
+        "name": "Jarros y botellas de agua para viajes",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D22016,Jarros y botellas de agua para viajes"
+      },
+      {
+        "category_id": "H30D23011001",
+        "crumb": "/H30D22/H30D05011/H30D23011001",
+        "level": 3,
+        "name": "Filtros para café",
+        "parent_id": "H30D05011",
+        "tree_path": "/H30D22,Hogar/H30D05011,Productos de papelería para el hogar/H30D23011001,Filtros para café"
+      },
+      {
+        "category_id": "H30D25009011",
+        "crumb": "/H30D22/H30D41009/H30D25009011",
+        "level": 3,
+        "name": "Lámparas",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D25009011,Lámparas"
+      },
+      {
+        "category_id": "H30D27009007",
+        "crumb": "/H30D22/H30D41009/H30D27009007",
+        "level": 3,
+        "name": "Relojes",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D27009007,Relojes"
+      },
+      {
+        "category_id": "H30D27009012",
+        "crumb": "/H30D22/H30D41009/H30D27009012",
+        "level": 3,
+        "name": "Espejos",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D27009012,Espejos"
+      },
+      {
+        "category_id": "H30D27010",
+        "crumb": "/H30D22/H30D27010",
+        "level": 2,
+        "name": "Organización del hogar",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D27010,Organización del hogar"
+      },
+      {
+        "category_id": "H30D27010001",
+        "crumb": "/H30D22/H30D27010/H30D27010001",
+        "level": 3,
+        "name": "Canastas",
+        "parent_id": "H30D27010",
+        "tree_path": "/H30D22,Hogar/H30D27010,Organización del hogar/H30D27010001,Canastas"
+      },
+      {
+        "category_id": "H30D27010005",
+        "crumb": "/H30D22/H30D27010/H30D27010005",
+        "level": 3,
+        "name": "Unidades de estanterías",
+        "parent_id": "H30D27010",
+        "tree_path": "/H30D22,Hogar/H30D27010,Organización del hogar/H30D27010005,Unidades de estanterías"
+      },
+      {
+        "category_id": "H30D41009",
+        "crumb": "/H30D22/H30D41009",
+        "level": 2,
+        "name": "Decoración del hogar",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar"
+      },
+      {
+        "category_id": "H30D41009002",
+        "crumb": "/H30D22/H30D41009/H30D41009002",
+        "level": 3,
+        "name": "Sábanas",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D41009002,Sábanas"
+      },
+      {
+        "category_id": "H30D41009003",
+        "crumb": "/H30D22/H30D41009/H30D41009003",
+        "level": 3,
+        "name": "Ropa de cama",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D41009003,Ropa de cama"
+      },
+      {
+        "category_id": "H30D41009004",
+        "crumb": "/H30D22/H30D41009/H30D41009004",
+        "level": 3,
+        "name": "Mantas y cobertores",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D41009004,Mantas y cobertores"
+      },
+      {
+        "category_id": "H30D41009006",
+        "crumb": "/H30D22/H30D41009/H30D41009006",
+        "level": 3,
+        "name": "Velas",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D41009006,Velas"
+      },
+      {
+        "category_id": "H30D41009009",
+        "crumb": "/H30D22/H30D41009/H30D41009009",
+        "level": 3,
+        "name": "Accesorios decorativos",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D41009009,Accesorios decorativos"
+      },
+      {
+        "category_id": "H30D41009014",
+        "crumb": "/H30D22/H30D41009/H30D41009014",
+        "level": 3,
+        "name": "Almohadas",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D41009014,Almohadas"
+      },
+      {
+        "category_id": "H30D41009015",
+        "crumb": "/H30D22/H30D41009/H30D41009015",
+        "level": 3,
+        "name": "Alfombras",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D41009015,Alfombras"
+      },
+      {
+        "category_id": "H30D41009017",
+        "crumb": "/H30D22/H30D41009/H30D41009017",
+        "level": 3,
+        "name": "Mantas",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D41009017,Mantas"
+      },
+      {
+        "category_id": "H30D41009018",
+        "crumb": "/H30D22/H30D41009/H30D41009018",
+        "level": 3,
+        "name": "Toallas",
+        "parent_id": "H30D41009",
+        "tree_path": "/H30D22,Hogar/H30D41009,Decoración del hogar/H30D41009018,Toallas"
+      },
+      {
+        "category_id": "H30D52002",
+        "crumb": "/H30D22/H30D52002",
+        "level": 2,
+        "name": "Productos de limpieza",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza"
+      },
+      {
+        "category_id": "H30D52002001",
+        "crumb": "/H30D22/H30D52002/H30D52002001",
+        "level": 3,
+        "name": "Aromatizantes",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002001,Aromatizantes"
+      },
+      {
+        "category_id": "H30D52002002",
+        "crumb": "/H30D22/H30D52002/H30D52002002",
+        "level": 3,
+        "name": "Limpiadores para todo propósito",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002002,Limpiadores para todo propósito"
+      },
+      {
+        "category_id": "H30D52002003",
+        "crumb": "/H30D22/H30D52002/H30D52002003",
+        "level": 3,
+        "name": "Escobas y trapeadores",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002003,Escobas y trapeadores"
+      },
+      {
+        "category_id": "H30D52002005",
+        "crumb": "/H30D22/H30D52002/H30D52002005",
+        "level": 3,
+        "name": "Limpiadores para la encimera",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002005,Limpiadores para la encimera"
+      },
+      {
+        "category_id": "H30D52002006",
+        "crumb": "/H30D22/H30D52002/H30D52002006",
+        "level": 3,
+        "name": "Detergentes para vajilla",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002006,Detergentes para vajilla"
+      },
+      {
+        "category_id": "H30D52002007",
+        "crumb": "/H30D22/H30D52002/H30D52002007",
+        "level": 3,
+        "name": "Desinfectantes",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002007,Desinfectantes"
+      },
+      {
+        "category_id": "H30D52002009",
+        "crumb": "/H30D22/H30D52002/H30D52002009",
+        "level": 3,
+        "name": "Bolsas para la basura",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002009,Bolsas para la basura"
+      },
+      {
+        "category_id": "H30D52002010",
+        "crumb": "/H30D22/H30D52002/H30D52002010",
+        "level": 3,
+        "name": "Esponjas",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002010,Esponjas"
+      },
+      {
+        "category_id": "H30D52002012",
+        "crumb": "/H30D22/H30D52002/H30D52002012",
+        "level": 3,
+        "name": "Cepillos para inodoro",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002012,Cepillos para inodoro"
+      },
+      {
+        "category_id": "H30D52002013",
+        "crumb": "/H30D22/H30D52002/H30D52002013",
+        "level": 3,
+        "name": "Limpiadores para inodoro",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002013,Limpiadores para inodoro"
+      },
+      {
+        "category_id": "H30D52002014",
+        "crumb": "/H30D22/H30D27010/H30D52002014",
+        "level": 3,
+        "name": "Cestos de basura",
+        "parent_id": "H30D27010",
+        "tree_path": "/H30D22,Hogar/H30D27010,Organización del hogar/H30D52002014,Cestos de basura"
+      },
+      {
+        "category_id": "H30D52002015",
+        "crumb": "/H30D22/H30D52002/H30D52002015",
+        "level": 3,
+        "name": "Limpiadores de vidrios",
+        "parent_id": "H30D52002",
+        "tree_path": "/H30D22,Hogar/H30D52002,Productos de limpieza/H30D52002015,Limpiadores de vidrios"
+      },
+      {
+        "category_id": "H30D52011003",
+        "crumb": "/H30D22/H30D05011/H30D52011003",
+        "level": 3,
+        "name": "Servilletas",
+        "parent_id": "H30D05011",
+        "tree_path": "/H30D22,Hogar/H30D05011,Productos de papelería para el hogar/H30D52011003,Servilletas"
+      },
+      {
+        "category_id": "H30D52013",
+        "crumb": "/H30D22/H30D52013",
+        "level": 2,
+        "name": "Suministros de lavandería",
+        "parent_id": "H30D22",
+        "tree_path": "/H30D22,Hogar/H30D52013,Suministros de lavandería"
+      },
+      {
+        "category_id": "H30D52013001",
+        "crumb": "/H30D22/H30D52013/H30D52013001",
+        "level": 3,
+        "name": "Tendederos",
+        "parent_id": "H30D52013",
+        "tree_path": "/H30D22,Hogar/H30D52013,Suministros de lavandería/H30D52013001,Tendederos"
+      },
+      {
+        "category_id": "H30D52013003",
+        "crumb": "/H30D22/H30D52013/H30D52013003",
+        "level": 3,
+        "name": "Toallas para secadora",
+        "parent_id": "H30D52013",
+        "tree_path": "/H30D22,Hogar/H30D52013,Suministros de lavandería/H30D52013003,Toallas para secadora"
+      },
+      {
+        "category_id": "H30D52013004",
+        "crumb": "/H30D22/H30D52013/H30D52013004",
+        "level": 3,
+        "name": "Suavizantes para telas",
+        "parent_id": "H30D52013",
+        "tree_path": "/H30D22,Hogar/H30D52013,Suministros de lavandería/H30D52013004,Suavizantes para telas"
+      },
+      {
+        "category_id": "H30D52013007",
+        "crumb": "/H30D22/H30D52013/H30D52013007",
+        "level": 3,
+        "name": "Detergentes para ropa",
+        "parent_id": "H30D52013",
+        "tree_path": "/H30D22,Hogar/H30D52013,Suministros de lavandería/H30D52013007,Detergentes para ropa"
+      },
+      {
+        "category_id": "H30D52013010",
+        "crumb": "/H30D22/H30D52013/H30D52013010",
+        "level": 3,
+        "name": "Apresto",
+        "parent_id": "H30D52013",
+        "tree_path": "/H30D22,Hogar/H30D52013,Suministros de lavandería/H30D52013010,Apresto"
+      },
+      {
+        "category_id": "H30D52013011",
+        "crumb": "/H30D22/H30D52013/H30D52013011",
+        "level": 3,
+        "name": "Quitamanchas y Aditivos",
+        "parent_id": "H30D52013",
+        "tree_path": "/H30D22,Hogar/H30D52013,Suministros de lavandería/H30D52013011,Quitamanchas y Aditivos"
+      },
+      {
+        "category_id": "J10D44",
+        "crumb": "/J10D44",
+        "level": 1,
+        "name": "Joyería y relojes",
+        "parent_id": null,
+        "tree_path": "/J10D44,Joyería y relojes"
+      },
+      {
+        "category_id": "L10D22",
+        "crumb": "/L10D22",
+        "level": 1,
+        "name": "Equipaje",
+        "parent_id": null,
+        "tree_path": "/L10D22,Equipaje"
+      },
+      {
+        "category_id": "L10D22001",
+        "crumb": "/L10D22/L10D22001",
+        "level": 2,
+        "name": "Piezas de equipaje",
+        "parent_id": "L10D22",
+        "tree_path": "/L10D22,Equipaje/L10D22001,Piezas de equipaje"
+      },
+      {
+        "category_id": "L10D22002",
+        "crumb": "/L10D22/L10D22002",
+        "level": 2,
+        "name": "Set de equipaje",
+        "parent_id": "L10D22",
+        "tree_path": "/L10D22,Equipaje/L10D22002,Set de equipaje"
+      },
+      {
+        "category_id": "L10D25001",
+        "crumb": "/L10D22/L10D25001",
+        "level": 2,
+        "name": "Mochilas y maletines",
+        "parent_id": "L10D22",
+        "tree_path": "/L10D22,Equipaje/L10D25001,Mochilas y maletines"
+      },
+      {
+        "category_id": "M10D43",
+        "crumb": "/M10D43",
+        "level": 1,
+        "name": "Línea blanca",
+        "parent_id": null,
+        "tree_path": "/M10D43,Línea blanca"
+      },
+      {
+        "category_id": "M10D43002",
+        "crumb": "/M10D43/M10D43002",
+        "level": 2,
+        "name": "Aires acondicionados y calefactores",
+        "parent_id": "M10D43",
+        "tree_path": "/M10D43,Línea blanca/M10D43002,Aires acondicionados y calefactores"
+      },
+      {
+        "category_id": "M10D43003",
+        "crumb": "/M10D43/M10D43003",
+        "level": 2,
+        "name": "Secadoras de ropa",
+        "parent_id": "M10D43",
+        "tree_path": "/M10D43,Línea blanca/M10D43003,Secadoras de ropa"
+      },
+      {
+        "category_id": "M10D43004",
+        "crumb": "/M10D43/M10D43004",
+        "level": 2,
+        "name": "Lavavajillas",
+        "parent_id": "M10D43",
+        "tree_path": "/M10D43,Línea blanca/M10D43004,Lavavajillas"
+      },
+      {
+        "category_id": "M10D43005",
+        "crumb": "/M10D43/M10D43005",
+        "level": 2,
+        "name": "Congeladores",
+        "parent_id": "M10D43",
+        "tree_path": "/M10D43,Línea blanca/M10D43005,Congeladores"
+      },
+      {
+        "category_id": "M10D43006",
+        "crumb": "/M10D43/M10D43006",
+        "level": 2,
+        "name": "Microondas",
+        "parent_id": "M10D43",
+        "tree_path": "/M10D43,Línea blanca/M10D43006,Microondas"
+      },
+      {
+        "category_id": "M10D43007",
+        "crumb": "/M10D43/M10D43007",
+        "level": 2,
+        "name": "Campanas de extracción",
+        "parent_id": "M10D43",
+        "tree_path": "/M10D43,Línea blanca/M10D43007,Campanas de extracción"
+      },
+      {
+        "category_id": "M10D43008",
+        "crumb": "/M10D43/M10D43008",
+        "level": 2,
+        "name": "Estufas y hornos",
+        "parent_id": "M10D43",
+        "tree_path": "/M10D43,Línea blanca/M10D43008,Estufas y hornos"
+      },
+      {
+        "category_id": "M10D43009",
+        "crumb": "/M10D43/M10D43009",
+        "level": 2,
+        "name": "Refrigeradores",
+        "parent_id": "M10D43",
+        "tree_path": "/M10D43,Línea blanca/M10D43009,Refrigeradores"
+      },
+      {
+        "category_id": "M10D43011",
+        "crumb": "/M10D43/M10D43011",
+        "level": 2,
+        "name": "Lavadoras de ropa",
+        "parent_id": "M10D43",
+        "tree_path": "/M10D43,Línea blanca/M10D43011,Lavadoras de ropa"
+      },
+      {
+        "category_id": "M10D43013",
+        "crumb": "/M10D43/M10D43013",
+        "level": 2,
+        "name": "Humidificadores",
+        "parent_id": "M10D43",
+        "tree_path": "/M10D43,Línea blanca/M10D43013,Humidificadores"
+      },
+      {
+        "category_id": "O10D25",
+        "crumb": "/O10D25",
+        "level": 1,
+        "name": "Oficina",
+        "parent_id": null,
+        "tree_path": "/O10D25,Oficina"
+      },
+      {
+        "category_id": "O10D25008",
+        "crumb": "/O10D25/O10D25008",
+        "level": 2,
+        "name": "Accesorios de oficina",
+        "parent_id": "O10D25",
+        "tree_path": "/O10D25,Oficina/O10D25008,Accesorios de oficina"
+      },
+      {
+        "category_id": "O10D25008002",
+        "crumb": "/O10D25/O10D25008/O10D25008002",
+        "level": 3,
+        "name": "Organizadores de escritorio",
+        "parent_id": "O10D25008",
+        "tree_path": "/O10D25,Oficina/O10D25008,Accesorios de oficina/O10D25008002,Organizadores de escritorio"
+      },
+      {
+        "category_id": "O10D25008004",
+        "crumb": "/O10D25/O10D25008/O10D25008004",
+        "level": 3,
+        "name": "Rotuladores",
+        "parent_id": "O10D25008",
+        "tree_path": "/O10D25,Oficina/O10D25008,Accesorios de oficina/O10D25008004,Rotuladores"
+      },
+      {
+        "category_id": "O10D25009",
+        "crumb": "/O10D25/O10D25009",
+        "level": 2,
+        "name": "Papel para oficina",
+        "parent_id": "O10D25",
+        "tree_path": "/O10D25,Oficina/O10D25009,Papel para oficina"
+      },
+      {
+        "category_id": "O10D25009001",
+        "crumb": "/O10D25/O10D25009/O10D25009001",
+        "level": 3,
+        "name": "Cartulina y papel para manualidades",
+        "parent_id": "O10D25009",
+        "tree_path": "/O10D25,Oficina/O10D25009,Papel para oficina/O10D25009001,Cartulina y papel para manualidades"
+      },
+      {
+        "category_id": "O10D25009002",
+        "crumb": "/O10D25/O10D25009/O10D25009002",
+        "level": 3,
+        "name": "Papel para fotocopiadoras e impresoras",
+        "parent_id": "O10D25009",
+        "tree_path": "/O10D25,Oficina/O10D25009,Papel para oficina/O10D25009002,Papel para fotocopiadoras e impresoras"
+      },
+      {
+        "category_id": "O10D25010",
+        "crumb": "/O10D25/O10D25010",
+        "level": 2,
+        "name": "Almacenamiento para oficina",
+        "parent_id": "O10D25",
+        "tree_path": "/O10D25,Oficina/O10D25010,Almacenamiento para oficina"
+      },
+      {
+        "category_id": "O10D25012",
+        "crumb": "/O10D25/O10D25012",
+        "level": 2,
+        "name": "Cajas de seguridad",
+        "parent_id": "O10D25",
+        "tree_path": "/O10D25,Oficina/O10D25012,Cajas de seguridad"
+      },
+      {
+        "category_id": "O10D25014",
+        "crumb": "/O10D25/O10D25014",
+        "level": 2,
+        "name": "Elementos de escritura",
+        "parent_id": "O10D25",
+        "tree_path": "/O10D25,Oficina/O10D25014,Elementos de escritura"
+      },
+      {
+        "category_id": "O10D25014002",
+        "crumb": "/O10D25/O10D25014/O10D25014002",
+        "level": 3,
+        "name": "Marcadores",
+        "parent_id": "O10D25014",
+        "tree_path": "/O10D25,Oficina/O10D25014,Elementos de escritura/O10D25014002,Marcadores"
+      },
+      {
+        "category_id": "O10D29010",
+        "crumb": "/O10D25/O10D29010",
+        "level": 2,
+        "name": "Proyectores",
+        "parent_id": "O10D25",
+        "tree_path": "/O10D25,Oficina/O10D29010,Proyectores"
+      },
+      {
+        "category_id": "O20D21001",
+        "crumb": "/O20D30/O20D21001",
+        "level": 2,
+        "name": "Equipo eléctrico para jardín",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D21001,Equipo eléctrico para jardín"
+      },
+      {
+        "category_id": "O20D21001001",
+        "crumb": "/O20D30/O20D21001/O20D21001001",
+        "level": 3,
+        "name": "Motosierras",
+        "parent_id": "O20D21001",
+        "tree_path": "/O20D30,Exteriores/O20D21001,Equipo eléctrico para jardín/O20D21001001,Motosierras"
+      },
+      {
+        "category_id": "O20D21001003",
+        "crumb": "/O20D30/O20D21001/O20D21001003",
+        "level": 3,
+        "name": "Cortadoras de césped",
+        "parent_id": "O20D21001",
+        "tree_path": "/O20D30,Exteriores/O20D21001,Equipo eléctrico para jardín/O20D21001003,Cortadoras de césped"
+      },
+      {
+        "category_id": "O20D21001004",
+        "crumb": "/O20D30/O20D21001/O20D21001004",
+        "level": 3,
+        "name": "Sopladoras de hojas",
+        "parent_id": "O20D21001",
+        "tree_path": "/O20D30,Exteriores/O20D21001,Equipo eléctrico para jardín/O20D21001004,Sopladoras de hojas"
+      },
+      {
+        "category_id": "O20D21001006",
+        "crumb": "/O20D30/O20D21001/O20D21001006",
+        "level": 3,
+        "name": "Cortadoras y bordeadoras",
+        "parent_id": "O20D21001",
+        "tree_path": "/O20D30,Exteriores/O20D21001,Equipo eléctrico para jardín/O20D21001006,Cortadoras y bordeadoras"
+      },
+      {
+        "category_id": "O20D21002",
+        "crumb": "/O20D30/O20D21002",
+        "level": 2,
+        "name": "Herramientas para usar en exteriores",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D21002,Herramientas para usar en exteriores"
+      },
+      {
+        "category_id": "O20D26001",
+        "crumb": "/O20D30/O20D26001",
+        "level": 2,
+        "name": "Hieleras",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D26001,Hieleras"
+      },
+      {
+        "category_id": "O20D30",
+        "crumb": "/O20D30",
+        "level": 1,
+        "name": "Exteriores",
+        "parent_id": null,
+        "tree_path": "/O20D30,Exteriores"
+      },
+      {
+        "category_id": "O20D30001",
+        "crumb": "/O20D30/O20D30001",
+        "level": 2,
+        "name": "Doseles y gazebos",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30001,Doseles y gazebos"
+      },
+      {
+        "category_id": "O20D30002",
+        "crumb": "/O20D30/O20D30002",
+        "level": 2,
+        "name": "Cajas de almacenamiento",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30002,Cajas de almacenamiento"
+      },
+      {
+        "category_id": "O20D30003",
+        "crumb": "/O20D30/O20D30003",
+        "level": 2,
+        "name": "Alfombritas para la entrada al hogar",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30003,Alfombritas para la entrada al hogar"
+      },
+      {
+        "category_id": "O20D30004",
+        "crumb": "/O20D30/O20D30004",
+        "level": 2,
+        "name": "Parrillas",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30004,Parrillas"
+      },
+      {
+        "category_id": "O20D30004001",
+        "crumb": "/O20D30/O20D30004/O20D30004001",
+        "level": 3,
+        "name": "Parrillas para barbacoa",
+        "parent_id": "O20D30004",
+        "tree_path": "/O20D30,Exteriores/O20D30004,Parrillas/O20D30004001,Parrillas para barbacoa"
+      },
+      {
+        "category_id": "O20D30004004",
+        "crumb": "/O20D30/O20D30004/O20D30004004",
+        "level": 3,
+        "name": "Cilindros de propano",
+        "parent_id": "O20D30004",
+        "tree_path": "/O20D30,Exteriores/O20D30004,Parrillas/O20D30004004,Cilindros de propano"
+      },
+      {
+        "category_id": "O20D30004005",
+        "crumb": "/O20D30/O20D30004/O20D30004005",
+        "level": 3,
+        "name": "Carros de asador",
+        "parent_id": "O20D30004",
+        "tree_path": "/O20D30,Exteriores/O20D30004,Parrillas/O20D30004005,Carros de asador"
+      },
+      {
+        "category_id": "O20D30005",
+        "crumb": "/O20D30/O20D30005",
+        "level": 2,
+        "name": "Control de insectos",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30005,Control de insectos"
+      },
+      {
+        "category_id": "O20D30006",
+        "crumb": "/O20D30/O20D30006",
+        "level": 2,
+        "name": "Sillas de jardín",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30006,Sillas de jardín"
+      },
+      {
+        "category_id": "O20D30007",
+        "crumb": "/O20D30/O20D30007",
+        "level": 2,
+        "name": "Mobiliario para el patio",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30007,Mobiliario para el patio"
+      },
+      {
+        "category_id": "O20D30009",
+        "crumb": "/O20D30/O20D30009",
+        "level": 2,
+        "name": "Macetas y elementos para jardinería",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30009,Macetas y elementos para jardinería"
+      },
+      {
+        "category_id": "O20D30010",
+        "crumb": "/O20D30/O20D30010",
+        "level": 2,
+        "name": "Cobertizos",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30010,Cobertizos"
+      },
+      {
+        "category_id": "O20D30011",
+        "crumb": "/O20D30/O20D30011",
+        "level": 2,
+        "name": "Spas",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30011,Spas"
+      },
+      {
+        "category_id": "O20D30012",
+        "crumb": "/O20D30/O20D30012",
+        "level": 2,
+        "name": "Sombrillas",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30012,Sombrillas"
+      },
+      {
+        "category_id": "O20D30017",
+        "crumb": "/O20D30/O20D30017",
+        "level": 2,
+        "name": "Boquillas de manguera",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30017,Boquillas de manguera"
+      },
+      {
+        "category_id": "O20D30019",
+        "crumb": "/O20D30/O20D30019",
+        "level": 2,
+        "name": "Mangueras",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30019,Mangueras"
+      },
+      {
+        "category_id": "O20D30020",
+        "crumb": "/O20D30/O20D30020",
+        "level": 2,
+        "name": "Mesas para picnic",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30020,Mesas para picnic"
+      },
+      {
+        "category_id": "O20D30021",
+        "crumb": "/O20D30/O20D30021",
+        "level": 2,
+        "name": "Accesorios para decoración de patio",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30021,Accesorios para decoración de patio"
+      },
+      {
+        "category_id": "O20D30022",
+        "crumb": "/O20D30/O20D30022",
+        "level": 2,
+        "name": "Sombras para patio",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30022,Sombras para patio"
+      },
+      {
+        "category_id": "O20D30023",
+        "crumb": "/O20D30/O20D30023",
+        "level": 2,
+        "name": "Suelos y abonos",
+        "parent_id": "O20D30",
+        "tree_path": "/O20D30,Exteriores/O20D30023,Suelos y abonos"
+      },
+      {
+        "category_id": "P10D51",
+        "crumb": "/P10D51",
+        "level": 1,
+        "name": "Mascotas",
+        "parent_id": null,
+        "tree_path": "/P10D51,Mascotas"
+      },
+      {
+        "category_id": "P10D51001",
+        "crumb": "/P10D51/P10D51001",
+        "level": 2,
+        "name": "Alimento y golosinas para gatos",
+        "parent_id": "P10D51",
+        "tree_path": "/P10D51,Mascotas/P10D51001,Alimento y golosinas para gatos"
+      },
+      {
+        "category_id": "P10D51002",
+        "crumb": "/P10D51/P10D51002",
+        "level": 2,
+        "name": "Juguetes para gatos",
+        "parent_id": "P10D51",
+        "tree_path": "/P10D51,Mascotas/P10D51002,Juguetes para gatos"
+      },
+      {
+        "category_id": "P10D51003",
+        "crumb": "/P10D51/P10D51003",
+        "level": 2,
+        "name": "Camas para perros",
+        "parent_id": "P10D51",
+        "tree_path": "/P10D51,Mascotas/P10D51003,Camas para perros"
+      },
+      {
+        "category_id": "P10D51004",
+        "crumb": "/P10D51/P10D51004",
+        "level": 2,
+        "name": "Alimento y golosinas para perros",
+        "parent_id": "P10D51",
+        "tree_path": "/P10D51,Mascotas/P10D51004,Alimento y golosinas para perros"
+      },
+      {
+        "category_id": "P10D51005",
+        "crumb": "/P10D51/P10D51005",
+        "level": 2,
+        "name": "Juguetes para perros",
+        "parent_id": "P10D51",
+        "tree_path": "/P10D51,Mascotas/P10D51005,Juguetes para perros"
+      },
+      {
+        "category_id": "P10D51007",
+        "crumb": "/P10D51/P10D51007",
+        "level": 2,
+        "name": "Comederos",
+        "parent_id": "P10D51",
+        "tree_path": "/P10D51,Mascotas/P10D51007,Comederos"
+      },
+      {
+        "category_id": "P10D51008",
+        "crumb": "/P10D51/P10D51008",
+        "level": 2,
+        "name": "Piedras sanitarias",
+        "parent_id": "P10D51",
+        "tree_path": "/P10D51,Mascotas/P10D51008,Piedras sanitarias"
+      },
+      {
+        "category_id": "P10D51011",
+        "crumb": "/P10D51/P10D51011",
+        "level": 2,
+        "name": "Almacenamiento de alimento para mascotas",
+        "parent_id": "P10D51",
+        "tree_path": "/P10D51,Mascotas/P10D51011,Almacenamiento de alimento para mascotas"
+      },
+      {
+        "category_id": "P10D51012",
+        "crumb": "/P10D51/P10D51012",
+        "level": 2,
+        "name": "Muebles para Mascotas",
+        "parent_id": "P10D51",
+        "tree_path": "/P10D51,Mascotas/P10D51012,Muebles para Mascotas"
+      },
+      {
+        "category_id": "P10D51015",
+        "crumb": "/P10D51/P10D51015",
+        "level": 2,
+        "name": "Paños de entrenamiento",
+        "parent_id": "P10D51",
+        "tree_path": "/P10D51,Mascotas/P10D51015,Paños de entrenamiento"
+      },
+      {
+        "category_id": "Poultry",
+        "crumb": "/G10D03/Poultry",
+        "level": 2,
+        "name": "Aves",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/Poultry,Aves"
+      },
+      {
+        "category_id": "R10D22",
+        "crumb": "/R10D22",
+        "level": 1,
+        "name": "Suministros para restaurantes",
+        "parent_id": null,
+        "tree_path": "/R10D22,Suministros para restaurantes"
+      },
+      {
+        "category_id": "R10D22001",
+        "crumb": "/R10D22/R10D22001",
+        "level": 2,
+        "name": "Alfombras de descanso",
+        "parent_id": "R10D22",
+        "tree_path": "/R10D22,Suministros para restaurantes/R10D22001,Alfombras de descanso"
+      },
+      {
+        "category_id": "R10D22002",
+        "crumb": "/R10D22/R10D22002",
+        "level": 2,
+        "name": "Dispensadores de bebidas",
+        "parent_id": "R10D22",
+        "tree_path": "/R10D22,Suministros para restaurantes/R10D22002,Dispensadores de bebidas"
+      },
+      {
+        "category_id": "R10D22007",
+        "crumb": "/R10D22/R10D22007",
+        "level": 2,
+        "name": "Utensilios comerciales para cocina",
+        "parent_id": "R10D22",
+        "tree_path": "/R10D22,Suministros para restaurantes/R10D22007,Utensilios comerciales para cocina"
+      },
+      {
+        "category_id": "R10D22010",
+        "crumb": "/R10D22/R10D22010",
+        "level": 2,
+        "name": "Cubiertos comerciales",
+        "parent_id": "R10D22",
+        "tree_path": "/R10D22,Suministros para restaurantes/R10D22010,Cubiertos comerciales"
+      },
+      {
+        "category_id": "R10D22012",
+        "crumb": "/R10D22/R10D22012",
+        "level": 2,
+        "name": "Suministros para concesión",
+        "parent_id": "R10D22",
+        "tree_path": "/R10D22,Suministros para restaurantes/R10D22012,Suministros para concesión"
+      },
+      {
+        "category_id": "R10D22013",
+        "crumb": "/R10D22/R10D22013",
+        "level": 2,
+        "name": "Recipientes para servicio de alimentos",
+        "parent_id": "R10D22",
+        "tree_path": "/R10D22,Suministros para restaurantes/R10D22013,Recipientes para servicio de alimentos"
+      },
+      {
+        "category_id": "R10D22014",
+        "crumb": "/R10D22/R10D22014",
+        "level": 2,
+        "name": "Envoltorio para alimentos",
+        "parent_id": "R10D22",
+        "tree_path": "/R10D22,Suministros para restaurantes/R10D22014,Envoltorio para alimentos"
+      },
+      {
+        "category_id": "R10D28001",
+        "crumb": "/R10D22/R10D28001",
+        "level": 2,
+        "name": "Mesas de preparación para cocina",
+        "parent_id": "R10D22",
+        "tree_path": "/R10D22,Suministros para restaurantes/R10D28001,Mesas de preparación para cocina"
+      },
+      {
+        "category_id": "S10D02001",
+        "crumb": "/S10D45/S10D02001",
+        "level": 2,
+        "name": "Dulces de temporada",
+        "parent_id": "S10D45",
+        "tree_path": "/S10D45,Productos de temporada/S10D02001,Dulces de temporada"
+      },
+      {
+        "category_id": "S10D02008",
+        "crumb": "/S10D45/S10D02008",
+        "level": 2,
+        "name": "Golosinas para Halloween",
+        "parent_id": "S10D45",
+        "tree_path": "/S10D45,Productos de temporada/S10D02008,Golosinas para Halloween"
+      },
+      {
+        "category_id": "S10D45",
+        "crumb": "/S10D45",
+        "level": 1,
+        "name": "Productos de temporada",
+        "parent_id": null,
+        "tree_path": "/S10D45,Productos de temporada"
+      },
+      {
+        "category_id": "S10D45002",
+        "crumb": "/S10D45/S10D45002",
+        "level": 2,
+        "name": "Decoraciones navideñas",
+        "parent_id": "S10D45",
+        "tree_path": "/S10D45,Productos de temporada/S10D45002,Decoraciones navideñas"
+      },
+      {
+        "category_id": "S10D45003",
+        "crumb": "/S10D45/S10D45003",
+        "level": 2,
+        "name": "Luces navideñas",
+        "parent_id": "S10D45",
+        "tree_path": "/S10D45,Productos de temporada/S10D45003,Luces navideñas"
+      },
+      {
+        "category_id": "S10D45004",
+        "crumb": "/S10D45/S10D45004",
+        "level": 2,
+        "name": "Adornos navideños",
+        "parent_id": "S10D45",
+        "tree_path": "/S10D45,Productos de temporada/S10D45004,Adornos navideños"
+      },
+      {
+        "category_id": "S10D45006",
+        "crumb": "/S10D45/S10D45006",
+        "level": 2,
+        "name": "Árboles navideños",
+        "parent_id": "S10D45",
+        "tree_path": "/S10D45,Productos de temporada/S10D45006,Árboles navideños"
+      },
+      {
+        "category_id": "S10D45007",
+        "crumb": "/S10D45/S10D45007",
+        "level": 2,
+        "name": "Envoltorios",
+        "parent_id": "S10D45",
+        "tree_path": "/S10D45,Productos de temporada/S10D45007,Envoltorios"
+      },
+      {
+        "category_id": "S10D45007004",
+        "crumb": "/S10D45/S10D45007/S10D45007004",
+        "level": 3,
+        "name": "Papel para envolver",
+        "parent_id": "S10D45007",
+        "tree_path": "/S10D45,Productos de temporada/S10D45007,Envoltorios/S10D45007004,Papel para envolver"
+      },
+      {
+        "category_id": "S10D45009",
+        "crumb": "/S10D45/S10D45009",
+        "level": 2,
+        "name": "Decoraciones para Halloween",
+        "parent_id": "S10D45",
+        "tree_path": "/S10D45,Productos de temporada/S10D45009,Decoraciones para Halloween"
+      },
+      {
+        "category_id": "S20D23",
+        "crumb": "/S20D23",
+        "level": 1,
+        "name": "Electrodomésticos",
+        "parent_id": null,
+        "tree_path": "/S20D23,Electrodomésticos"
+      },
+      {
+        "category_id": "S20D23002",
+        "crumb": "/S20D23/S20D23002",
+        "level": 2,
+        "name": "Licuadoras",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23002,Licuadoras"
+      },
+      {
+        "category_id": "S20D23003",
+        "crumb": "/S20D23/S20D23003",
+        "level": 2,
+        "name": "Cafeteras",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23003,Cafeteras"
+      },
+      {
+        "category_id": "S20D23005",
+        "crumb": "/S20D23/S20D23005",
+        "level": 2,
+        "name": "Mixers",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23005,Mixers"
+      },
+      {
+        "category_id": "S20D23006",
+        "crumb": "/S20D23/S20D23006",
+        "level": 2,
+        "name": "Procesadores de alimentos",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23006,Procesadores de alimentos"
+      },
+      {
+        "category_id": "S20D23007",
+        "crumb": "/S20D23/S20D23007",
+        "level": 2,
+        "name": "Freidoras",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23007,Freidoras"
+      },
+      {
+        "category_id": "S20D23008",
+        "crumb": "/S20D23/S20D23008",
+        "level": 2,
+        "name": "Planchas de cocina",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23008,Planchas de cocina"
+      },
+      {
+        "category_id": "S20D23009",
+        "crumb": "/S20D23/S20D23009",
+        "level": 2,
+        "name": "Secadores de cabello",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23009,Secadores de cabello"
+      },
+      {
+        "category_id": "S20D23010",
+        "crumb": "/S20D23/S20D23010",
+        "level": 2,
+        "name": "Ventiladores",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23010,Ventiladores"
+      },
+      {
+        "category_id": "S20D23011",
+        "crumb": "/S20D23/S20D23011",
+        "level": 2,
+        "name": "Humidificadores y deshumidificadores",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23011,Humidificadores y deshumidificadores"
+      },
+      {
+        "category_id": "S20D23012",
+        "crumb": "/S20D23/S20D23012",
+        "level": 2,
+        "name": "Planchas y planchas a vapor",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23012,Planchas y planchas a vapor"
+      },
+      {
+        "category_id": "S20D23013",
+        "crumb": "/S20D23/S20D23013",
+        "level": 2,
+        "name": "Jugueras",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23013,Jugueras"
+      },
+      {
+        "category_id": "S20D23014",
+        "crumb": "/S20D23/S20D23014",
+        "level": 2,
+        "name": "Equipo para masajes",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23014,Equipo para masajes"
+      },
+      {
+        "category_id": "S20D23014005",
+        "crumb": "/S20D23/S20D23014/S20D23014005",
+        "level": 3,
+        "name": "Masajeadores personales",
+        "parent_id": "S20D23014",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23014,Equipo para masajes/S20D23014005,Masajeadores personales"
+      },
+      {
+        "category_id": "S20D23015",
+        "crumb": "/S20D23/S20D23015",
+        "level": 2,
+        "name": "Máquinas para hacer palomitas de maíz",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23015,Máquinas para hacer palomitas de maíz"
+      },
+      {
+        "category_id": "S20D23016",
+        "crumb": "/S20D23/S20D23016",
+        "level": 2,
+        "name": "Ollas para cocinar arroz",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23016,Ollas para cocinar arroz"
+      },
+      {
+        "category_id": "S20D23017",
+        "crumb": "/S20D23/S20D23017",
+        "level": 2,
+        "name": "Máquinas de coser",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23017,Máquinas de coser"
+      },
+      {
+        "category_id": "S20D23018",
+        "crumb": "/S20D23/S20D23018",
+        "level": 2,
+        "name": "Teteras",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23018,Teteras"
+      },
+      {
+        "category_id": "S20D23019",
+        "crumb": "/S20D23/S20D23019",
+        "level": 2,
+        "name": "Tostadoras y hornos tostadores",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23019,Tostadoras y hornos tostadores"
+      },
+      {
+        "category_id": "S20D23020",
+        "crumb": "/S20D23/S20D23020",
+        "level": 2,
+        "name": "Aspiradoras y cuidado de pisos",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23020,Aspiradoras y cuidado de pisos"
+      },
+      {
+        "category_id": "S20D23021",
+        "crumb": "/S20D23/S20D23021",
+        "level": 2,
+        "name": "Dispensadores de agua",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23021,Dispensadores de agua"
+      },
+      {
+        "category_id": "S20D23027",
+        "crumb": "/S20D23/S20D23027",
+        "level": 2,
+        "name": "Waflera",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23027,Waflera"
+      },
+      {
+        "category_id": "S20D26001003",
+        "crumb": "/S20D23/S20D23014/S20D26001003",
+        "level": 3,
+        "name": "Camillas y bancos para masajes",
+        "parent_id": "S20D23014",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23014,Equipo para masajes/S20D26001003,Camillas y bancos para masajes"
+      },
+      {
+        "category_id": "S20D27001004",
+        "crumb": "/S20D23/S20D23014/S20D27001004",
+        "level": 3,
+        "name": "Sillas masajeadoras",
+        "parent_id": "S20D23014",
+        "tree_path": "/S20D23,Electrodomésticos/S20D23014,Equipo para masajes/S20D27001004,Sillas masajeadoras"
+      },
+      {
+        "category_id": "S20D43001",
+        "crumb": "/S20D23/S20D43001",
+        "level": 2,
+        "name": "Fabricadoras de cubitos de hielo",
+        "parent_id": "S20D23",
+        "tree_path": "/S20D23,Electrodomésticos/S20D43001,Fabricadoras de cubitos de hielo"
+      },
+      {
+        "category_id": "S30D26",
+        "crumb": "/S30D26",
+        "level": 1,
+        "name": "Deportes y fitness",
+        "parent_id": null,
+        "tree_path": "/S30D26,Deportes y fitness"
+      },
+      {
+        "category_id": "S30D26001",
+        "crumb": "/S30D26/S30D26001",
+        "level": 2,
+        "name": "Aros de basquetball",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26001,Aros de basquetball"
+      },
+      {
+        "category_id": "S30D26003",
+        "crumb": "/S30D26/S30D26003",
+        "level": 2,
+        "name": "Equipo y suministros para campamento",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26003,Equipo y suministros para campamento"
+      },
+      {
+        "category_id": "S30D26003001",
+        "crumb": "/S30D26/S30D26003/S30D26003001",
+        "level": 3,
+        "name": "Colchones de aire",
+        "parent_id": "S30D26003",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26003,Equipo y suministros para campamento/S30D26003001,Colchones de aire"
+      },
+      {
+        "category_id": "S30D26003002",
+        "crumb": "/S30D26/S30D26003/S30D26003002",
+        "level": 3,
+        "name": "Catres y colchones inflables para campamento",
+        "parent_id": "S30D26003",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26003,Equipo y suministros para campamento/S30D26003002,Catres y colchones inflables para campamento"
+      },
+      {
+        "category_id": "S30D26003005",
+        "crumb": "/S30D26/S30D26003/S30D26003005",
+        "level": 3,
+        "name": "Repelentes de insectos",
+        "parent_id": "S30D26003",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26003,Equipo y suministros para campamento/S30D26003005,Repelentes de insectos"
+      },
+      {
+        "category_id": "S30D26003006",
+        "crumb": "/S30D26/S30D26003/S30D26003006",
+        "level": 3,
+        "name": "Carpas",
+        "parent_id": "S30D26003",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26003,Equipo y suministros para campamento/S30D26003006,Carpas"
+      },
+      {
+        "category_id": "S30D26004",
+        "crumb": "/S30D26/S30D26004",
+        "level": 2,
+        "name": "Equipo de cardio",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26004,Equipo de cardio"
+      },
+      {
+        "category_id": "S30D26004001",
+        "crumb": "/S30D26/S30D26004/S30D26004001",
+        "level": 3,
+        "name": "Elípticas",
+        "parent_id": "S30D26004",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26004,Equipo de cardio/S30D26004001,Elípticas"
+      },
+      {
+        "category_id": "S30D26004003",
+        "crumb": "/S30D26/S30D26004/S30D26004003",
+        "level": 3,
+        "name": "Bicicletas fijas",
+        "parent_id": "S30D26004",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26004,Equipo de cardio/S30D26004003,Bicicletas fijas"
+      },
+      {
+        "category_id": "S30D26004004",
+        "crumb": "/S30D26/S30D26004/S30D26004004",
+        "level": 3,
+        "name": "Cintas caminadoras",
+        "parent_id": "S30D26004",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26004,Equipo de cardio/S30D26004004,Cintas caminadoras"
+      },
+      {
+        "category_id": "S30D26004007",
+        "crumb": "/S30D26/S30D26004/S30D26004007",
+        "level": 3,
+        "name": "Máquina para remar",
+        "parent_id": "S30D26004",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26004,Equipo de cardio/S30D26004007,Máquina para remar"
+      },
+      {
+        "category_id": "S30D26005",
+        "crumb": "/S30D26/S30D26005",
+        "level": 2,
+        "name": "Ciclismo",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26005,Ciclismo"
+      },
+      {
+        "category_id": "S30D26005002",
+        "crumb": "/S30D26/S30D26005/S30D26005002",
+        "level": 3,
+        "name": "Bicicletas",
+        "parent_id": "S30D26005",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26005,Ciclismo/S30D26005002,Bicicletas"
+      },
+      {
+        "category_id": "S30D26006",
+        "crumb": "/S30D26/S30D26006",
+        "level": 2,
+        "name": "Scooter y bicicletas eléctricas",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26006,Scooter y bicicletas eléctricas"
+      },
+      {
+        "category_id": "S30D26007",
+        "crumb": "/S30D26/S30D26007",
+        "level": 2,
+        "name": "Juegos de mesa",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26007,Juegos de mesa"
+      },
+      {
+        "category_id": "S30D26009",
+        "crumb": "/S30D26/S30D26009",
+        "level": 2,
+        "name": "Piso para gimnasios",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26009,Piso para gimnasios"
+      },
+      {
+        "category_id": "S30D26011",
+        "crumb": "/S30D26/S30D26011",
+        "level": 2,
+        "name": "Herramientas múltiples",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26011,Herramientas múltiples"
+      },
+      {
+        "category_id": "S30D26012",
+        "crumb": "/S30D26/S30D26012",
+        "level": 2,
+        "name": "Pelotas deportivas",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26012,Pelotas deportivas"
+      },
+      {
+        "category_id": "S30D26014",
+        "crumb": "/S30D26/S30D26014",
+        "level": 2,
+        "name": "Piscinas",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26014,Piscinas"
+      },
+      {
+        "category_id": "S30D26015",
+        "crumb": "/S30D26/S30D26015",
+        "level": 2,
+        "name": "Telescopios",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26015,Telescopios"
+      },
+      {
+        "category_id": "S30D26016",
+        "crumb": "/S30D26/S30D26016",
+        "level": 2,
+        "name": "Trampolines",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26016,Trampolines"
+      },
+      {
+        "category_id": "S30D26017",
+        "crumb": "/S30D26/S30D26017",
+        "level": 2,
+        "name": "Deportes acuáticos",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26017,Deportes acuáticos"
+      },
+      {
+        "category_id": "S30D26017004",
+        "crumb": "/S30D26/S30D26017/S30D26017004",
+        "level": 3,
+        "name": "Flotantes para piscina",
+        "parent_id": "S30D26017",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26017,Deportes acuáticos/S30D26017004,Flotantes para piscina"
+      },
+      {
+        "category_id": "S30D26017011",
+        "crumb": "/S30D26/S30D26017/S30D26017011",
+        "level": 3,
+        "name": "Tabla de natacion",
+        "parent_id": "S30D26017",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26017,Deportes acuáticos/S30D26017011,Tabla de natacion"
+      },
+      {
+        "category_id": "S30D26018",
+        "crumb": "/S30D26/S30D26018",
+        "level": 2,
+        "name": "Equipo para levantamiento de pesas",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26018,Equipo para levantamiento de pesas"
+      },
+      {
+        "category_id": "S30D26018001",
+        "crumb": "/S30D26/S30D26018/S30D26018001",
+        "level": 3,
+        "name": "Pesas libres",
+        "parent_id": "S30D26018",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26018,Equipo para levantamiento de pesas/S30D26018001,Pesas libres"
+      },
+      {
+        "category_id": "S30D26018004",
+        "crumb": "/S30D26/S30D26018/S30D26018004",
+        "level": 3,
+        "name": "Máquinas con pesas",
+        "parent_id": "S30D26018",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26018,Equipo para levantamiento de pesas/S30D26018004,Máquinas con pesas"
+      },
+      {
+        "category_id": "S30D26021",
+        "crumb": "/S30D26/S30D26021",
+        "level": 2,
+        "name": "Colchonetas para ejercicio",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26021,Colchonetas para ejercicio"
+      },
+      {
+        "category_id": "S30D26022",
+        "crumb": "/S30D26/S30D26022",
+        "level": 2,
+        "name": "Metas deportivas",
+        "parent_id": "S30D26",
+        "tree_path": "/S30D26,Deportes y fitness/S30D26022,Metas deportivas"
+      },
+      {
+        "category_id": "Seafood",
+        "crumb": "/G10D03/Seafood",
+        "level": 2,
+        "name": "Mariscos y pescado",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/Seafood,Mariscos y pescado"
+      },
+      {
+        "category_id": "Smart_Vouchers",
+        "crumb": "/V10D79/Smart_Vouchers",
+        "level": 2,
+        "name": "Smart Vouchers",
+        "parent_id": "V10D79",
+        "tree_path": "/V10D79,Tarjetas de Regalo/Smart_Vouchers,Smart Vouchers"
+      },
+      {
+        "category_id": "T10D26001",
+        "crumb": "/T10D46/T10D26001",
+        "level": 2,
+        "name": "Juguetes para andar",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D26001,Juguetes para andar"
+      },
+      {
+        "category_id": "T10D26002",
+        "crumb": "/T10D46/T10D26002",
+        "level": 2,
+        "name": "Juguetes para exteriores",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D26002,Juguetes para exteriores"
+      },
+      {
+        "category_id": "T10D26002002",
+        "crumb": "/T10D46/T10D26002/T10D26002002",
+        "level": 3,
+        "name": "Juegos para exteriores",
+        "parent_id": "T10D26002",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D26002,Juguetes para exteriores/T10D26002002,Juegos para exteriores"
+      },
+      {
+        "category_id": "T10D26002005",
+        "crumb": "/T10D46/T10D26002/T10D26002005",
+        "level": 3,
+        "name": "Juguetes para arena%2Fagua",
+        "parent_id": "T10D26002",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D26002,Juguetes para exteriores/T10D26002005,Juguetes para arena%2Fagua"
+      },
+      {
+        "category_id": "T10D46",
+        "crumb": "/T10D46",
+        "level": 1,
+        "name": "Juguetes y juegos",
+        "parent_id": null,
+        "tree_path": "/T10D46,Juguetes y juegos"
+      },
+      {
+        "category_id": "T10D46001",
+        "crumb": "/T10D46/T10D46001",
+        "level": 2,
+        "name": "Muñecos y figuras de acción",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46001,Muñecos y figuras de acción"
+      },
+      {
+        "category_id": "T10D46002",
+        "crumb": "/T10D46/T10D46002",
+        "level": 2,
+        "name": "Juguetes para actividades",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46002,Juguetes para actividades"
+      },
+      {
+        "category_id": "T10D46003",
+        "crumb": "/T10D46/T10D46003",
+        "level": 2,
+        "name": "Juguetes para artes y manualidades",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46003,Juguetes para artes y manualidades"
+      },
+      {
+        "category_id": "T10D46004",
+        "crumb": "/T10D46/T10D46004",
+        "level": 2,
+        "name": "Juguetes de construcción y para armar",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46004,Juguetes de construcción y para armar"
+      },
+      {
+        "category_id": "T10D46007",
+        "crumb": "/T10D46/T10D46007",
+        "level": 2,
+        "name": "Juguetes educativos",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46007,Juguetes educativos"
+      },
+      {
+        "category_id": "T10D46008",
+        "crumb": "/T10D46/T10D46008",
+        "level": 2,
+        "name": "Juguetes musicales",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46008,Juguetes musicales"
+      },
+      {
+        "category_id": "T10D46009004",
+        "crumb": "/T10D46/T10D26002/T10D46009004",
+        "level": 3,
+        "name": "Casas de juguete",
+        "parent_id": "T10D26002",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D26002,Juguetes para exteriores/T10D46009004,Casas de juguete"
+      },
+      {
+        "category_id": "T10D46012",
+        "crumb": "/T10D46/T10D46012",
+        "level": 2,
+        "name": "Vehículos de juego",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46012,Vehículos de juego"
+      },
+      {
+        "category_id": "T10D46014",
+        "crumb": "/T10D46/T10D46014",
+        "level": 2,
+        "name": "Rompecabezas y juegos",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46014,Rompecabezas y juegos"
+      },
+      {
+        "category_id": "T10D46014001",
+        "crumb": "/T10D46/T10D46014/T10D46014001",
+        "level": 3,
+        "name": "Juegos de mesa",
+        "parent_id": "T10D46014",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46014,Rompecabezas y juegos/T10D46014001,Juegos de mesa"
+      },
+      {
+        "category_id": "T10D46014002",
+        "crumb": "/T10D46/T10D46014/T10D46014002",
+        "level": 3,
+        "name": "Rompecabezas",
+        "parent_id": "T10D46014",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46014,Rompecabezas y juegos/T10D46014002,Rompecabezas"
+      },
+      {
+        "category_id": "T10D46015",
+        "crumb": "/T10D46/T10D46015",
+        "level": 2,
+        "name": "Muñecos de peluche",
+        "parent_id": "T10D46",
+        "tree_path": "/T10D46,Juguetes y juegos/T10D46015,Muñecos de peluche"
+      },
+      {
+        "category_id": "T20D42",
+        "crumb": "/T20D42",
+        "level": 1,
+        "name": "Películas, música y libros",
+        "parent_id": null,
+        "tree_path": "/T20D42,Películas, música y libros"
+      },
+      {
+        "category_id": "T20D42003",
+        "crumb": "/T20D42/T20D42003",
+        "level": 2,
+        "name": "Libros",
+        "parent_id": "T20D42",
+        "tree_path": "/T20D42,Películas, música y libros/T20D42003,Libros"
+      },
+      {
+        "category_id": "T20D42003001",
+        "crumb": "/T20D42/T20D42003/T20D42003001",
+        "level": 3,
+        "name": "Infantil y Juvenil Libros",
+        "parent_id": "T20D42003",
+        "tree_path": "/T20D42,Películas, música y libros/T20D42003,Libros/T20D42003001,Infantil y Juvenil Libros"
+      },
+      {
+        "category_id": "U10D72",
+        "crumb": "/U10D72",
+        "level": 1,
+        "name": "Óptica",
+        "parent_id": null,
+        "tree_path": "/U10D72,Óptica"
+      },
+      {
+        "category_id": "U10D72002",
+        "crumb": "/U10D72/U10D72002",
+        "level": 2,
+        "name": "Lentes &  lentilla (lente de contacto)",
+        "parent_id": "U10D72",
+        "tree_path": "/U10D72,Óptica/U10D72002,Lentes &  lentilla (lente de contacto)"
+      },
+      {
+        "category_id": "U10D72003",
+        "crumb": "/U10D72/U10D72003",
+        "level": 2,
+        "name": "Accesorios optica",
+        "parent_id": "U10D72",
+        "tree_path": "/U10D72,Óptica/U10D72003,Accesorios optica"
+      },
+      {
+        "category_id": "U11D13",
+        "crumb": "/U11D13",
+        "level": 1,
+        "name": "Audiología",
+        "parent_id": null,
+        "tree_path": "/U11D13,Audiología"
+      },
+      {
+        "category_id": "V10D79",
+        "crumb": "/V10D79",
+        "level": 1,
+        "name": "Tarjetas de Regalo",
+        "parent_id": null,
+        "tree_path": "/V10D79,Tarjetas de Regalo"
+      },
+      {
+        "category_id": "WomensShirt",
+        "crumb": "/F10D40/F10D39005/WomensShirt",
+        "level": 3,
+        "name": "Camisa para Mujer",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/WomensShirt,Camisa para Mujer"
+      },
+      {
+        "category_id": "childrens_sets",
+        "crumb": "/F10D40/F10D40001/childrens_sets",
+        "level": 3,
+        "name": "Conjuntos para niños y niñas",
+        "parent_id": "F10D40001",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40001,Moda y accesorios infantiles/childrens_sets,Conjuntos para niños y niñas"
+      },
+      {
+        "category_id": "childrens_tshirts",
+        "crumb": "/F10D40/F10D40001/childrens_tshirts",
+        "level": 3,
+        "name": "Camisetas para niños y niñas",
+        "parent_id": "F10D40001",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40001,Moda y accesorios infantiles/childrens_tshirts,Camisetas para niños y niñas"
+      },
+      {
+        "category_id": "deli_meat",
+        "crumb": "/G10D03/deli_meat",
+        "level": 2,
+        "name": "Embutidos",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/deli_meat,Embutidos"
+      },
+      {
+        "category_id": "mens_sets",
+        "crumb": "/F10D40/F10D40003/mens_sets",
+        "level": 3,
+        "name": "Conjuntos para Hombres",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/mens_sets,Conjuntos para Hombres"
+      },
+      {
+        "category_id": "mens_slippers",
+        "crumb": "/F10D40/F10D40003/mens_slippers",
+        "level": 3,
+        "name": "Pantuflas para hombre",
+        "parent_id": "F10D40003",
+        "tree_path": "/F10D40,Moda y accesorios/F10D40003,Moda y accesorios hombres/mens_slippers,Pantuflas para hombre"
+      },
+      {
+        "category_id": "reading_glasses",
+        "crumb": "/U10D72/reading_glasses",
+        "level": 2,
+        "name": "Lentes para lectura",
+        "parent_id": "U10D72",
+        "tree_path": "/U10D72,Óptica/reading_glasses,Lentes para lectura"
+      },
+      {
+        "category_id": "ready_to_eat",
+        "crumb": "/G10D03/ready_to_eat",
+        "level": 2,
+        "name": "Listo para comer",
+        "parent_id": "G10D03",
+        "tree_path": "/G10D03,Alimentos/ready_to_eat,Listo para comer"
+      },
+      {
+        "category_id": "womens_sets",
+        "crumb": "/F10D40/F10D39005/womens_sets",
+        "level": 3,
+        "name": "Conjuntos para Mujeres",
+        "parent_id": "F10D39005",
+        "tree_path": "/F10D40,Moda y accesorios/F10D39005,Moda y accesorios mujer/womens_sets,Conjuntos para Mujeres"
+      }
+    ],
+    "observed_leaf_nodes": 457,
+    "observed_parent_nodes": 89,
+    "orphan_nodes": 0,
+    "root_nodes": 26,
+    "structure_collisions": 0
+  }
+}
