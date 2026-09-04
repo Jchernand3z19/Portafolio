@@ -14,23 +14,29 @@
   "valid_gtin": 34365,
   "exact_gtin_groups_cross_supermarket": 9087,
   "source_products_in_exact_gtin_groups": 21331,
-  "exact_gtin_groups_comparison_ready": 8108,
-  "exact_gtin_groups_review_required": 979,
+  "exact_gtin_groups_comparison_ready": 8126,
+  "exact_gtin_groups_review_required": 961,
+  "review_reason_counts_non_exclusive": {
+    "cross_source_presentation_conflict": 509,
+    "ambiguous_multipack_presentation": 397,
+    "product_type_conflict": 60,
+    "source_presentation_conflict": 7
+  },
   "review_candidates_without_exact_gtin": 2,
   "presentation_status": {
-    "ambiguous_multipack": 1609,
-    "confirmed": 13041,
+    "ambiguous_multipack": 1561,
+    "confirmed": 13077,
     "conflict": 28,
-    "missing": 17899,
-    "name_only": 23054,
+    "missing": 17902,
+    "name_only": 23063,
     "name_preferred_source_conflict": 778,
     "source_only": 370
   },
   "generic_brand_placeholders": 16290,
   "paiz_source_presentation_overrides": 778,
-  "audit_workflow_run_id": 33915254257,
-  "audit_artifact_id": 9952898244,
-  "audit_artifact_sha256": "7aaa80b37aaaf6a2f8d1fb5c0a9c904d56105a1fd721db27d8997a0f1ff5485c",
+  "audit_workflow_run_id": 33917069107,
+  "audit_artifact_id": 9953558639,
+  "audit_artifact_sha256": "692bdc53f6bf851580c8ed66f4c03da6da67a28f8d9badf3781c41b0d881ae38",
   "candidate_examples": [
     {
       "left_source_record_id": "la_colonia:7175",
