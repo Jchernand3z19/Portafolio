@@ -52,8 +52,8 @@ def attach_runtime_guards(page: Page) -> tuple[list[str], list[str]]:
 def wait_for_portfolio(page: Page) -> None:
     page.goto(BASE_URL, wait_until="domcontentloaded")
     page.wait_for_selector("#portfolio-language-switcher")
-    page.wait_for_selector('[data-portfolio-project="mundial-2026"]')
-    page.wait_for_selector('[data-portfolio-project="precios-supermercados"]')
+    page.wait_for_selector("#proyectos .mw-card")
+    page.wait_for_selector("#proyectos .price-card")
 
 
 def assert_no_global_overflow(page: Page) -> None:
@@ -78,17 +78,17 @@ def desktop_flow(browser: Browser) -> None:
     assert page.locator("html").get_attribute("lang") == "es"
     assert page.locator("#nav-links").get_by_text("Inicio", exact=True).count() == 1
     assert page.locator("#proyectos .projects-grid > [data-portfolio-project]").count() == 2
-    assert "Precios de Supermercados" in page.locator('[data-portfolio-project="precios-supermercados"] h3').inner_text()
+    assert "Precios de Supermercados" in page.locator("#proyectos .price-card h3").inner_text()
     assert_no_global_overflow(page)
 
     page.locator('[data-locale="en"]').click()
     assert page.locator("html").get_attribute("lang") == "en"
     assert page.locator("#nav-links").get_by_text("Home", exact=True).count() == 1
     assert page.evaluate("localStorage.getItem('portfolio.locale.v1')") == "en"
-    assert "Grocery Price Data" in page.locator('[data-portfolio-project="precios-supermercados"] h3').inner_text()
-    assert "World Cup 2026" in page.locator('[data-portfolio-project="mundial-2026"] h3').inner_text()
+    assert "Grocery Price Data" in page.locator("#proyectos .price-card h3").inner_text()
+    assert "World Cup 2026" in page.locator("#proyectos .mw-card h3").inner_text()
 
-    opener = page.locator('[data-portfolio-project="precios-supermercados"] [data-price-open]').last
+    opener = page.locator("#proyectos .price-card [data-price-open]").last
     opener.click()
     dialog = page.locator("#price-project-view")
     assert dialog.evaluate("element => element.open") is True
@@ -106,7 +106,7 @@ def desktop_flow(browser: Browser) -> None:
     assert mundial.is_hidden()
 
     page.reload(wait_until="domcontentloaded")
-    page.wait_for_selector('[data-portfolio-project="precios-supermercados"]')
+    page.wait_for_selector("#proyectos .price-card")
     assert page.locator("html").get_attribute("lang") == "en"
     assert page.locator("#nav-links").get_by_text("Home", exact=True).count() == 1
 
@@ -170,7 +170,7 @@ def responsive_flow(browser: Browser, width: int, height: int) -> None:
         assert page.locator("html").get_attribute("lang") == "en"
         assert_no_global_overflow(page)
 
-        page.locator('[data-portfolio-project="precios-supermercados"] [data-price-open]').first.click()
+        page.locator("#proyectos .price-card [data-price-open]").first.click()
         dialog = page.locator("#price-project-view")
         assert dialog.evaluate("element => element.open") is True
         rect = dialog.bounding_box()
