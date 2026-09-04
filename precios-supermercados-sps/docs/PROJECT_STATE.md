@@ -59,6 +59,16 @@ Colonial, Walmart y PriceSmart conservan sus cierres productivos demostrados; no
 
 La suite sobre el PR final pasó **2,088 pruebas**. Después del merge, el workflow de `main` [run 33902732635](https://github.com/Jchernand3z19/Portafolio/actions/runs/33902732635) volvió a ejecutar el commit exacto `7f9b10b18445184f3dbfba49d25a6375d7a87b4f` y terminó **2,088 passed en 177.25 s**, incluyendo la auditoría de seguridad de workflows.
 
+## Seguridad y autoridad live
+
+El fingerprint productivo canónico de la región SPS de La Colonia se conserva explícitamente para los contratos offline y de fallback:
+
+```text
+SPS_REGION_FINGERPRINT = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+```
+
+Las autorizaciones temporales one-shot registradas en la evidencia histórica siguen siendo hechos auditables, pero **no se interpreta como autorización abierta** ninguna autorización temporal ya consumida o vencida. La existencia de un schedule técnicamente configurado tampoco amplía por sí sola la autoridad live fuera del alcance que haya sido autorizado expresamente.
+
 ## Fronteras actuales
 
 - Fase de adquisición: **cerrada** para las cadenas demostradas arriba.
