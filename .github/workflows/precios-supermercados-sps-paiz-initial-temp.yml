@@ -30,9 +30,9 @@ jobs:
           persist-credentials: false
 
       - name: Configurar Python
-        uses: actions/setup-python@a73c84a0e0ca018a09be0e8aefc3e859e41a0f41 # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Compilar componentes Paiz
         run: |
