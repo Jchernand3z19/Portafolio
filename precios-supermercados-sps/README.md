@@ -1,15 +1,43 @@
 # Precios de Supermercados de San Pedro Sula
 
-Proyecto para recolectar, normalizar, validar, historizar y comparar precios de supermercados con alcance inicial en San Pedro Sula.
+Proyecto para recolectar, normalizar, validar, historizar y comparar precios de supermercados con alcance inicial en San Pedro Sula y cobertura adicional ya verificada en Tegucigalpa.
+
+## Presentación pública en el portafolio
+
+El proyecto se presenta como el **proyecto principal** del portafolio profesional.
+
+La versión pública prioriza lenguaje entendible para una persona no técnica y muestra primero el valor del proyecto: qué hace, qué cobertura tiene, qué datos reales ya genera y qué preguntas permite responder.
+
+Cifras públicas verificadas al **4 de septiembre de 2026**:
+
+- 5 fuentes integradas.
+- 9 ubicaciones monitoreadas.
+- 47,470 productos registrados en el estado integrado utilizado como base de la presentación.
+- 90,876 periodos históricos de precio en ese mismo corte.
+- Cobertura en San Pedro Sula y Tegucigalpa.
+
+La tabla visible en el portafolio ya no usa registros sintéticos ni identificadores `SKU-DEMO`. Utiliza una muestra real proveniente del snapshot aceptado del 4 de septiembre de 2026. Para que la presentación sea fácil de entender, muestra únicamente:
+
+```text
+Producto
+Ciudad
+Precio actual
+Precio regular
+Promoción
+Disponibilidad
+```
+
+La procedencia exacta de esa muestra, sus hashes y el criterio de publicación se documentan en [`docs/portfolio-showcase.md`](docs/portfolio-showcase.md).
 
 ## Fuentes de verdad
 
 - **Estado operativo mutable, autorizaciones, blockers y último CI:** [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)
+- **Presentación pública y evidencia de cifras del portafolio:** [`docs/portfolio-showcase.md`](docs/portfolio-showcase.md)
 - **Arquitectura estable:** [`docs/arquitectura.md`](docs/arquitectura.md)
 - **Modelo de datos:** [`docs/modelo-datos.md`](docs/modelo-datos.md)
 - **Decisiones técnicas:** [`docs/decisiones-tecnicas.md`](docs/decisiones-tecnicas.md)
 
-El README no replica SHAs, runs, conteos de tests, authorization IDs ni flags operativos. Esos valores cambian con el tiempo y deben consultarse en `PROJECT_STATE.md` y en la evidencia real de GitHub.
+El README no replica SHAs de ejecución, authorization IDs ni flags operativos. Esos valores cambian con el tiempo y deben consultarse en `PROJECT_STATE.md` y en la evidencia real de GitHub. Las cifras públicas del portafolio sí quedan versionadas en `portfolio-showcase.md` porque forman parte de la presentación publicada y deben poder auditarse.
 
 ## Principios
 
@@ -41,14 +69,14 @@ completitud + provenance + ACCEPT/REJECT
   ↓
 current/history                   # CURATED
   ↓
-Google Sheets                     # backend temporal
+Turso / SQLite
   ↓
 proyección semántica
   ↓
-Power BI                          # SERVE
+consumo analítico                 # SERVE
 ```
 
-BigQuery queda como evolución posterior cuando el proceso completo sea estable. La migración podrá cambiar el modelo físico sin cambiar la semántica comercial.
+La visualización completa de comparación todavía es una capa posterior. La presentación actual del portafolio no la muestra como si ya estuviera terminada.
 
 ## Identidad
 
@@ -78,25 +106,7 @@ historical_previous_price
 
 ## Almacenamiento físico activo
 
-Google Sheets es el backend temporal y materializa únicamente seis tablas con grain/lifecycle ya justificados:
-
-```text
-cfg_supermarkets
-cfg_locations
-fact_offers_current
-fact_offer_history
-fact_scrape_runs
-fact_quality_events
-```
-
-Los contratos lógicos:
-
-```text
-dim_products
-map_source_products
-```
-
-permanecen diferidos hasta que exista una segunda fuente o un consumidor real que requiera identidad canónica cross-source. `source_product_id` y `product_id` continúan presentes en current/history, por lo que esa capacidad puede activarse y backfillearse posteriormente sin inventar observaciones.
+Turso / SQLite mantiene el estado productivo integrado bajo un modelo común. El detalle operativo, la huella de esquema vigente y las verificaciones de cada integración se consultan en `PROJECT_STATE.md` y en los reportes de evidencia versionados.
 
 ## Seguridad y tráfico live
 
