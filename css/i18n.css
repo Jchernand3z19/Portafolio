@@ -65,10 +65,10 @@
   }
 }
 
-@media (max-width: 1024px) and (min-width: 768px) {
-  #proyectos .projects-grid[data-registry-ready="true"] .project-card:last-child {
-    grid-column: auto;
-    width: auto;
+@media (min-width: 768px) {
+  #proyectos .projects-grid[data-registry-ready="true"] .price-card {
+    grid-column: 1 / -1;
+    width: 100%;
     justify-self: stretch;
   }
 }
