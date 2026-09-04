@@ -6,6 +6,8 @@ Proyecto de **web scraping, automatización y datos** para recolectar, normaliza
 
 El proyecto se presenta como el **proyecto principal** del portafolio profesional y comunica de forma explícita que los datos parten de sitios web públicos.
 
+La tarjeta principal utiliza el estándar compartido definido en [`../docs/PROJECT_CARD_STANDARD.md`](../docs/PROJECT_CARD_STANDARD.md), por lo que conserva la identidad visual del proyecto sin crear un sistema distinto de estructura, tags o acciones frente a los demás proyectos publicados.
+
 La versión pública muestra:
 
 - flujo `Sitios web → Web Scraping → Validación → Histórico → Análisis`;
