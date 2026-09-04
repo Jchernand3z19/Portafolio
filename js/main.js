@@ -122,8 +122,21 @@
       }
     };
 
+    const reapplyAfterMundialOpen = () => {
+      queueMicrotask(applyLabels);
+      requestAnimationFrame(applyLabels);
+      window.setTimeout(applyLabels, 0);
+    };
+
     applyLabels();
     window.PortfolioI18n?.onChange?.(applyLabels);
+
+    ['mw-open', 'mw-open-media'].forEach(id => {
+      const control = document.getElementById(id);
+      if (!control || control.dataset.projectHierarchyReady === 'true') return;
+      control.dataset.projectHierarchyReady = 'true';
+      control.addEventListener('click', reapplyAfterMundialOpen);
+    });
 
     const mundialView = document.getElementById('mw-view');
     if (
