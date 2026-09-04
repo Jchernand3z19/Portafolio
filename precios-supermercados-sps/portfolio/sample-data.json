@@ -1,32 +1,34 @@
 {
-  "schema_version": 1,
-  "as_of_utc": "2026-09-04T01:44:35.172709Z",
+  "schema_version": 2,
+  "as_of_date": "2026-09-04",
   "city": "San Pedro Sula",
-  "source_scope": "verified_public_source_sps",
-  "source_artifact_id": 9920279680,
-  "snapshot_sha256": "a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc",
-  "evidence_path": "precios-supermercados-sps/reports/comisariato-los-andes/2026-09-04-full/evidence.json",
-  "rows": [
-    {
-      "product": "Rica yema huevos 15 unds",
-      "current_price": "61.85",
-      "regular_price": "88.50",
-      "promotion": true,
-      "availability": "not_confirmed"
+  "scope": "representative_everyday_products",
+  "official_basic_basket": false,
+  "matching_rule": "same_brand_and_same_presentation",
+  "provenance": {
+    "comisariato_los_andes": {
+      "type": "accepted_project_snapshot",
+      "captured_at_utc": "2026-09-04T01:44:35.172709Z",
+      "artifact_id": 9920279680,
+      "snapshot_sha256": "a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc",
+      "evidence_path": "precios-supermercados-sps/reports/comisariato-los-andes/2026-09-04-full/"
     },
-    {
-      "product": "Arroz progreso grano largo 5 lb",
-      "current_price": "84.50",
-      "regular_price": null,
-      "promotion": false,
-      "availability": "not_confirmed"
-    },
-    {
-      "product": "Nestle agua purificada 0.5 ltr",
-      "current_price": "8.95",
-      "regular_price": null,
-      "promotion": false,
-      "availability": "not_confirmed"
+    "supermercados_colonial": {
+      "type": "official_public_catalog_check",
+      "checked_on": "2026-09-04",
+      "source_url": "https://supercolonial.com/"
     }
+  },
+  "rows": [
+    {"product":"Arroz blanco","brand":"Progreso","presentation":"1 lb / 454 g","city":"San Pedro Sula","comisariato_los_andes":16.90,"supermercados_colonial":15.79,"best_price":15.79},
+    {"product":"Huevos","brand":"Rica Yema","presentation":"15 und","city":"San Pedro Sula","comisariato_los_andes":61.85,"supermercados_colonial":60.79,"best_price":60.79},
+    {"product":"Harina de maíz","brand":"Maseca","presentation":"4.5 lb","city":"San Pedro Sula","comisariato_los_andes":93.50,"supermercados_colonial":85.99,"best_price":85.99},
+    {"product":"Harina de trigo","brand":"Gold Star","presentation":"5 lb","city":"San Pedro Sula","comisariato_los_andes":74.50,"supermercados_colonial":64.99,"best_price":64.99},
+    {"product":"Frijoles rojos volteados","brand":"La Chula","presentation":"48 oz","city":"San Pedro Sula","comisariato_los_andes":75.50,"supermercados_colonial":63.39,"best_price":63.39},
+    {"product":"Pierna muslo de pollo","brand":"Norteño","presentation":"1 lb","city":"San Pedro Sula","comisariato_los_andes":32.90,"supermercados_colonial":34.59,"best_price":32.90},
+    {"product":"Mantequilla crema","brand":"Leyde","presentation":"1 lb","city":"San Pedro Sula","comisariato_los_andes":50.50,"supermercados_colonial":35.29,"best_price":35.29},
+    {"product":"Avena mosh","brand":"Quaker","presentation":"600 g","city":"San Pedro Sula","comisariato_los_andes":55.90,"supermercados_colonial":49.49,"best_price":49.49},
+    {"product":"Pan molde","brand":"Monarca","presentation":"540 g","city":"San Pedro Sula","comisariato_los_andes":61.50,"supermercados_colonial":58.99,"best_price":58.99},
+    {"product":"Café molido","brand":"Passion","presentation":"1 lb","city":"San Pedro Sula","comisariato_los_andes":299.50,"supermercados_colonial":215.99,"best_price":215.99}
   ]
 }

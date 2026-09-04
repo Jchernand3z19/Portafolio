@@ -16,7 +16,7 @@ Portafolio/
 ├── css/                        # Estilos compartidos del sitio
 ├── js/                         # Lógica compartida, i18n y registro de proyectos
 ├── docs/                       # Reglas generales del repositorio
-├── precios-supermercados-sps/  # Monitoreo e inteligencia de precios
+├── precios-supermercados-sps/  # Web scraping, monitoreo e inteligencia de precios
 ├── mundial-2026/               # Proyecto Mundial 2026 completo
 ├── index.html                  # Página principal de GitHub Pages
 ├── script.js                   # Cargador de js/main.js
@@ -29,22 +29,25 @@ La única excepción a la regla de encapsulación es `.github/workflows/`: GitHu
 
 ## Proyectos publicados
 
-### 1. Precios de Supermercados: monitoreo e inteligencia de precios
+### 1. Monitoreo automatizado de precios — Web Scraping
 
-Proyecto principal del portafolio. Reúne precios públicos de supermercados, los valida, los estructura y conserva su histórico para detectar cambios, promociones y diferencias cuando la comparación es válida.
+Proyecto principal del portafolio. Obtiene precios y promociones desde sitios web públicos de supermercados, valida las capturas, estructura los datos y conserva su histórico para análisis.
 
 Estado público verificado al **4 de septiembre de 2026**:
 
-- **5 fuentes integradas**.
+- **5 fuentes web integradas**.
 - **9 ubicaciones monitoreadas**.
 - **47K+ productos registrados**.
 - **90K+ registros históricos de precio**.
 - Cobertura actual en **San Pedro Sula y Tegucigalpa**.
-- El portafolio muestra una **muestra real y verificable** proveniente de un snapshot aceptado del 4 de septiembre de 2026; no carga el dataset productivo completo en el navegador.
+- Evidencia pública de una captura aceptada con **6,646 productos con precio** y **120 promociones**.
+- Comparación pública de **10 productos representativos de consumo básico**, usando misma marca y presentación entre Comisariato Los Andes y Supermercados Colonial.
+
+El detalle del sitio enlaza la **página de origen**, la **evidencia versionada en GitHub** y el **código de extracción** para que la capacidad de web scraping sea comprobable y no sólo declarativa.
 
 **Carpeta completa:** [`precios-supermercados-sps/`](precios-supermercados-sps/)
 
-La procedencia exacta de la muestra pública y las cifras utilizadas por la presentación se documenta en [`precios-supermercados-sps/docs/portfolio-showcase.md`](precios-supermercados-sps/docs/portfolio-showcase.md).
+**Procedencia de la presentación:** [`precios-supermercados-sps/docs/portfolio-showcase.md`](precios-supermercados-sps/docs/portfolio-showcase.md)
 
 ### 2. Mundial 2026: análisis histórico y predicción
 
