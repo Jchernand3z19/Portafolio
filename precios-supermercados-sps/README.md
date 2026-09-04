@@ -13,16 +13,28 @@ La versión pública muestra:
 - flujo `Sitios web → Web Scraping → Validación → Histórico → Análisis`;
 - una extracción real comprobable con enlace a la fuente, la evidencia y el código;
 - cifras de escala verificadas;
-- una comparación de 10 productos representativos de consumo básico entre dos supermercados;
+- una tabla de cobertura con **todos los supermercados que ya tienen datos productivos aceptados**;
+- una comparación homologada de 10 productos representativos entre dos supermercados;
 - marca y presentación/cantidad para evitar comparaciones engañosas.
 
 Cifras públicas verificadas al **4 de septiembre de 2026**:
 
-- 5 fuentes integradas.
-- 9 ubicaciones monitoreadas.
-- 47,470 productos registrados en el estado integrado utilizado como base de la presentación.
-- 90,876 periodos históricos de precio en ese mismo corte.
+- 6 supermercados / cadenas productivas integradas.
+- 11 ubicaciones monitoreadas.
+- 56,769 productos registrados.
+- 108,315 periodos históricos de precio.
 - Cobertura en San Pedro Sula y Tegucigalpa.
+
+Cadenas con datos productivos aceptados:
+
+| Supermercado | Ubicaciones |
+| --- | --- |
+| La Colonia | SPS, Tegucigalpa |
+| Supermercados Colonial | SPS |
+| Walmart | SPS, TGU FFAA, TGU El Sauce |
+| PriceSmart | SPS 6603, Florencia 6602 |
+| Comisariato Los Andes | SPS |
+| Paiz | TGU Multiplaza, TGU Próceres |
 
 ### Extracción web comprobable
 
@@ -41,7 +53,7 @@ Evidencia versionada: [`reports/comisariato-los-andes/2026-09-04-full/`](reports
 
 ### Comparación pública
 
-La tabla visible usa 10 productos cotidianos con esta estructura:
+La tabla visible de precios usa 10 productos cotidianos con esta estructura:
 
 ```text
 Producto
@@ -53,7 +65,11 @@ Precio Supermercados Colonial
 Mejor precio
 ```
 
-La regla para incluir una fila es **misma marca + misma presentación/cantidad**. La selección sirve para demostrar la comparación y **no se presenta como la canasta básica oficial de Honduras**.
+La cobertura total del proyecto es de seis cadenas. Esta tabla de precios usa sólo dos porque esos 10 artículos tienen una equivalencia curada y comprobada. La regla para incluir una fila es **misma marca + misma presentación/cantidad**.
+
+No se agregan columnas de La Colonia, Walmart, PriceSmart o Paiz usando coincidencias aproximadas sólo para llenar la tabla. Cuando el matching cross-source esté verificado para una equivalencia, entonces puede entrar a una comparación pública.
+
+La selección sirve para demostrar la comparación y **no se presenta como la canasta básica oficial de Honduras**.
 
 Los Andes usa el snapshot aceptado indicado arriba. Los valores de Colonial fueron comprobados el 4 de septiembre de 2026 contra su catálogo web público oficial. La muestra versionada está en [`portfolio/sample-data.json`](portfolio/sample-data.json).
 
@@ -106,7 +122,7 @@ proyección semántica
 consumo analítico                 # SERVE
 ```
 
-La visualización completa de comparación todavía es una capa posterior. La presentación actual muestra una comparación pública curada de 10 productos, no un dashboard cross-source productivo terminado.
+La visualización completa de comparación todavía es una capa posterior. La presentación actual muestra la cobertura productiva completa de seis cadenas y, de forma separada, una comparación pública curada de 10 productos entre dos supermercados; no presenta un dashboard cross-source productivo terminado.
 
 ## Identidad
 
