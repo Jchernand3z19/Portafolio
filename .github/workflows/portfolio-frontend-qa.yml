@@ -7,8 +7,7 @@ on:
       - "script.js"
       - "css/**"
       - "js/**"
-      - "mundial-2026/portfolio/**"
-      - "precios-supermercados-sps/portfolio/**"
+      - "**/portfolio/**"
       - "tests/portfolio_frontend_smoke.py"
       - ".github/workflows/portfolio-frontend-qa.yml"
   push:
@@ -19,8 +18,7 @@ on:
       - "script.js"
       - "css/**"
       - "js/**"
-      - "mundial-2026/portfolio/**"
-      - "precios-supermercados-sps/portfolio/**"
+      - "**/portfolio/**"
       - "tests/portfolio_frontend_smoke.py"
       - ".github/workflows/portfolio-frontend-qa.yml"
   workflow_dispatch:
@@ -56,9 +54,7 @@ jobs:
           node --check js/main.js
           node --check js/i18n.js
           node --check js/projects/registry.js
-          node --check mundial-2026/portfolio/mundial-2026.js
-          node --check mundial-2026/portfolio/mundial-2026-i18n.js
-          node --check precios-supermercados-sps/portfolio/precios-portfolio.js
+          find . -path '*/portfolio/*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Ejecutar smoke bilingüe, responsive y accesible
         run: python tests/portfolio_frontend_smoke.py
