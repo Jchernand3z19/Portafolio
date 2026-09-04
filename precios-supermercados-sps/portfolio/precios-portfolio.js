@@ -24,7 +24,7 @@
       'flow.title': 'Qué hace hoy',
       'flow.body': 'El sistema transforma fuentes con estructuras diferentes en estados comerciales comparables dentro de cada fuente y ubicación aceptada.',
       'flow.public.title': 'Fuentes públicas',
-      'flow.public.body': 'Catálogos y superficies read-only evaluadas antes de integrarse.',
+      'flow.public.body': 'Catálogos y superficies de solo lectura evaluadas antes de integrarse.',
       'flow.collect.title': 'Recolección',
       'flow.collect.body': 'Capturas completas con límites y evidencia reproducible.',
       'flow.validate.title': 'Validación',
@@ -44,6 +44,7 @@
       'sample.product': 'Producto',
       'sample.city': 'Ciudad',
       'sample.location': 'Ubicación',
+      'sample.context': 'Contexto',
       'sample.current': 'Precio actual',
       'sample.regular': 'Precio regular',
       'sample.promo': 'Promoción',
@@ -103,8 +104,8 @@
       'tech.turso.body': 'Cinco tablas para fuentes, ubicaciones, productos, histórico y ejecuciones.',
       'tech.actions.title': 'GitHub Actions',
       'tech.actions.body': 'Ejecuciones controladas, evidencia y automatización autorizada.',
-      'tech.http.title': 'HTTP read-only',
-      'tech.http.body': 'Integraciones públicas con límites, validación y comportamiento fail-closed.',
+      'tech.http.title': 'HTTP de solo lectura',
+      'tech.http.body': 'Integraciones públicas con límites, validación y comportamiento de cierre seguro ante fallos.',
       'tech.tests.title': 'Pytest',
       'tech.tests.body': 'Más de 2,000 pruebas en el cierre más reciente integrado antes de esta presentación.',
       'end.repo': 'Ver implementación en GitHub'
@@ -150,6 +151,7 @@
       'sample.product': 'Product',
       'sample.city': 'City',
       'sample.location': 'Location',
+      'sample.context': 'Context',
       'sample.current': 'Current price',
       'sample.regular': 'Regular price',
       'sample.promo': 'Promotion',
@@ -260,9 +262,9 @@
 
   function sampleRows() {
     return `
-      <tr><td>SKU-DEMO-01</td><td>San Pedro Sula</td><td>Contexto 01</td><td>L 84.50</td><td>L 89.00</td><td>${t('sample.yes')}</td><td>${t('sample.inStock')}</td></tr>
-      <tr><td>SKU-DEMO-02</td><td>Tegucigalpa</td><td>Contexto 02</td><td>L 126.00</td><td>—</td><td>${t('sample.no')}</td><td>${t('sample.unknown')}</td></tr>
-      <tr><td>SKU-DEMO-03</td><td>Tegucigalpa</td><td>Contexto 03</td><td>L 51.75</td><td>L 51.75</td><td>${t('sample.no')}</td><td>${t('sample.inStock')}</td></tr>`;
+      <tr><td>SKU-DEMO-01</td><td>San Pedro Sula</td><td>${t('sample.context')} 01</td><td>L 84.50</td><td>L 89.00</td><td>${t('sample.yes')}</td><td>${t('sample.inStock')}</td></tr>
+      <tr><td>SKU-DEMO-02</td><td>Tegucigalpa</td><td>${t('sample.context')} 02</td><td>L 126.00</td><td>—</td><td>${t('sample.no')}</td><td>${t('sample.unknown')}</td></tr>
+      <tr><td>SKU-DEMO-03</td><td>Tegucigalpa</td><td>${t('sample.context')} 03</td><td>L 51.75</td><td>L 51.75</td><td>${t('sample.no')}</td><td>${t('sample.inStock')}</td></tr>`;
   }
 
   function view() {
