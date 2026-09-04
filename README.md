@@ -35,13 +35,14 @@ Proyecto principal del portafolio. Obtiene precios y promociones desde sitios we
 
 Estado público verificado al **4 de septiembre de 2026**:
 
-- **5 fuentes web integradas**.
-- **9 ubicaciones monitoreadas**.
-- **47K+ productos registrados**.
-- **90K+ registros históricos de precio**.
+- **6 supermercados / cadenas productivas integradas**.
+- **11 ubicaciones monitoreadas**.
+- **56K+ productos registrados** (`56,769` en el corte verificado).
+- **108K+ registros históricos de precio** (`108,315` en el corte verificado).
 - Cobertura actual en **San Pedro Sula y Tegucigalpa**.
+- Cadenas con datos aceptados: **La Colonia, Supermercados Colonial, Walmart, PriceSmart, Comisariato Los Andes y Paiz**.
 - Evidencia pública de una captura aceptada con **6,646 productos con precio** y **120 promociones**.
-- Comparación pública de **10 productos representativos de consumo básico**, usando misma marca y presentación entre Comisariato Los Andes y Supermercados Colonial.
+- Comparación pública homologada de **10 productos** entre Comisariato Los Andes y Supermercados Colonial. Esa tabla es una muestra de matching verificado, no el límite de cobertura del proyecto.
 
 El detalle del sitio enlaza la **página de origen**, la **evidencia versionada en GitHub** y el **código de extracción** para que la capacidad de web scraping sea comprobable y no sólo declarativa.
 
