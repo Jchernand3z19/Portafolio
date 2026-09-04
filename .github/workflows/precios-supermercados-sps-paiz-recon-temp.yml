@@ -1,11 +1,6 @@
 name: Precios SPS - Paiz reconocimiento temporal
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - precios-supermercados-sps/reports/paiz/**
-      - .github/workflows/precios-supermercados-sps-paiz-recon-temp.yml
   push:
     branches: [feature/paiz-final-acquisition]
     paths:
@@ -33,14 +28,14 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Ejecutar reconocimiento Paiz acotado
-        run: python reports/paiz/2026-09-03-probe/probe_recon.py
+      - name: Ejecutar reconocimiento de contexto Paiz
+        run: python reports/paiz/2026-09-03-probe/probe_context.py
 
       - name: Publicar evidencia
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: paiz-recon-${{ github.run_id }}
-          path: precios-supermercados-sps/paiz-recon-artifact/
+          name: paiz-context-${{ github.run_id }}
+          path: precios-supermercados-sps/paiz-context-artifact/
           if-no-files-found: warn
           retention-days: 7
