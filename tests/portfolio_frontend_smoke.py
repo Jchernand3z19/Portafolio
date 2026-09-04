@@ -94,7 +94,7 @@ def desktop_flow(browser: Browser) -> None:
     assert "Precios de Supermercados" in page.locator("#proyectos .price-card h3").inner_text()
     assert page.locator("#proyectos .price-card").get_attribute("data-project-position") == "PROYECTO PRINCIPAL · 01"
     assert page.locator("#proyectos .mw-card").get_attribute("data-project-position") == "PROYECTO · 02"
-    assert page.locator("#mw-view .mw-kicker").inner_text() == "Proyecto 02"
+    assert page.locator("#mw-view .mw-kicker").count() == 0
     assert_no_global_overflow(page)
 
     page.locator('[data-locale="en"]').click()
@@ -105,7 +105,7 @@ def desktop_flow(browser: Browser) -> None:
     assert "World Cup 2026" in page.locator("#proyectos .mw-card h3").inner_text()
     assert page.locator("#proyectos .price-card").get_attribute("data-project-position") == "FEATURED PROJECT · 01"
     assert page.locator("#proyectos .mw-card").get_attribute("data-project-position") == "PROJECT · 02"
-    assert page.locator("#mw-view .mw-kicker").inner_text() == "Project 02"
+    assert page.locator("#mw-view .mw-kicker").count() == 0
     assert_project_order(page)
 
     opener = page.locator("#proyectos .price-card [data-price-open]").last
@@ -134,8 +134,8 @@ def desktop_flow(browser: Browser) -> None:
     mundial = page.locator("#mw-view")
     assert mundial.is_visible()
     assert "World Cup 2026" in mundial.locator("#mw-title").inner_text()
-    page.wait_for_function("() => document.querySelector('#mw-view .mw-kicker')?.textContent === 'Project 02'")
-    assert mundial.locator(".mw-kicker").inner_text() == "Project 02"
+    page.wait_for_function("() => document.querySelector('#mw-view .mw-kicker') === null")
+    assert mundial.locator(".mw-kicker").count() == 0
     assert page.locator(":focus").get_attribute("id") == "mw-close"
     page.keyboard.press("Escape")
     assert mundial.is_hidden()
