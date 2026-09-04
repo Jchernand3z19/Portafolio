@@ -1,79 +1,54 @@
-name: Precios SPS - Paiz full recovery temporal
+name: Precios SPS - Paiz finalización temporal
 
 on:
   push:
     branches: [feature/paiz-final-acquisition]
     paths:
-      - precios-supermercados-sps/reports/paiz/2026-09-03-probe/recover_full.py
+      - precios-supermercados-sps/src/precios_supermercados/scrapers/paiz.py
+      - precios-supermercados-sps/scripts/generar_snapshots_paiz.py
       - .github/workflows/precios-supermercados-sps-paiz-recon-temp.yml
 
 permissions:
-  actions: read
   contents: write
 
 concurrency:
-  group: precios-sps-paiz-full-temp
+  group: precios-sps-paiz-finalize-temp
   cancel-in-progress: false
 
 jobs:
-  recover:
+  finalize:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: precios-supermercados-sps
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
     steps:
       - name: Descargar revisión inmutable
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
 
-      - name: Recuperar RAW válido del intento interrumpido
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Generar snapshots sólo desde RAW aceptado
+        run: python scripts/generar_snapshots_paiz.py reports/paiz/2026-09-04-full
+
+      - name: Verificar evidencia reproducible
         run: |
           set -euo pipefail
-          mkdir -p reports/paiz/2026-09-04-full
-          curl --fail --location --silent --show-error \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/Jchernand3z19/Portafolio/actions/artifacts/9922521379/zip \
-            -o /tmp/paiz-partial.zip
-          echo "d3858f10493ace31f870f04a72cc8a35e17e810f6da2cd6c8320aa56eb4568ab  /tmp/paiz-partial.zip" | sha256sum -c -
-          unzip -q /tmp/paiz-partial.zip -d reports/paiz/2026-09-04-full
+          python scripts/generar_snapshots_paiz.py reports/paiz/2026-09-04-full > /tmp/replay.json
+          git diff --check
 
-      - name: Completar sólo páginas faltantes o inválidas
-        run: python reports/paiz/2026-09-03-probe/recover_full.py
-
-      - name: Empaquetar RAW por contexto
-        run: |
-          set -euo pipefail
-          out=reports/paiz/2026-09-04-full
-          tar -czf "$out/raw-paiz-multiplaza.tar.gz" -C "$out/raw" walmarthnsp633
-          tar -czf "$out/raw-paiz-proceres.tar.gz" -C "$out/raw" walmarthnsp4010
-          rm -rf "$out/raw"
-          sha256sum "$out"/raw-paiz-*.tar.gz > "$out/raw-archives.sha256"
-          for f in "$out"/raw-paiz-*.tar.gz; do
-            size=$(stat -c%s "$f")
-            test "$size" -lt 95000000 || { echo "RAW archive too large for repository: $f $size" >&2; exit 1; }
-          done
-
-      - name: Publicar evidencia durable en la rama
+      - name: Publicar normalización durable
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add reports/paiz/2026-09-04-full
           git diff --cached --check
-          git commit -m "docs(paiz): record accepted full TGU capture"
+          if git diff --cached --quiet; then
+            echo "Sin cambios"
+            exit 0
+          fi
+          git commit -m "docs(paiz): publish normalized TGU snapshots"
           git push origin HEAD:feature/paiz-final-acquisition
-
-      - name: Publicar artefacto de respaldo
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: paiz-full-recovered-${{ github.run_id }}
-          path: precios-supermercados-sps/reports/paiz/2026-09-04-full/
-          if-no-files-found: warn
-          retention-days: 14
