@@ -106,30 +106,31 @@
   }
 
   function setupProjectPresentation() {
-    const applyLabels = () => {
+    const applyHierarchy = () => {
       const locale = window.PortfolioI18n?.getLocale?.() === 'en' ? 'en' : 'es';
       const labels = locale === 'en'
-        ? { prices: 'FEATURED PROJECT · 01', mundial: 'PROJECT · 02', mundialDetail: 'Project 02' }
-        : { prices: 'PROYECTO PRINCIPAL · 01', mundial: 'PROYECTO · 02', mundialDetail: 'Proyecto 02' };
+        ? { prices: 'FEATURED PROJECT · 01', mundial: 'PROJECT · 02' }
+        : { prices: 'PROYECTO PRINCIPAL · 01', mundial: 'PROYECTO · 02' };
 
       const prices = document.querySelector('#proyectos .price-card');
       const mundial = document.querySelector('#proyectos .mw-card');
-      const mundialKicker = document.querySelector('#mw-view .mw-kicker');
       if (prices) prices.dataset.projectPosition = labels.prices;
       if (mundial) mundial.dataset.projectPosition = labels.mundial;
-      if (mundialKicker && mundialKicker.textContent !== labels.mundialDetail) {
-        mundialKicker.textContent = labels.mundialDetail;
-      }
+
+      // Mundial conservaba un rótulo histórico de “proyecto destacado” dentro
+      // del detalle. Se elimina para no competir con la nueva jerarquía pública:
+      // Precios es el proyecto principal y Mundial queda claramente como segundo.
+      document.querySelector('#mw-view .mw-kicker')?.remove();
     };
 
     const reapplyAfterMundialOpen = () => {
-      queueMicrotask(applyLabels);
-      requestAnimationFrame(applyLabels);
-      window.setTimeout(applyLabels, 0);
+      queueMicrotask(applyHierarchy);
+      requestAnimationFrame(applyHierarchy);
+      window.setTimeout(applyHierarchy, 0);
     };
 
-    applyLabels();
-    window.PortfolioI18n?.onChange?.(applyLabels);
+    applyHierarchy();
+    window.PortfolioI18n?.onChange?.(applyHierarchy);
 
     ['mw-open', 'mw-open-media'].forEach(id => {
       const control = document.getElementById(id);
@@ -144,11 +145,10 @@
       !window.__portfolioProjectHierarchyObserver &&
       'MutationObserver' in window
     ) {
-      const hierarchyObserver = new MutationObserver(() => applyLabels());
+      const hierarchyObserver = new MutationObserver(() => applyHierarchy());
       hierarchyObserver.observe(mundialView, {
         childList: true,
-        subtree: true,
-        characterData: true
+        subtree: true
       });
       window.__portfolioProjectHierarchyObserver = hierarchyObserver;
     }
