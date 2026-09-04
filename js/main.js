@@ -117,11 +117,28 @@
       const mundialKicker = document.querySelector('#mw-view .mw-kicker');
       if (prices) prices.dataset.projectPosition = labels.prices;
       if (mundial) mundial.dataset.projectPosition = labels.mundial;
-      if (mundialKicker) mundialKicker.textContent = labels.mundialDetail;
+      if (mundialKicker && mundialKicker.textContent !== labels.mundialDetail) {
+        mundialKicker.textContent = labels.mundialDetail;
+      }
     };
 
     applyLabels();
     window.PortfolioI18n?.onChange?.(applyLabels);
+
+    const mundialView = document.getElementById('mw-view');
+    if (
+      mundialView &&
+      !window.__portfolioProjectHierarchyObserver &&
+      'MutationObserver' in window
+    ) {
+      const hierarchyObserver = new MutationObserver(() => applyLabels());
+      hierarchyObserver.observe(mundialView, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+      window.__portfolioProjectHierarchyObserver = hierarchyObserver;
+    }
   }
 
   function setupSite() {
