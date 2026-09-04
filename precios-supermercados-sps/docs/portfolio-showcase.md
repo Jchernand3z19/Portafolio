@@ -13,30 +13,45 @@ Orden público:
 
 ## Cifras públicas verificadas
 
+El portafolio debe reflejar el estado productivo vigente documentado en `PROJECT_STATE.md`.
+
 | Métrica | Valor exacto de soporte | Valor mostrado |
 | --- | ---: | ---: |
-| Fuentes integradas | 5 | 5 |
-| Ubicaciones monitoreadas | 9 | 9 |
-| Productos registrados | 47,470 | 47K+ |
-| Periodos históricos de precio | 90,876 | 90K+ |
+| Supermercados / cadenas productivas | 6 | 6 |
+| Ubicaciones monitoreadas | 11 | 11 |
+| Productos registrados | 56,769 | 56K+ |
+| Periodos históricos de precio | 108,315 | 108K+ |
 | Ciudades con cobertura integrada | 2 | 2 |
 
-### Derivación
+### Cobertura por supermercado
 
-El estado productivo verificado del 2 de septiembre de 2026 documenta 4 fuentes, 8 ubicaciones, 40,824 productos y 84,230 periodos históricos. La integración aceptada del 4 de septiembre agrega 1 fuente, 1 ubicación en San Pedro Sula, 6,646 productos con precio y 6,646 periodos iniciales.
+| Supermercado | Ubicaciones con datos productivos aceptados |
+| --- | --- |
+| La Colonia | SPS, Tegucigalpa |
+| Supermercados Colonial | SPS |
+| Walmart | SPS, TGU FFAA, TGU El Sauce |
+| PriceSmart | SPS 6603, Florencia 6602 |
+| Comisariato Los Andes | SPS |
+| Paiz | TGU Multiplaza, TGU Próceres |
+
+La interfaz pública debe mostrar las seis cadenas. Una comparación de productos entre sólo algunas cadenas **no debe confundirse con la cobertura total**.
+
+### Derivación del corte vigente
+
+El corte público anterior documentaba 5 fuentes, 9 ubicaciones, 47,470 productos y 90,876 periodos históricos. El cierre productivo de Paiz agregó una sexta cadena, dos contextos demostrados y 9,299 identidades Paiz únicas, con 8,868 y 8,571 periodos actuales respectivamente.
 
 ```text
-40,824 + 6,646 = 47,470 productos
-84,230 + 6,646 = 90,876 periodos históricos
-4 + 1 = 5 fuentes
-8 + 1 = 9 ubicaciones
+47,470 + 9,299 = 56,769 productos
+90,876 + 8,868 + 8,571 = 108,315 periodos históricos
+5 + 1 = 6 supermercados
+9 + 2 = 11 ubicaciones
 ```
 
-Fuentes: [`PROJECT_STATE.md`](PROJECT_STATE.md) y [`../reports/comisariato-los-andes/2026-09-04-full/README.md`](../reports/comisariato-los-andes/2026-09-04-full/README.md).
+Fuentes: [`PROJECT_STATE.md`](PROJECT_STATE.md), [`../reports/paiz/2026-09-04-full/README.md`](../reports/paiz/2026-09-04-full/README.md) y [`../reports/comisariato-los-andes/2026-09-04-full/README.md`](../reports/comisariato-los-andes/2026-09-04-full/README.md).
 
 ## Extracción web comprobable
 
-La interfaz muestra una prueba pública concreta de que el proyecto obtiene datos desde una web real.
+La interfaz mantiene una prueba pública concreta de que el proyecto obtiene datos desde una web real.
 
 Captura aceptada de **Comisariato Los Andes**:
 
@@ -60,15 +75,15 @@ No se publican credenciales, cookies, IDs internos ni el dataset productivo comp
 
 ## Comparación pública de 10 productos
 
-La tabla del portafolio ya no usa tres filas aleatorias. Presenta **10 productos representativos de consumo básico** para explicar de forma inmediata qué valor tienen los datos.
+La tabla de precios presenta **10 productos representativos de consumo básico** entre **Comisariato Los Andes** y **Supermercados Colonial**.
 
-La selección **no se presenta como la canasta básica oficial de Honduras**. Su propósito es demostrar una comparación comprensible usando productos cotidianos.
-
-Regla obligatoria de matching para esta muestra:
+Esta tabla **no representa toda la cobertura del proyecto**. La cobertura total ya incluye seis cadenas; aquí sólo se muestran dos porque estos 10 productos cuentan con una equivalencia curada y comprobada bajo la regla:
 
 > misma marca + misma presentación/cantidad.
 
-No se comparan tamaños, marcas o variantes diferentes sólo porque el nombre se parezca.
+No se completan columnas para Walmart, PriceSmart, La Colonia o Paiz con coincidencias aproximadas. Hasta que exista matching cross-source validado para esos productos, dejar esas cadenas fuera de la tabla de precios es más correcto que inventar equivalencias.
+
+La selección **no se presenta como la canasta básica oficial de Honduras**. Su propósito es demostrar una comparación comprensible usando productos cotidianos.
 
 | Producto | Marca | Presentación | Ciudad | Comisariato Los Andes | Supermercados Colonial | Mejor precio |
 | --- | --- | --- | --- | ---: | ---: | ---: |
@@ -115,6 +130,8 @@ Análisis
 
 La tarjeta y el detalle deben usar explícitamente `Web Scraping`, `Python`, `Playwright` y `GitHub Actions` para que la habilidad no dependa de una inferencia del visitante.
 
+La sección “Cobertura productiva actual” debe mostrar las seis cadenas productivas y sus ubicaciones aceptadas antes de presentar la muestra de precios entre dos supermercados.
+
 La sección “Qué demuestra este proyecto” traduce la implementación a cuatro capacidades contratables:
 
 - Web Scraping.
@@ -135,20 +152,23 @@ Además de la muestra cross-source curada, pueden comunicarse estos hallazgos ya
 1. Mostrar primero el problema, la evidencia y el valor; dejar detalles de almacenamiento al final.
 2. Decir `Web Scraping` explícitamente cuando la capacidad esté respaldada.
 3. Enlazar la fuente web, la evidencia y el código para que otra persona pueda comprobarlo.
-4. Mostrar marca y presentación en comparaciones cross-source.
-5. No presentar la selección de 10 productos como canasta básica oficial.
-6. No presentar precios históricos como tiempo real.
-7. No cargar el dataset productivo completo en el navegador.
-8. No mostrar secretos, cookies, tokens, IDs internos ni artefactos RAW completos en la interfaz.
-9. No presentar funcionalidades futuras como terminadas.
+4. Mostrar todas las cadenas con datos aceptados en la sección de cobertura.
+5. Mostrar marca y presentación en comparaciones cross-source.
+6. No llenar una comparación con coincidencias de producto no verificadas.
+7. No presentar la selección de 10 productos como canasta básica oficial.
+8. No presentar precios históricos como tiempo real.
+9. No cargar el dataset productivo completo en el navegador.
+10. No mostrar secretos, cookies, tokens, IDs internos ni artefactos RAW completos en la interfaz.
+11. No presentar funcionalidades futuras como terminadas.
 
 ## Actualización
 
 Cuando cambie una cifra, evidencia o comparación pública, deben revisarse conjuntamente:
 
+- `docs/PROJECT_STATE.md`.
 - `portfolio/scraping-proof.json`.
 - `portfolio/sample-data.json`.
-- `portfolio/precios-portfolio.js`.
+- `portfolio/precios-portfolio.js` y cualquier adaptador de estado público asociado.
 - este documento.
 - el README del proyecto.
 - el README raíz cuando cambie el alcance público.
