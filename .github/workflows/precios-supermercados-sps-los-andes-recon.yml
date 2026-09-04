@@ -13,63 +13,65 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Inspect known public frontend bundle
+      - name: Inspect catalog and location frontend contracts
         shell: bash
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
+          base='https://comisariatolosandes.com'
 
-          # Authorization window from the user: 2026-09-04T01:13:02Z through
-          # 2026-09-05T01:13:02Z. This phase performs exactly one public GET,
-          # read-only, with no cookies/login/cart/checkout/mutations/retries.
-          bundle='https://comisariatolosandes.com/main-QMN3KKEM.js'
-          curl --compressed --fail --silent --show-error --location \
-            --max-time 20 --retry 0 "$bundle" -o "$tmp/main.js"
+          # User authorization window: 2026-09-04T01:13:02Z through
+          # 2026-09-05T01:13:02Z. Exactly six public GETs, concurrency 1,
+          # no retries, cookies, login, age-gate action, cart or mutations.
+          files=(
+            main-QMN3KKEM.js
+            chunk-XN3CPJKT.js
+            chunk-WBUEVQKI.js
+            chunk-GQU2NDPB.js
+            chunk-MVSEO36R.js
+            chunk-KPFBBVRC.js
+          )
+          for f in "${files[@]}"; do
+            curl --compressed --fail --silent --show-error --location \
+              --max-time 20 --retry 0 "$base/$f" -o "$tmp/$f"
+            printf '%s bytes=%s sha256=%s\n' "$f" "$(wc -c < "$tmp/$f")" "$(sha256sum "$tmp/$f" | awk '{print $1}')"
+            sleep 0.4
+          done
 
-          echo '=== bundle fingerprint ==='
-          printf 'bytes=%s\n' "$(wc -c < "$tmp/main.js")"
-          printf 'sha256=%s\n' "$(sha256sum "$tmp/main.js" | awk '{print $1}')"
+          python - "$tmp" <<'PY'
+          import pathlib, re, sys
+          root = pathlib.Path(sys.argv[1])
+          texts = {p.name: p.read_text(encoding='utf-8', errors='replace') for p in root.glob('*.js')}
 
-          python - "$tmp/main.js" <<'PY'
-          import re, sys
-
-          text = open(sys.argv[1], encoding='utf-8', errors='replace').read()
-
-          def contexts(label, pattern, radius=900, limit=12):
+          def show_hits(label, pattern, radius=1200, limit=25):
               print(f'=== {label} ===')
-              seen = set()
               count = 0
-              for m in re.finditer(pattern, text, re.I):
-                  start = max(0, m.start() - radius)
-                  end = min(len(text), m.end() + radius)
-                  snippet = text[start:end].replace('\n', ' ')
-                  key = snippet[:250]
-                  if key in seen:
-                      continue
-                  seen.add(key)
-                  print(snippet)
-                  print('\n---')
-                  count += 1
-                  if count >= limit:
-                      break
+              seen = set()
+              for name, text in texts.items():
+                  for m in re.finditer(pattern, text, re.I):
+                      s=max(0,m.start()-radius); e=min(len(text),m.end()+radius)
+                      sn=text[s:e].replace('\n',' ')
+                      key=(name,sn[:300])
+                      if key in seen: continue
+                      seen.add(key)
+                      print(f'FILE={name}\n{sn}\n---')
+                      count += 1
+                      if count >= limit: return
 
-          contexts('product API calls', r'getProducts(?:Search)?\s*\(')
-          contexts('location/store API calls', r'(?:get|load|fetch|search|find)[A-Za-z0-9_]*(?:Store|Location|City|Cities|Agency|Agencies)[A-Za-z0-9_]*\s*\(')
-          contexts('http client calls', r'\.(?:get|post)\s*\(')
-          contexts('known service/config symbols', r'(?:url_amazon_s3|providerId|businessPartner|officeCode|storeId|priceList|defaultDeliveryType)')
+          show_hits('service symbol Fr', r'\bFr\b', 1800, 8)
+          show_hits('location symbol ji', r'\bji\b', 1800, 8)
+          show_hits('product methods', r'getProducts(?:Search|ByCode|ById)?\s*\(', 1600, 20)
+          show_hits('category methods', r'(?:get|load)[A-Za-z0-9_]*Categor[A-Za-z0-9_]*\s*\(', 1400, 20)
+          show_hits('store/location methods', r'(?:get|load|set)[A-Za-z0-9_]*(?:Store|Location|City|Cities|Agency|Agencies)[A-Za-z0-9_]*\s*\(', 1600, 30)
+          show_hits('http paths', r'["\'][^"\']{0,120}(?:product|producto|material|category|categoria|store|location|city|agency|agencia|api)[^"\']{0,160}["\']', 300, 80)
+          show_hits('config objects', r'(?:url_amazon_s3|providerId|defaultDeliveryType|apiUrl|baseUrl|url_api|api_url|office_code)', 1400, 30)
 
-          print('=== absolute URLs ===')
-          urls = sorted(set(re.findall(r'https?://[^"\'`\\\s<>]+', text)))
-          for u in urls[:200]:
-              print(u.rstrip('),;'))
-
-          print('=== dynamic chunks ===')
-          chunks = []
-          for c in re.findall(r'import\(["\']\./([^"\']+\.js)["\']\)', text):
-              if c not in chunks:
-                  chunks.append(c)
-          print(f'chunk_count={len(chunks)}')
-          for c in chunks[:200]:
-              print(c)
+          print('=== all URL-like strings ===')
+          vals=set()
+          for name,text in texts.items():
+              for u in re.findall(r'https?://[^"\'`\\\s<>]+', text): vals.add(u.rstrip('),;'))
+              for s in re.findall(r'["\'](/[^"\']{2,180})["\']', text):
+                  if re.search(r'api|product|producto|material|category|categoria|store|location|city|agency|agencia', s, re.I): vals.add(s)
+          for v in sorted(vals): print(v)
           PY
