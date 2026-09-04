@@ -1,14 +1,15 @@
-"""Taxonomía y candidatos conservadores para homologación cross-supermercado.
+"""Homologación conservadora de productos entre supermercados.
 
-Esta capa es deliberadamente independiente del estado comercial. Mejorar una
-clasificación o un candidato de matching no abre/cierra periodos de precio.
+La clasificación descriptiva vive separada del estado comercial: cambiar una
+categoría, un tipo de producto o un candidato de matching nunca modifica por sí
+solo un periodo de precio.
 
-Reglas de confianza:
-- un GTIN válido idéntico puede crear identidad exacta cross-supermercado;
-- sin GTIN, sólo se generan candidatos para revisión humana;
-- GTIN válidos distintos son evidencia contradictoria y nunca se proponen;
-- marca, tipo de producto y presentación compatible forman el bloque mínimo de
-  candidatos; la semejanza textual sólo ordena candidatos dentro de ese bloque.
+Confianza:
+- GTIN válido idéntico = identidad fuerte, pero una contradicción descriptiva
+  puede bloquear su uso automático en comparaciones de precio;
+- sin GTIN, el motor sólo genera candidatos `review_required`;
+- dos GTIN válidos distintos nunca se proponen como el mismo producto;
+- multipacks y unidades ambiguas se conservan, no se reducen a una unidad.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import re
 import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from difflib import SequenceMatcher
 from typing import Iterable
 
@@ -42,14 +43,14 @@ def _optional_text(value: str | None) -> str | None:
 
 
 def fold_text(value: str | None) -> str | None:
-    """Normaliza texto para comparación, incluyendo equivalencia de acentos."""
+    """Normaliza texto para comparación sin destruir el texto fuente."""
 
     value = _optional_text(value)
     if value is None:
         return None
     decomposed = unicodedata.normalize("NFKD", value)
     without_marks = "".join(
-        character for character in decomposed if not unicodedata.combining(character)
+        char for char in decomposed if not unicodedata.combining(char)
     )
     normalized = re.sub(r"[^0-9a-zA-Z]+", " ", without_marks).casefold()
     collapsed = " ".join(normalized.split())
@@ -58,8 +59,6 @@ def fold_text(value: str | None) -> str | None:
 
 @dataclass(frozen=True, slots=True)
 class SourceProductRecord:
-    """Producto descriptivo de una fuente, sin precio ni ubicación comercial."""
-
     source_record_id: str
     supermarket_id: str
     source_name: str
@@ -90,7 +89,9 @@ class SourceProductRecord:
             "source_category",
             "barcode",
         ):
-            object.__setattr__(self, field_name, _optional_text(getattr(self, field_name)))
+            object.__setattr__(
+                self, field_name, _optional_text(getattr(self, field_name))
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,17 +104,20 @@ class TaxonomyAssignment:
 
 @dataclass(frozen=True, slots=True)
 class PresentationSignature:
-    """Presentación comparable en una unidad base, conservando multipack."""
+    """Presentación comparable; `total_base` representa el paquete completo."""
 
     dimension: str
     total_base: Decimal
     pack_count: int
+    unit_amount_base: Decimal | None = None
 
     def __post_init__(self) -> None:
-        if self.dimension not in {"mass_g", "volume_ml", "count"}:
+        if self.dimension not in {"mass_g", "volume_ml", "count", "ounce"}:
             raise ProductHomologationError("presentation_dimension_invalid")
         if self.total_base <= 0 or self.pack_count <= 0:
             raise ProductHomologationError("presentation_value_invalid")
+        if self.unit_amount_base is not None and self.unit_amount_base <= 0:
+            raise ProductHomologationError("presentation_unit_value_invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +139,8 @@ class ExactGtinGroup:
     canonical_product_id: str
     source_record_ids: tuple[str, ...]
     supermarket_ids: tuple[str, ...]
+    comparison_status: str = "ready"
+    conflict_reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,16 +172,21 @@ class HomologationResult:
         return {
             "source_products": len(self.profiles),
             "classified_product_type": sum(
-                profile.taxonomy.product_type is not None for profile in self.profiles
+                p.taxonomy.product_type is not None for p in self.profiles
             ),
-            "valid_gtin": sum(
-                profile.canonical_gtin is not None for profile in self.profiles
-            ),
+            "valid_gtin": sum(p.canonical_gtin is not None for p in self.profiles),
             "exact_gtin_groups_cross_supermarket": len(self.exact_gtin_groups),
+            "exact_gtin_groups_comparison_ready": sum(
+                g.comparison_status == "ready" for g in self.exact_gtin_groups
+            ),
+            "exact_gtin_groups_review_required": sum(
+                g.comparison_status == "review_required"
+                for g in self.exact_gtin_groups
+            ),
             "source_products_in_exact_gtin_groups": len(exact_members),
             "review_candidates": len(self.candidates),
             "presentation_conflicts": sum(
-                profile.presentation_status == "conflict" for profile in self.profiles
+                p.presentation_status == "conflict" for p in self.profiles
             ),
         }
 
@@ -190,11 +201,11 @@ class _TaxonomyRule:
     any_terms: tuple[str, ...] = ()
     forbidden_terms: tuple[str, ...] = ()
 
-    def matches(self, haystack: str) -> bool:
-        padded = f" {haystack} "
+    def matches(self, text: str) -> bool:
+        padded = f" {text} "
 
         def present(term: str) -> bool:
-            return f" {term} " in padded if " " not in term else term in haystack
+            return f" {term} " in padded if " " not in term else term in text
 
         return (
             all(present(term) for term in self.all_terms)
@@ -203,136 +214,48 @@ class _TaxonomyRule:
         )
 
 
-# Orden específico -> genérico. Lo no demostrado permanece sin product_type.
+# Específico -> genérico. `product_type` se deriva del nombre anunciado, no del
+# breadcrumb fuente: categorías como "Pastas y Salsas" no convierten una salsa
+# en pasta.
 _TAXONOMY_RULES = (
-    _TaxonomyRule(
-        "harina_maiz", "Alimentos", "Harinas", "Harina de maíz",
-        ("harina",), ("maiz",),
-    ),
-    _TaxonomyRule(
-        "harina_trigo", "Alimentos", "Harinas", "Harina de trigo",
-        ("harina",), ("trigo",),
-    ),
-    _TaxonomyRule(
-        "leche_polvo", "Alimentos", "Lácteos", "Leche en polvo",
-        ("leche", "polvo"),
-    ),
-    _TaxonomyRule(
-        "leche_condensada", "Alimentos", "Lácteos", "Leche condensada",
-        ("leche", "condensada"),
-    ),
-    _TaxonomyRule(
-        "leche_evaporada", "Alimentos", "Lácteos", "Leche evaporada",
-        ("leche", "evaporada"),
-    ),
-    _TaxonomyRule(
-        "leche", "Alimentos", "Lácteos", "Leche", ("leche",),
-        forbidden_terms=("condensada", "evaporada", "polvo"),
-    ),
-    _TaxonomyRule(
-        "huevo", "Alimentos", "Huevos", "Huevo",
-        any_terms=("huevo", "huevos"),
-    ),
-    _TaxonomyRule(
-        "arroz", "Alimentos", "Arroz y granos", "Arroz",
-        any_terms=("arroz",),
-    ),
-    _TaxonomyRule(
-        "frijol", "Alimentos", "Frijoles y legumbres", "Frijol",
-        any_terms=("frijol", "frijoles"),
-    ),
-    _TaxonomyRule(
-        "pasta_dental", "Cuidado personal", "Higiene oral", "Pasta dental",
-        ("pasta",), ("dental", "dientes"),
-    ),
-    _TaxonomyRule(
-        "pasta", "Alimentos", "Pastas", "Pasta",
-        any_terms=("pasta", "espagueti", "spaghetti", "macarron", "macarrones"),
-    ),
-    _TaxonomyRule(
-        "cereal", "Alimentos", "Cereales", "Cereal",
-        any_terms=("cereal", "corn flakes", "hojuelas"),
-    ),
-    _TaxonomyRule(
-        "avena", "Alimentos", "Cereales", "Avena",
-        any_terms=("avena", "mosh"),
-    ),
-    _TaxonomyRule(
-        "mantequilla_mani", "Alimentos", "Untables", "Mantequilla de maní",
-        ("mantequilla",), ("mani",),
-    ),
-    _TaxonomyRule(
-        "mantequilla", "Alimentos", "Lácteos", "Mantequilla",
-        ("mantequilla",), forbidden_terms=("mani",),
-    ),
-    _TaxonomyRule(
-        "queso", "Alimentos", "Lácteos", "Queso", any_terms=("queso",),
-    ),
-    _TaxonomyRule(
-        "yogurt", "Alimentos", "Lácteos", "Yogurt",
-        any_terms=("yogurt", "yoghurt"),
-    ),
-    _TaxonomyRule(
-        "pan_molde", "Alimentos", "Panadería", "Pan de molde",
-        ("pan",), ("molde", "sandwich"),
-    ),
-    _TaxonomyRule(
-        "aceite", "Alimentos", "Aceites y grasas", "Aceite comestible",
-        any_terms=("aceite",),
-    ),
-    _TaxonomyRule(
-        "cafe", "Bebidas", "Café", "Café", any_terms=("cafe",),
-    ),
-    _TaxonomyRule(
-        "agua", "Bebidas", "Agua", "Agua", any_terms=("agua",),
-        forbidden_terms=("oxigenada",),
-    ),
-    _TaxonomyRule(
-        "jugo", "Bebidas", "Jugos", "Jugo", any_terms=("jugo", "nectar"),
-    ),
-    _TaxonomyRule(
-        "refresco", "Bebidas", "Refrescos", "Refresco",
-        any_terms=("refresco", "gaseosa", "soda"),
-    ),
-    _TaxonomyRule(
-        "detergente", "Limpieza", "Lavandería", "Detergente",
-        any_terms=("detergente",),
-    ),
-    _TaxonomyRule(
-        "suavizante", "Limpieza", "Lavandería", "Suavizante",
-        any_terms=("suavizante",),
-    ),
-    _TaxonomyRule(
-        "papel_higienico", "Hogar", "Papel", "Papel higiénico",
-        ("papel", "higienico"),
-    ),
-    _TaxonomyRule(
-        "shampoo", "Cuidado personal", "Cabello", "Shampoo",
-        any_terms=("shampoo", "champu"),
-    ),
-    _TaxonomyRule(
-        "jabon", "Cuidado personal", "Higiene", "Jabón",
-        any_terms=("jabon",),
-    ),
-    _TaxonomyRule(
-        "desodorante", "Cuidado personal", "Higiene", "Desodorante",
-        any_terms=("desodorante",),
-    ),
-    _TaxonomyRule(
-        "panal", "Bebés", "Pañales", "Pañal",
-        any_terms=("panal", "panales"),
-    ),
-    _TaxonomyRule(
-        "alimento_perro", "Mascotas", "Alimento para mascotas",
-        "Alimento para perro", ("alimento",), ("perro", "canino"),
-    ),
-    _TaxonomyRule(
-        "alimento_gato", "Mascotas", "Alimento para mascotas",
-        "Alimento para gato", ("alimento",), ("gato", "felino"),
-    ),
+    _TaxonomyRule("harina_maiz", "Alimentos", "Harinas", "Harina de maíz", ("harina",), ("maiz",)),
+    _TaxonomyRule("harina_trigo", "Alimentos", "Harinas", "Harina de trigo", ("harina",), ("trigo",)),
+    _TaxonomyRule("leche_polvo", "Alimentos", "Lácteos", "Leche en polvo", ("leche", "polvo")),
+    _TaxonomyRule("leche_condensada", "Alimentos", "Lácteos", "Leche condensada", ("leche", "condensada")),
+    _TaxonomyRule("leche_evaporada", "Alimentos", "Lácteos", "Leche evaporada", ("leche", "evaporada")),
+    _TaxonomyRule("leche", "Alimentos", "Lácteos", "Leche", ("leche",), forbidden_terms=("condensada", "evaporada", "polvo")),
+    _TaxonomyRule("huevo", "Alimentos", "Huevos", "Huevo", any_terms=("huevo", "huevos")),
+    _TaxonomyRule("arroz", "Alimentos", "Arroz y granos", "Arroz", any_terms=("arroz",)),
+    _TaxonomyRule("frijol", "Alimentos", "Frijoles y legumbres", "Frijol", any_terms=("frijol", "frijoles")),
+    _TaxonomyRule("pasta_dental", "Cuidado personal", "Higiene oral", "Pasta dental", ("pasta",), ("dental", "dientes")),
+    _TaxonomyRule("pasta", "Alimentos", "Pastas", "Pasta", any_terms=("pasta", "espagueti", "spaghetti", "macarron", "macarrones")),
+    _TaxonomyRule("cereal", "Alimentos", "Cereales", "Cereal", any_terms=("cereal", "corn flakes", "hojuelas")),
+    _TaxonomyRule("avena", "Alimentos", "Cereales", "Avena", any_terms=("avena", "mosh")),
+    _TaxonomyRule("mantequilla_mani", "Alimentos", "Untables", "Mantequilla de maní", ("mantequilla",), ("mani",)),
+    _TaxonomyRule("mantequilla", "Alimentos", "Lácteos", "Mantequilla", ("mantequilla",), forbidden_terms=("mani",)),
+    _TaxonomyRule("queso", "Alimentos", "Lácteos", "Queso", any_terms=("queso",)),
+    _TaxonomyRule("yogurt", "Alimentos", "Lácteos", "Yogurt", any_terms=("yogurt", "yoghurt")),
+    _TaxonomyRule("pan_molde", "Alimentos", "Panadería", "Pan de molde", ("pan",), ("molde", "sandwich")),
+    _TaxonomyRule("aceite", "Alimentos", "Aceites y grasas", "Aceite comestible", any_terms=("aceite",), forbidden_terms=("motor", "cabello", "corporal", "esencial")),
+    _TaxonomyRule("cafe", "Bebidas", "Café", "Café", any_terms=("cafe",)),
+    _TaxonomyRule("agua_micelar", "Cuidado personal", "Cuidado facial", "Agua micelar", ("agua", "micelar")),
+    _TaxonomyRule("agua", "Bebidas", "Agua", "Agua", any_terms=("agua",), forbidden_terms=("oxigenada", "micelar", "colonia")),
+    _TaxonomyRule("jugo", "Bebidas", "Jugos", "Jugo", any_terms=("jugo", "nectar")),
+    _TaxonomyRule("refresco", "Bebidas", "Refrescos", "Refresco", any_terms=("refresco", "gaseosa", "soda")),
+    _TaxonomyRule("detergente", "Limpieza", "Lavandería", "Detergente", any_terms=("detergente",)),
+    _TaxonomyRule("suavizante", "Limpieza", "Lavandería", "Suavizante", any_terms=("suavizante",)),
+    _TaxonomyRule("papel_higienico", "Hogar", "Papel", "Papel higiénico", ("papel", "higienico")),
+    _TaxonomyRule("shampoo", "Cuidado personal", "Cabello", "Shampoo", any_terms=("shampoo", "champu")),
+    _TaxonomyRule("jabon", "Cuidado personal", "Higiene", "Jabón", any_terms=("jabon",)),
+    _TaxonomyRule("desodorante", "Cuidado personal", "Higiene", "Desodorante", any_terms=("desodorante",)),
+    _TaxonomyRule("panal", "Bebés", "Pañales", "Pañal", any_terms=("panal", "panales")),
+    _TaxonomyRule("alimento_perro", "Mascotas", "Alimento para mascotas", "Alimento para perro", ("alimento",), ("perro", "canino")),
+    _TaxonomyRule("alimento_gato", "Mascotas", "Alimento para mascotas", "Alimento para gato", ("alimento",), ("gato", "felino")),
 )
 
 
+# `oz` no se fuerza a gramos: sin "fl oz" la fuente puede estar usando onzas
+# de peso o una abreviación comercial de onza fluida.
 _UNIT_FACTORS: dict[str, tuple[str, Decimal]] = {
     "g": ("mass_g", Decimal("1")),
     "gr": ("mass_g", Decimal("1")),
@@ -341,41 +264,47 @@ _UNIT_FACTORS: dict[str, tuple[str, Decimal]] = {
     "kg": ("mass_g", Decimal("1000")),
     "lb": ("mass_g", Decimal("453.59237")),
     "lbs": ("mass_g", Decimal("453.59237")),
-    "oz": ("mass_g", Decimal("28.349523125")),
     "ml": ("volume_ml", Decimal("1")),
     "l": ("volume_ml", Decimal("1000")),
     "lt": ("volume_ml", Decimal("1000")),
     "litro": ("volume_ml", Decimal("1000")),
     "litros": ("volume_ml", Decimal("1000")),
+    "oz": ("ounce", Decimal("1")),
+    "onza": ("ounce", Decimal("1")),
+    "onzas": ("ounce", Decimal("1")),
     "un": ("count", Decimal("1")),
     "und": ("count", Decimal("1")),
     "uds": ("count", Decimal("1")),
+    "ud": ("count", Decimal("1")),
     "unidad": ("count", Decimal("1")),
     "unidades": ("count", Decimal("1")),
 }
 _UNIT_PATTERN = "|".join(sorted(_UNIT_FACTORS, key=len, reverse=True))
-_MULTIPACK_RE = re.compile(
-    rf"(?<!\w)(?P<count>\d+)\s*[x×]\s*(?P<amount>\d+(?:[.,]\d+)?)\s*"
-    rf"(?P<unit>{_UNIT_PATTERN})(?!\w)",
+_EXPLICIT_MULTIPACK_RE = re.compile(
+    rf"(?<!\w)(?P<count>\d+)\s*[x×]\s*(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>{_UNIT_PATTERN})(?!\w)",
+    re.IGNORECASE,
+)
+_SLASH_MULTIPACK_RE = re.compile(
+    rf"(?<!\w)(?P<count>\d+)\s*(?:unidades?|uds?|und|ud|pack|pk)\s*/\s*(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>{_UNIT_PATTERN})(?!\w)",
     re.IGNORECASE,
 )
 _SINGLE_RE = re.compile(
     rf"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>{_UNIT_PATTERN})(?!\w)",
     re.IGNORECASE,
 )
-_STOPWORDS = frozenset({
-    "de", "del", "la", "el", "los", "las", "y", "con", "para", "en", "por",
-    "un", "und", "uds", "unidad", "unidades", "g", "gr", "kg", "lb", "lbs", "oz",
-    "ml", "l", "lt", "x",
-})
+_STOPWORDS = frozenset(
+    {
+        "de", "del", "la", "el", "los", "las", "y", "con", "para", "en", "por",
+        "un", "und", "uds", "ud", "unidad", "unidades", "g", "gr", "kg", "lb", "lbs",
+        "oz", "ml", "l", "lt", "x", "pack", "pk",
+    }
+)
 
 
 def assign_taxonomy(record: SourceProductRecord) -> TaxonomyAssignment:
-    haystack = fold_text(
-        " ".join(filter(None, (record.source_name, record.source_category)))
-    ) or ""
+    text = fold_text(record.source_name) or ""
     for rule in _TAXONOMY_RULES:
-        if rule.matches(haystack):
+        if rule.matches(text):
             return TaxonomyAssignment(
                 category=rule.category,
                 subcategory=rule.subcategory,
@@ -393,36 +322,61 @@ def _decimal(value: str) -> Decimal | None:
     return parsed if parsed.is_finite() and parsed > 0 else None
 
 
-def _signature_from_match(
-    match: re.Match[str], *, multipack: bool
+def _signature(
+    amount_text: str,
+    unit_text: str,
+    *,
+    pack_count: int = 1,
 ) -> PresentationSignature | None:
-    amount = _decimal(match.group("amount"))
-    unit_info = _UNIT_FACTORS.get(match.group("unit").casefold())
-    if amount is None or unit_info is None:
+    amount = _decimal(amount_text)
+    unit_info = _UNIT_FACTORS.get(unit_text.casefold())
+    if amount is None or unit_info is None or pack_count <= 0:
         return None
     dimension, factor = unit_info
-    count = int(match.group("count")) if multipack else 1
-    if count <= 0:
-        return None
+    unit_amount = amount * factor
     if dimension == "count":
-        if multipack or amount != amount.to_integral_value():
+        if pack_count != 1 or amount != amount.to_integral_value():
             return None
         count = int(amount)
-        return PresentationSignature("count", Decimal(count), count)
-    return PresentationSignature(dimension, amount * factor * count, count)
+        return PresentationSignature(
+            dimension="count",
+            total_base=Decimal(count),
+            pack_count=count,
+            unit_amount_base=Decimal("1"),
+        )
+    return PresentationSignature(
+        dimension=dimension,
+        total_base=unit_amount * pack_count,
+        pack_count=pack_count,
+        unit_amount_base=unit_amount,
+    )
 
 
 def _parse_presentation_text(value: str | None) -> PresentationSignature | None:
     value = _optional_text(value)
     if value is None:
         return None
-    multipacks = list(_MULTIPACK_RE.finditer(value))
-    if multipacks:
-        return _signature_from_match(multipacks[-1], multipack=True)
+    slash = list(_SLASH_MULTIPACK_RE.finditer(value))
+    if slash:
+        match = slash[-1]
+        return _signature(
+            match.group("amount"),
+            match.group("unit"),
+            pack_count=int(match.group("count")),
+        )
+    explicit = list(_EXPLICIT_MULTIPACK_RE.finditer(value))
+    if explicit:
+        match = explicit[-1]
+        return _signature(
+            match.group("amount"),
+            match.group("unit"),
+            pack_count=int(match.group("count")),
+        )
     singles = list(_SINGLE_RE.finditer(value))
     if not singles:
         return None
-    return _signature_from_match(singles[-1], multipack=False)
+    match = singles[-1]
+    return _signature(match.group("amount"), match.group("unit"))
 
 
 def presentations_compatible(
@@ -431,11 +385,10 @@ def presentations_compatible(
 ) -> bool:
     if left.dimension != right.dimension or left.pack_count != right.pack_count:
         return False
-    if left.dimension == "count":
+    if left.dimension in {"count", "ounce"}:
         return left.total_base == right.total_base
     larger = max(left.total_base, right.total_base)
     difference = abs(left.total_base - right.total_base)
-    # Tolera equivalencias de etiqueta como 1 lb ~= 454 g, no tamaños distintos.
     return difference <= Decimal("1.5") or difference / larger <= Decimal("0.005")
 
 
@@ -513,12 +466,48 @@ def _name_similarity(left: ProductProfile, right: ProductProfile) -> Decimal:
 
 
 def _presentation_bucket(value: PresentationSignature) -> tuple[str, int, int]:
-    if value.dimension == "count":
-        bucket = int(value.total_base)
+    if value.dimension in {"count", "ounce"}:
+        bucket = int(
+            (value.total_base * Decimal("10")).to_integral_value(
+                rounding=ROUND_HALF_UP
+            )
+        )
     else:
-        # Bucket de 5 g/ml; compatibilidad exacta se revalida después.
-        bucket = int((value.total_base / Decimal("5")).to_integral_value())
+        bucket = int(
+            (value.total_base / Decimal("5")).to_integral_value(
+                rounding=ROUND_HALF_UP
+            )
+        )
     return value.dimension, value.pack_count, bucket
+
+
+def _gtin_group_conflicts(members: list[ProductProfile]) -> tuple[str, ...]:
+    reasons: set[str] = set()
+    if any(member.presentation_status == "conflict" for member in members):
+        reasons.add("source_presentation_conflict")
+
+    comparable = [
+        member
+        for member in members
+        if member.presentation is not None
+        and member.presentation_status != "conflict"
+    ]
+    for index, left in enumerate(comparable):
+        for right in comparable[index + 1 :]:
+            if left.record.supermarket_id == right.record.supermarket_id:
+                continue
+            assert left.presentation is not None and right.presentation is not None
+            if not presentations_compatible(left.presentation, right.presentation):
+                reasons.add("cross_source_presentation_conflict")
+
+    types = {
+        member.taxonomy.product_type
+        for member in members
+        if member.taxonomy.product_type is not None
+    }
+    if len(types) > 1:
+        reasons.add("product_type_conflict")
+    return tuple(sorted(reasons))
 
 
 def homologate_products(
@@ -526,7 +515,7 @@ def homologate_products(
     *,
     candidate_threshold: Decimal = Decimal("0.72"),
 ) -> HomologationResult:
-    """Clasifica productos, cierra GTIN exactos y genera candidatos revisables."""
+    """Clasifica, agrupa GTIN exactos y genera candidatos revisables."""
 
     if candidate_threshold < 0 or candidate_threshold > 1:
         raise ProductHomologationError("candidate_threshold_invalid")
@@ -536,7 +525,7 @@ def homologate_products(
             key=lambda profile: profile.record.source_record_id,
         )
     )
-    if len({profile.record.source_record_id for profile in profiles}) != len(profiles):
+    if len({p.record.source_record_id for p in profiles}) != len(profiles):
         raise ProductHomologationError("source_record_id_duplicate")
 
     gtin_index: dict[str, list[ProductProfile]] = defaultdict(list)
@@ -546,21 +535,24 @@ def homologate_products(
 
     exact_groups: list[ExactGtinGroup] = []
     for gtin, members in sorted(gtin_index.items()):
-        supermarkets = sorted({member.record.supermarket_id for member in members})
+        supermarkets = sorted({m.record.supermarket_id for m in members})
         if len(supermarkets) < 2:
             continue
+        conflicts = _gtin_group_conflicts(members)
         exact_groups.append(
             ExactGtinGroup(
                 canonical_gtin=gtin,
                 canonical_product_id=generate_gtin_product_id(gtin),
-                source_record_ids=tuple(
-                    member.record.source_record_id for member in members
-                ),
+                source_record_ids=tuple(m.record.source_record_id for m in members),
                 supermarket_ids=tuple(supermarkets),
+                comparison_status=("review_required" if conflicts else "ready"),
+                conflict_reasons=conflicts,
             )
         )
 
-    blocks: dict[tuple[str, str, str, int, int], list[ProductProfile]] = defaultdict(list)
+    blocks: dict[
+        tuple[str, str, str, int, int], list[ProductProfile]
+    ] = defaultdict(list)
     for profile in profiles:
         if (
             profile.taxonomy.product_type is None
@@ -588,17 +580,14 @@ def homologate_products(
                     continue
                 pair = tuple(
                     sorted(
-                        (
-                            left.record.source_record_id,
-                            right.record.source_record_id,
-                        )
+                        (left.record.source_record_id, right.record.source_record_id)
                     )
                 )
                 if pair in seen_pairs:
                     continue
                 seen_pairs.add(pair)
                 if left.canonical_gtin is not None and right.canonical_gtin is not None:
-                    # Mismo GTIN ya quedó resuelto; GTIN distintos contradicen match.
+                    # Igual GTIN ya está en exact_groups; GTIN distinto contradice match.
                     continue
                 assert left.presentation is not None and right.presentation is not None
                 if not presentations_compatible(left.presentation, right.presentation):
@@ -613,7 +602,7 @@ def homologate_products(
                         left_supermarket_id=left.record.supermarket_id,
                         right_supermarket_id=right.record.supermarket_id,
                         product_type=left.taxonomy.product_type,
-                        normalized_brand=left.normalized_brand or "",
+                        normalized_brand=left.normalized_brand,
                         score=score,
                     )
                 )
@@ -625,8 +614,4 @@ def homologate_products(
             candidate.right_source_record_id,
         )
     )
-    return HomologationResult(
-        profiles,
-        tuple(exact_groups),
-        tuple(candidates),
-    )
+    return HomologationResult(profiles, tuple(exact_groups), tuple(candidates))
