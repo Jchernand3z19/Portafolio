@@ -109,13 +109,15 @@
     const applyLabels = () => {
       const locale = window.PortfolioI18n?.getLocale?.() === 'en' ? 'en' : 'es';
       const labels = locale === 'en'
-        ? { prices: 'FEATURED PROJECT · 01', mundial: 'PROJECT · 02' }
-        : { prices: 'PROYECTO PRINCIPAL · 01', mundial: 'PROYECTO · 02' };
+        ? { prices: 'FEATURED PROJECT · 01', mundial: 'PROJECT · 02', mundialDetail: 'Project 02' }
+        : { prices: 'PROYECTO PRINCIPAL · 01', mundial: 'PROYECTO · 02', mundialDetail: 'Proyecto 02' };
 
       const prices = document.querySelector('#proyectos .price-card');
       const mundial = document.querySelector('#proyectos .mw-card');
+      const mundialKicker = document.querySelector('#mw-view .mw-kicker');
       if (prices) prices.dataset.projectPosition = labels.prices;
       if (mundial) mundial.dataset.projectPosition = labels.mundial;
+      if (mundialKicker) mundialKicker.textContent = labels.mundialDetail;
     };
 
     applyLabels();
