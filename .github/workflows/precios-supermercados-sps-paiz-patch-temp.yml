@@ -27,7 +27,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Aplicar parche determinista
+      - name: Aplicar parche determinista corregido
         run: python scripts/patch_workflow_paiz_temp.py
 
       - name: Compilar integración Paiz
