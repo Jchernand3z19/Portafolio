@@ -1,0 +1,90 @@
+name: Precios SPS - Auditoría Turso read-only temporal
+
+on:
+  push:
+    branches:
+      - feature/paiz-final-acquisition
+    paths:
+      - .github/workflows/precios-supermercados-sps-turso-readonly-audit.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: precios-sps-turso-readonly-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: precios-supermercados-sps
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Consultar estado productivo sin mutaciones
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          sys.path.insert(0, 'scripts')
+          from actualizar_mvp_turso_la_colonia import _execute_rows, _pipeline, _stmt
+          from migrar_mvp_pricesmart import fingerprint, SCHEMA_QUERY
+
+          statements = [
+              ('tables', "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", ()),
+              ('supermarkets', 'SELECT COUNT(*) FROM supermarkets', ()),
+              ('locations', 'SELECT COUNT(*) FROM locations', ()),
+              ('products', 'SELECT COUNT(*) FROM products', ()),
+              ('price_history', 'SELECT COUNT(*) FROM price_history', ()),
+              ('scrape_runs', 'SELECT COUNT(*) FROM scrape_runs', ()),
+              ('current_periods', 'SELECT COUNT(*) FROM price_history WHERE valid_to_utc IS NULL', ()),
+              ('duplicate_current', "SELECT COUNT(*) FROM (SELECT supermarket_id,product_id,location_id FROM price_history WHERE valid_to_utc IS NULL GROUP BY supermarket_id,product_id,location_id HAVING COUNT(*)>1)", ()),
+              ('fk_violations', 'SELECT COUNT(*) FROM pragma_foreign_key_check', ()),
+              ('integrity_check', 'PRAGMA integrity_check', ()),
+              ('page_count', 'PRAGMA page_count', ()),
+              ('page_size', 'PRAGMA page_size', ()),
+              ('current_by_scope', "SELECT supermarket_id,location_id,COUNT(*) FROM price_history WHERE valid_to_utc IS NULL GROUP BY supermarket_id,location_id ORDER BY supermarket_id,location_id", ()),
+              ('runs_by_scope', "SELECT supermarket_id,location_id,COUNT(*) FROM scrape_runs GROUP BY supermarket_id,location_id ORDER BY supermarket_id,location_id", ()),
+              ('schema', SCHEMA_QUERY, ()),
+          ]
+          reqs = [{'type':'execute','stmt':_stmt(sql,args)} for _,sql,args in statements] + [{'type':'close'}]
+          data = _pipeline(os.environ['TURSO_DATABASE_URL'], os.environ['TURSO_AUTH_TOKEN'], reqs)
+          out = {}
+          for (name,_,_), result in zip(statements, data['results'], strict=False):
+              out[name] = _execute_rows(result)
+          out['schema_fingerprint'] = fingerprint(out.pop('schema'))
+          page_count = out['page_count'][0][0]
+          page_size = out['page_size'][0][0]
+          out['database_bytes'] = page_count * page_size
+          expected_tables = ['locations','price_history','products','scrape_runs','supermarkets']
+          if [r[0] for r in out['tables']] != expected_tables:
+              raise SystemExit(f"unexpected_tables:{out['tables']}")
+          if out['duplicate_current'] != [[0]]:
+              raise SystemExit(f"duplicate_current:{out['duplicate_current']}")
+          if out['fk_violations'] != [[0]]:
+              raise SystemExit(f"fk_violations:{out['fk_violations']}")
+          if out['integrity_check'] != [['ok']]:
+              raise SystemExit(f"integrity_check:{out['integrity_check']}")
+          with open('turso-readonly-audit.json','w',encoding='utf-8') as fh:
+              json.dump(out, fh, ensure_ascii=False, sort_keys=True, indent=2)
+          print(json.dumps(out, ensure_ascii=False, sort_keys=True))
+          PY
+
+      - name: Publicar evidencia read-only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: turso-readonly-audit-${{ github.run_id }}
+          path: precios-supermercados-sps/turso-readonly-audit.json
+          if-no-files-found: error
+          retention-days: 7
