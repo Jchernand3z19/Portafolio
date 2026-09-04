@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from actualizar_mvp_sqlite_la_colonia import SnapshotError, _minor
 from actualizar_mvp_turso_la_colonia import (
@@ -25,6 +26,7 @@ from migrar_mvp_paiz import schema_ready_sql
 SUPERMARKET_ID = "paiz"
 SUPERMARKET_NAME = "Paiz"
 COUNTRY = "HN"
+SOURCE_COUNTRY = "HND"
 SCOPE = "public_ecommerce_selected_store_not_universal_city_price"
 SALES_CHANNEL = "2"
 LOCATIONS = {
@@ -46,8 +48,41 @@ PRODUCT_KEYS = {
 }
 
 
-def _region_id(seller: str) -> str:
-    return base64.b64encode(("SW#" + seller).encode()).decode()
+def _region_id(selector: str) -> str:
+    return base64.b64encode(("SW#" + selector).encode()).decode()
+
+
+def _validate_page_evidence(value: object, *, selector: str) -> None:
+    if not isinstance(value, list) or not value:
+        raise SnapshotError("paiz_page_evidence_missing")
+    expected_region = _region_id(selector)
+    for entry in value:
+        if not isinstance(entry, dict):
+            raise SnapshotError("paiz_page_evidence_invalid")
+        url = entry.get("url")
+        digest = entry.get("sha256")
+        observed = entry.get("observed_at")
+        if not isinstance(url, str) or not url:
+            raise SnapshotError("paiz_page_evidence_invalid")
+        parsed = urlsplit(url)
+        query = parse_qs(parsed.query)
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc != "www.paiz.com.hn"
+            or f"/accesscontrollist/{selector}/" not in parsed.path
+            or query.get("regionId") != [expected_region]
+            or query.get("sc") != [SALES_CHANNEL]
+            or query.get("country") != [SOURCE_COUNTRY]
+        ):
+            raise SnapshotError("paiz_context_evidence_invalid")
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(ch not in "0123456789abcdef" for ch in digest.lower())
+            or not isinstance(observed, str)
+            or not observed.endswith("Z")
+        ):
+            raise SnapshotError("paiz_page_evidence_invalid")
 
 
 def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
@@ -61,6 +96,7 @@ def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
     if location_id not in LOCATIONS:
         raise SnapshotError("paiz_location_invalid")
     meta = LOCATIONS[str(location_id)]
+    selector = str(meta["seller_id"])
     expected = {
         "result": "success",
         "supermarket_id": SUPERMARKET_ID,
@@ -68,9 +104,9 @@ def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
         "city": meta["city"],
         "currency": "HNL",
         "scope": SCOPE,
-        "seller_id": meta["seller_id"],
+        "seller_id": selector,
         "store_name": meta["store_name"],
-        "region_id": _region_id(meta["seller_id"]),
+        "region_id": _region_id(selector),
         "sales_channel": SALES_CHANNEL,
         "catalog_complete": True,
         "validation_passed": True,
@@ -82,6 +118,7 @@ def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
     observed = data.get("observed_at_utc")
     if not isinstance(observed, str) or not observed.endswith("Z"):
         raise SnapshotError("paiz_observed_at_invalid")
+    _validate_page_evidence(data.get("page_evidence"), selector=selector)
 
     rows = data.get("products")
     details = data.get("source_details")
@@ -115,8 +152,9 @@ def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
         detail = details.get(sku)
         if not isinstance(detail, dict):
             raise SnapshotError("paiz_source_details_invalid")
-        if detail.get("seller_id") != meta["seller_id"]:
-            raise SnapshotError("paiz_seller_evidence_invalid")
+        offer_seller = detail.get("seller_id")
+        if offer_seller is not None and (not isinstance(offer_seller, str) or not offer_seller):
+            raise SnapshotError("paiz_offer_seller_invalid")
         quantity = detail.get("available_quantity_signal")
         if quantity is not None and (type(quantity) not in {int, float} or quantity < 0):
             raise SnapshotError("paiz_availability_evidence_invalid")
@@ -171,9 +209,6 @@ def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
         raise SnapshotError("paiz_availability_counts_invalid")
     if data.get("promotion_counts") != promotion_counts:
         raise SnapshotError("paiz_promotion_counts_invalid")
-    page_evidence = data.get("page_evidence")
-    if not isinstance(page_evidence, list) or not page_evidence:
-        raise SnapshotError("paiz_page_evidence_missing")
     return data
 
 
@@ -265,7 +300,7 @@ def persist_snapshot(raw: bytes, *, database_url: str, auth_token: str, run_id: 
         supermarket_id=SUPERMARKET_ID,
     )
     begin = next(i for i, step in enumerate(steps) if step[0] == "begin")
-    city = LOCATIONS[location_id]["city"]
+    city = str(LOCATIONS[location_id]["city"])
     steps[begin + 1:begin + 1] = [
         ("register_supermarket", "INSERT OR IGNORE INTO supermarkets VALUES(?,?,?)", (SUPERMARKET_ID, SUPERMARKET_NAME, COUNTRY)),
         ("register_location", "INSERT OR IGNORE INTO locations VALUES(?,?,?,?)", (location_id, SUPERMARKET_ID, city, COUNTRY)),
