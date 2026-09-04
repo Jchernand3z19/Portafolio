@@ -87,6 +87,24 @@ def main() -> int:
             assert "TGU Multiplaza · TGU Próceres" in coverage_text
             assert price.locator("#price-sample-title").inner_text() == "Comparación homologada: 10 productos en 2 supermercados"
 
+            # The redundant best-price column is hidden from the interface. Price rank is read in place.
+            comparison = price.locator(".price-table")
+            assert comparison.locator("thead th:visible").count() == 6
+            assert comparison.locator("thead th.price-best-legacy:visible").count() == 0
+            assert comparison.locator("tbody tr").count() == 10
+            assert comparison.locator("tbody td.price-rank--best").count() == 10
+            assert comparison.locator("tbody td.price-rank--highest").count() == 10
+            assert comparison.locator("tbody td.price-rank--middle").count() == 0
+            assert price.locator("[data-price-ranking-legend]").count() == 1
+            legend_text = price.locator("[data-price-ranking-legend]").inner_text()
+            assert "Mejor precio" in legend_text
+            assert "Precio intermedio" in legend_text
+            assert "Precio más alto" in legend_text
+            first_best = comparison.locator("tbody td.price-rank--best").first
+            first_highest = comparison.locator("tbody td.price-rank--highest").first
+            assert "Mejor precio" in (first_best.get_attribute("aria-label") or "")
+            assert "Precio más alto" in (first_highest.get_attribute("aria-label") or "")
+
             price_shell = price.locator(".price-view__body").bounding_box()
             price_top = price.locator(".price-view__top").bounding_box()
             price_title_size = price.locator("#price-title").evaluate(
