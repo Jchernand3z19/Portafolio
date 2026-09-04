@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Inspect catalog and location frontend contracts
+      - name: Resolve public API service endpoints
         shell: bash
         run: |
           set -euo pipefail
@@ -22,21 +22,24 @@ jobs:
           base='https://comisariatolosandes.com'
 
           # User authorization window: 2026-09-04T01:13:02Z through
-          # 2026-09-05T01:13:02Z. Exactly six public GETs, concurrency 1,
-          # no retries, cookies, login, age-gate action, cart or mutations.
+          # 2026-09-05T01:13:02Z. Public read-only bundle inspection only.
+          # Concurrency 1, no retries/cookies/login/cart/checkout/mutations.
           files=(
-            main-QMN3KKEM.js
-            chunk-XN3CPJKT.js
+            chunk-3RVGB5MK.js
+            chunk-KACWDGJI.js
+            chunk-CMVDC4NV.js
+            chunk-BBQA5YXX.js
+            chunk-BGJEFN5N.js
+            chunk-XPLU7MLV.js
+            chunk-KESYAQWM.js
+            chunk-UALGFQGO.js
             chunk-WBUEVQKI.js
-            chunk-GQU2NDPB.js
-            chunk-MVSEO36R.js
-            chunk-KPFBBVRC.js
           )
           for f in "${files[@]}"; do
             curl --compressed --fail --silent --show-error --location \
               --max-time 20 --retry 0 "$base/$f" -o "$tmp/$f"
             printf '%s bytes=%s sha256=%s\n' "$f" "$(wc -c < "$tmp/$f")" "$(sha256sum "$tmp/$f" | awk '{print $1}')"
-            sleep 0.4
+            sleep 0.7
           done
 
           python - "$tmp" <<'PY'
@@ -44,34 +47,32 @@ jobs:
           root = pathlib.Path(sys.argv[1])
           texts = {p.name: p.read_text(encoding='utf-8', errors='replace') for p in root.glob('*.js')}
 
-          def show_hits(label, pattern, radius=1200, limit=25):
+          def compact(s):
+              return re.sub(r'\s+', ' ', s)
+
+          def contexts(label, pattern, radius=900, limit=30):
               print(f'=== {label} ===')
-              count = 0
-              seen = set()
-              for name, text in texts.items():
-                  for m in re.finditer(pattern, text, re.I):
+              count=0
+              for name,text in texts.items():
+                  for m in re.finditer(pattern,text,re.I):
                       s=max(0,m.start()-radius); e=min(len(text),m.end()+radius)
-                      sn=text[s:e].replace('\n',' ')
-                      key=(name,sn[:300])
-                      if key in seen: continue
-                      seen.add(key)
-                      print(f'FILE={name}\n{sn}\n---')
-                      count += 1
-                      if count >= limit: return
+                      print(f'FILE={name}\n{compact(text[s:e])}\n---')
+                      count+=1
+                      if count>=limit:return
 
-          show_hits('service symbol Fr', r'\bFr\b', 1800, 8)
-          show_hits('location symbol ji', r'\bji\b', 1800, 8)
-          show_hits('product methods', r'getProducts(?:Search|ByCode|ById)?\s*\(', 1600, 20)
-          show_hits('category methods', r'(?:get|load)[A-Za-z0-9_]*Categor[A-Za-z0-9_]*\s*\(', 1400, 20)
-          show_hits('store/location methods', r'(?:get|load|set)[A-Za-z0-9_]*(?:Store|Location|City|Cities|Agency|Agencies)[A-Za-z0-9_]*\s*\(', 1600, 30)
-          show_hits('http paths', r'["\'][^"\']{0,120}(?:product|producto|material|category|categoria|store|location|city|agency|agencia|api)[^"\']{0,160}["\']', 300, 80)
-          show_hits('config objects', r'(?:url_amazon_s3|providerId|defaultDeliveryType|apiUrl|baseUrl|url_api|api_url|office_code)', 1400, 30)
+          contexts('HTTP service calls', r'\.(?:get|post|put|delete)\s*\(', 1100, 80)
+          contexts('product API method definitions', r'(?:getProducts|getProductsSearch|getProductsBySlug|getDetailProduct|getDetailProductStore|getDetailProductBySlug|getRelated|getSuggested)\s*\(', 1000, 50)
+          contexts('location/store method definitions', r'(?:get|load|search|find)[A-Za-z0-9_]*(?:Location|Locations|Store|Stores|City|Cities|Department|Departments|Agency|Agencies)[A-Za-z0-9_]*\s*\(', 1000, 60)
+          contexts('provider and base URL config', r'(?:providerId|defaultDeliveryType|url_api|api_url|apiUrl|baseUrl|url_amazon_s3|office_code)', 1000, 50)
+          contexts('SPS/city strings', r'(?:San Pedro Sula|Cort[eé]s|SPS|Honduras)', 800, 30)
 
-          print('=== all URL-like strings ===')
+          print('=== candidate endpoint/base strings ===')
           vals=set()
-          for name,text in texts.items():
-              for u in re.findall(r'https?://[^"\'`\\\s<>]+', text): vals.add(u.rstrip('),;'))
-              for s in re.findall(r'["\'](/[^"\']{2,180})["\']', text):
-                  if re.search(r'api|product|producto|material|category|categoria|store|location|city|agency|agencia', s, re.I): vals.add(s)
-          for v in sorted(vals): print(v)
+          for text in texts.values():
+              for s in re.findall(r'["\']([^"\']{2,240})["\']',text):
+                  if re.search(r'https?://|/api|product|material|categor|location|store|city|department|agency|agencia|office',s,re.I):
+                      vals.add(s)
+          for v in sorted(vals):
+              if len(v)<=240:
+                  print(v)
           PY
