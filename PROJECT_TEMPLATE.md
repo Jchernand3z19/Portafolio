@@ -123,6 +123,28 @@ const projectModules = [
 
 El módulo debe registrarse con `window.PortfolioProjects.register(...)` y no debe borrar las tarjetas de los demás proyectos.
 
+### Estándar visual obligatorio
+
+La tarjeta principal no puede crear un sistema visual independiente. Debe seguir [`docs/PROJECT_CARD_STANDARD.md`](docs/PROJECT_CARD_STANDARD.md), que define la estructura y el vocabulario comunes para todos los proyectos.
+
+Las acciones equivalentes deben utilizar exactamente estas etiquetas:
+
+```text
+Explorar proyecto
+Ver resultado
+Ver código
+```
+
+En inglés:
+
+```text
+Explore project
+View result
+View code
+```
+
+El archivo CSS propio del proyecto puede definir su visual específico y el detalle interno, pero no debe reemplazar el sistema compartido de tarjeta, tags, acciones, espaciado o jerarquía.
+
 ## GitHub Actions
 
 Los workflows ejecutables deben estar en:
@@ -150,6 +172,8 @@ El workflow debe apuntar a la carpeta correspondiente mediante `working-director
 - [ ] Dependencias definidas.
 - [ ] Pruebas de funciones críticas.
 - [ ] Capturas optimizadas.
+- [ ] Tarjeta alineada con `docs/PROJECT_CARD_STANDARD.md`.
+- [ ] Acciones estandarizadas: `Explorar proyecto`, `Ver resultado`, `Ver código`.
 - [ ] Tarjeta y detalle responsive.
 - [ ] Workflow identificado y limitado al proyecto.
 - [ ] Sin carpetas vacías ni proyectos ficticios.
