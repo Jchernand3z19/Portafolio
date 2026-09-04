@@ -1,0 +1,141 @@
+name: Precios SPS - Paiz carga inicial temporal
+
+on:
+  push:
+    branches: [feature/paiz-final-acquisition]
+    paths:
+      - .github/workflows/precios-supermercados-sps-paiz-initial-temp.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: precios-sps-paiz-initial-temp
+  cancel-in-progress: false
+
+jobs:
+  initial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: precios-supermercados-sps
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Configurar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Compilar y probar persistencia Paiz
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/migrar_mvp_paiz.py scripts/actualizar_mvp_turso_paiz.py scripts/obtener_catalogo_paiz_operativo.py
+          pytest -q tests/test_paiz_persistence.py
+
+      - name: Capturar ambos catálogos TGU con runner definitivo
+        run: |
+          set -euo pipefail
+          python scripts/obtener_catalogo_paiz_operativo.py \
+            --live-read-only --allow-full-catalog \
+            --delay-seconds 1.0 --max-requests 500 \
+            --output-directory run-artifacts/paiz \
+            --raw-directory run-artifacts/paiz/raw \
+            --evidence-output run-artifacts/paiz/evidence.json
+
+      - name: Validar snapshots antes de producción
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, 'scripts')
+          from actualizar_mvp_turso_paiz import validate_snapshot_bytes
+          out = {}
+          for name in ('multiplaza', 'proceres'):
+              snap = validate_snapshot_bytes(Path(f'run-artifacts/paiz/snapshot-paiz-{name}.json').read_bytes())
+              out[name] = {k: snap[k] for k in ('location_id','catalog_products_reported','skus_extracted','skus_with_price','availability_counts','promotion_counts')}
+          Path('run-artifacts/paiz/prewrite-validation.json').write_text(json.dumps(out, ensure_ascii=False, sort_keys=True, indent=2), encoding='utf-8')
+          print(json.dumps(out, ensure_ascii=False, sort_keys=True))
+          PY
+
+      - name: Migrar esquema productivo para Paiz
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: python scripts/migrar_mvp_paiz.py --turso | tee run-artifacts/paiz/schema-migration.json
+
+      - name: Persistir Paiz Multiplaza
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          python scripts/actualizar_mvp_turso_paiz.py run-artifacts/paiz/snapshot-paiz-multiplaza.json \
+            --run-id "paiz-initial-${GITHUB_RUN_ID}-multiplaza" --verify | tee run-artifacts/paiz/persist-multiplaza.json
+
+      - name: Persistir Paiz Próceres
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          python scripts/actualizar_mvp_turso_paiz.py run-artifacts/paiz/snapshot-paiz-proceres.json \
+            --run-id "paiz-initial-${GITHUB_RUN_ID}-proceres" --verify | tee run-artifacts/paiz/persist-proceres.json
+
+      - name: Postflight productivo
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          sys.path.insert(0, 'scripts')
+          from actualizar_mvp_turso_la_colonia import _execute_rows, _pipeline, _stmt
+          from actualizar_mvp_turso_paiz import validate_snapshot_bytes
+          from migrar_mvp_paiz import schema_ready_sql
+          snaps = {n: validate_snapshot_bytes(Path(f'run-artifacts/paiz/snapshot-paiz-{n}.json').read_bytes()) for n in ('multiplaza','proceres')}
+          queries = [
+              ('supermarkets','SELECT COUNT(*) FROM supermarkets',()),
+              ('locations','SELECT COUNT(*) FROM locations',()),
+              ('products','SELECT COUNT(*) FROM products',()),
+              ('price_history','SELECT COUNT(*) FROM price_history',()),
+              ('current_periods','SELECT COUNT(*) FROM price_history WHERE valid_to_utc IS NULL',()),
+              ('scrape_runs','SELECT COUNT(*) FROM scrape_runs',()),
+              ('paiz_products',"SELECT COUNT(*) FROM products WHERE supermarket_id='paiz'",()),
+              ('paiz_open',"SELECT location_id,COUNT(*) FROM price_history WHERE supermarket_id='paiz' AND valid_to_utc IS NULL GROUP BY location_id ORDER BY location_id",()),
+              ('duplicate_current',"SELECT COUNT(*) FROM (SELECT supermarket_id,product_id,location_id FROM price_history WHERE valid_to_utc IS NULL GROUP BY supermarket_id,product_id,location_id HAVING COUNT(*)>1)",()),
+              ('fk_violations','SELECT COUNT(*) FROM pragma_foreign_key_check',()),
+              ('integrity_check','PRAGMA integrity_check',()),
+              ('ddl',"SELECT sql FROM sqlite_master WHERE type='table' AND name='price_history'",()),
+          ]
+          data = _pipeline(os.environ['TURSO_DATABASE_URL'], os.environ['TURSO_AUTH_TOKEN'], [{'type':'execute','stmt':_stmt(sql,args)} for _,sql,args in queries] + [{'type':'close'}])
+          out = {name: _execute_rows(result) for (name,_,_), result in zip(queries, data['results'], strict=False)}
+          expected = [['paiz_tgu_multiplaza', snaps['multiplaza']['skus_extracted']], ['paiz_tgu_proceres', snaps['proceres']['skus_extracted']]]
+          union = len({r['source_key'] for s in snaps.values() for r in s['products']})
+          if out['paiz_open'] != expected or out['paiz_products'] != [[union]]:
+              raise SystemExit(f"paiz_state_mismatch:{out['paiz_open']}:{out['paiz_products']}:{expected}:{union}")
+          if out['duplicate_current'] != [[0]] or out['fk_violations'] != [[0]] or out['integrity_check'] != [['ok']]:
+              raise SystemExit(f"integrity_failed:{out['duplicate_current']}:{out['fk_violations']}:{out['integrity_check']}")
+          if len(out['ddl']) != 1 or not schema_ready_sql(out['ddl'][0][0]):
+              raise SystemExit('paiz_schema_not_ready')
+          out['ddl'] = [['verified_paiz_nullable_out_of_stock']]
+          Path('run-artifacts/paiz/postflight.json').write_text(json.dumps(out, ensure_ascii=False, sort_keys=True, indent=2), encoding='utf-8')
+          print(json.dumps(out, ensure_ascii=False, sort_keys=True))
+          PY
+
+      - name: Publicar evidencia
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paiz-initial-${{ github.run_id }}
+          path: precios-supermercados-sps/run-artifacts/paiz/
+          if-no-files-found: warn
+          retention-days: 7
