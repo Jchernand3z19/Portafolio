@@ -81,6 +81,58 @@ def assert_project_order(page: Page) -> None:
     assert cards.nth(1).get_attribute("data-portfolio-project") == "mundial-2026"
 
 
+def assert_price_evidence(dialog) -> None:
+    proof = dialog.locator(".price-proof")
+    assert proof.count() == 1
+    proof_text = proof.inner_text()
+    assert "Comisariato Los Andes" in proof_text
+    assert "6,646" in proof_text
+    assert "120" in proof_text
+    assert "9920279680" in proof_text
+    assert proof.locator('a[href="https://comisariatolosandes.com/"]').count() == 1
+    assert proof.locator('a[href*="reports/comisariato-los-andes/2026-09-04-full"]').count() == 1
+    assert proof.locator('a[href*="src/precios_supermercados"]').count() == 1
+
+
+def assert_comparison_table(dialog) -> None:
+    headers = [value.lower() for value in dialog.locator(".price-table th").all_inner_texts()]
+    assert headers == [
+        "product",
+        "brand",
+        "presentation",
+        "city",
+        "comisariato los andes",
+        "supermercados colonial",
+        "best price",
+    ]
+
+    rows = dialog.locator(".price-table tbody tr")
+    assert rows.count() == 10
+    sample_text = dialog.locator(".price-table tbody").inner_text()
+    for value in (
+        "Arroz blanco",
+        "Progreso",
+        "1 lb / 454 g",
+        "Rica Yema",
+        "Maseca",
+        "Gold Star",
+        "La Chula",
+        "Norteño",
+        "Leyde",
+        "Quaker",
+        "Monarca",
+        "Passion",
+        "L 15.79",
+        "L 215.99",
+    ):
+        assert value in sample_text
+
+    assert "SKU-DEMO" not in sample_text
+    assert "Context" not in sample_text
+    assert rows.locator(".price-number.is-best").count() == 10
+    assert rows.locator(".price-best").count() == 10
+
+
 def desktop_flow(browser: Browser) -> None:
     context = browser.new_context(viewport={"width": 1440, "height": 900})
     local_only(context)
@@ -91,8 +143,11 @@ def desktop_flow(browser: Browser) -> None:
     assert page.locator("html").get_attribute("lang") == "es"
     assert page.locator("#nav-links").get_by_text("Inicio", exact=True).count() == 1
     assert_project_order(page)
-    assert "Precios de Supermercados" in page.locator("#proyectos .price-card h3").inner_text()
-    assert page.locator("#proyectos .price-card").get_attribute("data-project-position") == "PROYECTO PRINCIPAL · 01"
+    card = page.locator("#proyectos .price-card")
+    assert "Monitoreo automatizado de precios" in card.locator("h3").inner_text()
+    assert "Web Scraping" in card.inner_text()
+    assert "Playwright" in card.inner_text()
+    assert card.get_attribute("data-project-position") == "PROYECTO PRINCIPAL · 01"
     assert page.locator("#proyectos .mw-card").get_attribute("data-project-position") == "PROYECTO · 02"
     assert page.locator("#mw-view .mw-kicker").count() == 0
     assert_no_global_overflow(page)
@@ -101,7 +156,8 @@ def desktop_flow(browser: Browser) -> None:
     assert page.locator("html").get_attribute("lang") == "en"
     assert page.locator("#nav-links").get_by_text("Home", exact=True).count() == 1
     assert page.evaluate("localStorage.getItem('portfolio.locale.v1')") == "en"
-    assert "Grocery Prices" in page.locator("#proyectos .price-card h3").inner_text()
+    assert "Automated grocery price monitoring" in page.locator("#proyectos .price-card h3").inner_text()
+    assert "Web Scraping" in page.locator("#proyectos .price-card").inner_text()
     assert "World Cup 2026" in page.locator("#proyectos .mw-card h3").inner_text()
     assert page.locator("#proyectos .price-card").get_attribute("data-project-position") == "FEATURED PROJECT · 01"
     assert page.locator("#proyectos .mw-card").get_attribute("data-project-position") == "PROJECT · 02"
@@ -112,19 +168,16 @@ def desktop_flow(browser: Browser) -> None:
     opener.click()
     dialog = page.locator("#price-project-view")
     assert dialog.evaluate("element => element.open") is True
-    assert dialog.locator("#price-title").inner_text() == "Grocery price monitoring"
-
-    headers = [value.lower() for value in dialog.locator(".price-table th").all_inner_texts()]
-    assert headers == ["product", "city", "current price", "regular price", "promotion", "availability"]
-    sample_text = dialog.locator(".price-table tbody").inner_text()
-    assert "Rica yema huevos 15 unds" in sample_text
-    assert "Arroz progreso grano largo 5 lb" in sample_text
-    assert "Nestle agua purificada 0.5 ltr" in sample_text
-    assert "SKU-DEMO" not in sample_text
-    assert "Context" not in sample_text
+    assert dialog.locator("#price-title").inner_text() == "Grocery prices collected from the web"
+    assert "Web Scraping" in dialog.locator("#price-flow-title").locator("xpath=../..").inner_text()
+    assert_price_evidence(dialog)
+    assert_comparison_table(dialog)
     assert dialog.locator("#price-quality-title").count() == 0
+    assert dialog.locator("#price-cap-title").count() == 1
     assert dialog.locator("#price-value-title").count() == 1
-    assert "Sep 4, 2026" in dialog.locator(".price-note").inner_text()
+    note = dialog.locator("#price-sample-title").locator("xpath=../..").locator(".price-note").inner_text()
+    assert "Sep 4, 2026" in note
+    assert "official basic basket" in note
     assert page.locator(":focus").get_attribute("data-price-close") is not None
     page.keyboard.press("Escape")
     assert dialog.evaluate("element => element.open") is False
@@ -217,6 +270,9 @@ def responsive_flow(browser: Browser, width: int, height: int) -> None:
         assert dialog.evaluate("element => element.open") is True
         rect = dialog.bounding_box()
         assert rect is not None and rect["width"] <= width + 1, rect
+        table_wrap = dialog.locator(".price-table-wrap")
+        assert table_wrap.evaluate("el => el.scrollWidth > el.clientWidth") is True
+        assert_no_global_overflow(page)
         page.keyboard.press("Escape")
     else:
         cards = page.locator("#proyectos .projects-grid > [data-portfolio-project]")
