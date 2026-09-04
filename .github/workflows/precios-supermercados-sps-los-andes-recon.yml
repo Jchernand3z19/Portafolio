@@ -9,76 +9,220 @@ permissions:
   contents: read
 
 jobs:
-  recon:
+  capture:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
-      - name: Validate page size and pricing signals
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Configurar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Capturar catálogo SPS completo con presupuesto acotado
+        working-directory: precios-supermercados-sps
+        env:
+          PYTHONPATH: src
         shell: bash
         run: |
           set -euo pipefail
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-          endpoint='https://andes.aveapplications.com/api/em/material/paginate?skip=0&take=100'
+          rm -rf .tmp/los-andes-capture
+          mkdir -p .tmp/los-andes-capture
+          python - <<'PY'
+          from __future__ import annotations
 
-          # User authorization window: 2026-09-04T01:13:02Z through
-          # 2026-09-05T01:13:02Z. Exactly one public read-only catalog query.
-          # Concurrency 1; no retries, auth, cookies, login, cart, checkout or mutations.
-          cat > "$tmp/request.json" <<'JSON'
-          {"businessPartner":1,"storeId":1,"groupCode":"0","officeCode":"00","type":"PD","sortBy":"category","sortOption":"ASC","search":"","filter":{"priceMin":null,"priceMax":null,"brand":null,"supplier":null,"bulletPoint":null,"agency":null},"source":"WEB","hidden":"0"}
-          JSON
+          import hashlib
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
 
-          curl --compressed --fail --silent --show-error --location \
-            --max-time 25 --retry 0 -H 'Content-Type: application/json' \
-            --data-binary @"$tmp/request.json" "$endpoint" -o "$tmp/catalog.json"
+          from precios_supermercados.scrapers.comisariato_los_andes import (
+              LOCATION_ID,
+              LOCATION_TWO_CODE,
+              OFFICE_CODE,
+              PAGE_SIZE,
+              STORE_ID,
+              SUPERMARKET_ID,
+              build_catalog_request,
+              reconcile_capture,
+          )
 
-          python - "$tmp/catalog.json" <<'PY'
-          import json, math, sys
-          p=json.load(open(sys.argv[1],encoding='utf-8'))
-          items=p.get('data',[])
-          print('totalItems=',p.get('totalItems'))
-          print('totalPages=',p.get('totalPages'))
-          print('itemPerPage=',p.get('itemPerPage'))
-          print('sample_count=',len(items))
+          # Autorización explícita del usuario: 2026-09-04T01:13:02Z a
+          # 2026-09-05T01:13:02Z. Este job es público/read-only: sin login,
+          # cookies, age-gate action, carrito, checkout ni mutaciones.
+          MAX_REQUESTS = 400
+          MAX_RETRIES = 10
+          DELAY_SECONDS = 0.7
+          TIMEOUT_SECONDS = 25
+          out = Path('.tmp/los-andes-capture')
+          request_count = 0
+          retry_count = 0
+          pages = []
+          started = time.monotonic()
+          last_request_at = 0.0
 
-          def num(v):
-              return isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v)
-          stats={
-              'availability_positive':0,'availability_zero':0,'availability_missing':0,
-              'new_price_positive':0,'new_price_zero':0,'new_price_missing':0,
-              'old_price_positive':0,'old_price_null':0,
-              'list_price_positive':0,'list_price_null':0,
-              'discount_nonzero':0,'promo_old_gt_new':0,'promo_list_gt_new':0,
-              'price_mismatch_new_vs_price':0,'old_below_new':0,'list_below_new':0,
-          }
-          examples=[]
-          for x in items:
-              a=x.get('availibilityCount')
-              if a is None: stats['availability_missing']+=1
-              elif num(a) and a>0: stats['availability_positive']+=1
-              elif num(a) and a==0: stats['availability_zero']+=1
-              n=x.get('newPrice')
-              if n is None: stats['new_price_missing']+=1
-              elif num(n) and n>0: stats['new_price_positive']+=1
-              elif num(n) and n==0: stats['new_price_zero']+=1
-              o=x.get('oldPrice')
-              if o is None: stats['old_price_null']+=1
-              elif num(o) and o>0: stats['old_price_positive']+=1
-              lp=x.get('listPrice')
-              if lp is None: stats['list_price_null']+=1
-              elif num(lp) and lp>0: stats['list_price_positive']+=1
-              d=x.get('discount')
-              if num(d) and d!=0: stats['discount_nonzero']+=1
-              if num(n) and num(o):
-                  if o>n: stats['promo_old_gt_new']+=1
-                  if o<n: stats['old_below_new']+=1
-              if num(n) and num(lp):
-                  if lp>n: stats['promo_list_gt_new']+=1
-                  if lp<n: stats['list_below_new']+=1
-              pr=x.get('price')
-              if num(n) and num(pr) and n!=pr: stats['price_mismatch_new_vs_price']+=1
-              if len(examples)<12 and ((num(o) and num(n) and o!=n) or (num(lp) and num(n) and lp!=n) or (num(d) and d!=0)):
-                  examples.append({k:x.get(k) for k in ('code','name','newPrice','price','oldPrice','listPrice','discount','discountTwo','availibilityCount','stock')})
-          print('stats=',json.dumps(stats,sort_keys=True))
-          for e in examples: print('PRICE_SIGNAL=',json.dumps(e,ensure_ascii=False,sort_keys=True))
+          def now_z() -> str:
+              return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+          def request_page(skip: int, filename: str) -> tuple[dict, dict]:
+              nonlocal_placeholder = None
+              del nonlocal_placeholder
+              global request_count, last_request_at
+              if request_count >= MAX_REQUESTS:
+                  raise RuntimeError('request_budget_exhausted')
+              elapsed = time.monotonic() - last_request_at
+              if last_request_at and elapsed < DELAY_SECONDS:
+                  time.sleep(DELAY_SECONDS - elapsed)
+              url, body = build_catalog_request(skip, PAGE_SIZE)
+              raw_request = json.dumps(body, ensure_ascii=False, separators=(',', ':')).encode()
+              req = urllib.request.Request(
+                  url,
+                  data=raw_request,
+                  method='POST',
+                  headers={
+                      'Content-Type': 'application/json',
+                      'Accept': 'application/json',
+                      'User-Agent': 'PreciosSupermercadosSPS/1.0 public-readonly',
+                  },
+              )
+              observed = now_z()
+              request_count += 1
+              last_request_at = time.monotonic()
+              try:
+                  with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as response:
+                      status = response.status
+                      raw = response.read()
+              except urllib.error.HTTPError as exc:
+                  raise RuntimeError(f'http_error:{exc.code}:skip={skip}') from exc
+              except urllib.error.URLError as exc:
+                  raise RuntimeError(f'network_error:skip={skip}:{exc.reason}') from exc
+              if status != 200:
+                  raise RuntimeError(f'http_status:{status}:skip={skip}')
+              path = out / filename
+              path.write_bytes(raw)
+              try:
+                  payload = json.loads(raw)
+              except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                  raise RuntimeError(f'json_invalid:skip={skip}') from exc
+              record = {
+                  'skip': skip,
+                  'take': PAGE_SIZE,
+                  'status': status,
+                  'retries': 0,
+                  'url': url,
+                  'request_body': body,
+                  'response_file': filename,
+                  'response_sha256': hashlib.sha256(raw).hexdigest(),
+                  'response_bytes': len(raw),
+                  'observed_at_utc': observed,
+              }
+              return payload, record
+
+          try:
+              first, first_record = request_page(0, 'page-00000.json')
+              total = first.get('totalItems')
+              total_pages = first.get('totalPages')
+              if type(total) is not int or total <= 0:
+                  raise RuntimeError('total_items_invalid')
+              if type(total_pages) is not int or total_pages <= 0:
+                  raise RuntimeError('total_pages_invalid')
+              expected_pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
+              if total_pages != expected_pages:
+                  raise RuntimeError('total_pages_mismatch')
+              pages.append(first_record)
+
+              for skip in range(PAGE_SIZE, total, PAGE_SIZE):
+                  payload, record = request_page(skip, f'page-{skip:05d}.json')
+                  if payload.get('totalItems') != total or payload.get('totalPages') != total_pages:
+                      raise RuntimeError(f'catalog_total_changed:skip={skip}')
+                  pages.append(record)
+
+              final, final_record = request_page(0, 'final-recheck.json')
+              final_total = final.get('totalItems')
+              if final_total != total or final.get('totalPages') != total_pages:
+                  raise RuntimeError('catalog_total_changed_at_final_recheck')
+
+              ledger = {
+                  'closed': True,
+                  'supermarket_id': SUPERMARKET_ID,
+                  'location_id': LOCATION_ID,
+                  'store_id': STORE_ID,
+                  'office_code': OFFICE_CODE,
+                  'location_two_code': LOCATION_TWO_CODE,
+                  'concurrency': 1,
+                  'max_requests': MAX_REQUESTS,
+                  'max_retries': MAX_RETRIES,
+                  'delay_seconds': DELAY_SECONDS,
+                  'request_count': request_count,
+                  'retry_count': retry_count,
+                  'final_total_items': final_total,
+                  'final_recheck': final_record,
+                  'elapsed_seconds': round(time.monotonic() - started, 3),
+                  'pages': pages,
+              }
+              (out / 'ledger.json').write_text(
+                  json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True),
+                  encoding='utf-8',
+              )
+
+              snapshot = reconcile_capture(out)
+              raw_snapshot = json.dumps(
+                  snapshot, ensure_ascii=False, separators=(',', ':'), sort_keys=True
+              ).encode()
+              (out / 'snapshot.json').write_bytes(raw_snapshot)
+              evidence = {
+                  'run_result': 'success',
+                  'request_count': request_count,
+                  'retry_count': retry_count,
+                  'catalog_products_reported': snapshot['catalog_products_reported'],
+                  'unique_products_extracted': snapshot['unique_products_extracted'],
+                  'skus_with_price': snapshot['skus_with_price'],
+                  'availability_counts': snapshot['availability_counts'],
+                  'promotion_counts': snapshot['promotion_counts'],
+                  'membership_sha256': snapshot['membership_sha256'],
+                  'snapshot_sha256': hashlib.sha256(raw_snapshot).hexdigest(),
+                  'snapshot_bytes': len(raw_snapshot),
+                  'elapsed_seconds': ledger['elapsed_seconds'],
+                  'errors': [],
+              }
+              (out / 'evidence.json').write_text(
+                  json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True),
+                  encoding='utf-8',
+              )
+              print(json.dumps(evidence, ensure_ascii=False, sort_keys=True))
+          except Exception as exc:
+              (out / 'validation-error.txt').write_text(
+                  f'{type(exc).__name__}: {exc}\n', encoding='utf-8'
+              )
+              raise
           PY
+
+      - name: Empaquetar evidencia RAW
+        if: always()
+        working-directory: precios-supermercados-sps
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d .tmp/los-andes-capture ]; then
+            tar -czf .tmp/los-andes-capture.tar.gz -C .tmp los-andes-capture
+            sha256sum .tmp/los-andes-capture.tar.gz
+          fi
+
+      - name: Publicar artefacto de captura
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: comisariato-los-andes-sps-full-capture
+          path: |
+            precios-supermercados-sps/.tmp/los-andes-capture.tar.gz
+            precios-supermercados-sps/.tmp/los-andes-capture/evidence.json
+            precios-supermercados-sps/.tmp/los-andes-capture/validation-error.txt
+          if-no-files-found: warn
+          retention-days: 14
