@@ -1,12 +1,18 @@
 # Precios de Supermercados de San Pedro Sula
 
-Proyecto para recolectar, normalizar, validar, historizar y comparar precios de supermercados con alcance inicial en San Pedro Sula y cobertura adicional ya verificada en Tegucigalpa.
+Proyecto de **web scraping, automatización y datos** para recolectar, normalizar, validar, historizar y comparar precios de supermercados con alcance inicial en San Pedro Sula y cobertura adicional ya verificada en Tegucigalpa.
 
 ## Presentación pública en el portafolio
 
-El proyecto se presenta como el **proyecto principal** del portafolio profesional.
+El proyecto se presenta como el **proyecto principal** del portafolio profesional y comunica de forma explícita que los datos parten de sitios web públicos.
 
-La versión pública prioriza lenguaje entendible para una persona no técnica y muestra primero el valor del proyecto: qué hace, qué cobertura tiene, qué datos reales ya genera y qué preguntas permite responder.
+La versión pública muestra:
+
+- flujo `Sitios web → Web Scraping → Validación → Histórico → Análisis`;
+- una extracción real comprobable con enlace a la fuente, la evidencia y el código;
+- cifras de escala verificadas;
+- una comparación de 10 productos representativos de consumo básico entre dos supermercados;
+- marca y presentación/cantidad para evitar comparaciones engañosas.
 
 Cifras públicas verificadas al **4 de septiembre de 2026**:
 
@@ -16,18 +22,40 @@ Cifras públicas verificadas al **4 de septiembre de 2026**:
 - 90,876 periodos históricos de precio en ese mismo corte.
 - Cobertura en San Pedro Sula y Tegucigalpa.
 
-La tabla visible en el portafolio ya no usa registros sintéticos ni identificadores `SKU-DEMO`. Utiliza una muestra real proveniente del snapshot aceptado del 4 de septiembre de 2026. Para que la presentación sea fácil de entender, muestra únicamente:
+### Extracción web comprobable
+
+La evidencia pública principal usa una captura aceptada de **Comisariato Los Andes**:
+
+- fuente: <https://comisariatolosandes.com/>;
+- captura: `2026-09-04T01:44:35.172709Z`;
+- 6,646 productos con precio;
+- 120 promociones;
+- artifact de GitHub Actions `9920279680`;
+- snapshot SHA-256 `a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc`.
+
+Metadatos públicos: [`portfolio/scraping-proof.json`](portfolio/scraping-proof.json).
+
+Evidencia versionada: [`reports/comisariato-los-andes/2026-09-04-full/`](reports/comisariato-los-andes/2026-09-04-full/).
+
+### Comparación pública
+
+La tabla visible usa 10 productos cotidianos con esta estructura:
 
 ```text
 Producto
+Marca
+Presentación / cantidad
 Ciudad
-Precio actual
-Precio regular
-Promoción
-Disponibilidad
+Precio Comisariato Los Andes
+Precio Supermercados Colonial
+Mejor precio
 ```
 
-La procedencia exacta de esa muestra, sus hashes y el criterio de publicación se documentan en [`docs/portfolio-showcase.md`](docs/portfolio-showcase.md).
+La regla para incluir una fila es **misma marca + misma presentación/cantidad**. La selección sirve para demostrar la comparación y **no se presenta como la canasta básica oficial de Honduras**.
+
+Los Andes usa el snapshot aceptado indicado arriba. Los valores de Colonial fueron comprobados el 4 de septiembre de 2026 contra su catálogo web público oficial. La muestra versionada está en [`portfolio/sample-data.json`](portfolio/sample-data.json).
+
+La procedencia completa y los límites de interpretación se documentan en [`docs/portfolio-showcase.md`](docs/portfolio-showcase.md).
 
 ## Fuentes de verdad
 
@@ -37,7 +65,7 @@ La procedencia exacta de esa muestra, sus hashes y el criterio de publicación s
 - **Modelo de datos:** [`docs/modelo-datos.md`](docs/modelo-datos.md)
 - **Decisiones técnicas:** [`docs/decisiones-tecnicas.md`](docs/decisiones-tecnicas.md)
 
-El README no replica SHAs de ejecución, authorization IDs ni flags operativos. Esos valores cambian con el tiempo y deben consultarse en `PROJECT_STATE.md` y en la evidencia real de GitHub. Las cifras públicas del portafolio sí quedan versionadas en `portfolio-showcase.md` porque forman parte de la presentación publicada y deben poder auditarse.
+El README no replica SHAs de ejecución, authorization IDs ni flags operativos mutables. Esos valores se consultan en `PROJECT_STATE.md` y en la evidencia real de GitHub. Los metadatos estrictamente necesarios para demostrar la extracción pública sí se versionan porque forman parte de la presentación del proyecto.
 
 ## Principios
 
@@ -76,7 +104,7 @@ proyección semántica
 consumo analítico                 # SERVE
 ```
 
-La visualización completa de comparación todavía es una capa posterior. La presentación actual del portafolio no la muestra como si ya estuviera terminada.
+La visualización completa de comparación todavía es una capa posterior. La presentación actual muestra una comparación pública curada de 10 productos, no un dashboard cross-source productivo terminado.
 
 ## Identidad
 
