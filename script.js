@@ -1,21 +1,16 @@
 (() => {
-  const BUILD = '20260904-project-cards-v1';
+  const BUILD = '20260904-project-detail-standard-v1';
   const entrypoint = document.createElement('script');
   entrypoint.src = `js/main.js?v=${BUILD}`;
   entrypoint.defer = true;
   entrypoint.onload = () => {
-    const style = document.createElement('link');
-    style.rel = 'stylesheet';
-    style.href = `css/project-card-standard.css?v=${BUILD}`;
-    document.head.appendChild(style);
-
-    const standardizer = document.createElement('script');
-    standardizer.src = `js/project-card-standard.js?v=${BUILD}`;
-    standardizer.defer = true;
-    standardizer.onerror = () => {
-      console.error('No se pudo cargar el estándar visual de proyectos.');
+    const standards = document.createElement('script');
+    standards.src = `js/portfolio-standards-loader.js?v=${BUILD}`;
+    standards.defer = true;
+    standards.onerror = () => {
+      console.error('No se pudieron cargar los estándares visuales del portafolio.');
     };
-    document.body.appendChild(standardizer);
+    document.body.appendChild(standards);
   };
   entrypoint.onerror = () => {
     console.error('No se pudo cargar la aplicación principal del portafolio.');
