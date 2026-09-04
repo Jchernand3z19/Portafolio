@@ -185,8 +185,7 @@
     const projectModules = [
       'mundial-2026/portfolio/mundial-2026.js',
       'mundial-2026/portfolio/mundial-2026-i18n.js',
-      'precios-supermercados-sps/portfolio/precios-portfolio.js',
-      'precios-supermercados-sps/portfolio/precios-portfolio-lifecycle.js'
+      'precios-supermercados-sps/portfolio/precios-portfolio.js'
     ];
 
     projectStyles.forEach(loadStylesheet);
