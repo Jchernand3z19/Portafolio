@@ -62,7 +62,7 @@ Captura aceptada de **Comisariato Los Andes**:
 - Promociones detectadas: `120`.
 - Artifact de GitHub Actions: `9920279680`.
 - Snapshot SHA-256: `a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc`.
-- Evidencia versionada: [`../reports/comisariato-los-andes/2026-09-04-full/`](../reports/comisariato-los-andes/2026-09-04-full/).
+- Evidencia versionada: [`../reports/comisariato-los-andes/2026-09-04-full/`](../reports/comisariato-los-andes/2026-09-04-full/README.md).
 - Metadatos públicos reducidos: [`../portfolio/scraping-proof.json`](../portfolio/scraping-proof.json).
 
 La página enlaza tres niveles de comprobación:
@@ -85,18 +85,26 @@ No se completan columnas para Walmart, PriceSmart, La Colonia o Paiz con coincid
 
 La selección **no se presenta como la canasta básica oficial de Honduras**. Su propósito es demostrar una comparación comprensible usando productos cotidianos.
 
-| Producto | Marca | Presentación | Ciudad | Comisariato Los Andes | Supermercados Colonial | Mejor precio |
-| --- | --- | --- | --- | ---: | ---: | ---: |
-| Arroz blanco | Progreso | 1 lb / 454 g | San Pedro Sula | L 16.90 | L 15.79 | L 15.79 |
-| Huevos | Rica Yema | 15 und | San Pedro Sula | L 61.85 | L 60.79 | L 60.79 |
-| Harina de maíz | Maseca | 4.5 lb | San Pedro Sula | L 93.50 | L 85.99 | L 85.99 |
-| Harina de trigo | Gold Star | 5 lb | San Pedro Sula | L 74.50 | L 64.99 | L 64.99 |
-| Frijoles rojos volteados | La Chula | 48 oz | San Pedro Sula | L 75.50 | L 63.39 | L 63.39 |
-| Pierna muslo de pollo | Norteño | 1 lb | San Pedro Sula | L 32.90 | L 34.59 | L 32.90 |
-| Mantequilla crema | Leyde | 1 lb | San Pedro Sula | L 50.50 | L 35.29 | L 35.29 |
-| Avena mosh | Quaker | 600 g | San Pedro Sula | L 55.90 | L 49.49 | L 49.49 |
-| Pan molde | Monarca | 540 g | San Pedro Sula | L 61.50 | L 58.99 | L 58.99 |
-| Café molido | Passion | 1 lb | San Pedro Sula | L 299.50 | L 215.99 | L 215.99 |
+La interfaz ya no necesita una columna duplicada de “Mejor precio”. La lectura se resuelve directamente sobre las celdas de precio:
+
+- **verde**: mejor precio de la fila;
+- **amarillo**: precio intermedio cuando existan tres o más precios comparables;
+- **rojo**: precio más alto de la fila.
+
+El color no es la única señal: cada celda también recibe una etiqueta accesible con su clasificación y la tabla incluye una leyenda textual.
+
+| Producto | Marca | Presentación | Ciudad | Comisariato Los Andes | Supermercados Colonial |
+| --- | --- | --- | --- | ---: | ---: |
+| Arroz blanco | Progreso | 1 lb / 454 g | San Pedro Sula | L 16.90 | L 15.79 |
+| Huevos | Rica Yema | 15 und | San Pedro Sula | L 61.85 | L 60.79 |
+| Harina de maíz | Maseca | 4.5 lb | San Pedro Sula | L 93.50 | L 85.99 |
+| Harina de trigo | Gold Star | 5 lb | San Pedro Sula | L 74.50 | L 64.99 |
+| Frijoles rojos volteados | La Chula | 48 oz | San Pedro Sula | L 75.50 | L 63.39 |
+| Pierna muslo de pollo | Norteño | 1 lb | San Pedro Sula | L 32.90 | L 34.59 |
+| Mantequilla crema | Leyde | 1 lb | San Pedro Sula | L 50.50 | L 35.29 |
+| Avena mosh | Quaker | 600 g | San Pedro Sula | L 55.90 | L 49.49 |
+| Pan molde | Monarca | 540 g | San Pedro Sula | L 61.50 | L 58.99 |
+| Café molido | Passion | 1 lb | San Pedro Sula | L 299.50 | L 215.99 |
 
 La versión estructurada se mantiene en [`../portfolio/sample-data.json`](../portfolio/sample-data.json).
 
@@ -155,11 +163,12 @@ Además de la muestra cross-source curada, pueden comunicarse estos hallazgos ya
 4. Mostrar todas las cadenas con datos aceptados en la sección de cobertura.
 5. Mostrar marca y presentación en comparaciones cross-source.
 6. No llenar una comparación con coincidencias de producto no verificadas.
-7. No presentar la selección de 10 productos como canasta básica oficial.
-8. No presentar precios históricos como tiempo real.
-9. No cargar el dataset productivo completo en el navegador.
-10. No mostrar secretos, cookies, tokens, IDs internos ni artefactos RAW completos en la interfaz.
-11. No presentar funcionalidades futuras como terminadas.
+7. Resaltar el ranking de precios directamente en las celdas y mantener una leyenda textual accesible.
+8. No presentar la selección de 10 productos como canasta básica oficial.
+9. No presentar precios históricos como tiempo real.
+10. No cargar el dataset productivo completo en el navegador.
+11. No mostrar secretos, cookies, tokens, IDs internos ni artefactos RAW completos en la interfaz.
+12. No presentar funcionalidades futuras como terminadas.
 
 ## Actualización
 
