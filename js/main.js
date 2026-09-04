@@ -1,5 +1,5 @@
 (() => {
-  const BUILD = '20260904-six-chain-coverage-v1';
+  const BUILD = '20260904-price-heatmap-v1';
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
