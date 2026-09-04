@@ -13,49 +13,75 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Identify SPS stores from public API
+      - name: Sample SPS catalog contract
         shell: bash
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
-          endpoint='https://andes.aveapplications.com/api/em/store/get_filter'
+          endpoint='https://andes.aveapplications.com/api/em/material/paginate?skip=0&take=6'
 
           # User authorization window: 2026-09-04T01:13:02Z through
-          # 2026-09-05T01:13:02Z. Exactly one public read-only query POST.
-          # This mirrors the public frontend store selector: no auth, cookies,
-          # login, cart, checkout, mutations or retries; concurrency is 1.
-          printf '%s' '{"business_partner":1,"cityCode":null,"pickPosition":"PD"}' > "$tmp/request.json"
+          # 2026-09-05T01:13:02Z. Exactly one public read-only catalog query.
+          # SPS store was proven by the previous bounded probe: storeId=1,
+          # officeCode=00, location_two_code=501. No auth/cookies/login/cart,
+          # checkout/mutations/retries; concurrency is 1.
+          cat > "$tmp/request.json" <<'JSON'
+          {
+            "businessPartner": 1,
+            "storeId": 1,
+            "groupCode": "0",
+            "officeCode": "00",
+            "type": "PD",
+            "sortBy": "category",
+            "sortOption": "ASC",
+            "search": "",
+            "filter": {
+              "priceMin": null,
+              "priceMax": null,
+              "brand": null,
+              "supplier": null,
+              "bulletPoint": null,
+              "agency": null
+            },
+            "source": "WEB",
+            "hidden": "0"
+          }
+          JSON
+
           curl --compressed --fail --silent --show-error --location \
-            --max-time 20 --retry 0 \
+            --max-time 25 --retry 0 \
             -H 'Content-Type: application/json' \
             --data-binary @"$tmp/request.json" \
-            "$endpoint" -o "$tmp/stores.json"
+            "$endpoint" -o "$tmp/catalog.json"
 
-          python - "$tmp/stores.json" <<'PY'
+          python - "$tmp/catalog.json" <<'PY'
           import json, sys
-          from collections.abc import Mapping
-
           payload=json.load(open(sys.argv[1],encoding='utf-8'))
           print('top_type=', type(payload).__name__)
-          if isinstance(payload, Mapping):
+          if isinstance(payload, dict):
               print('top_keys=', sorted(payload.keys()))
-
-          def rows(value):
-              if isinstance(value, list): return value
-              if isinstance(value, dict):
-                  for key in ('data','stores','items','result','results'):
-                      v=value.get(key)
-                      if isinstance(v,list): return v
-                  for v in value.values():
-                      if isinstance(v,list) and all(isinstance(x,dict) for x in v): return v
-              return []
-
-          items=rows(payload)
-          print('store_count=', len(items))
-          fields=('id','name','address','location_one_code','location_one_name','location_two_code','location_two_name','office_code','latitude','longitude','active')
+              for key in ('totalItems','totalPages','itemPerPage','currentPage'):
+                  if key in payload: print(f'{key}=', payload[key])
+          items=payload.get('data',[]) if isinstance(payload,dict) else []
+          print('sample_count=', len(items))
+          keys=sorted({k for item in items if isinstance(item,dict) for k in item.keys()})
+          print('sample_product_keys=', keys)
+          fields=(
+            'id','code','codeERP','name','slug','brandId','brandName',
+            'materialGroupCode','materialGroupName','principalMaterialgroup',
+            'newPrice','oldPrice','price','discount','megaDiscount',
+            'megaDiscountPercentage','availibilityCount','quantityToBeParent',
+            'parentAvailibilityCount','stockAvailableSons','active','active_csm',
+            'active_deprecated','idDelete','is_adult','unitMeasureCode','images'
+          )
           for item in items:
-              blob=' '.join(str(item.get(k,'')) for k in ('name','address','location_one_name','location_two_name')).lower()
-              if any(token in blob for token in ('san pedro sula','s.p.s',' sps','cortés','cortes')):
-                  print('SPS_STORE=', json.dumps({k:item.get(k) for k in fields if k in item}, ensure_ascii=False, sort_keys=True))
+              if not isinstance(item,dict): continue
+              reduced={k:item.get(k) for k in fields if k in item}
+              if isinstance(reduced.get('images'),list):
+                  reduced['images']=[
+                    {k:img.get(k) for k in ('id','fileName','displayName','position','active') if isinstance(img,dict) and k in img}
+                    for img in reduced['images'][:2]
+                  ]
+              print('PRODUCT=', json.dumps(reduced,ensure_ascii=False,sort_keys=True))
           PY
