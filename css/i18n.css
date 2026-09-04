@@ -65,6 +65,14 @@
   }
 }
 
+@media (max-width: 1024px) and (min-width: 768px) {
+  #proyectos .projects-grid[data-registry-ready="true"] .project-card:last-child {
+    grid-column: auto;
+    width: auto;
+    justify-self: stretch;
+  }
+}
+
 @media (max-width: 767px) {
   .nav__controls {
     margin-left: auto;
