@@ -54,6 +54,12 @@ def wait_for_portfolio(page: Page) -> None:
     page.wait_for_selector("#portfolio-language-switcher")
     page.wait_for_selector("#proyectos .price-card")
     page.wait_for_selector("#proyectos .mw-card")
+    page.wait_for_function(
+        """() => Boolean(
+            document.querySelector('#proyectos .price-card')?.dataset.projectPosition &&
+            document.querySelector('#proyectos .mw-card')?.dataset.projectPosition
+        )"""
+    )
 
 
 def assert_no_global_overflow(page: Page) -> None:
@@ -88,6 +94,7 @@ def desktop_flow(browser: Browser) -> None:
     assert "Precios de Supermercados" in page.locator("#proyectos .price-card h3").inner_text()
     assert page.locator("#proyectos .price-card").get_attribute("data-project-position") == "PROYECTO PRINCIPAL · 01"
     assert page.locator("#proyectos .mw-card").get_attribute("data-project-position") == "PROYECTO · 02"
+    assert page.locator("#mw-view .mw-kicker").inner_text() == "Proyecto 02"
     assert_no_global_overflow(page)
 
     page.locator('[data-locale="en"]').click()
@@ -98,6 +105,7 @@ def desktop_flow(browser: Browser) -> None:
     assert "World Cup 2026" in page.locator("#proyectos .mw-card h3").inner_text()
     assert page.locator("#proyectos .price-card").get_attribute("data-project-position") == "FEATURED PROJECT · 01"
     assert page.locator("#proyectos .mw-card").get_attribute("data-project-position") == "PROJECT · 02"
+    assert page.locator("#mw-view .mw-kicker").inner_text() == "Project 02"
     assert_project_order(page)
 
     opener = page.locator("#proyectos .price-card [data-price-open]").last
@@ -126,6 +134,7 @@ def desktop_flow(browser: Browser) -> None:
     mundial = page.locator("#mw-view")
     assert mundial.is_visible()
     assert "World Cup 2026" in mundial.locator("#mw-title").inner_text()
+    assert mundial.locator(".mw-kicker").inner_text() == "Project 02"
     assert page.locator(":focus").get_attribute("id") == "mw-close"
     page.keyboard.press("Escape")
     assert mundial.is_hidden()
@@ -133,6 +142,7 @@ def desktop_flow(browser: Browser) -> None:
 
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("#proyectos .price-card")
+    page.wait_for_function("() => Boolean(document.querySelector('#proyectos .price-card')?.dataset.projectPosition)")
     assert page.locator("html").get_attribute("lang") == "en"
     assert page.locator("#nav-links").get_by_text("Home", exact=True).count() == 1
     assert_project_order(page)
@@ -144,6 +154,7 @@ def desktop_flow(browser: Browser) -> None:
     page.evaluate("localStorage.setItem('portfolio.locale.v1', 'invalid-locale')")
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("#portfolio-language-switcher")
+    page.wait_for_function("() => Boolean(document.querySelector('#proyectos .price-card')?.dataset.projectPosition)")
     assert page.locator("html").get_attribute("lang") == "es"
     assert_project_order(page)
 
