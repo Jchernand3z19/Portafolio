@@ -12,7 +12,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from actualizar_mvp_turso_paiz import _normalised_json, validate_snapshot_bytes  # noqa: E402
 from generar_mvp_sqlite_la_colonia import create_schema  # noqa: E402
-from migrar_mvp_paiz import migrate_sqlite, schema_ready_sql  # noqa: E402
+from migrar_mvp_paiz import (  # noqa: E402
+    locations_index_ready_sql,
+    migrate_sqlite,
+    schema_ready_sql,
+)
 
 REPORT = ROOT / "reports" / "paiz" / "2026-09-04-full"
 
@@ -60,7 +64,7 @@ def test_paiz_migration_preserves_existing_rows_and_allows_unpriced(tmp_path: Pa
     create_schema(con)
     con.execute("INSERT INTO supermarkets VALUES('la_colonia','La Colonia','HN')")
     con.execute("INSERT INTO locations VALUES('la_colonia_sps','la_colonia','San Pedro Sula','HN')")
-    con.execute("INSERT INTO products VALUES(1,'la_colonia','sku','1','1','1',NULL,'Producto',NULL,NULL,NULL)")
+    con.execute("INSERT INTO products VALUES(1,'la_colonia','sku','1','1','1',NULL,NULL,'Producto',NULL,NULL,NULL)")
     con.execute("INSERT INTO scrape_runs VALUES('existing','la_colonia','la_colonia_sps','2026-09-04T00:00:00Z','success',1,1,NULL,NULL,NULL)")
     con.execute("INSERT INTO price_history VALUES(1,'la_colonia','la_colonia_sps',100,NULL,0,'in_stock','HNL','2026-09-04T00:00:00Z',NULL,'existing')")
     con.commit()
@@ -72,14 +76,18 @@ def test_paiz_migration_preserves_existing_rows_and_allows_unpriced(tmp_path: Pa
     con = sqlite3.connect(db)
     try:
         sql = con.execute("SELECT sql FROM sqlite_master WHERE name='price_history'").fetchone()[0]
+        location_index_sql = con.execute(
+            "SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_locations_city_legacy'"
+        ).fetchone()[0]
         assert schema_ready_sql(sql)
+        assert locations_index_ready_sql(location_index_sql)
         assert con.execute("SELECT COUNT(*) FROM price_history").fetchone() == (1,)
         assert con.execute("PRAGMA foreign_key_check").fetchall() == []
         assert con.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
         assert con.execute("SELECT location_id FROM locations WHERE supermarket_id='paiz' ORDER BY location_id").fetchall() == [
             ("paiz_tgu_multiplaza",), ("paiz_tgu_proceres",)
         ]
-        con.execute("INSERT INTO products VALUES(2,'paiz','item_id','2','2','2',NULL,'Agotado',NULL,NULL,NULL)")
+        con.execute("INSERT INTO products VALUES(2,'paiz','item_id','2','2','2',NULL,NULL,'Agotado',NULL,NULL,NULL)")
         con.execute("INSERT INTO scrape_runs VALUES('paiz-test','paiz','paiz_tgu_multiplaza','2026-09-04T01:00:00Z','success',1,1,NULL,NULL,NULL)")
         con.execute("INSERT INTO price_history VALUES(2,'paiz','paiz_tgu_multiplaza',NULL,NULL,NULL,'out_of_stock','HNL','2026-09-04T01:00:00Z',NULL,'paiz-test')")
         con.commit()
