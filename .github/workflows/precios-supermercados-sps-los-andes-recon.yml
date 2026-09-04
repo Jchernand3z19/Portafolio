@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Trace SPS store selector contract
+      - name: Resolve store query payload
         shell: bash
         run: |
           set -euo pipefail
@@ -22,40 +22,34 @@ jobs:
           base='https://comisariatolosandes.com'
 
           # User authorization window: 2026-09-04T01:13:02Z through
-          # 2026-09-05T01:13:02Z. Exactly three public read-only GETs.
+          # 2026-09-05T01:13:02Z. Exactly one public read-only GET.
           # Concurrency 1, no retries/cookies/login/cart/checkout/mutations.
-          files=(chunk-WBUEVQKI.js chunk-UALGFQGO.js chunk-KESYAQWM.js)
-          for f in "${files[@]}"; do
-            curl --compressed --fail --silent --show-error --location \
-              --max-time 20 --retry 0 "$base/$f" -o "$tmp/$f"
-            printf '%s bytes=%s sha256=%s\n' "$f" "$(wc -c < "$tmp/$f")" "$(sha256sum "$tmp/$f" | awk '{print $1}')"
-            sleep 0.7
-          done
+          f='chunk-EBIAV7X2.js'
+          curl --compressed --fail --silent --show-error --location \
+            --max-time 20 --retry 0 "$base/$f" -o "$tmp/$f"
+          printf '%s bytes=%s sha256=%s\n' "$f" "$(wc -c < "$tmp/$f")" "$(sha256sum "$tmp/$f" | awk '{print $1}')"
 
-          python - "$tmp" <<'PY'
-          import pathlib, re, sys
-          root=pathlib.Path(sys.argv[1])
-          texts={p.name:p.read_text(encoding='utf-8',errors='replace') for p in root.glob('*.js')}
+          python - "$tmp/$f" <<'PY'
+          import re, sys
+          text=open(sys.argv[1],encoding='utf-8',errors='replace').read()
 
           print('=== imports ===')
-          for name,text in texts.items():
-              print(f'FILE={name}')
-              for stmt in re.findall(r'import\{[^;]+?from"[^"]+";', text):
-                  print(stmt)
+          for stmt in re.findall(r'import\{[^;]+?from"[^"]+";', text):
+              print(stmt)
 
-          def around(label, pattern, radius=2500, limit=15):
+          def around(label, pattern, radius=3200, limit=15):
               print(f'=== {label} ===')
               count=0
-              for name,text in texts.items():
-                  for m in re.finditer(pattern,text,re.I):
-                      s=max(0,m.start()-radius); e=min(len(text),m.end()+radius)
-                      print(f'FILE={name}\n{text[s:e]}\n---')
-                      count+=1
-                      if count>=limit:return
+              for m in re.finditer(pattern,text,re.I):
+                  s=max(0,m.start()-radius); e=min(len(text),m.end()+radius)
+                  print(text[s:e])
+                  print('---')
+                  count+=1
+                  if count>=limit:return
 
-          around('loadStoresByCityCode', r'loadStoresByCityCode', 3200, 10)
-          around('store API invocation', r'\.getStores\s*\(', 2600, 10)
-          around('city code state', r'cityCode', 1800, 15)
-          around('location two', r'location_two', 1800, 15)
-          around('choose store VM load', r'chooseStorePageViewModel\.load\s*\(', 2200, 5)
+          around('loadStoresByCityCode', r'loadStoresByCityCode', 4200, 10)
+          around('getStores call', r'\.getStores\s*\(', 3600, 10)
+          around('cities derivation', r'\bcities\b', 2800, 12)
+          around('location fields', r'location_two', 2600, 12)
+          around('filter/body fields', r'(?:business_partner|deliveryType|pickup|cityCode|location_two_code)', 2600, 20)
           PY
