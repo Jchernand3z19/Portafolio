@@ -35,14 +35,14 @@ def source_product(**updates):
         "discountTwo": None,
         "images": [{"active": "1", "fileName": "p.webp", "position": 0}],
         "is_adult": "0",
-        "listPrice": 0,
+        "listPrice": "PD",
         "materialGroupCode": "100",
         "materialGroupName": "ABARROTES",
         "name": "Producto de prueba",
         "newPrice": 10,
         "oldPrice": None,
         "price": 10,
-        "stock": 8,
+        "stock": 100,
         "unitMeasureCode": "UN",
         "unitMeasureName": "Unidad",
     }
@@ -68,7 +68,7 @@ def test_request_contract_is_sps_store_bound_and_bounded():
         build_catalog_request(0, PAGE_SIZE + 1)
 
 
-def test_proven_sample_normalizes_identity_price_availability_and_image():
+def test_proven_sample_normalizes_identity_price_and_image_without_inventing_stock():
     payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
     parsed = parse_catalog_page(payload, expected_skip=0, take=6)
     assert parsed["total_items"] == 6646
@@ -81,19 +81,25 @@ def test_proven_sample_normalizes_identity_price_availability_and_image():
     assert first["current_price"] == "149.95"
     assert first["reported_regular_price"] is None
     assert first["is_promotion"] is False
-    assert first["availability"] == "in_stock"
+    assert first["availability"] == "unknown"
     assert first["brand"] == "Marca COMANDES"
     assert first["category"] == "READY TO GO"
-    assert parsed["source_details"][first["source_key"]]["image_url"] == (
-        IMAGE_BASE + "_0001_Ready_to_go_aderezo_para_ensaladas_-_99001005224_74ae411_2b2f61b.webp"
+    detail = parsed["source_details"][first["source_key"]]
+    assert detail["source_availibility_count"] == 1000
+    assert detail["availability_interpretation"] == "not_proven"
+    assert detail["source_list_price"] == "PD"
+    assert detail["image_url"] == (
+        IMAGE_BASE
+        + "_0001_Ready_to_go_aderezo_para_ensaladas_-_99001005224_74ae411_2b2f61b.webp"
     )
-    unavailable = by_code["0001-000000007400051"]
-    assert unavailable["availability"] == "out_of_stock"
-    assert unavailable["current_price"] == "18.90"
+    zero_signal = by_code["0001-000000007400051"]
+    assert zero_signal["availability"] == "unknown"
+    assert zero_signal["current_price"] == "18.90"
+    assert parsed["source_details"][zero_signal["source_key"]]["source_availibility_count"] == 0
 
 
-def test_explicit_regular_price_is_the_only_promotion_evidence():
-    product = source_product(oldPrice=12, newPrice=9.5, price=9.5)
+def test_explicit_old_price_and_matching_discount_prove_promotion():
+    product = source_product(oldPrice=12, newPrice=9.5, price=9.5, discount=2.5)
     rows, details = parse_products([product])
     row = rows[0]
     assert (row["current_price"], row["reported_regular_price"], row["is_promotion"]) == (
@@ -102,15 +108,16 @@ def test_explicit_regular_price_is_the_only_promotion_evidence():
         True,
     )
     assert details[row["source_key"]]["regular_price_evidence"] == ["oldPrice"]
+    assert details[row["source_key"]]["source_list_price"] == "PD"
 
 
-def test_list_price_can_corrobate_regular_price_without_overwriting_effective_price():
-    product = source_product(oldPrice=12, listPrice=12, newPrice=9.5, price=9.5)
-    rows, details = parse_products([product])
+def test_list_price_is_delivery_mode_not_a_monetary_signal():
+    rows, details = parse_products([source_product(listPrice="PD")])
     row = rows[0]
-    assert row["current_price"] == "9.50"
-    assert row["reported_regular_price"] == "12.00"
-    assert details[row["source_key"]]["regular_price_evidence"] == ["oldPrice", "listPrice"]
+    assert row["current_price"] == "10.00"
+    assert row["reported_regular_price"] is None
+    assert row["is_promotion"] is False
+    assert details[row["source_key"]]["source_list_price"] == "PD"
 
 
 @pytest.mark.parametrize(
@@ -121,8 +128,8 @@ def test_list_price_can_corrobate_regular_price_without_overwriting_effective_pr
         ({"newPrice": -1, "price": -1}, "new_price_invalid"),
         ({"newPrice": 10, "price": 9}, "new_price_price_mismatch"),
         ({"newPrice": 10, "price": 10, "oldPrice": 9}, "oldPrice_below_current"),
-        ({"newPrice": 10, "price": 10, "oldPrice": 12, "listPrice": 13}, "regular_price_signals_conflict"),
         ({"discount": 5}, "discount_without_regular_price_evidence"),
+        ({"newPrice": 10, "price": 10, "oldPrice": 12, "discount": 1}, "discount_amount_mismatch"),
         ({"availibilityCount": -1}, "availability_signal_invalid"),
     ],
 )
@@ -131,21 +138,19 @@ def test_ambiguous_or_invalid_source_signals_fail_closed(updates, reason):
         parse_products([source_product(**updates)])
 
 
-def test_unpriced_product_requires_explicit_out_of_stock_signal():
-    rows, details = parse_products([
-        source_product(availibilityCount=0, newPrice=0, price=0, oldPrice=None, listPrice=0)
-    ])
+def test_unpriced_product_does_not_invent_promotion_or_availability():
+    rows, details = parse_products(
+        [source_product(availibilityCount=0, newPrice=0, price=0, oldPrice=None)]
+    )
     row = rows[0]
-    assert row["availability"] == "out_of_stock"
+    assert row["availability"] == "unknown"
     assert row["current_price"] is None
     assert row["reported_regular_price"] is None
     assert row["is_promotion"] is None
-    assert details[row["source_key"]]["price_status"] == "unavailable_unpriced"
-    with pytest.raises(LosAndesError, match="unpriced_without_out_of_stock_signal"):
-        parse_products([source_product(availibilityCount=None, newPrice=0, price=0)])
+    assert details[row["source_key"]]["price_status"] == "unpriced"
 
 
-def test_missing_availability_is_preserved_as_unknown_when_price_exists():
+def test_missing_availability_is_also_preserved_as_unknown():
     rows, details = parse_products([source_product(availibilityCount=None)])
     assert rows[0]["availability"] == "unknown"
     assert details[rows[0]["source_key"]]["source_availibility_count"] is None
@@ -168,7 +173,11 @@ def test_page_metadata_must_match_offset_and_page_size():
 def test_complete_capture_reconciles_only_from_hashed_raw(tmp_path):
     products = [
         source_product(code="0001-000000000000001", availibilityCount=3),
-        source_product(code="0001-000000000000002", availibilityCount=0, name="Otro producto"),
+        source_product(
+            code="0001-000000000000002",
+            availibilityCount=0,
+            name="Otro producto",
+        ),
     ]
     payload = {
         "currentPage": 1,
@@ -196,7 +205,7 @@ def test_complete_capture_reconciles_only_from_hashed_raw(tmp_path):
             {
                 "skip": 0,
                 "take": 100,
-                "status": 200,
+                "status": 201,
                 "retries": 0,
                 "url": url,
                 "request_body": body,
@@ -211,10 +220,13 @@ def test_complete_capture_reconciles_only_from_hashed_raw(tmp_path):
     assert snapshot["catalog_complete"] is True
     assert snapshot["catalog_products_reported"] == 2
     assert snapshot["unique_products_extracted"] == 2
-    assert snapshot["availability_counts"] == {"in_stock": 1, "out_of_stock": 1}
-    assert snapshot["promotion_counts"] == {"promotion": 0, "not_promotion": 2, "unknown": 0}
+    assert snapshot["availability_counts"] == {"unknown": 2}
+    assert snapshot["promotion_counts"] == {
+        "promotion": 0,
+        "not_promotion": 2,
+        "unknown": 0,
+    }
 
-    tampered = raw + b" "
-    (tmp_path / response_name).write_bytes(tampered)
+    (tmp_path / response_name).write_bytes(raw + b" ")
     with pytest.raises(LosAndesError, match="raw_file_hash_mismatch"):
         reconcile_capture(tmp_path)
