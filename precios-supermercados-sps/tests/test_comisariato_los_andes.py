@@ -14,12 +14,14 @@ from precios_supermercados.scrapers.comisariato_los_andes import (
     LOCATION_ID,
     LosAndesError,
     PAGE_SIZE,
+    STORE_ENDPOINT,
     STORE_ID,
     build_catalog_request,
     build_store_request,
     parse_catalog_page,
     parse_products,
     reconcile_capture,
+    validate_store_payload,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures/comisariato_los_andes/catalog_page_sample.json"
@@ -50,6 +52,23 @@ def source_product(**updates):
     return product
 
 
+def store_payload():
+    return [
+        {
+            "id": 1,
+            "name": "COMISARIATO LOS ANDES",
+            "address": "SAN PEDRO SULA, CORTES, BARRIO LOS ANDES 6 CALLE 15 Y 15 AVENIDA",
+            "location_one_code": "COR",
+            "location_one_name": "CORTES",
+            "location_two_code": "501",
+            "location_two_name": "SAN PEDRO SULA",
+            "office_code": "00",
+            "latitude": "15.51108636534507",
+            "longitude": "-88.03563552495497",
+        }
+    ]
+
+
 def test_request_contract_is_sps_store_bound_and_bounded():
     assert build_store_request() == {
         "business_partner": 1,
@@ -66,6 +85,20 @@ def test_request_contract_is_sps_store_bound_and_bounded():
     assert body["hidden"] == "0"
     with pytest.raises(LosAndesError, match="take_above_verified_page_size"):
         build_catalog_request(0, PAGE_SIZE + 1)
+
+
+def test_store_payload_proves_exact_sps_binding():
+    store = validate_store_payload(store_payload())
+    assert store["id"] == 1
+    assert store["office_code"] == "00"
+    assert store["location_one_code"] == "COR"
+    assert store["location_two_code"] == "501"
+    assert store["location_two_name"] == "SAN PEDRO SULA"
+
+    changed = store_payload()
+    changed[0]["location_two_code"] = "999"
+    with pytest.raises(LosAndesError, match="store_city_changed"):
+        validate_store_payload(changed)
 
 
 def test_proven_sample_normalizes_identity_price_and_image_without_inventing_stock():
@@ -182,42 +215,67 @@ def test_complete_capture_reconciles_only_from_hashed_raw(tmp_path):
     payload = {
         "currentPage": 1,
         "data": products,
-        "itemPerPage": 100,
+        "itemPerPage": 2,
         "totalItems": 2,
         "totalPages": 1,
     }
     raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
     response_name = "page-00000.json"
+    final_name = "final-recheck.json"
+    store_name = "store-evidence.json"
     (tmp_path / response_name).write_bytes(raw)
+    (tmp_path / final_name).write_bytes(raw)
+    store_raw = json.dumps(store_payload(), ensure_ascii=False, separators=(",", ":")).encode()
+    (tmp_path / store_name).write_bytes(store_raw)
+
     url, body = build_catalog_request(0, 100)
+    page_record = {
+        "skip": 0,
+        "take": 100,
+        "status": 201,
+        "retries": 0,
+        "url": url,
+        "request_body": body,
+        "response_file": response_name,
+        "response_sha256": hashlib.sha256(raw).hexdigest(),
+        "response_bytes": len(raw),
+        "observed_at_utc": "2026-09-04T01:30:00Z",
+    }
+    final_record = {
+        **page_record,
+        "response_file": final_name,
+        "observed_at_utc": "2026-09-04T01:30:02Z",
+    }
+    store_record = {
+        "status": 200,
+        "retries": 0,
+        "url": STORE_ENDPOINT,
+        "request_body": build_store_request(),
+        "response_file": store_name,
+        "response_sha256": hashlib.sha256(store_raw).hexdigest(),
+        "response_bytes": len(store_raw),
+        "observed_at_utc": "2026-09-04T01:29:59Z",
+    }
     ledger = {
         "closed": True,
         "supermarket_id": "comisariato_los_andes",
         "location_id": LOCATION_ID,
         "store_id": 1,
         "office_code": "00",
-        "location_two_code": 501,
+        "location_two_code": "501",
         "concurrency": 1,
-        "request_count": 2,
+        "request_count": 3,
         "retry_count": 0,
+        "store_evidence": store_record,
         "final_total_items": 2,
-        "pages": [
-            {
-                "skip": 0,
-                "take": 100,
-                "status": 201,
-                "retries": 0,
-                "url": url,
-                "request_body": body,
-                "response_file": response_name,
-                "response_sha256": hashlib.sha256(raw).hexdigest(),
-                "observed_at_utc": "2026-09-04T01:30:00Z",
-            }
-        ],
+        "final_recheck": final_record,
+        "pages": [page_record],
     }
     (tmp_path / "ledger.json").write_text(json.dumps(ledger), encoding="utf-8")
     snapshot = reconcile_capture(tmp_path)
     assert snapshot["catalog_complete"] is True
+    assert snapshot["location_verified_same_run"] is True
+    assert snapshot["store_name"] == "COMISARIATO LOS ANDES"
     assert snapshot["catalog_products_reported"] == 2
     assert snapshot["unique_products_extracted"] == 2
     assert snapshot["availability_counts"] == {"unknown": 2}
@@ -229,4 +287,22 @@ def test_complete_capture_reconciles_only_from_hashed_raw(tmp_path):
 
     (tmp_path / response_name).write_bytes(raw + b" ")
     with pytest.raises(LosAndesError, match="raw_file_hash_mismatch"):
+        reconcile_capture(tmp_path)
+
+
+def test_capture_rejects_missing_same_run_store_evidence(tmp_path):
+    (tmp_path / "ledger.json").write_text(
+        json.dumps(
+            {
+                "closed": True,
+                "supermarket_id": "comisariato_los_andes",
+                "location_id": LOCATION_ID,
+                "concurrency": 1,
+                "request_count": 1,
+                "retry_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(LosAndesError, match="store_evidence_missing"):
         reconcile_capture(tmp_path)
