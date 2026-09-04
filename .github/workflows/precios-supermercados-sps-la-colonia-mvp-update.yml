@@ -205,7 +205,7 @@ jobs:
               )
 
           expected_runs = []
-          expected_min_open = []
+          expected_open_by_location = []
           for city, supermarket_id, location_id in (
               ('sps', 'la_colonia', 'la_colonia_sps'),
               ('tgu', 'la_colonia', 'la_colonia_tgu'),
@@ -222,27 +222,27 @@ jobs:
                   snapshot['catalog_products_reported'],
                   digest,
               ])
-              expected_min_open.append([supermarket_id, location_id, snapshot['skus_extracted']])
+              expected_open_by_location.append([location_id, snapshot['skus_extracted']])
 
           raw = Path('run-artifacts/los-andes/full-catalog.json').read_bytes()
-          snapshot = validate_los_andes(raw)
+          los_andes_snapshot = validate_los_andes(raw)
           digest = hashlib.sha256(raw).hexdigest()
           expected_runs.append([
               f"{os.environ['GITHUB_RUN_ID']}-los-andes",
               'comisariato_los_andes',
               'comisariato_los_andes_sps',
               'success',
-              snapshot['skus_extracted'],
-              snapshot['catalog_products_reported'],
+              los_andes_snapshot['skus_extracted'],
+              los_andes_snapshot['catalog_products_reported'],
               digest,
           ])
-          expected_min_open.append([
+          expected_los_andes = [[
               'comisariato_los_andes',
               'comisariato_los_andes_sps',
-              snapshot['skus_extracted'],
-          ])
+              los_andes_snapshot['skus_extracted'],
+          ]]
           expected_runs.sort()
-          expected_min_open.sort()
+          expected_open_by_location.sort()
 
           run_sql = '''SELECT scrape_run_id,supermarket_id,location_id,run_status,sku_count,catalog_product_count,source_json_sha256 FROM scrape_runs WHERE scrape_run_id IN (?,?,?) ORDER BY scrape_run_id'''
           run_args = (
@@ -270,26 +270,31 @@ jobs:
               os.environ['TURSO_AUTH_TOKEN'],
               [
                   {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT supermarket_id,product_id,location_id FROM price_history WHERE ((supermarket_id=? AND location_id IN (?,?)) OR (supermarket_id=? AND location_id=?)) AND valid_to_utc IS NULL GROUP BY supermarket_id,product_id,location_id HAVING COUNT(*)>1)''', ('la_colonia','la_colonia_sps','la_colonia_tgu','comisariato_los_andes','comisariato_los_andes_sps'))},
-                  {'type':'execute','stmt':_stmt('''SELECT supermarket_id,location_id,COUNT(*) FROM price_history WHERE ((supermarket_id=? AND location_id IN (?,?)) OR (supermarket_id=? AND location_id=?)) AND valid_to_utc IS NULL GROUP BY supermarket_id,location_id ORDER BY supermarket_id,location_id''', ('la_colonia','la_colonia_sps','la_colonia_tgu','comisariato_los_andes','comisariato_los_andes_sps'))},
+                  {'type':'execute','stmt':_stmt('''SELECT location_id,COUNT(*) FROM price_history WHERE supermarket_id=? AND location_id IN (?,?) AND valid_to_utc IS NULL GROUP BY location_id ORDER BY location_id''', ('la_colonia','la_colonia_sps','la_colonia_tgu'))},
+                  {'type':'execute','stmt':_stmt('''SELECT supermarket_id,location_id,COUNT(*) FROM price_history WHERE supermarket_id=? AND location_id=? AND valid_to_utc IS NULL GROUP BY supermarket_id,location_id''', ('comisariato_los_andes','comisariato_los_andes_sps'))},
                   {'type':'close'},
               ],
           )
           duplicates = _execute_rows(data['results'][0])
           open_by_location = _execute_rows(data['results'][1])
+          los_andes_open = _execute_rows(data['results'][2])
           if duplicates != [[0]]:
               raise SystemExit(f'duplicate_open_periods:{duplicates}')
-          if [row[:2] for row in open_by_location] != [row[:2] for row in expected_min_open]:
-              raise SystemExit(f'current_location_mismatch:expected={expected_min_open}:actual={open_by_location}')
-          if any(actual[2] < expected[2] for actual, expected in zip(open_by_location, expected_min_open, strict=True)):
-              raise SystemExit(f'current_state_incomplete:minimum={expected_min_open}:actual={open_by_location}')
-          retained_absent = [
-              [actual[0], actual[1], actual[2] - expected[2]]
-              for actual, expected in zip(open_by_location, expected_min_open, strict=True)
+          if [row[0] for row in open_by_location] != [row[0] for row in expected_open_by_location]:
+              raise SystemExit(f'current_location_mismatch:expected={expected_open_by_location}:actual={open_by_location}')
+          if any(actual[1] < expected[1] for actual, expected in zip(open_by_location, expected_open_by_location, strict=True)):
+              raise SystemExit(f'current_state_incomplete:minimum={expected_open_by_location}:actual={open_by_location}')
+          if los_andes_open != expected_los_andes:
+              raise SystemExit(f'los_andes_current_state_incomplete:expected={expected_los_andes}:actual={los_andes_open}')
+          retained_absent_by_location = [
+              [actual[0], actual[1] - expected[1]]
+              for actual, expected in zip(open_by_location, expected_open_by_location, strict=True)
           ]
           print(json.dumps({
               'runs': runs,
               'open_by_location': open_by_location,
-              'retained_absent_by_location': retained_absent,
+              'los_andes_open': los_andes_open,
+              'retained_absent_by_location': retained_absent_by_location,
               'duplicate_open_periods': duplicates,
           }, ensure_ascii=False, sort_keys=True))
           PY
