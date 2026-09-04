@@ -39,7 +39,8 @@ jobs:
           from pathlib import Path
           from precios_supermercados.scrapers.comisariato_los_andes import (
               LOCATION_ID, LOCATION_TWO_CODE, OFFICE_CODE, PAGE_SIZE, STORE_ID,
-              SUPERMARKET_ID, build_catalog_request, reconcile_capture,
+              STORE_ENDPOINT, SUPERMARKET_ID, build_catalog_request,
+              build_store_request, reconcile_capture,
           )
 
           # Autorización del usuario: 2026-09-04T01:13:02Z–2026-09-05T01:13:02Z.
@@ -53,13 +54,12 @@ jobs:
           def now_z():
               return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
-          def fetch(skip, filename):
+          def post_json(url, body, filename):
               if state['requests'] >= MAX_REQUESTS:
                   raise RuntimeError('request_budget_exhausted')
               elapsed = time.monotonic() - state['last']
               if state['last'] and elapsed < DELAY:
                   time.sleep(DELAY - elapsed)
-              url, body = build_catalog_request(skip, PAGE_SIZE)
               req = urllib.request.Request(
                   url,
                   data=json.dumps(body, ensure_ascii=False, separators=(',', ':')).encode(),
@@ -77,25 +77,34 @@ jobs:
                   with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
                       status, raw = response.status, response.read()
               except urllib.error.HTTPError as exc:
-                  raise RuntimeError(f'http_error:{exc.code}:skip={skip}') from exc
+                  raise RuntimeError(f'http_error:{exc.code}:{filename}') from exc
               except urllib.error.URLError as exc:
-                  raise RuntimeError(f'network_error:skip={skip}:{exc.reason}') from exc
+                  raise RuntimeError(f'network_error:{filename}:{exc.reason}') from exc
               if status not in (200, 201):
-                  raise RuntimeError(f'http_status:{status}:skip={skip}')
+                  raise RuntimeError(f'http_status:{status}:{filename}')
               (out / filename).write_bytes(raw)
               try:
                   payload = json.loads(raw)
               except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                  raise RuntimeError(f'json_invalid:skip={skip}') from exc
+                  raise RuntimeError(f'json_invalid:{filename}') from exc
               return payload, {
-                  'skip': skip, 'take': PAGE_SIZE, 'status': status, 'retries': 0,
-                  'url': url, 'request_body': body, 'response_file': filename,
+                  'status': status, 'retries': 0, 'url': url, 'request_body': body,
+                  'response_file': filename,
                   'response_sha256': hashlib.sha256(raw).hexdigest(),
                   'response_bytes': len(raw), 'observed_at_utc': observed,
               }
 
+          def fetch_catalog(skip, filename):
+              url, body = build_catalog_request(skip, PAGE_SIZE)
+              payload, record = post_json(url, body, filename)
+              record.update({'skip': skip, 'take': PAGE_SIZE})
+              return payload, record
+
           try:
-              first, record = fetch(0, 'page-00000.json')
+              _, store_record = post_json(
+                  STORE_ENDPOINT, build_store_request(), 'store-evidence.json'
+              )
+              first, record = fetch_catalog(0, 'page-00000.json')
               total, total_pages = first.get('totalItems'), first.get('totalPages')
               if type(total) is not int or total <= 0 or type(total_pages) is not int:
                   raise RuntimeError('catalog_totals_invalid')
@@ -103,11 +112,11 @@ jobs:
                   raise RuntimeError('total_pages_mismatch')
               pages.append(record)
               for skip in range(PAGE_SIZE, total, PAGE_SIZE):
-                  payload, record = fetch(skip, f'page-{skip:05d}.json')
+                  payload, record = fetch_catalog(skip, f'page-{skip:05d}.json')
                   if payload.get('totalItems') != total or payload.get('totalPages') != total_pages:
                       raise RuntimeError(f'catalog_total_changed:skip={skip}')
                   pages.append(record)
-              final, final_record = fetch(0, 'final-recheck.json')
+              final, final_record = fetch_catalog(0, 'final-recheck.json')
               if final.get('totalItems') != total or final.get('totalPages') != total_pages:
                   raise RuntimeError('catalog_total_changed_at_final_recheck')
               ledger = {
@@ -116,6 +125,7 @@ jobs:
                   'location_two_code': LOCATION_TWO_CODE, 'concurrency': 1,
                   'max_requests': MAX_REQUESTS, 'max_retries': MAX_RETRIES,
                   'delay_seconds': DELAY, 'request_count': state['requests'], 'retry_count': 0,
+                  'store_evidence': store_record,
                   'final_total_items': total, 'final_recheck': final_record,
                   'elapsed_seconds': round(time.monotonic() - started, 3), 'pages': pages,
               }
@@ -133,6 +143,7 @@ jobs:
                   'membership_sha256': snapshot['membership_sha256'],
                   'snapshot_sha256': hashlib.sha256(raw_snapshot).hexdigest(),
                   'snapshot_bytes': len(raw_snapshot), 'elapsed_seconds': ledger['elapsed_seconds'],
+                  'store': snapshot['store'],
                   'errors': [],
               }
               (out/'evidence.json').write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True), encoding='utf-8')
