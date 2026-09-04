@@ -134,6 +134,7 @@ def desktop_flow(browser: Browser) -> None:
     mundial = page.locator("#mw-view")
     assert mundial.is_visible()
     assert "World Cup 2026" in mundial.locator("#mw-title").inner_text()
+    page.wait_for_function("() => document.querySelector('#mw-view .mw-kicker')?.textContent === 'Project 02'")
     assert mundial.locator(".mw-kicker").inner_text() == "Project 02"
     assert page.locator(":focus").get_attribute("id") == "mw-close"
     page.keyboard.press("Escape")
