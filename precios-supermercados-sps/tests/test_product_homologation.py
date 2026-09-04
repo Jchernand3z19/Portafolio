@@ -173,6 +173,30 @@ def test_ambiguous_pack_notation_fails_closed() -> None:
     assert status == "ambiguous_multipack"
 
 
+def test_packaging_words_doy_pack_and_tetra_pack_are_not_multipacks() -> None:
+    doy, doy_status = resolve_presentation(
+        product(
+            "a",
+            "la_colonia",
+            "Mayonesa Hellmanns Doy Pack 380 Gr",
+            presentation="380 Gr",
+        )
+    )
+    tetra, tetra_status = resolve_presentation(
+        product(
+            "b",
+            "la_colonia",
+            "Jugo Del Monte Néctar De Pera Tetra Pack 200 Ml",
+            presentation="200 Ml",
+        )
+    )
+
+    assert doy is not None and doy.total_base == Decimal("380")
+    assert doy_status == "confirmed"
+    assert tetra is not None and tetra.total_base == Decimal("200")
+    assert tetra_status == "confirmed"
+
+
 def test_single_unit_never_matches_multipack_candidate() -> None:
     result = homologate_products(
         (

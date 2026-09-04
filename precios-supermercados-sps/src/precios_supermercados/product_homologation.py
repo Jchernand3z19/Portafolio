@@ -550,7 +550,12 @@ def _parse_presentation_text(
 
     # "3 Pack - 142 g" o "620 g Pack 2" no dice inequívocamente si el peso
     # anunciado corresponde a cada unidad o al paquete completo.
-    if _AMBIGUOUS_PACK_RE.search(value):
+    pack_scan_value = re.sub(
+        r"(?i)\b(?:doy|tetra)\s+pack\b",
+        "",
+        value,
+    )
+    if _AMBIGUOUS_PACK_RE.search(pack_scan_value):
         return None, True
 
     singles = list(_SINGLE_RE.finditer(value))
