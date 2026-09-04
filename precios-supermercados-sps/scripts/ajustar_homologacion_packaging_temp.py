@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# Archivo temporal: este commit fuerza la auditoría final sobre el código corregido.
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "precios_supermercados" / "product_homologation.py"
 TESTS = ROOT / "tests" / "test_product_homologation.py"
