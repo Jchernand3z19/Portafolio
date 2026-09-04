@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       live_read_only_authorized:
-        description: Confirma autorización humana vigente para consultar SPS y TGU
+        description: Confirma autorización humana vigente para consultas públicas read-only del MVP
         required: true
         default: false
         type: boolean
@@ -46,7 +46,7 @@ jobs:
       - name: Instalar dependencias verificadas
         run: python -m pip install -r requirements.txt
 
-      - name: Descargar catálogo SPS
+      - name: Descargar catálogo SPS La Colonia
         id: sps
         shell: bash
         run: |
@@ -62,7 +62,7 @@ jobs:
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Descargar catálogo TGU
+      - name: Descargar catálogo TGU La Colonia
         id: tgu
         shell: bash
         run: |
@@ -78,25 +78,49 @@ jobs:
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
 
+      - name: Descargar catálogo SPS Comisariato Los Andes
+        id: los_andes
+        shell: bash
+        run: |
+          set +e
+          python scripts/obtener_catalogo_comisariato_los_andes_operativo.py \
+            --live-read-only \
+            --allow-full-catalog \
+            --delay-seconds 1.0 \
+            --max-retries 3 \
+            --output run-artifacts/los-andes/full-catalog.json \
+            --raw-directory run-artifacts/los-andes/raw \
+            --evidence-output run-artifacts/los-andes/evidence.json
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
       - name: Aceptar sólo snapshots completos
         shell: bash
         env:
           SPS_EXIT: ${{ steps.sps.outputs.exit_code }}
           TGU_EXIT: ${{ steps.tgu.outputs.exit_code }}
+          LOS_ANDES_EXIT: ${{ steps.los_andes.outputs.exit_code }}
         run: |
           set -euo pipefail
           test "$SPS_EXIT" = "0"
           test "$TGU_EXIT" = "0"
+          test "$LOS_ANDES_EXIT" = "0"
           python - <<'PY'
           from pathlib import Path
           import sys
           sys.path.insert(0, 'scripts')
           from actualizar_mvp_sqlite_la_colonia import validate_snapshot_bytes
+          from actualizar_mvp_turso_comisariato_los_andes import validate_snapshot_bytes as validate_los_andes
           for city in ('sps', 'tgu'):
               validate_snapshot_bytes(Path(f'run-artifacts/{city}/full-catalog.json').read_bytes())
+          los_andes = validate_los_andes(Path('run-artifacts/los-andes/full-catalog.json').read_bytes())
+          assert los_andes['location_verified_same_run'] is True
+          assert los_andes['catalog_complete'] is True
+          assert los_andes['catalog_products_reported'] == los_andes['unique_products_extracted']
           PY
 
-      - name: Persistir SPS en Turso
+      - name: Persistir SPS La Colonia en Turso
         id: persist_sps
         shell: bash
         env:
@@ -114,7 +138,7 @@ jobs:
           cat /tmp/sps-persist.err >&2 || true
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
 
-      - name: Persistir TGU en Turso
+      - name: Persistir TGU La Colonia en Turso
         id: persist_tgu
         shell: bash
         env:
@@ -132,6 +156,24 @@ jobs:
           cat /tmp/tgu-persist.err >&2 || true
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
 
+      - name: Persistir SPS Comisariato Los Andes en Turso
+        id: persist_los_andes
+        shell: bash
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          set +e
+          python scripts/actualizar_mvp_turso_comisariato_los_andes.py \
+            run-artifacts/los-andes/full-catalog.json \
+            --run-id "${GITHUB_RUN_ID}-los-andes" \
+            > /tmp/los-andes-persist.out 2> /tmp/los-andes-persist.err
+          code=$?
+          set -e
+          cat /tmp/los-andes-persist.out || true
+          cat /tmp/los-andes-persist.err >&2 || true
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
       - name: Verificar commits exactos en Turso
         shell: bash
         env:
@@ -139,6 +181,7 @@ jobs:
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           SPS_PERSIST_EXIT: ${{ steps.persist_sps.outputs.exit_code }}
           TGU_PERSIST_EXIT: ${{ steps.persist_tgu.outputs.exit_code }}
+          LOS_ANDES_PERSIST_EXIT: ${{ steps.persist_los_andes.outputs.exit_code }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -150,31 +193,63 @@ jobs:
           from pathlib import Path
           sys.path.insert(0, 'scripts')
           from actualizar_mvp_sqlite_la_colonia import validate_snapshot_bytes
+          from actualizar_mvp_turso_comisariato_los_andes import validate_snapshot_bytes as validate_los_andes
           from actualizar_mvp_turso_la_colonia import _execute_rows, _pipeline, _stmt
 
+          if os.environ['SPS_PERSIST_EXIT'] != '0' or os.environ['TGU_PERSIST_EXIT'] != '0' or os.environ['LOS_ANDES_PERSIST_EXIT'] != '0':
+              raise SystemExit(
+                  'persist_failed:'
+                  f"sps={os.environ['SPS_PERSIST_EXIT']}:"
+                  f"tgu={os.environ['TGU_PERSIST_EXIT']}:"
+                  f"los_andes={os.environ['LOS_ANDES_PERSIST_EXIT']}"
+              )
+
           expected_runs = []
-          expected_min_open_by_location = []
-          for city, location_id in (
-              ('sps', 'la_colonia_sps'),
-              ('tgu', 'la_colonia_tgu'),
+          expected_min_open = []
+          for city, supermarket_id, location_id in (
+              ('sps', 'la_colonia', 'la_colonia_sps'),
+              ('tgu', 'la_colonia', 'la_colonia_tgu'),
           ):
               raw = Path(f'run-artifacts/{city}/full-catalog.json').read_bytes()
               snapshot = validate_snapshot_bytes(raw)
               digest = hashlib.sha256(raw).hexdigest()
               expected_runs.append([
                   f"{os.environ['GITHUB_RUN_ID']}-{city}",
+                  supermarket_id,
                   location_id,
                   'success',
                   snapshot['skus_extracted'],
                   snapshot['catalog_products_reported'],
                   digest,
               ])
-              expected_min_open_by_location.append([location_id, snapshot['skus_extracted']])
-          expected_runs.sort()
-          expected_min_open_by_location.sort()
+              expected_min_open.append([supermarket_id, location_id, snapshot['skus_extracted']])
 
-          run_sql = '''SELECT scrape_run_id,location_id,run_status,sku_count,catalog_product_count,source_json_sha256 FROM scrape_runs WHERE scrape_run_id IN (?,?) ORDER BY scrape_run_id'''
-          run_args = (f"{os.environ['GITHUB_RUN_ID']}-sps", f"{os.environ['GITHUB_RUN_ID']}-tgu")
+          raw = Path('run-artifacts/los-andes/full-catalog.json').read_bytes()
+          snapshot = validate_los_andes(raw)
+          digest = hashlib.sha256(raw).hexdigest()
+          expected_runs.append([
+              f"{os.environ['GITHUB_RUN_ID']}-los-andes",
+              'comisariato_los_andes',
+              'comisariato_los_andes_sps',
+              'success',
+              snapshot['skus_extracted'],
+              snapshot['catalog_products_reported'],
+              digest,
+          ])
+          expected_min_open.append([
+              'comisariato_los_andes',
+              'comisariato_los_andes_sps',
+              snapshot['skus_extracted'],
+          ])
+          expected_runs.sort()
+          expected_min_open.sort()
+
+          run_sql = '''SELECT scrape_run_id,supermarket_id,location_id,run_status,sku_count,catalog_product_count,source_json_sha256 FROM scrape_runs WHERE scrape_run_id IN (?,?,?) ORDER BY scrape_run_id'''
+          run_args = (
+              f"{os.environ['GITHUB_RUN_ID']}-sps",
+              f"{os.environ['GITHUB_RUN_ID']}-tgu",
+              f"{os.environ['GITHUB_RUN_ID']}-los-andes",
+          )
           runs = []
           for attempt in range(7):
               data = _pipeline(
@@ -188,14 +263,14 @@ jobs:
               if attempt < 6:
                   time.sleep(20)
           if runs != expected_runs:
-              raise SystemExit(f'commit_not_confirmed:sps_exit={os.environ["SPS_PERSIST_EXIT"]}:tgu_exit={os.environ["TGU_PERSIST_EXIT"]}:runs={runs}')
+              raise SystemExit(f'commit_not_confirmed:expected={expected_runs}:actual={runs}')
 
           data = _pipeline(
               os.environ['TURSO_DATABASE_URL'],
               os.environ['TURSO_AUTH_TOKEN'],
               [
-                  {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE supermarket_id=? AND location_id IN (?,?) AND valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)''', ('la_colonia','la_colonia_sps','la_colonia_tgu'))},
-                  {'type':'execute','stmt':_stmt('''SELECT location_id,COUNT(*) FROM price_history WHERE supermarket_id=? AND location_id IN (?,?) AND valid_to_utc IS NULL GROUP BY location_id ORDER BY location_id''', ('la_colonia','la_colonia_sps','la_colonia_tgu'))},
+                  {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT supermarket_id,product_id,location_id FROM price_history WHERE (supermarket_id=? AND location_id IN (?,?)) OR (supermarket_id=? AND location_id=?) AND valid_to_utc IS NULL GROUP BY supermarket_id,product_id,location_id HAVING COUNT(*)>1)''', ('la_colonia','la_colonia_sps','la_colonia_tgu','comisariato_los_andes','comisariato_los_andes_sps'))},
+                  {'type':'execute','stmt':_stmt('''SELECT supermarket_id,location_id,COUNT(*) FROM price_history WHERE ((supermarket_id=? AND location_id IN (?,?)) OR (supermarket_id=? AND location_id=?)) AND valid_to_utc IS NULL GROUP BY supermarket_id,location_id ORDER BY supermarket_id,location_id''', ('la_colonia','la_colonia_sps','la_colonia_tgu','comisariato_los_andes','comisariato_los_andes_sps'))},
                   {'type':'close'},
               ],
           )
@@ -203,18 +278,18 @@ jobs:
           open_by_location = _execute_rows(data['results'][1])
           if duplicates != [[0]]:
               raise SystemExit(f'duplicate_open_periods:{duplicates}')
-          if [row[0] for row in open_by_location] != [row[0] for row in expected_min_open_by_location]:
-              raise SystemExit(f'current_location_mismatch:expected={expected_min_open_by_location}:actual={open_by_location}')
-          if any(actual[1] < expected[1] for actual, expected in zip(open_by_location, expected_min_open_by_location, strict=True)):
-              raise SystemExit(f'current_state_incomplete:minimum={expected_min_open_by_location}:actual={open_by_location}')
-          retained_absent_by_location = [
-              [actual[0], actual[1] - expected[1]]
-              for actual, expected in zip(open_by_location, expected_min_open_by_location, strict=True)
+          if [row[:2] for row in open_by_location] != [row[:2] for row in expected_min_open]:
+              raise SystemExit(f'current_location_mismatch:expected={expected_min_open}:actual={open_by_location}')
+          if any(actual[2] < expected[2] for actual, expected in zip(open_by_location, expected_min_open, strict=True)):
+              raise SystemExit(f'current_state_incomplete:minimum={expected_min_open}:actual={open_by_location}')
+          retained_absent = [
+              [actual[0], actual[1], actual[2] - expected[2]]
+              for actual, expected in zip(open_by_location, expected_min_open, strict=True)
           ]
           print(json.dumps({
               'runs': runs,
               'open_by_location': open_by_location,
-              'retained_absent_by_location': retained_absent_by_location,
+              'retained_absent_by_location': retained_absent,
               'duplicate_open_periods': duplicates,
           }, ensure_ascii=False, sort_keys=True))
           PY
@@ -223,7 +298,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: la-colonia-mvp-${{ github.run_id }}
+          name: supermercados-mvp-${{ github.run_id }}
           path: precios-supermercados-sps/run-artifacts/
           if-no-files-found: warn
           retention-days: 14
