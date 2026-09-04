@@ -113,8 +113,8 @@ verify = '''      - name: Verificar estado Paiz en Turso
           data = _pipeline(
               os.environ['TURSO_DATABASE_URL'], os.environ['TURSO_AUTH_TOKEN'],
               [
-                  {'type':'execute','stmt':_stmt('''SELECT location_id,COUNT(*) FROM price_history WHERE supermarket_id='paiz' AND location_id IN ('paiz_tgu_multiplaza','paiz_tgu_proceres') AND valid_to_utc IS NULL GROUP BY location_id ORDER BY location_id''')},
-                  {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE supermarket_id='paiz' AND valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)''')},
+                  {'type':'execute','stmt':_stmt("SELECT location_id,COUNT(*) FROM price_history WHERE supermarket_id='paiz' AND location_id IN ('paiz_tgu_multiplaza','paiz_tgu_proceres') AND valid_to_utc IS NULL GROUP BY location_id ORDER BY location_id")},
+                  {'type':'execute','stmt':_stmt("SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE supermarket_id='paiz' AND valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)")},
                   {'type':'execute','stmt':_stmt('SELECT COUNT(*) FROM pragma_foreign_key_check')},
                   {'type':'execute','stmt':_stmt('PRAGMA integrity_check')},
                   {'type':'close'},
