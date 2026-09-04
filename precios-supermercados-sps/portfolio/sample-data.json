@@ -8,7 +8,6 @@
   "evidence_path": "precios-supermercados-sps/reports/comisariato-los-andes/2026-09-04-full/evidence.json",
   "rows": [
     {
-      "product_id": "0001-000742414240008",
       "product": "Rica yema huevos 15 unds",
       "current_price": "61.85",
       "regular_price": "88.50",
@@ -16,7 +15,6 @@
       "availability": "not_confirmed"
     },
     {
-      "product_id": "0001-000070751700200",
       "product": "Arroz progreso grano largo 5 lb",
       "current_price": "84.50",
       "regular_price": null,
@@ -24,7 +22,6 @@
       "availability": "not_confirmed"
     },
     {
-      "product_id": "0001-000006827400006",
       "product": "Nestle agua purificada 0.5 ltr",
       "current_price": "8.95",
       "regular_price": null,
