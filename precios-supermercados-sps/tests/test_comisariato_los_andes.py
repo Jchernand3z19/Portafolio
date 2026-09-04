@@ -120,7 +120,9 @@ def test_proven_sample_normalizes_identity_price_and_image_without_inventing_sto
     detail = parsed["source_details"][first["source_key"]]
     assert detail["source_availibility_count"] == 1000
     assert detail["availability_interpretation"] == "not_proven"
-    assert detail["source_list_price"] == "PD"
+    # La muestra temprana devolvió 0; el crawl completo posterior devolvió "PD".
+    # Ambos se preservan literalmente y nunca se usan como precio monetario.
+    assert detail["source_list_price"] == 0
     assert detail["image_url"] == (
         IMAGE_BASE
         + "_0001_Ready_to_go_aderezo_para_ensaladas_-_99001005224_74ae411_2b2f61b.webp"
