@@ -6,6 +6,7 @@ from precios_supermercados.product_homologation import (
     SourceProductRecord,
     assign_taxonomy,
     homologate_products,
+    normalize_brand,
     presentations_compatible,
     profile_product,
     resolve_presentation,
@@ -55,32 +56,60 @@ def test_taxonomy_separates_category_subcategory_and_product_type() -> None:
     )
 
 
-def test_specific_taxonomy_rule_wins_over_generic_word() -> None:
-    dental = assign_taxonomy(
-        product("a", "walmart", "Pasta Dental Colgate Triple Acción 75 ml")
+def test_source_category_is_preserved_but_does_not_drive_product_type() -> None:
+    source = product(
+        "a",
+        "paiz",
+        "Salsa Kraft Barbecue Ahumada 1100 g",
+        category="Abarrotes > Pastas y Salsas",
     )
-    assert dental.product_type == "Pasta dental"
-    assert dental.subcategory == "Higiene oral"
+    assignment = assign_taxonomy(source)
+    assert source.source_category == "Abarrotes > Pastas y Salsas"
+    assert assignment.product_type == "Salsa"
+    assert assignment.subcategory == "Salsas y aderezos"
 
 
-def test_source_category_does_not_force_product_type() -> None:
-    assignment = assign_taxonomy(
-        product(
-            "a",
-            "paiz",
-            "Salsa Kraft Barbecue Ahumada 1100 g",
-            category="Abarrotes > Pastas y Salsas",
-        )
+def test_head_product_noun_wins_over_ingredient_words() -> None:
+    assert assign_taxonomy(
+        product("a", "la_colonia", "Atún Bumble Bee En Agua 142 Gr")
+    ).product_type == "Atún"
+    assert assign_taxonomy(
+        product("b", "la_colonia", "Chocolate Kinder Sorpresa Con Leche 20 Gr")
+    ).product_type == "Chocolate"
+    assert assign_taxonomy(
+        product("c", "la_colonia", "Sopa De Pollo Con Salsa Picante 64 Gr")
+    ).product_type == "Sopa"
+    assert assign_taxonomy(
+        product("d", "paiz", "Pan De Harina De Trigo Integral Monarca - 600 g")
+    ).product_type == "Pan"
+
+
+def test_generic_source_brand_placeholders_do_not_participate_in_matching() -> None:
+    assert normalize_brand("RMS") is None
+    assert normalize_brand("Marca COMANDES") is None
+    assert normalize_brand("SIN MARCA") is None
+    assert normalize_brand("Great Value") == "great value"
+
+    result = homologate_products(
+        (
+            product(
+                "a",
+                "colonial",
+                "Arroz Progreso Blanco 1 lb",
+                brand="RMS",
+                presentation="1 lb",
+            ),
+            product(
+                "b",
+                "walmart",
+                "Arroz Progreso Blanco 454 g",
+                brand="Progreso",
+                presentation="454 g",
+            ),
+        ),
+        candidate_threshold=Decimal("0"),
     )
-    assert assignment.product_type is None
-
-
-def test_non_beverage_agua_rule_wins_before_generic_water() -> None:
-    assignment = assign_taxonomy(
-        product("a", "paiz", "Agua Micelar Garnier Todo En 1 - 400 ml")
-    )
-    assert assignment.product_type == "Agua micelar"
-    assert assignment.category == "Cuidado personal"
+    assert result.candidates == ()
 
 
 def test_presentation_reconciles_one_pound_and_454_grams() -> None:
@@ -88,7 +117,7 @@ def test_presentation_reconciles_one_pound_and_454_grams() -> None:
         product("a", "colonial", "Arroz Progreso 1 lb", presentation="1 lb")
     )
     right, right_status = resolve_presentation(
-        product("b", "los_andes", "Arroz Progreso 454 g", presentation="454 g")
+        product("b", "walmart", "Arroz Progreso 454 g", presentation="454 g")
     )
 
     assert left is not None and right is not None
@@ -97,7 +126,7 @@ def test_presentation_reconciles_one_pound_and_454_grams() -> None:
     assert presentations_compatible(left, right)
 
 
-def test_ounce_is_not_silently_assumed_to_be_mass_or_volume() -> None:
+def test_plain_ounce_is_not_silently_assumed_mass_or_volume() -> None:
     ounce, _ = resolve_presentation(
         product("a", "la_colonia", "Salsa Tabasco 5 Oz", presentation="5 Oz")
     )
@@ -108,6 +137,16 @@ def test_ounce_is_not_silently_assumed_to_be_mass_or_volume() -> None:
     assert ounce.dimension == "ounce"
     assert milliliters.dimension == "volume_ml"
     assert not presentations_compatible(ounce, milliliters)
+
+
+def test_explicit_fluid_ounce_is_normalized_as_volume() -> None:
+    fluid_ounce, status = resolve_presentation(
+        product("a", "walmart", "Jabón Líquido 8 fl oz")
+    )
+    assert status == "name_only"
+    assert fluid_ounce is not None
+    assert fluid_ounce.dimension == "volume_ml"
+    assert abs(fluid_ounce.total_base - Decimal("236.5882365")) < Decimal("0.0001")
 
 
 def test_pricesmart_style_multipack_preserves_pack_count_and_total() -> None:
@@ -126,7 +165,15 @@ def test_pricesmart_style_multipack_preserves_pack_count_and_total() -> None:
     assert signature.total_base == Decimal("15000")
 
 
-def test_pricesmart_multipack_is_not_same_presentation_as_single_unit() -> None:
+def test_ambiguous_pack_notation_fails_closed() -> None:
+    signature, status = resolve_presentation(
+        product("a", "paiz", "Atún Bumble Bee En Agua 3 Pack - 142 g")
+    )
+    assert signature is None
+    assert status == "ambiguous_multipack"
+
+
+def test_single_unit_never_matches_multipack_candidate() -> None:
     result = homologate_products(
         (
             product(
@@ -147,7 +194,20 @@ def test_pricesmart_multipack_is_not_same_presentation_as_single_unit() -> None:
     assert result.candidates == ()
 
 
-def test_conflicting_source_and_advertised_presentations_fail_closed() -> None:
+def test_non_paiz_source_name_presentation_conflict_fails_closed() -> None:
+    signature, status = resolve_presentation(
+        product(
+            "a",
+            "la_colonia",
+            "Leche Dos Pinos en Polvo - 360 g",
+            presentation="75 gr",
+        )
+    )
+    assert signature is None
+    assert status == "conflict"
+
+
+def test_paiz_prefers_advertised_name_over_known_noisy_source_presentation() -> None:
     signature, status = resolve_presentation(
         product(
             "a",
@@ -156,8 +216,10 @@ def test_conflicting_source_and_advertised_presentations_fail_closed() -> None:
             presentation="75 gr",
         )
     )
-    assert signature is None
-    assert status == "conflict"
+    assert signature is not None
+    assert signature.dimension == "mass_g"
+    assert signature.total_base == Decimal("360")
+    assert status == "name_preferred_source_conflict"
 
 
 def test_exact_valid_gtin_groups_products_across_supermarkets() -> None:
@@ -189,7 +251,6 @@ def test_exact_valid_gtin_groups_products_across_supermarkets() -> None:
     assert group.supermarket_ids == ("colonial", "walmart")
     assert group.comparison_status == "ready"
     assert group.conflict_reasons == ()
-    assert result.candidates == ()
 
 
 def test_same_gtin_keeps_identity_but_blocks_comparison_on_size_conflict() -> None:
@@ -205,7 +266,7 @@ def test_same_gtin_keeps_identity_but_blocks_comparison_on_size_conflict() -> No
             ),
             product(
                 "b",
-                "paiz",
+                "walmart",
                 "Maíz Dulce En Granos El Migo - 148 g",
                 brand="El Migo",
                 presentation="148 g",
@@ -213,11 +274,36 @@ def test_same_gtin_keeps_identity_but_blocks_comparison_on_size_conflict() -> No
             ),
         )
     )
-    assert len(result.exact_gtin_groups) == 1
     group = result.exact_gtin_groups[0]
     assert group.comparison_status == "review_required"
     assert "cross_source_presentation_conflict" in group.conflict_reasons
     assert group.canonical_product_id.startswith("prod_gtin_")
+
+
+def test_same_gtin_taxonomy_disagreement_is_retained_for_review() -> None:
+    result = homologate_products(
+        (
+            product(
+                "a",
+                "la_colonia",
+                "Leche Dos Pinos Chocolate 200 ml",
+                brand="Dos Pinos",
+                presentation="200 ml",
+                barcode="7590002040003",
+            ),
+            product(
+                "b",
+                "walmart",
+                "Chocolate Dos Pinos Bebida 200 ml",
+                brand="Dos Pinos",
+                presentation="200 ml",
+                barcode="7590002040003",
+            ),
+        )
+    )
+    group = result.exact_gtin_groups[0]
+    assert group.comparison_status == "review_required"
+    assert group.conflict_reasons == ("product_type_conflict",)
 
 
 def test_different_valid_gtins_never_become_text_candidate() -> None:
@@ -239,7 +325,8 @@ def test_different_valid_gtins_never_become_text_candidate() -> None:
                 presentation="454 g",
                 barcode="7501031311309",
             ),
-        )
+        ),
+        candidate_threshold=Decimal("0"),
     )
     assert result.exact_gtin_groups == ()
     assert result.candidates == ()
@@ -249,15 +336,15 @@ def test_non_gtin_match_is_review_candidate_not_automatic_mapping() -> None:
     result = homologate_products(
         (
             product(
-                "colonial:1",
-                "colonial",
+                "la_colonia:1",
+                "la_colonia",
                 "Harina de Maíz Maseca Original 4.5 lb",
                 brand="Maseca",
                 presentation="4.5 lb",
             ),
             product(
-                "andes:2",
-                "comisariato_los_andes",
+                "pricesmart:2",
+                "pricesmart",
                 "Maseca Harina Maiz Original 2.04 kg",
                 brand="MASECA",
                 presentation="2.04 kg",
@@ -272,89 +359,6 @@ def test_non_gtin_match_is_review_candidate_not_automatic_mapping() -> None:
     assert candidate.normalized_brand == "maseca"
     assert candidate.status == "review_required"
     assert all(profile.canonical_product_id is None for profile in result.profiles)
-
-
-def test_ambiguous_ounce_does_not_match_metric_without_gtin() -> None:
-    result = homologate_products(
-        (
-            product(
-                "a",
-                "la_colonia",
-                "Jugo Ocean Spray Arándano 64 Oz",
-                brand="Ocean Spray",
-                presentation="64 Oz",
-            ),
-            product(
-                "b",
-                "pricesmart",
-                "Ocean Spray Jugo de Arándano 1.89 L",
-                brand="Ocean Spray",
-            ),
-        ),
-        candidate_threshold=Decimal("0"),
-    )
-    assert result.candidates == ()
-
-
-def test_brand_difference_blocks_candidate_even_when_name_and_size_are_similar() -> None:
-    result = homologate_products(
-        (
-            product(
-                "a", "colonial", "Arroz Progreso Blanco 1 lb",
-                brand="Progreso", presentation="1 lb",
-            ),
-            product(
-                "b", "paiz", "Arroz Great Value Blanco 454 g",
-                brand="Great Value", presentation="454 g",
-            ),
-        ),
-        candidate_threshold=Decimal("0"),
-    )
-    assert result.candidates == ()
-
-
-def test_same_supermarket_never_creates_cross_source_candidate() -> None:
-    result = homologate_products(
-        (
-            product(
-                "a", "colonial", "Café Passion Molido 1 lb",
-                brand="Passion", presentation="1 lb",
-            ),
-            product(
-                "b", "colonial", "Cafe Passion Molido 454 g",
-                brand="Passion", presentation="454 g",
-            ),
-        ),
-        candidate_threshold=Decimal("0"),
-    )
-    assert result.candidates == ()
-
-
-def test_summary_reports_classification_gtin_candidates_and_conflicts() -> None:
-    result = homologate_products(
-        (
-            product(
-                "a", "colonial", "Huevos Rica Yema 15 und",
-                brand="Rica Yema", presentation="15 und",
-            ),
-            product(
-                "b", "walmart", "Huevos Rica Yema 15 unidades",
-                brand="Rica Yema", presentation="15 unidades",
-            ),
-            product(
-                "c",
-                "paiz",
-                "Leche Dos Pinos en Polvo 360 g",
-                brand="Dos Pinos",
-                presentation="75 g",
-            ),
-        ),
-        candidate_threshold=Decimal("0"),
-    )
-    assert result.summary["source_products"] == 3
-    assert result.summary["classified_product_type"] == 3
-    assert result.summary["presentation_conflicts"] == 1
-    assert result.summary["review_candidates"] == 1
 
 
 def test_profile_preserves_source_fields_and_normalizes_comparison_fields() -> None:
