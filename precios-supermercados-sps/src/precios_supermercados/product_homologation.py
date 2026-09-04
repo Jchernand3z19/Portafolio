@@ -70,13 +70,19 @@ class SourceProductRecord:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "source_record_id", _required_text(self.source_record_id, "source_record_id")
+            self,
+            "source_record_id",
+            _required_text(self.source_record_id, "source_record_id"),
         )
         object.__setattr__(
-            self, "supermarket_id", _required_text(self.supermarket_id, "supermarket_id")
+            self,
+            "supermarket_id",
+            _required_text(self.supermarket_id, "supermarket_id"),
         )
         object.__setattr__(
-            self, "source_name", _required_text(self.source_name, "source_name")
+            self,
+            "source_name",
+            _required_text(self.source_name, "source_name"),
         )
         for field_name in (
             "source_brand",
@@ -162,7 +168,9 @@ class HomologationResult:
             "classified_product_type": sum(
                 profile.taxonomy.product_type is not None for profile in self.profiles
             ),
-            "valid_gtin": sum(profile.canonical_gtin is not None for profile in self.profiles),
+            "valid_gtin": sum(
+                profile.canonical_gtin is not None for profile in self.profiles
+            ),
             "exact_gtin_groups_cross_supermarket": len(self.exact_gtin_groups),
             "source_products_in_exact_gtin_groups": len(exact_members),
             "review_candidates": len(self.candidates),
@@ -195,41 +203,133 @@ class _TaxonomyRule:
         )
 
 
-# Orden específico -> genérico. Las reglas sólo clasifican cuando el texto lo
-# demuestra; no usan el nombre de la categoría fuente como verdad canónica.
+# Orden específico -> genérico. Lo no demostrado permanece sin product_type.
 _TAXONOMY_RULES = (
-    _TaxonomyRule("harina_maiz", "Alimentos", "Harinas", "Harina de maíz", ("harina",), ("maiz",)),
-    _TaxonomyRule("harina_trigo", "Alimentos", "Harinas", "Harina de trigo", ("harina",), ("trigo",)),
-    _TaxonomyRule("leche_polvo", "Alimentos", "Lácteos", "Leche en polvo", ("leche", "polvo")),
-    _TaxonomyRule("leche_condensada", "Alimentos", "Lácteos", "Leche condensada", ("leche", "condensada")),
-    _TaxonomyRule("leche_evaporada", "Alimentos", "Lácteos", "Leche evaporada", ("leche", "evaporada")),
-    _TaxonomyRule("leche", "Alimentos", "Lácteos", "Leche", ("leche",), forbidden_terms=("condensada", "evaporada", "polvo")),
-    _TaxonomyRule("huevo", "Alimentos", "Huevos", "Huevo", any_terms=("huevo", "huevos")),
-    _TaxonomyRule("arroz", "Alimentos", "Arroz y granos", "Arroz", any_terms=("arroz",)),
-    _TaxonomyRule("frijol", "Alimentos", "Frijoles y legumbres", "Frijol", any_terms=("frijol", "frijoles")),
-    _TaxonomyRule("pasta", "Alimentos", "Pastas", "Pasta", any_terms=("pasta", "espagueti", "spaghetti", "macarron", "macarrones")),
-    _TaxonomyRule("cereal", "Alimentos", "Cereales", "Cereal", any_terms=("cereal", "corn flakes", "hojuelas")),
-    _TaxonomyRule("avena", "Alimentos", "Cereales", "Avena", any_terms=("avena", "mosh")),
-    _TaxonomyRule("mantequilla_mani", "Alimentos", "Untables", "Mantequilla de maní", ("mantequilla",), ("mani",)),
-    _TaxonomyRule("mantequilla", "Alimentos", "Lácteos", "Mantequilla", ("mantequilla",), forbidden_terms=("mani",)),
-    _TaxonomyRule("queso", "Alimentos", "Lácteos", "Queso", any_terms=("queso",)),
-    _TaxonomyRule("yogurt", "Alimentos", "Lácteos", "Yogurt", any_terms=("yogurt", "yoghurt")),
-    _TaxonomyRule("pan_molde", "Alimentos", "Panadería", "Pan de molde", ("pan",), ("molde", "sandwich")),
-    _TaxonomyRule("aceite", "Alimentos", "Aceites y grasas", "Aceite comestible", any_terms=("aceite",)),
-    _TaxonomyRule("cafe", "Bebidas", "Café", "Café", any_terms=("cafe",)),
-    _TaxonomyRule("agua", "Bebidas", "Agua", "Agua", any_terms=("agua",), forbidden_terms=("oxigenada",)),
-    _TaxonomyRule("jugo", "Bebidas", "Jugos", "Jugo", any_terms=("jugo", "nectar")),
-    _TaxonomyRule("refresco", "Bebidas", "Refrescos", "Refresco", any_terms=("refresco", "gaseosa", "soda")),
-    _TaxonomyRule("detergente", "Limpieza", "Lavandería", "Detergente", any_terms=("detergente",)),
-    _TaxonomyRule("suavizante", "Limpieza", "Lavandería", "Suavizante", any_terms=("suavizante",)),
-    _TaxonomyRule("papel_higienico", "Hogar", "Papel", "Papel higiénico", ("papel", "higienico")),
-    _TaxonomyRule("shampoo", "Cuidado personal", "Cabello", "Shampoo", any_terms=("shampoo", "champu")),
-    _TaxonomyRule("jabon", "Cuidado personal", "Higiene", "Jabón", any_terms=("jabon",)),
-    _TaxonomyRule("desodorante", "Cuidado personal", "Higiene", "Desodorante", any_terms=("desodorante",)),
-    _TaxonomyRule("pasta_dental", "Cuidado personal", "Higiene oral", "Pasta dental", ("pasta",), ("dental", "dientes")),
-    _TaxonomyRule("panal", "Bebés", "Pañales", "Pañal", any_terms=("panal", "panales")),
-    _TaxonomyRule("alimento_perro", "Mascotas", "Alimento para mascotas", "Alimento para perro", any_terms=("perro", "canino"), all_terms=("alimento",)),
-    _TaxonomyRule("alimento_gato", "Mascotas", "Alimento para mascotas", "Alimento para gato", any_terms=("gato", "felino"), all_terms=("alimento",)),
+    _TaxonomyRule(
+        "harina_maiz", "Alimentos", "Harinas", "Harina de maíz",
+        ("harina",), ("maiz",),
+    ),
+    _TaxonomyRule(
+        "harina_trigo", "Alimentos", "Harinas", "Harina de trigo",
+        ("harina",), ("trigo",),
+    ),
+    _TaxonomyRule(
+        "leche_polvo", "Alimentos", "Lácteos", "Leche en polvo",
+        ("leche", "polvo"),
+    ),
+    _TaxonomyRule(
+        "leche_condensada", "Alimentos", "Lácteos", "Leche condensada",
+        ("leche", "condensada"),
+    ),
+    _TaxonomyRule(
+        "leche_evaporada", "Alimentos", "Lácteos", "Leche evaporada",
+        ("leche", "evaporada"),
+    ),
+    _TaxonomyRule(
+        "leche", "Alimentos", "Lácteos", "Leche", ("leche",),
+        forbidden_terms=("condensada", "evaporada", "polvo"),
+    ),
+    _TaxonomyRule(
+        "huevo", "Alimentos", "Huevos", "Huevo",
+        any_terms=("huevo", "huevos"),
+    ),
+    _TaxonomyRule(
+        "arroz", "Alimentos", "Arroz y granos", "Arroz",
+        any_terms=("arroz",),
+    ),
+    _TaxonomyRule(
+        "frijol", "Alimentos", "Frijoles y legumbres", "Frijol",
+        any_terms=("frijol", "frijoles"),
+    ),
+    _TaxonomyRule(
+        "pasta_dental", "Cuidado personal", "Higiene oral", "Pasta dental",
+        ("pasta",), ("dental", "dientes"),
+    ),
+    _TaxonomyRule(
+        "pasta", "Alimentos", "Pastas", "Pasta",
+        any_terms=("pasta", "espagueti", "spaghetti", "macarron", "macarrones"),
+    ),
+    _TaxonomyRule(
+        "cereal", "Alimentos", "Cereales", "Cereal",
+        any_terms=("cereal", "corn flakes", "hojuelas"),
+    ),
+    _TaxonomyRule(
+        "avena", "Alimentos", "Cereales", "Avena",
+        any_terms=("avena", "mosh"),
+    ),
+    _TaxonomyRule(
+        "mantequilla_mani", "Alimentos", "Untables", "Mantequilla de maní",
+        ("mantequilla",), ("mani",),
+    ),
+    _TaxonomyRule(
+        "mantequilla", "Alimentos", "Lácteos", "Mantequilla",
+        ("mantequilla",), forbidden_terms=("mani",),
+    ),
+    _TaxonomyRule(
+        "queso", "Alimentos", "Lácteos", "Queso", any_terms=("queso",),
+    ),
+    _TaxonomyRule(
+        "yogurt", "Alimentos", "Lácteos", "Yogurt",
+        any_terms=("yogurt", "yoghurt"),
+    ),
+    _TaxonomyRule(
+        "pan_molde", "Alimentos", "Panadería", "Pan de molde",
+        ("pan",), ("molde", "sandwich"),
+    ),
+    _TaxonomyRule(
+        "aceite", "Alimentos", "Aceites y grasas", "Aceite comestible",
+        any_terms=("aceite",),
+    ),
+    _TaxonomyRule(
+        "cafe", "Bebidas", "Café", "Café", any_terms=("cafe",),
+    ),
+    _TaxonomyRule(
+        "agua", "Bebidas", "Agua", "Agua", any_terms=("agua",),
+        forbidden_terms=("oxigenada",),
+    ),
+    _TaxonomyRule(
+        "jugo", "Bebidas", "Jugos", "Jugo", any_terms=("jugo", "nectar"),
+    ),
+    _TaxonomyRule(
+        "refresco", "Bebidas", "Refrescos", "Refresco",
+        any_terms=("refresco", "gaseosa", "soda"),
+    ),
+    _TaxonomyRule(
+        "detergente", "Limpieza", "Lavandería", "Detergente",
+        any_terms=("detergente",),
+    ),
+    _TaxonomyRule(
+        "suavizante", "Limpieza", "Lavandería", "Suavizante",
+        any_terms=("suavizante",),
+    ),
+    _TaxonomyRule(
+        "papel_higienico", "Hogar", "Papel", "Papel higiénico",
+        ("papel", "higienico"),
+    ),
+    _TaxonomyRule(
+        "shampoo", "Cuidado personal", "Cabello", "Shampoo",
+        any_terms=("shampoo", "champu"),
+    ),
+    _TaxonomyRule(
+        "jabon", "Cuidado personal", "Higiene", "Jabón",
+        any_terms=("jabon",),
+    ),
+    _TaxonomyRule(
+        "desodorante", "Cuidado personal", "Higiene", "Desodorante",
+        any_terms=("desodorante",),
+    ),
+    _TaxonomyRule(
+        "panal", "Bebés", "Pañales", "Pañal",
+        any_terms=("panal", "panales"),
+    ),
+    _TaxonomyRule(
+        "alimento_perro", "Mascotas", "Alimento para mascotas",
+        "Alimento para perro", ("alimento",), ("perro", "canino"),
+    ),
+    _TaxonomyRule(
+        "alimento_gato", "Mascotas", "Alimento para mascotas",
+        "Alimento para gato", ("alimento",), ("gato", "felino"),
+    ),
 )
 
 
@@ -255,7 +355,8 @@ _UNIT_FACTORS: dict[str, tuple[str, Decimal]] = {
 }
 _UNIT_PATTERN = "|".join(sorted(_UNIT_FACTORS, key=len, reverse=True))
 _MULTIPACK_RE = re.compile(
-    rf"(?<!\w)(?P<count>\d+)\s*[x×]\s*(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>{_UNIT_PATTERN})(?!\w)",
+    rf"(?<!\w)(?P<count>\d+)\s*[x×]\s*(?P<amount>\d+(?:[.,]\d+)?)\s*"
+    rf"(?P<unit>{_UNIT_PATTERN})(?!\w)",
     re.IGNORECASE,
 )
 _SINGLE_RE = re.compile(
@@ -270,7 +371,9 @@ _STOPWORDS = frozenset({
 
 
 def assign_taxonomy(record: SourceProductRecord) -> TaxonomyAssignment:
-    haystack = fold_text(" ".join(filter(None, (record.source_name, record.source_category)))) or ""
+    haystack = fold_text(
+        " ".join(filter(None, (record.source_name, record.source_category)))
+    ) or ""
     for rule in _TAXONOMY_RULES:
         if rule.matches(haystack):
             return TaxonomyAssignment(
@@ -290,10 +393,11 @@ def _decimal(value: str) -> Decimal | None:
     return parsed if parsed.is_finite() and parsed > 0 else None
 
 
-def _signature_from_match(match: re.Match[str], *, multipack: bool) -> PresentationSignature | None:
+def _signature_from_match(
+    match: re.Match[str], *, multipack: bool
+) -> PresentationSignature | None:
     amount = _decimal(match.group("amount"))
-    unit = match.group("unit").casefold()
-    unit_info = _UNIT_FACTORS.get(unit)
+    unit_info = _UNIT_FACTORS.get(match.group("unit").casefold())
     if amount is None or unit_info is None:
         return None
     dimension, factor = unit_info
@@ -331,11 +435,13 @@ def presentations_compatible(
         return left.total_base == right.total_base
     larger = max(left.total_base, right.total_base)
     difference = abs(left.total_base - right.total_base)
-    # 1 lb vs 454 g y equivalencias de etiquetado similares deben reconciliar.
-    return difference <= Decimal("1") or difference / larger <= Decimal("0.005")
+    # Tolera equivalencias de etiqueta como 1 lb ~= 454 g, no tamaños distintos.
+    return difference <= Decimal("1.5") or difference / larger <= Decimal("0.005")
 
 
-def resolve_presentation(record: SourceProductRecord) -> tuple[PresentationSignature | None, str]:
+def resolve_presentation(
+    record: SourceProductRecord,
+) -> tuple[PresentationSignature | None, str]:
     source = _parse_presentation_text(record.source_presentation)
     name = _parse_presentation_text(record.source_name)
     if source is not None and name is not None:
@@ -352,11 +458,13 @@ def resolve_presentation(record: SourceProductRecord) -> tuple[PresentationSigna
 def _matching_tokens(name: str, brand: str | None) -> tuple[str, ...]:
     tokens = (fold_text(name) or "").split()
     brand_tokens = set((fold_text(brand) or "").split())
-    cleaned = [
-        token for token in tokens
-        if token not in _STOPWORDS and token not in brand_tokens and not token.replace(".", "").isdigit()
-    ]
-    return tuple(cleaned)
+    return tuple(
+        token
+        for token in tokens
+        if token not in _STOPWORDS
+        and token not in brand_tokens
+        and not token.isdigit()
+    )
 
 
 def profile_product(record: SourceProductRecord) -> ProductProfile:
@@ -371,7 +479,9 @@ def profile_product(record: SourceProductRecord) -> ProductProfile:
         normalized_brand=normalized_brand,
         canonical_gtin=canonical_gtin,
         canonical_product_id=(
-            generate_gtin_product_id(canonical_gtin) if canonical_gtin is not None else None
+            generate_gtin_product_id(canonical_gtin)
+            if canonical_gtin is not None
+            else None
         ),
         taxonomy=assign_taxonomy(record),
         presentation=presentation,
@@ -385,18 +495,30 @@ def _name_similarity(left: ProductProfile, right: ProductProfile) -> Decimal:
     right_tokens = set(right.matching_tokens)
     if not left_tokens or not right_tokens:
         return Decimal("0")
-    union = left_tokens | right_tokens
-    jaccard = Decimal(len(left_tokens & right_tokens)) / Decimal(len(union))
-    sequence = Decimal(
-        str(SequenceMatcher(None, " ".join(left.matching_tokens), " ".join(right.matching_tokens)).ratio())
+    jaccard = Decimal(len(left_tokens & right_tokens)) / Decimal(
+        len(left_tokens | right_tokens)
     )
-    return (jaccard * Decimal("0.6") + sequence * Decimal("0.4")).quantize(Decimal("0.0001"))
+    sequence = Decimal(
+        str(
+            SequenceMatcher(
+                None,
+                " ".join(left.matching_tokens),
+                " ".join(right.matching_tokens),
+            ).ratio()
+        )
+    )
+    return (
+        jaccard * Decimal("0.6") + sequence * Decimal("0.4")
+    ).quantize(Decimal("0.0001"))
 
 
 def _presentation_bucket(value: PresentationSignature) -> tuple[str, int, int]:
-    # Bucket amplio; la compatibilidad exacta se revalida después.
-    rounded = int(value.total_base.to_integral_value())
-    return value.dimension, value.pack_count, rounded
+    if value.dimension == "count":
+        bucket = int(value.total_base)
+    else:
+        # Bucket de 5 g/ml; compatibilidad exacta se revalida después.
+        bucket = int((value.total_base / Decimal("5")).to_integral_value())
+    return value.dimension, value.pack_count, bucket
 
 
 def homologate_products(
@@ -406,7 +528,14 @@ def homologate_products(
 ) -> HomologationResult:
     """Clasifica productos, cierra GTIN exactos y genera candidatos revisables."""
 
-    profiles = tuple(sorted((profile_product(record) for record in records), key=lambda p: p.record.source_record_id))
+    if candidate_threshold < 0 or candidate_threshold > 1:
+        raise ProductHomologationError("candidate_threshold_invalid")
+    profiles = tuple(
+        sorted(
+            (profile_product(record) for record in records),
+            key=lambda profile: profile.record.source_record_id,
+        )
+    )
     if len({profile.record.source_record_id for profile in profiles}) != len(profiles):
         raise ProductHomologationError("source_record_id_duplicate")
 
@@ -424,7 +553,9 @@ def homologate_products(
             ExactGtinGroup(
                 canonical_gtin=gtin,
                 canonical_product_id=generate_gtin_product_id(gtin),
-                source_record_ids=tuple(member.record.source_record_id for member in members),
+                source_record_ids=tuple(
+                    member.record.source_record_id for member in members
+                ),
                 supermarket_ids=tuple(supermarkets),
             )
         )
@@ -437,15 +568,16 @@ def homologate_products(
             or profile.presentation is None
         ):
             continue
-        dimension, pack_count, rounded = _presentation_bucket(profile.presentation)
-        key = (
-            profile.taxonomy.product_type,
-            profile.normalized_brand,
-            dimension,
-            pack_count,
-            rounded,
-        )
-        blocks[key].append(profile)
+        dimension, pack_count, bucket = _presentation_bucket(profile.presentation)
+        blocks[
+            (
+                profile.taxonomy.product_type,
+                profile.normalized_brand,
+                dimension,
+                pack_count,
+                bucket,
+            )
+        ].append(profile)
 
     candidates: list[MatchCandidate] = []
     seen_pairs: set[tuple[str, str]] = set()
@@ -454,12 +586,19 @@ def homologate_products(
             for right in members[index + 1 :]:
                 if left.record.supermarket_id == right.record.supermarket_id:
                     continue
-                pair = tuple(sorted((left.record.source_record_id, right.record.source_record_id)))
+                pair = tuple(
+                    sorted(
+                        (
+                            left.record.source_record_id,
+                            right.record.source_record_id,
+                        )
+                    )
+                )
                 if pair in seen_pairs:
                     continue
                 seen_pairs.add(pair)
                 if left.canonical_gtin is not None and right.canonical_gtin is not None:
-                    # Mismo GTIN ya quedó resuelto arriba; GTIN distintos contradicen el match.
+                    # Mismo GTIN ya quedó resuelto; GTIN distintos contradicen match.
                     continue
                 assert left.presentation is not None and right.presentation is not None
                 if not presentations_compatible(left.presentation, right.presentation):
@@ -486,4 +625,8 @@ def homologate_products(
             candidate.right_source_record_id,
         )
     )
-    return HomologationResult(profiles, tuple(exact_groups), tuple(candidates))
+    return HomologationResult(
+        profiles,
+        tuple(exact_groups),
+        tuple(candidates),
+    )
