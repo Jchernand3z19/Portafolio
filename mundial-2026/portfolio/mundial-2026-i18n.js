@@ -69,6 +69,10 @@
       'code.github': 'Ver en GitHub',
       'code.copy': 'Copiar código completo',
       'code.select': 'Selecciona un archivo.',
+      'code.loading': 'Cargando archivo completo...',
+      'code.loadError': 'No se pudo cargar {file}. Verifica la conexión o el repositorio.',
+      'code.copied': 'Código copiado',
+      'code.copyError': 'No se pudo copiar',
       'results.title': 'Resultados',
       'results.subtitle': 'Un caso que demuestra análisis, automatización y desarrollo de producto de datos.',
       'results.players': 'Jugadores integrados.',
@@ -146,6 +150,10 @@
       'code.github': 'View on GitHub',
       'code.copy': 'Copy full code',
       'code.select': 'Select a file.',
+      'code.loading': 'Loading full file...',
+      'code.loadError': 'Could not load {file}. Check the connection or repository.',
+      'code.copied': 'Code copied',
+      'code.copyError': 'Could not copy',
       'results.title': 'Results',
       'results.subtitle': 'A case that demonstrates analysis, automation, and data-product development.',
       'results.players': 'Players integrated.',
@@ -185,8 +193,8 @@
     return window.PortfolioI18n;
   }
 
-  function t(key) {
-    return api()?.t(`mundial.${key}`) ?? translations.es[key] ?? key;
+  function t(key, variables = {}) {
+    return api()?.t(`mundial.${key}`, variables) ?? translations.es[key] ?? key;
   }
 
   function text(selector, key, root = document) {
@@ -197,6 +205,37 @@
   function attr(selector, name, key, root = document) {
     const element = root.querySelector(selector);
     if (element) element.setAttribute(name, t(key));
+  }
+
+  function replaceTextIfNeeded(element, value) {
+    if (element && element.textContent !== value) element.textContent = value;
+  }
+
+  function applyTransientState(root) {
+    const code = root.querySelector('#mw-code-content');
+    if (code) {
+      const raw = code.textContent.trim();
+      const selectedName = root.querySelector('#mw-info-title')?.textContent?.trim() || '';
+      if (/^(Cargando archivo completo\.\.\.|Loading full file\.\.\.)$/.test(raw)) {
+        replaceTextIfNeeded(code, t('code.loading'));
+      } else if (/^(Selecciona un archivo\.|Select a file\.)$/.test(raw)) {
+        replaceTextIfNeeded(code, t('code.select'));
+      } else if (/^(No se pudo cargar|Could not load)/.test(raw) && selectedName) {
+        replaceTextIfNeeded(code, t('code.loadError', { file: selectedName }));
+      }
+    }
+
+    const copy = root.querySelector('#mw-copy');
+    if (copy) {
+      const raw = copy.textContent.trim();
+      if (/^(Código copiado|Code copied)$/.test(raw)) {
+        replaceTextIfNeeded(copy, t('code.copied'));
+      } else if (/^(No se pudo copiar|Could not copy)$/.test(raw)) {
+        replaceTextIfNeeded(copy, t('code.copyError'));
+      } else if (/^(Copiar código completo|Copy full code)$/.test(raw)) {
+        replaceTextIfNeeded(copy, t('code.copy'));
+      }
+    }
   }
 
   function applyFiles(root) {
@@ -214,7 +253,6 @@
     const selectedName = root.querySelector('#mw-info-title')?.textContent?.trim();
     const values = files[selectedName];
     if (!values) return;
-    text('#mw-info-title', null, root);
     const title = root.querySelector('#mw-info-title');
     const description = root.querySelector('#mw-info-description');
     const input = root.querySelector('#mw-info-input');
@@ -312,10 +350,7 @@
       const labels = sections[4].querySelectorAll('.mw-info-grid strong');
       [t('code.input'), t('code.output'), t('code.security')].forEach((value, index) => { if (labels[index]) labels[index].textContent = value; });
       text('#mw-code-source', 'code.github', sections[4]);
-      const copy = sections[4].querySelector('#mw-copy');
-      if (copy && !/copiado|copied|pudo|could not/i.test(copy.textContent)) copy.textContent = t('code.copy');
-      const code = sections[4].querySelector('#mw-code-content');
-      if (code && /^(Selecciona un archivo\.|Select a file\.)$/.test(code.textContent.trim())) code.textContent = t('code.select');
+      applyTransientState(sections[4]);
       applyFiles(sections[4]);
     }
 
@@ -340,13 +375,31 @@
     apply();
     api().onChange(() => queueMicrotask(apply));
 
+    const card = document.querySelector('[data-portfolio-project="mundial-2026"].mw-card');
+    if (card) {
+      card.addEventListener('click', event => {
+        if (event.target.closest('#mw-open, #mw-open-media')) queueMicrotask(apply);
+      });
+    }
+
     const view = document.getElementById('mw-view');
     if (view) {
       view.addEventListener('click', event => {
-        if (event.target.closest('.mw-file, .mw-code-tab, #mw-open, #mw-copy')) {
-          queueMicrotask(apply);
-        }
+        if (event.target.closest('.mw-file, .mw-code-tab, #mw-copy')) queueMicrotask(apply);
       });
+
+      if ('MutationObserver' in window) {
+        const transientObserver = new MutationObserver(mutations => {
+          const relevant = mutations.some(mutation => {
+            const element = mutation.target.nodeType === Node.ELEMENT_NODE
+              ? mutation.target
+              : mutation.target.parentElement;
+            return element?.closest?.('#mw-code-content, #mw-copy');
+          });
+          if (relevant) queueMicrotask(() => applyTransientState(view));
+        });
+        transientObserver.observe(view, { childList: true, characterData: true, subtree: true });
+      }
     }
   }
 
