@@ -1,0 +1,13 @@
+{
+  "decision": "keep_tgu_contexts_separate",
+  "multiplaza_only_skus": 728,
+  "multiplaza_skus": 8868,
+  "proceres_only_skus": 431,
+  "proceres_skus": 8571,
+  "reason": "catalog_membership_differs; commercial offer differences are measured independently",
+  "result": "success",
+  "shared_commercial_differences": 471,
+  "shared_current_price_differences": 206,
+  "shared_priced_skus": 7869,
+  "shared_skus": 8140
+}

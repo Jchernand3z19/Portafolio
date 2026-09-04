@@ -1,0 +1,45 @@
+{
+  "products": [
+    {
+      "availability": "in_stock",
+      "brand": "DOS PINOS",
+      "category": "/Alimentos Congelados/Postres Congelados/Helados/",
+      "context": {
+        "city": "Tegucigalpa",
+        "region_id": "U1cjd2FsbWFydGhuc3A2MzM=",
+        "sales_channel": "2",
+        "store_name": "Paiz Multiplaza"
+      },
+      "current_price": "165.00",
+      "is_promotion": true,
+      "location_id": "paiz_tgu_multiplaza",
+      "name": "Helado Dos Pinos Vainilla Con Chips De Chocolate - 1028g",
+      "presentation": "1028 gr",
+      "product_id": "10184",
+      "reported_regular_price": "206.00",
+      "seller_id": "walmarthnsp633",
+      "sku": "10184"
+    },
+    {
+      "availability": "in_stock",
+      "brand": "DOS PINOS",
+      "category": "/Lácteos/Leche/En Polvo/",
+      "context": {
+        "city": "Tegucigalpa",
+        "region_id": "U1cjd2FsbWFydGhuc3A0MDEw",
+        "sales_channel": "2",
+        "store_name": "Paiz Próceres"
+      },
+      "current_price": "119.60",
+      "is_promotion": true,
+      "location_id": "paiz_tgu_proceres",
+      "name": "Leche Semidescremada Dos Pinos en Polvo - 360 g",
+      "presentation": "75 gr",
+      "product_id": "10210",
+      "reported_regular_price": "148.00",
+      "seller_id": "walmarthnsp4010",
+      "sku": "10210"
+    }
+  ],
+  "result": "success"
+}

@@ -1,0 +1,289 @@
+{
+  "accepted_response_count": 198,
+  "automatic_retry_count": 0,
+  "completeness": "category-1 exhaustive partition; pre/post facets and root totals stable; exact per-page and unique product/SKU membership reconciled",
+  "concurrency": 1,
+  "elapsed_recovery_seconds": 180.574,
+  "geography": {
+    "sps_active_selector_contexts_observed": 0,
+    "tgu_contexts": 2
+  },
+  "observed_from_utc": "2026-09-04T03:31:08Z",
+  "observed_to_utc": "2026-09-04T03:39:11.007Z",
+  "page_size": 100,
+  "prior_failed_run_request_count": 69,
+  "recovery": "valid RAW from failed run reused byte-for-byte; only missing/invalid responses requested",
+  "recovery_request_count": 130,
+  "result": "success",
+  "reused_response_count": 68,
+  "scope": "public_ecommerce_selected_store_not_universal_city_price",
+  "stores": {
+    "walmarthnsp4010": {
+      "category_counts": {
+        "abarrotes": 2025,
+        "alimentos-congelados": 171,
+        "anthistaminicos": 146,
+        "articulos-para-el-hogar": 458,
+        "autos": 59,
+        "bebes-y-ninos": 300,
+        "carnes-embutidos-y-mariscos": 327,
+        "cervezas-vinos-y-licores": 341,
+        "deportes": 6,
+        "farmacia": 352,
+        "frutas-y-verduras": 150,
+        "higiene-y-belleza": 1780,
+        "jugos-y-bebidas": 476,
+        "juguetes": 76,
+        "lacteos": 448,
+        "limpieza": 951,
+        "mascota": 181,
+        "panaderia-y-tortilleria": 252,
+        "ropa-y-zapateria": 68
+      },
+      "city": "Tegucigalpa",
+      "expected_root": 8567,
+      "facet_after_sha256": "23299f48f5cac5e97c2dfc958889c37fa3d51cef9a67f30575165ba2f3c20cf7",
+      "facet_before_sha256": "23299f48f5cac5e97c2dfc958889c37fa3d51cef9a67f30575165ba2f3c20cf7",
+      "location_id": "paiz_tgu_proceres",
+      "partitions": {
+        "abarrotes": {
+          "pages": 21,
+          "products": 2025,
+          "skus": 2026
+        },
+        "alimentos-congelados": {
+          "pages": 2,
+          "products": 171,
+          "skus": 171
+        },
+        "anthistaminicos": {
+          "pages": 2,
+          "products": 146,
+          "skus": 146
+        },
+        "articulos-para-el-hogar": {
+          "pages": 5,
+          "products": 458,
+          "skus": 458
+        },
+        "autos": {
+          "pages": 1,
+          "products": 59,
+          "skus": 59
+        },
+        "bebes-y-ninos": {
+          "pages": 3,
+          "products": 300,
+          "skus": 300
+        },
+        "carnes-embutidos-y-mariscos": {
+          "pages": 4,
+          "products": 327,
+          "skus": 327
+        },
+        "cervezas-vinos-y-licores": {
+          "pages": 4,
+          "products": 341,
+          "skus": 341
+        },
+        "deportes": {
+          "pages": 1,
+          "products": 6,
+          "skus": 6
+        },
+        "farmacia": {
+          "pages": 4,
+          "products": 352,
+          "skus": 352
+        },
+        "frutas-y-verduras": {
+          "pages": 2,
+          "products": 150,
+          "skus": 150
+        },
+        "higiene-y-belleza": {
+          "pages": 18,
+          "products": 1780,
+          "skus": 1781
+        },
+        "jugos-y-bebidas": {
+          "pages": 5,
+          "products": 476,
+          "skus": 476
+        },
+        "juguetes": {
+          "pages": 1,
+          "products": 76,
+          "skus": 76
+        },
+        "lacteos": {
+          "pages": 5,
+          "products": 448,
+          "skus": 449
+        },
+        "limpieza": {
+          "pages": 10,
+          "products": 951,
+          "skus": 952
+        },
+        "mascota": {
+          "pages": 2,
+          "products": 181,
+          "skus": 181
+        },
+        "panaderia-y-tortilleria": {
+          "pages": 3,
+          "products": 252,
+          "skus": 252
+        },
+        "ropa-y-zapateria": {
+          "pages": 1,
+          "products": 68,
+          "skus": 68
+        }
+      },
+      "postal_code": "401001",
+      "products": 8567,
+      "region_id": "U1cjd2FsbWFydGhuc3A0MDEw",
+      "root_after_sha256": "af84d5b7a5b0fc8667029aaad65817ebe465e5b159818bb15fe320585e47edac",
+      "root_before_sha256": "af84d5b7a5b0fc8667029aaad65817ebe465e5b159818bb15fe320585e47edac",
+      "sales_channel": "2",
+      "skus": 8571,
+      "store_name": "Paiz Próceres"
+    },
+    "walmarthnsp633": {
+      "category_counts": {
+        "abarrotes": 2060,
+        "alimentos-congelados": 182,
+        "anthistaminicos": 140,
+        "articulos-para-el-hogar": 492,
+        "autos": 59,
+        "bebes-y-ninos": 314,
+        "carnes-embutidos-y-mariscos": 341,
+        "cervezas-vinos-y-licores": 360,
+        "deportes": 9,
+        "farmacia": 385,
+        "frutas-y-verduras": 173,
+        "higiene-y-belleza": 1835,
+        "jugos-y-bebidas": 483,
+        "juguetes": 88,
+        "lacteos": 451,
+        "limpieza": 999,
+        "mascota": 172,
+        "panaderia-y-tortilleria": 252,
+        "ropa-y-zapateria": 69
+      },
+      "city": "Tegucigalpa",
+      "expected_root": 8864,
+      "facet_after_sha256": "7e518e6a9d9f15df494c0695015653a569a2897764049bc2dc85e908da25af7f",
+      "facet_before_sha256": "7e518e6a9d9f15df494c0695015653a569a2897764049bc2dc85e908da25af7f",
+      "location_id": "paiz_tgu_multiplaza",
+      "partitions": {
+        "abarrotes": {
+          "pages": 21,
+          "products": 2060,
+          "skus": 2061
+        },
+        "alimentos-congelados": {
+          "pages": 2,
+          "products": 182,
+          "skus": 182
+        },
+        "anthistaminicos": {
+          "pages": 2,
+          "products": 140,
+          "skus": 140
+        },
+        "articulos-para-el-hogar": {
+          "pages": 5,
+          "products": 492,
+          "skus": 492
+        },
+        "autos": {
+          "pages": 1,
+          "products": 59,
+          "skus": 59
+        },
+        "bebes-y-ninos": {
+          "pages": 4,
+          "products": 314,
+          "skus": 314
+        },
+        "carnes-embutidos-y-mariscos": {
+          "pages": 4,
+          "products": 341,
+          "skus": 341
+        },
+        "cervezas-vinos-y-licores": {
+          "pages": 4,
+          "products": 360,
+          "skus": 360
+        },
+        "deportes": {
+          "pages": 1,
+          "products": 9,
+          "skus": 9
+        },
+        "farmacia": {
+          "pages": 4,
+          "products": 385,
+          "skus": 385
+        },
+        "frutas-y-verduras": {
+          "pages": 2,
+          "products": 173,
+          "skus": 173
+        },
+        "higiene-y-belleza": {
+          "pages": 19,
+          "products": 1835,
+          "skus": 1836
+        },
+        "jugos-y-bebidas": {
+          "pages": 5,
+          "products": 483,
+          "skus": 483
+        },
+        "juguetes": {
+          "pages": 1,
+          "products": 88,
+          "skus": 88
+        },
+        "lacteos": {
+          "pages": 5,
+          "products": 451,
+          "skus": 452
+        },
+        "limpieza": {
+          "pages": 10,
+          "products": 999,
+          "skus": 1000
+        },
+        "mascota": {
+          "pages": 2,
+          "products": 172,
+          "skus": 172
+        },
+        "panaderia-y-tortilleria": {
+          "pages": 3,
+          "products": 252,
+          "skus": 252
+        },
+        "ropa-y-zapateria": {
+          "pages": 1,
+          "products": 69,
+          "skus": 69
+        }
+      },
+      "postal_code": "633001",
+      "products": 8864,
+      "region_id": "U1cjd2FsbWFydGhuc3A2MzM=",
+      "root_after_sha256": "694e4fc0786f8d9456556c006badb880c0e5d24db4ff0f5f60959fe57538c9fe",
+      "root_before_sha256": "76a3774308fc7663e6292ff62139db83784f109e54c99819acfff3419c2f66ea",
+      "sales_channel": "2",
+      "skus": 8868,
+      "store_name": "Paiz Multiplaza"
+    }
+  },
+  "total_full_attempt_requests": 199
+}

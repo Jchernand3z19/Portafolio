@@ -1,0 +1,50 @@
+{
+  "context_comparison": {
+    "decision": "keep_tgu_contexts_separate",
+    "multiplaza_only_skus": 728,
+    "multiplaza_skus": 8868,
+    "proceres_only_skus": 431,
+    "proceres_skus": 8571,
+    "reason": "catalog_membership_differs; commercial offer differences are measured independently",
+    "result": "success",
+    "shared_commercial_differences": 471,
+    "shared_current_price_differences": 206,
+    "shared_priced_skus": 7869,
+    "shared_skus": 8140
+  },
+  "result": "success",
+  "snapshots": {
+    "paiz_tgu_multiplaza": {
+      "availability_counts": {
+        "in_stock": 8663,
+        "out_of_stock": 205
+      },
+      "catalog_products": 8864,
+      "file": "snapshot-paiz-multiplaza.json",
+      "promotion_counts": {
+        "not_promotion": 8215,
+        "promotion": 448,
+        "unknown": 205
+      },
+      "sha256": "38aa251354ffd15213d9df62451fe2618d6446d09e2b24c0b8d69b2b2b5d5fb1",
+      "skus": 8868,
+      "skus_with_price": 8663
+    },
+    "paiz_tgu_proceres": {
+      "availability_counts": {
+        "in_stock": 8366,
+        "out_of_stock": 205
+      },
+      "catalog_products": 8567,
+      "file": "snapshot-paiz-proceres.json",
+      "promotion_counts": {
+        "not_promotion": 7963,
+        "promotion": 403,
+        "unknown": 205
+      },
+      "sha256": "a61da4475b74a46cc2c623e4cf07b2d88de6179e8582e913dd4383cf0a9276e4",
+      "skus": 8571,
+      "skus_with_price": 8366
+    }
+  }
+}
