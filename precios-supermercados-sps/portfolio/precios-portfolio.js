@@ -424,6 +424,12 @@
       </dialog>`;
   }
 
+  function templateElement(markup) {
+    const template = document.createElement('template');
+    template.innerHTML = markup.trim();
+    return template.content.firstElementChild;
+  }
+
   function setup({ card: cardElement, detail }) {
     if (!(detail instanceof HTMLDialogElement)) {
       throw new Error('El detalle de precios debe montarse como dialog nativo.');
@@ -445,7 +451,7 @@
 
     function restoreAfterClose() {
       document.body.classList.remove('is-locked');
-      opener?.focus();
+      if (opener?.isConnected) opener.focus();
     }
 
     cardElement.addEventListener('click', event => {
@@ -463,9 +469,14 @@
 
     i18n().onChange(() => {
       const wasOpen = detail.open;
-      cardElement.outerHTML = card();
-      detail.innerHTML = view().replace(/^\s*<dialog[^>]*>|<\/dialog>\s*$/g, '');
-      if (wasOpen) detail.querySelector('[data-price-close]')?.focus();
+      const freshCard = templateElement(card());
+      const freshDetail = templateElement(view());
+      cardElement.innerHTML = freshCard.innerHTML;
+      detail.innerHTML = freshDetail.innerHTML;
+      if (wasOpen) {
+        opener = cardElement.querySelector('[data-price-open]');
+        detail.querySelector('[data-price-close]')?.focus();
+      }
     });
   }
 
