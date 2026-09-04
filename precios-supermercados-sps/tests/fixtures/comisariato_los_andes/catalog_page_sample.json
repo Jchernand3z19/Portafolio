@@ -1,0 +1,170 @@
+{
+  "currentPage": 1,
+  "data": [
+    {
+      "availibilityCount": 1000,
+      "brandId": 1,
+      "brandName": "Marca COMANDES",
+      "code": "0001-000099001005224",
+      "discount": null,
+      "images": [
+        {
+          "active": "1",
+          "displayName": "READY TO GO ADEREZO PARA ENSALADAS",
+          "fileName": "_0001_Ready_to_go_aderezo_para_ensaladas_-_99001005224_74ae411_2b2f61b.webp",
+          "id": 243,
+          "position": 0
+        }
+      ],
+      "is_adult": "0",
+      "listPrice": 0,
+      "materialGroupCode": "1112",
+      "materialGroupName": "READY TO GO",
+      "name": "Ready to go aderezo para ensaladas",
+      "newPrice": 149.95,
+      "oldPrice": null,
+      "parentAvailibilityCount": 0,
+      "price": 149.95,
+      "quantityToBeParent": 0,
+      "unitMeasureCode": "UN"
+    },
+    {
+      "availibilityCount": 0,
+      "brandId": 1,
+      "brandName": "Marca COMANDES",
+      "code": "0001-000000007400051",
+      "discount": null,
+      "images": [
+        {
+          "active": "1",
+          "displayName": "BIMBO BIMBOLETES 2 UND",
+          "fileName": "7400051-1_577810c9.webp",
+          "id": 23697,
+          "position": 0
+        }
+      ],
+      "is_adult": "0",
+      "listPrice": 0,
+      "materialGroupCode": "1111",
+      "materialGroupName": "PANADERIA Y REPOSTERIA",
+      "name": "Bimbo bimboletes 2 und",
+      "newPrice": 18.9,
+      "oldPrice": null,
+      "parentAvailibilityCount": 0,
+      "price": 18.9,
+      "quantityToBeParent": 0,
+      "unitMeasureCode": "UN"
+    },
+    {
+      "availibilityCount": 0,
+      "brandId": 1,
+      "brandName": "Marca COMANDES",
+      "code": "0001-000000007400065",
+      "discount": null,
+      "images": [
+        {
+          "active": "1",
+          "displayName": "MARISELA SUBMARINO VAINILLA 64GR",
+          "fileName": "_0002_Marisela_submarino_vainilla_64gr_-_7400065_7356f105.jpg",
+          "id": 23530,
+          "position": 0
+        }
+      ],
+      "is_adult": "0",
+      "listPrice": 0,
+      "materialGroupCode": "1111",
+      "materialGroupName": "PANADERIA Y REPOSTERIA",
+      "name": "Marisela submarino vainilla 64gr",
+      "newPrice": 26.5,
+      "oldPrice": null,
+      "parentAvailibilityCount": 0,
+      "price": 26.5,
+      "quantityToBeParent": 0,
+      "unitMeasureCode": "UN"
+    },
+    {
+      "availibilityCount": 0,
+      "brandId": 1,
+      "brandName": "Marca COMANDES",
+      "code": "0001-000000007400066",
+      "discount": null,
+      "images": [
+        {
+          "active": "1",
+          "displayName": "MARISELA SUBMARINO FRESA 64G",
+          "fileName": "_0003_Marisela_submarino_fresa_64g_-_7400066_6fc2ccf.jpg",
+          "id": 23529,
+          "position": 0
+        }
+      ],
+      "is_adult": "0",
+      "listPrice": 0,
+      "materialGroupCode": "1111",
+      "materialGroupName": "PANADERIA Y REPOSTERIA",
+      "name": "Marisela submarino fresa 64g",
+      "newPrice": 26.5,
+      "oldPrice": null,
+      "parentAvailibilityCount": 0,
+      "price": 26.5,
+      "quantityToBeParent": 0,
+      "unitMeasureCode": "UN"
+    },
+    {
+      "availibilityCount": 0,
+      "brandId": 1,
+      "brandName": "Marca COMANDES",
+      "code": "0001-000000007400068",
+      "discount": null,
+      "images": [
+        {
+          "active": "1",
+          "displayName": "MARISELA PINGUINOS",
+          "fileName": "_0009_Marisela_pinguinos_-_7400068_31067af3.jpg",
+          "id": 23528,
+          "position": 0
+        }
+      ],
+      "is_adult": "0",
+      "listPrice": 0,
+      "materialGroupCode": "1111",
+      "materialGroupName": "PANADERIA Y REPOSTERIA",
+      "name": "Marisela pinguinos",
+      "newPrice": 33.5,
+      "oldPrice": null,
+      "parentAvailibilityCount": 0,
+      "price": 33.5,
+      "quantityToBeParent": 0,
+      "unitMeasureCode": "UN"
+    },
+    {
+      "availibilityCount": 0,
+      "brandId": 1,
+      "brandName": "Marca COMANDES",
+      "code": "0001-000000007400070",
+      "discount": null,
+      "images": [
+        {
+          "active": "1",
+          "displayName": "MARISELA GANSITO 50 GR",
+          "fileName": "_0011_Marisela_gansito_50_gr_-_7400070_e7a6e0d.jpg",
+          "id": 23527,
+          "position": 0
+        }
+      ],
+      "is_adult": "0",
+      "listPrice": 0,
+      "materialGroupCode": "1111",
+      "materialGroupName": "PANADERIA Y REPOSTERIA",
+      "name": "Marisela gansito 50 gr",
+      "newPrice": 26.5,
+      "oldPrice": null,
+      "parentAvailibilityCount": 0,
+      "price": 26.5,
+      "quantityToBeParent": 0,
+      "unitMeasureCode": "UN"
+    }
+  ],
+  "itemPerPage": 6,
+  "totalItems": 6646,
+  "totalPages": 1108
+}

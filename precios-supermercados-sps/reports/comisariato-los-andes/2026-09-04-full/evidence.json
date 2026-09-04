@@ -1,0 +1,82 @@
+{
+  "artifact": {
+    "github_actions_artifact_id": 9920279680,
+    "github_actions_artifact_name": "comisariato-los-andes-sps-full-capture",
+    "github_actions_run_id": 33826831402,
+    "sha256": "97e6bebc77bb998d55a2bd4200893a96d010daa87e3d1c0efbaf409bb154d461",
+    "size_bytes": 1017320
+  },
+  "capture": {
+    "elapsed_seconds": 67.842,
+    "page_size": 100,
+    "request_count": 69,
+    "retry_count": 0,
+    "workflow_head_sha": "b94f667139c428b2189dd7f971297e82d2ba1b46"
+  },
+  "catalog": {
+    "availability_counts": {
+      "unknown": 6646
+    },
+    "catalog_products_reported": 6646,
+    "membership_sha256": "a0d044e6474439a875b20f5648080db53fb755b11629a705eb54487c97d217f9",
+    "promotion_counts": {
+      "not_promotion": 6526,
+      "promotion": 120,
+      "unknown": 0
+    },
+    "skus_with_price": 6646,
+    "unique_products_extracted": 6646
+  },
+  "persistence": {
+    "duplicate_open_periods": 0,
+    "history_closed": 0,
+    "history_opened": 6646,
+    "history_unchanged": 0,
+    "location_id": "comisariato_los_andes_sps",
+    "open_price_history": 6646,
+    "persist_run_id": "comisariato-los-andes-initial-33826831402",
+    "products_processed": 6646,
+    "result": "success",
+    "source_artifact_id": 9920279680,
+    "source_json_sha256": "a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc",
+    "verification_artifact_id": 9920510209,
+    "verification_artifact_sha256": "abe7910d66823fd45247d0774042b328891e370e12722579895ee2e69deb87b7",
+    "verification_workflow_run_id": 33827599712
+  },
+  "raw_semantics": {
+    "availability": {
+      "interpretation": "not_proven",
+      "observed_availibilityCount_distribution": {
+        "0": 6645,
+        "1000": 1
+      }
+    },
+    "listPrice": {
+      "interpretation": "delivery_mode_not_monetary_price",
+      "observed_full_capture_values": [
+        "PD"
+      ]
+    },
+    "pricing": {
+      "current_price": "newPrice",
+      "mirror_price": "price",
+      "promotion_regular_price": "oldPrice_when_greater_than_newPrice",
+      "promotion_discount": "discount_equals_oldPrice_minus_newPrice",
+      "validated_promotions": 120
+    }
+  },
+  "result": "success",
+  "snapshot": {
+    "bytes": 7189669,
+    "sha256": "a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc"
+  },
+  "store": {
+    "city": "San Pedro Sula",
+    "location_id": "comisariato_los_andes_sps",
+    "location_one_code": "COR",
+    "location_two_code": "501",
+    "office_code": "00",
+    "store_id": 1,
+    "store_name": "COMISARIATO LOS ANDES"
+  }
+}
