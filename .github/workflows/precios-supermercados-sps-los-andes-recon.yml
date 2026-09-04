@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Resolve public API service endpoints
+      - name: Trace SPS store selector contract
         shell: bash
         run: |
           set -euo pipefail
@@ -22,19 +22,9 @@ jobs:
           base='https://comisariatolosandes.com'
 
           # User authorization window: 2026-09-04T01:13:02Z through
-          # 2026-09-05T01:13:02Z. Public read-only bundle inspection only.
+          # 2026-09-05T01:13:02Z. Exactly three public read-only GETs.
           # Concurrency 1, no retries/cookies/login/cart/checkout/mutations.
-          files=(
-            chunk-3RVGB5MK.js
-            chunk-KACWDGJI.js
-            chunk-CMVDC4NV.js
-            chunk-BBQA5YXX.js
-            chunk-BGJEFN5N.js
-            chunk-XPLU7MLV.js
-            chunk-KESYAQWM.js
-            chunk-UALGFQGO.js
-            chunk-WBUEVQKI.js
-          )
+          files=(chunk-WBUEVQKI.js chunk-UALGFQGO.js chunk-KESYAQWM.js)
           for f in "${files[@]}"; do
             curl --compressed --fail --silent --show-error --location \
               --max-time 20 --retry 0 "$base/$f" -o "$tmp/$f"
@@ -44,35 +34,28 @@ jobs:
 
           python - "$tmp" <<'PY'
           import pathlib, re, sys
-          root = pathlib.Path(sys.argv[1])
-          texts = {p.name: p.read_text(encoding='utf-8', errors='replace') for p in root.glob('*.js')}
+          root=pathlib.Path(sys.argv[1])
+          texts={p.name:p.read_text(encoding='utf-8',errors='replace') for p in root.glob('*.js')}
 
-          def compact(s):
-              return re.sub(r'\s+', ' ', s)
+          print('=== imports ===')
+          for name,text in texts.items():
+              print(f'FILE={name}')
+              for stmt in re.findall(r'import\{[^;]+?from"[^"]+";', text):
+                  print(stmt)
 
-          def contexts(label, pattern, radius=900, limit=30):
+          def around(label, pattern, radius=2500, limit=15):
               print(f'=== {label} ===')
               count=0
               for name,text in texts.items():
                   for m in re.finditer(pattern,text,re.I):
                       s=max(0,m.start()-radius); e=min(len(text),m.end()+radius)
-                      print(f'FILE={name}\n{compact(text[s:e])}\n---')
+                      print(f'FILE={name}\n{text[s:e]}\n---')
                       count+=1
                       if count>=limit:return
 
-          contexts('HTTP service calls', r'\.(?:get|post|put|delete)\s*\(', 1100, 80)
-          contexts('product API method definitions', r'(?:getProducts|getProductsSearch|getProductsBySlug|getDetailProduct|getDetailProductStore|getDetailProductBySlug|getRelated|getSuggested)\s*\(', 1000, 50)
-          contexts('location/store method definitions', r'(?:get|load|search|find)[A-Za-z0-9_]*(?:Location|Locations|Store|Stores|City|Cities|Department|Departments|Agency|Agencies)[A-Za-z0-9_]*\s*\(', 1000, 60)
-          contexts('provider and base URL config', r'(?:providerId|defaultDeliveryType|url_api|api_url|apiUrl|baseUrl|url_amazon_s3|office_code)', 1000, 50)
-          contexts('SPS/city strings', r'(?:San Pedro Sula|Cort[eé]s|SPS|Honduras)', 800, 30)
-
-          print('=== candidate endpoint/base strings ===')
-          vals=set()
-          for text in texts.values():
-              for s in re.findall(r'["\']([^"\']{2,240})["\']',text):
-                  if re.search(r'https?://|/api|product|material|categor|location|store|city|department|agency|agencia|office',s,re.I):
-                      vals.add(s)
-          for v in sorted(vals):
-              if len(v)<=240:
-                  print(v)
+          around('loadStoresByCityCode', r'loadStoresByCityCode', 3200, 10)
+          around('store API invocation', r'\.getStores\s*\(', 2600, 10)
+          around('city code state', r'cityCode', 1800, 15)
+          around('location two', r'location_two', 1800, 15)
+          around('choose store VM load', r'chooseStorePageViewModel\.load\s*\(', 2200, 5)
           PY
