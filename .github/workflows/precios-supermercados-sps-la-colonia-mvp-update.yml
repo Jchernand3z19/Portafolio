@@ -87,7 +87,7 @@ jobs:
             --live-read-only \
             --allow-full-catalog \
             --delay-seconds 1.0 \
-            --max-retries 3 \
+            --max-retries 0 \
             --output run-artifacts/los-andes/full-catalog.json \
             --raw-directory run-artifacts/los-andes/raw \
             --evidence-output run-artifacts/los-andes/evidence.json
@@ -269,7 +269,7 @@ jobs:
               os.environ['TURSO_DATABASE_URL'],
               os.environ['TURSO_AUTH_TOKEN'],
               [
-                  {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT supermarket_id,product_id,location_id FROM price_history WHERE (supermarket_id=? AND location_id IN (?,?)) OR (supermarket_id=? AND location_id=?) AND valid_to_utc IS NULL GROUP BY supermarket_id,product_id,location_id HAVING COUNT(*)>1)''', ('la_colonia','la_colonia_sps','la_colonia_tgu','comisariato_los_andes','comisariato_los_andes_sps'))},
+                  {'type':'execute','stmt':_stmt('''SELECT COUNT(*) FROM (SELECT supermarket_id,product_id,location_id FROM price_history WHERE ((supermarket_id=? AND location_id IN (?,?)) OR (supermarket_id=? AND location_id=?)) AND valid_to_utc IS NULL GROUP BY supermarket_id,product_id,location_id HAVING COUNT(*)>1)''', ('la_colonia','la_colonia_sps','la_colonia_tgu','comisariato_los_andes','comisariato_los_andes_sps'))},
                   {'type':'execute','stmt':_stmt('''SELECT supermarket_id,location_id,COUNT(*) FROM price_history WHERE ((supermarket_id=? AND location_id IN (?,?)) OR (supermarket_id=? AND location_id=?)) AND valid_to_utc IS NULL GROUP BY supermarket_id,location_id ORDER BY supermarket_id,location_id''', ('la_colonia','la_colonia_sps','la_colonia_tgu','comisariato_los_andes','comisariato_los_andes_sps'))},
                   {'type':'close'},
               ],
