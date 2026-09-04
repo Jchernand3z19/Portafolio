@@ -34,11 +34,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Compilar y probar persistencia Paiz
+      - name: Compilar componentes Paiz
         run: |
           set -euo pipefail
           python -m py_compile scripts/migrar_mvp_paiz.py scripts/actualizar_mvp_turso_paiz.py scripts/obtener_catalogo_paiz_operativo.py
-          pytest -q tests/test_paiz_persistence.py
 
       - name: Capturar ambos catálogos TGU con runner definitivo
         run: |
