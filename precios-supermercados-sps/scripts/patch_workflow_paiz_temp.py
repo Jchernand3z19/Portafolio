@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Temporal: se elimina en el mismo commit que publica el workflow final.
 from pathlib import Path
 
 path = Path('../.github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml')
