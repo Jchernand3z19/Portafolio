@@ -34,57 +34,35 @@ jobs:
           mkdir -p .tmp/los-andes-capture
           python - <<'PY'
           from __future__ import annotations
-
-          import hashlib
-          import json
-          import time
-          import urllib.error
-          import urllib.request
+          import hashlib, json, time, urllib.error, urllib.request
           from datetime import datetime, timezone
           from pathlib import Path
-
           from precios_supermercados.scrapers.comisariato_los_andes import (
-              LOCATION_ID,
-              LOCATION_TWO_CODE,
-              OFFICE_CODE,
-              PAGE_SIZE,
-              STORE_ID,
-              SUPERMARKET_ID,
-              build_catalog_request,
-              reconcile_capture,
+              LOCATION_ID, LOCATION_TWO_CODE, OFFICE_CODE, PAGE_SIZE, STORE_ID,
+              SUPERMARKET_ID, build_catalog_request, reconcile_capture,
           )
 
-          # Autorización explícita del usuario: 2026-09-04T01:13:02Z a
-          # 2026-09-05T01:13:02Z. Este job es público/read-only: sin login,
-          # cookies, age-gate action, carrito, checkout ni mutaciones.
-          MAX_REQUESTS = 400
-          MAX_RETRIES = 10
-          DELAY_SECONDS = 0.7
-          TIMEOUT_SECONDS = 25
+          # Autorización del usuario: 2026-09-04T01:13:02Z–2026-09-05T01:13:02Z.
+          # Público/read-only; sin login, cookies, age-gate, carrito, checkout ni mutaciones.
+          MAX_REQUESTS, MAX_RETRIES, DELAY, TIMEOUT = 400, 10, 0.7, 25
           out = Path('.tmp/los-andes-capture')
-          request_count = 0
-          retry_count = 0
+          state = {'requests': 0, 'last': 0.0}
           pages = []
           started = time.monotonic()
-          last_request_at = 0.0
 
-          def now_z() -> str:
+          def now_z():
               return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
-          def request_page(skip: int, filename: str) -> tuple[dict, dict]:
-              nonlocal_placeholder = None
-              del nonlocal_placeholder
-              global request_count, last_request_at
-              if request_count >= MAX_REQUESTS:
+          def fetch(skip, filename):
+              if state['requests'] >= MAX_REQUESTS:
                   raise RuntimeError('request_budget_exhausted')
-              elapsed = time.monotonic() - last_request_at
-              if last_request_at and elapsed < DELAY_SECONDS:
-                  time.sleep(DELAY_SECONDS - elapsed)
+              elapsed = time.monotonic() - state['last']
+              if state['last'] and elapsed < DELAY:
+                  time.sleep(DELAY - elapsed)
               url, body = build_catalog_request(skip, PAGE_SIZE)
-              raw_request = json.dumps(body, ensure_ascii=False, separators=(',', ':')).encode()
               req = urllib.request.Request(
                   url,
-                  data=raw_request,
+                  data=json.dumps(body, ensure_ascii=False, separators=(',', ':')).encode(),
                   method='POST',
                   headers={
                       'Content-Type': 'application/json',
@@ -93,94 +71,60 @@ jobs:
                   },
               )
               observed = now_z()
-              request_count += 1
-              last_request_at = time.monotonic()
+              state['requests'] += 1
+              state['last'] = time.monotonic()
               try:
-                  with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as response:
-                      status = response.status
-                      raw = response.read()
+                  with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
+                      status, raw = response.status, response.read()
               except urllib.error.HTTPError as exc:
                   raise RuntimeError(f'http_error:{exc.code}:skip={skip}') from exc
               except urllib.error.URLError as exc:
                   raise RuntimeError(f'network_error:skip={skip}:{exc.reason}') from exc
-              if status != 200:
+              if status not in (200, 201):
                   raise RuntimeError(f'http_status:{status}:skip={skip}')
-              path = out / filename
-              path.write_bytes(raw)
+              (out / filename).write_bytes(raw)
               try:
                   payload = json.loads(raw)
               except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                   raise RuntimeError(f'json_invalid:skip={skip}') from exc
-              record = {
-                  'skip': skip,
-                  'take': PAGE_SIZE,
-                  'status': status,
-                  'retries': 0,
-                  'url': url,
-                  'request_body': body,
-                  'response_file': filename,
+              return payload, {
+                  'skip': skip, 'take': PAGE_SIZE, 'status': status, 'retries': 0,
+                  'url': url, 'request_body': body, 'response_file': filename,
                   'response_sha256': hashlib.sha256(raw).hexdigest(),
-                  'response_bytes': len(raw),
-                  'observed_at_utc': observed,
+                  'response_bytes': len(raw), 'observed_at_utc': observed,
               }
-              return payload, record
 
           try:
-              first, first_record = request_page(0, 'page-00000.json')
-              total = first.get('totalItems')
-              total_pages = first.get('totalPages')
-              if type(total) is not int or total <= 0:
-                  raise RuntimeError('total_items_invalid')
-              if type(total_pages) is not int or total_pages <= 0:
-                  raise RuntimeError('total_pages_invalid')
-              expected_pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
-              if total_pages != expected_pages:
+              first, record = fetch(0, 'page-00000.json')
+              total, total_pages = first.get('totalItems'), first.get('totalPages')
+              if type(total) is not int or total <= 0 or type(total_pages) is not int:
+                  raise RuntimeError('catalog_totals_invalid')
+              if total_pages != (total + PAGE_SIZE - 1) // PAGE_SIZE:
                   raise RuntimeError('total_pages_mismatch')
-              pages.append(first_record)
-
+              pages.append(record)
               for skip in range(PAGE_SIZE, total, PAGE_SIZE):
-                  payload, record = request_page(skip, f'page-{skip:05d}.json')
+                  payload, record = fetch(skip, f'page-{skip:05d}.json')
                   if payload.get('totalItems') != total or payload.get('totalPages') != total_pages:
                       raise RuntimeError(f'catalog_total_changed:skip={skip}')
                   pages.append(record)
-
-              final, final_record = request_page(0, 'final-recheck.json')
-              final_total = final.get('totalItems')
-              if final_total != total or final.get('totalPages') != total_pages:
+              final, final_record = fetch(0, 'final-recheck.json')
+              if final.get('totalItems') != total or final.get('totalPages') != total_pages:
                   raise RuntimeError('catalog_total_changed_at_final_recheck')
-
               ledger = {
-                  'closed': True,
-                  'supermarket_id': SUPERMARKET_ID,
-                  'location_id': LOCATION_ID,
-                  'store_id': STORE_ID,
-                  'office_code': OFFICE_CODE,
-                  'location_two_code': LOCATION_TWO_CODE,
-                  'concurrency': 1,
-                  'max_requests': MAX_REQUESTS,
-                  'max_retries': MAX_RETRIES,
-                  'delay_seconds': DELAY_SECONDS,
-                  'request_count': request_count,
-                  'retry_count': retry_count,
-                  'final_total_items': final_total,
-                  'final_recheck': final_record,
-                  'elapsed_seconds': round(time.monotonic() - started, 3),
-                  'pages': pages,
+                  'closed': True, 'supermarket_id': SUPERMARKET_ID, 'location_id': LOCATION_ID,
+                  'store_id': STORE_ID, 'office_code': OFFICE_CODE,
+                  'location_two_code': LOCATION_TWO_CODE, 'concurrency': 1,
+                  'max_requests': MAX_REQUESTS, 'max_retries': MAX_RETRIES,
+                  'delay_seconds': DELAY, 'request_count': state['requests'], 'retry_count': 0,
+                  'final_total_items': total, 'final_recheck': final_record,
+                  'elapsed_seconds': round(time.monotonic() - started, 3), 'pages': pages,
               }
-              (out / 'ledger.json').write_text(
-                  json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True),
-                  encoding='utf-8',
-              )
-
+              (out/'ledger.json').write_text(json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True), encoding='utf-8')
               snapshot = reconcile_capture(out)
-              raw_snapshot = json.dumps(
-                  snapshot, ensure_ascii=False, separators=(',', ':'), sort_keys=True
-              ).encode()
-              (out / 'snapshot.json').write_bytes(raw_snapshot)
+              raw_snapshot = json.dumps(snapshot, ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode()
+              (out/'snapshot.json').write_bytes(raw_snapshot)
               evidence = {
-                  'run_result': 'success',
-                  'request_count': request_count,
-                  'retry_count': retry_count,
+                  'run_result': 'success', 'request_count': state['requests'], 'retry_count': 0,
                   'catalog_products_reported': snapshot['catalog_products_reported'],
                   'unique_products_extracted': snapshot['unique_products_extracted'],
                   'skus_with_price': snapshot['skus_with_price'],
@@ -188,19 +132,13 @@ jobs:
                   'promotion_counts': snapshot['promotion_counts'],
                   'membership_sha256': snapshot['membership_sha256'],
                   'snapshot_sha256': hashlib.sha256(raw_snapshot).hexdigest(),
-                  'snapshot_bytes': len(raw_snapshot),
-                  'elapsed_seconds': ledger['elapsed_seconds'],
+                  'snapshot_bytes': len(raw_snapshot), 'elapsed_seconds': ledger['elapsed_seconds'],
                   'errors': [],
               }
-              (out / 'evidence.json').write_text(
-                  json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True),
-                  encoding='utf-8',
-              )
+              (out/'evidence.json').write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True), encoding='utf-8')
               print(json.dumps(evidence, ensure_ascii=False, sort_keys=True))
           except Exception as exc:
-              (out / 'validation-error.txt').write_text(
-                  f'{type(exc).__name__}: {exc}\n', encoding='utf-8'
-              )
+              (out/'validation-error.txt').write_text(f'{type(exc).__name__}: {exc}\n', encoding='utf-8')
               raise
           PY
 
