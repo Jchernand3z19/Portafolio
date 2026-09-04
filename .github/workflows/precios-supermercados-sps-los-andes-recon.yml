@@ -13,75 +13,72 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Sample SPS catalog contract
+      - name: Validate page size and pricing signals
         shell: bash
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
-          endpoint='https://andes.aveapplications.com/api/em/material/paginate?skip=0&take=6'
+          endpoint='https://andes.aveapplications.com/api/em/material/paginate?skip=0&take=100'
 
           # User authorization window: 2026-09-04T01:13:02Z through
           # 2026-09-05T01:13:02Z. Exactly one public read-only catalog query.
-          # SPS store was proven by the previous bounded probe: storeId=1,
-          # officeCode=00, location_two_code=501. No auth/cookies/login/cart,
-          # checkout/mutations/retries; concurrency is 1.
+          # Concurrency 1; no retries, auth, cookies, login, cart, checkout or mutations.
           cat > "$tmp/request.json" <<'JSON'
-          {
-            "businessPartner": 1,
-            "storeId": 1,
-            "groupCode": "0",
-            "officeCode": "00",
-            "type": "PD",
-            "sortBy": "category",
-            "sortOption": "ASC",
-            "search": "",
-            "filter": {
-              "priceMin": null,
-              "priceMax": null,
-              "brand": null,
-              "supplier": null,
-              "bulletPoint": null,
-              "agency": null
-            },
-            "source": "WEB",
-            "hidden": "0"
-          }
+          {"businessPartner":1,"storeId":1,"groupCode":"0","officeCode":"00","type":"PD","sortBy":"category","sortOption":"ASC","search":"","filter":{"priceMin":null,"priceMax":null,"brand":null,"supplier":null,"bulletPoint":null,"agency":null},"source":"WEB","hidden":"0"}
           JSON
 
           curl --compressed --fail --silent --show-error --location \
-            --max-time 25 --retry 0 \
-            -H 'Content-Type: application/json' \
-            --data-binary @"$tmp/request.json" \
-            "$endpoint" -o "$tmp/catalog.json"
+            --max-time 25 --retry 0 -H 'Content-Type: application/json' \
+            --data-binary @"$tmp/request.json" "$endpoint" -o "$tmp/catalog.json"
 
           python - "$tmp/catalog.json" <<'PY'
-          import json, sys
-          payload=json.load(open(sys.argv[1],encoding='utf-8'))
-          print('top_type=', type(payload).__name__)
-          if isinstance(payload, dict):
-              print('top_keys=', sorted(payload.keys()))
-              for key in ('totalItems','totalPages','itemPerPage','currentPage'):
-                  if key in payload: print(f'{key}=', payload[key])
-          items=payload.get('data',[]) if isinstance(payload,dict) else []
-          print('sample_count=', len(items))
-          keys=sorted({k for item in items if isinstance(item,dict) for k in item.keys()})
-          print('sample_product_keys=', keys)
-          fields=(
-            'id','code','codeERP','name','slug','brandId','brandName',
-            'materialGroupCode','materialGroupName','principalMaterialgroup',
-            'newPrice','oldPrice','price','discount','megaDiscount',
-            'megaDiscountPercentage','availibilityCount','quantityToBeParent',
-            'parentAvailibilityCount','stockAvailableSons','active','active_csm',
-            'active_deprecated','idDelete','is_adult','unitMeasureCode','images'
-          )
-          for item in items:
-              if not isinstance(item,dict): continue
-              reduced={k:item.get(k) for k in fields if k in item}
-              if isinstance(reduced.get('images'),list):
-                  reduced['images']=[
-                    {k:img.get(k) for k in ('id','fileName','displayName','position','active') if isinstance(img,dict) and k in img}
-                    for img in reduced['images'][:2]
-                  ]
-              print('PRODUCT=', json.dumps(reduced,ensure_ascii=False,sort_keys=True))
+          import json, math, sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          items=p.get('data',[])
+          print('totalItems=',p.get('totalItems'))
+          print('totalPages=',p.get('totalPages'))
+          print('itemPerPage=',p.get('itemPerPage'))
+          print('sample_count=',len(items))
+
+          def num(v):
+              return isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v)
+          stats={
+              'availability_positive':0,'availability_zero':0,'availability_missing':0,
+              'new_price_positive':0,'new_price_zero':0,'new_price_missing':0,
+              'old_price_positive':0,'old_price_null':0,
+              'list_price_positive':0,'list_price_null':0,
+              'discount_nonzero':0,'promo_old_gt_new':0,'promo_list_gt_new':0,
+              'price_mismatch_new_vs_price':0,'old_below_new':0,'list_below_new':0,
+          }
+          examples=[]
+          for x in items:
+              a=x.get('availibilityCount')
+              if a is None: stats['availability_missing']+=1
+              elif num(a) and a>0: stats['availability_positive']+=1
+              elif num(a) and a==0: stats['availability_zero']+=1
+              n=x.get('newPrice')
+              if n is None: stats['new_price_missing']+=1
+              elif num(n) and n>0: stats['new_price_positive']+=1
+              elif num(n) and n==0: stats['new_price_zero']+=1
+              o=x.get('oldPrice')
+              if o is None: stats['old_price_null']+=1
+              elif num(o) and o>0: stats['old_price_positive']+=1
+              lp=x.get('listPrice')
+              if lp is None: stats['list_price_null']+=1
+              elif num(lp) and lp>0: stats['list_price_positive']+=1
+              d=x.get('discount')
+              if num(d) and d!=0: stats['discount_nonzero']+=1
+              if num(n) and num(o):
+                  if o>n: stats['promo_old_gt_new']+=1
+                  if o<n: stats['old_below_new']+=1
+              if num(n) and num(lp):
+                  if lp>n: stats['promo_list_gt_new']+=1
+                  if lp<n: stats['list_below_new']+=1
+              pr=x.get('price')
+              if num(n) and num(pr) and n!=pr: stats['price_mismatch_new_vs_price']+=1
+              if len(examples)<12 and ((num(o) and num(n) and o!=n) or (num(lp) and num(n) and lp!=n) or (num(d) and d!=0)):
+                  examples.append({k:x.get(k) for k in ('code','name','newPrice','price','oldPrice','listPrice','discount','discountTwo','availibilityCount','stock')})
+          print('stats=',json.dumps(stats,sort_keys=True))
+          for e in examples: print('PRICE_SIGNAL=',json.dumps(e,ensure_ascii=False,sort_keys=True))
           PY
