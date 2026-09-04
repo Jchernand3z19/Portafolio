@@ -13,43 +13,49 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Resolve store query payload
+      - name: Identify SPS stores from public API
         shell: bash
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
-          base='https://comisariatolosandes.com'
+          endpoint='https://andes.aveapplications.com/api/em/store/get_filter'
 
           # User authorization window: 2026-09-04T01:13:02Z through
-          # 2026-09-05T01:13:02Z. Exactly one public read-only GET.
-          # Concurrency 1, no retries/cookies/login/cart/checkout/mutations.
-          f='chunk-EBIAV7X2.js'
+          # 2026-09-05T01:13:02Z. Exactly one public read-only query POST.
+          # This mirrors the public frontend store selector: no auth, cookies,
+          # login, cart, checkout, mutations or retries; concurrency is 1.
+          printf '%s' '{"business_partner":1,"cityCode":null,"pickPosition":"PD"}' > "$tmp/request.json"
           curl --compressed --fail --silent --show-error --location \
-            --max-time 20 --retry 0 "$base/$f" -o "$tmp/$f"
-          printf '%s bytes=%s sha256=%s\n' "$f" "$(wc -c < "$tmp/$f")" "$(sha256sum "$tmp/$f" | awk '{print $1}')"
+            --max-time 20 --retry 0 \
+            -H 'Content-Type: application/json' \
+            --data-binary @"$tmp/request.json" \
+            "$endpoint" -o "$tmp/stores.json"
 
-          python - "$tmp/$f" <<'PY'
-          import re, sys
-          text=open(sys.argv[1],encoding='utf-8',errors='replace').read()
+          python - "$tmp/stores.json" <<'PY'
+          import json, sys
+          from collections.abc import Mapping
 
-          print('=== imports ===')
-          for stmt in re.findall(r'import\{[^;]+?from"[^"]+";', text):
-              print(stmt)
+          payload=json.load(open(sys.argv[1],encoding='utf-8'))
+          print('top_type=', type(payload).__name__)
+          if isinstance(payload, Mapping):
+              print('top_keys=', sorted(payload.keys()))
 
-          def around(label, pattern, radius=3200, limit=15):
-              print(f'=== {label} ===')
-              count=0
-              for m in re.finditer(pattern,text,re.I):
-                  s=max(0,m.start()-radius); e=min(len(text),m.end()+radius)
-                  print(text[s:e])
-                  print('---')
-                  count+=1
-                  if count>=limit:return
+          def rows(value):
+              if isinstance(value, list): return value
+              if isinstance(value, dict):
+                  for key in ('data','stores','items','result','results'):
+                      v=value.get(key)
+                      if isinstance(v,list): return v
+                  for v in value.values():
+                      if isinstance(v,list) and all(isinstance(x,dict) for x in v): return v
+              return []
 
-          around('loadStoresByCityCode', r'loadStoresByCityCode', 4200, 10)
-          around('getStores call', r'\.getStores\s*\(', 3600, 10)
-          around('cities derivation', r'\bcities\b', 2800, 12)
-          around('location fields', r'location_two', 2600, 12)
-          around('filter/body fields', r'(?:business_partner|deliveryType|pickup|cityCode|location_two_code)', 2600, 20)
+          items=rows(payload)
+          print('store_count=', len(items))
+          fields=('id','name','address','location_one_code','location_one_name','location_two_code','location_two_name','office_code','latitude','longitude','active')
+          for item in items:
+              blob=' '.join(str(item.get(k,'')) for k in ('name','address','location_one_name','location_two_name')).lower()
+              if any(token in blob for token in ('san pedro sula','s.p.s',' sps','cortés','cortes')):
+                  print('SPS_STORE=', json.dumps({k:item.get(k) for k in fields if k in item}, ensure_ascii=False, sort_keys=True))
           PY
