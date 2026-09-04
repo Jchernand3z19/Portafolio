@@ -1,0 +1,65 @@
+{
+  "audit_date": "2026-09-04",
+  "mode": "turso_read_only_select_only",
+  "source_product_count": 56779,
+  "by_supermarket": {
+    "colonial": 9205,
+    "comisariato_los_andes": 6646,
+    "la_colonia": 9519,
+    "paiz": 9299,
+    "pricesmart": 6078,
+    "walmart": 16032
+  },
+  "classified_product_type": 18748,
+  "valid_gtin": 34365,
+  "exact_gtin_groups_cross_supermarket": 9087,
+  "source_products_in_exact_gtin_groups": 21331,
+  "exact_gtin_groups_comparison_ready": 8126,
+  "exact_gtin_groups_review_required": 961,
+  "review_reason_counts_non_exclusive": {
+    "cross_source_presentation_conflict": 509,
+    "ambiguous_multipack_presentation": 397,
+    "product_type_conflict": 60,
+    "source_presentation_conflict": 7
+  },
+  "review_candidates_without_exact_gtin": 2,
+  "presentation_status": {
+    "ambiguous_multipack": 1561,
+    "confirmed": 13077,
+    "conflict": 28,
+    "missing": 17902,
+    "name_only": 23063,
+    "name_preferred_source_conflict": 778,
+    "source_only": 370
+  },
+  "generic_brand_placeholders": 16290,
+  "paiz_source_presentation_overrides": 778,
+  "audit_workflow_run_id": 33917069107,
+  "audit_artifact_id": 9953558639,
+  "audit_artifact_sha256": "692bdc53f6bf851580c8ed66f4c03da6da67a28f8d9badf3781c41b0d881ae38",
+  "candidate_examples": [
+    {
+      "left_source_record_id": "la_colonia:7175",
+      "right_source_record_id": "pricesmart:35004",
+      "left_name": "Aceite Vegetal Ideal Girasol Y Soya 3750 Ml",
+      "right_name": "Ideal Aceite Vegetal de Girasol y Soya 3.75 L",
+      "brand": "ideal",
+      "product_type": "Aceite comestible",
+      "score": "1.0000",
+      "status": "review_required"
+    },
+    {
+      "left_source_record_id": "la_colonia:7831",
+      "right_source_record_id": "pricesmart:35831",
+      "left_name": "Arroz Progreso Blanco 25 Lb",
+      "right_name": "Progreso Arroz Blanco 95% / 11.3 kg / 25 lb",
+      "brand": "progreso",
+      "product_type": "Arroz",
+      "score": "1.0000",
+      "status": "review_required"
+    }
+  ],
+  "automatic_non_gtin_merges": 0,
+  "turso_mutations": 0,
+  "supermarket_http_requests": 0
+}
