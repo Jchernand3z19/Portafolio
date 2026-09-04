@@ -93,6 +93,9 @@ def desktop_flow(browser: Browser) -> None:
     dialog = page.locator("#price-project-view")
     assert dialog.evaluate("element => element.open") is True
     assert dialog.locator("#price-title").inner_text() == "From scattered prices to useful information"
+    sample_text = dialog.locator(".price-table tbody").inner_text()
+    assert "Context 01" in sample_text
+    assert "Contexto" not in sample_text
     assert page.locator(":focus").get_attribute("data-price-close") is not None
     page.keyboard.press("Escape")
     assert dialog.evaluate("element => element.open") is False
@@ -182,7 +185,9 @@ def responsive_flow(browser: Browser, width: int, height: int) -> None:
         first = cards.nth(0).bounding_box()
         second = cards.nth(1).bounding_box()
         assert first is not None and second is not None
-        assert abs(first["y"] - second["y"]) < 8, (first, second)
+        assert abs(first["x"] - second["x"]) < 8, (first, second)
+        assert abs(first["width"] - second["width"]) < 8, (first, second)
+        assert second["y"] >= first["y"] + first["height"], (first, second)
 
     assert page_errors == [], page_errors
     assert bad_local_responses == [], bad_local_responses
