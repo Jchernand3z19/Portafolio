@@ -105,8 +105,10 @@ def desktop_flow(browser: Browser) -> None:
     mundial = page.locator("#mw-view")
     assert mundial.is_visible()
     assert "World Cup 2026" in mundial.locator("#mw-title").inner_text()
+    assert page.locator(":focus").get_attribute("id") == "mw-close"
     page.keyboard.press("Escape")
     assert mundial.is_hidden()
+    assert page.locator(":focus").get_attribute("id") == "mw-open"
 
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("#proyectos .price-card")
