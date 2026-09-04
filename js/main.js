@@ -1,5 +1,5 @@
 (() => {
-  const BUILD = '20260804-1714';
+  const BUILD = '20260904-portfolio-i18n-prices';
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -99,6 +99,12 @@
     }
   }
 
+  function updateMenuLabel(toggle, open) {
+    const key = open ? 'site.nav.menuClose' : 'site.nav.menuOpen';
+    const fallback = open ? 'Cerrar menú de navegación' : 'Abrir menú de navegación';
+    toggle.setAttribute('aria-label', window.PortfolioI18n?.t(key) || fallback);
+  }
+
   function setupSite() {
     const toggle = document.getElementById('menu-toggle');
     const links = document.getElementById('nav-links');
@@ -106,10 +112,12 @@
       toggle.addEventListener('click', () => {
         const open = links.classList.toggle('is-open');
         toggle.setAttribute('aria-expanded', String(open));
+        updateMenuLabel(toggle, open);
       });
       links.querySelectorAll('a').forEach(link => link.addEventListener('click', () => {
         links.classList.remove('is-open');
         toggle.setAttribute('aria-expanded', 'false');
+        updateMenuLabel(toggle, false);
       }));
     }
 
@@ -169,16 +177,21 @@
     setupLegacyProjectCompatibility();
 
     const projectStyles = [
-      'mundial-2026/portfolio/mundial-2026.css'
+      'css/i18n.css',
+      'mundial-2026/portfolio/mundial-2026.css',
+      'precios-supermercados-sps/portfolio/precios-portfolio.css'
     ];
 
     const projectModules = [
-      'mundial-2026/portfolio/mundial-2026.js'
+      'mundial-2026/portfolio/mundial-2026.js',
+      'mundial-2026/portfolio/mundial-2026-i18n.js',
+      'precios-supermercados-sps/portfolio/precios-portfolio.js'
     ];
 
     projectStyles.forEach(loadStylesheet);
 
-    loadScript('js/projects/registry.js')
+    loadScript('js/i18n.js')
+      .then(() => loadScript('js/projects/registry.js'))
       .then(() => {
         window.PortfolioProjects?.prepare();
         return projectModules.reduce(
@@ -186,7 +199,10 @@
           Promise.resolve()
         );
       })
-      .then(() => rewriteLegacyProjectLinks())
+      .then(() => {
+        rewriteLegacyProjectLinks();
+        window.PortfolioI18n?.refresh();
+      })
       .catch(error => {
         console.error('No se pudieron cargar los proyectos del portafolio.', error);
       });
