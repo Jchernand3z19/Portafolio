@@ -53,6 +53,9 @@ def main() -> int:
                 )"""
             )
 
+            signal_values = page.locator("#proyectos .price-card .price-card__signal strong").all_inner_texts()
+            assert signal_values == ["6", "11", "56K+", "108K+"], signal_values
+
             # Price detail uses the same full-screen secondary-page shell.
             page.locator("#proyectos .price-card [data-price-open]").first.click()
             price = page.locator("#price-project-view")
@@ -65,6 +68,25 @@ def main() -> int:
             assert "PROYECTO PRINCIPAL · 01" in price.locator(".portfolio-detail__meta").inner_text()
             assert price.get_by_text("Ver resultado", exact=True).count() == 1
             assert price.get_by_text("Ver código", exact=True).count() >= 1
+
+            assert price.locator("#price-scale-title").inner_text() == "Cobertura productiva actual"
+            coverage = price.locator(".price-coverage-table")
+            assert coverage.count() == 1
+            assert coverage.locator("tbody tr").count() == 6
+            coverage_text = coverage.inner_text()
+            for chain in (
+                "La Colonia",
+                "Supermercados Colonial",
+                "Walmart",
+                "PriceSmart",
+                "Comisariato Los Andes",
+                "Paiz",
+            ):
+                assert chain in coverage_text
+            assert "SPS 6603 · Florencia 6602" in coverage_text
+            assert "TGU Multiplaza · TGU Próceres" in coverage_text
+            assert price.locator("#price-sample-title").inner_text() == "Comparación homologada: 10 productos en 2 supermercados"
+
             price_shell = price.locator(".price-view__body").bounding_box()
             price_top = price.locator(".price-view__top").bounding_box()
             price_title_size = price.locator("#price-title").evaluate(
