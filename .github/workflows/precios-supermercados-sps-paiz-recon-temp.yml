@@ -1,13 +1,14 @@
-name: Precios SPS - Paiz full temporal
+name: Precios SPS - Paiz full recovery temporal
 
 on:
   push:
     branches: [feature/paiz-final-acquisition]
     paths:
-      - precios-supermercados-sps/reports/paiz/2026-09-03-probe/acquire_full.py
+      - precios-supermercados-sps/reports/paiz/2026-09-03-probe/recover_full.py
       - .github/workflows/precios-supermercados-sps-paiz-recon-temp.yml
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -15,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  full:
+  recover:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -27,8 +28,23 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Capturar catálogo Paiz TGU acotado
-        run: python reports/paiz/2026-09-03-probe/acquire_full.py
+      - name: Recuperar RAW válido del intento interrumpido
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p reports/paiz/2026-09-04-full
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/Jchernand3z19/Portafolio/actions/artifacts/9922521379/zip \
+            -o /tmp/paiz-partial.zip
+          echo "d3858f10493ace31f870f04a72cc8a35e17e810f6da2cd6c8320aa56eb4568ab  /tmp/paiz-partial.zip" | sha256sum -c -
+          unzip -q /tmp/paiz-partial.zip -d reports/paiz/2026-09-04-full
+
+      - name: Completar sólo páginas faltantes o inválidas
+        run: python reports/paiz/2026-09-03-probe/recover_full.py
 
       - name: Empaquetar RAW por contexto
         run: |
@@ -57,7 +73,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: paiz-full-${{ github.run_id }}
+          name: paiz-full-recovered-${{ github.run_id }}
           path: precios-supermercados-sps/reports/paiz/2026-09-04-full/
           if-no-files-found: warn
           retention-days: 14
