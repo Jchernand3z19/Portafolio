@@ -19,8 +19,8 @@ def test_operational_capture_rejects_unsafe_budgets(tmp_path: Path) -> None:
     }
     with pytest.raises(runner.LiveCaptureError, match="delay_below_operational_floor"):
         runner.capture_catalog(**common, delay_seconds=0.49)
-    with pytest.raises(runner.LiveCaptureError, match="retry_budget_invalid"):
-        runner.capture_catalog(**common, max_retries=runner.MAX_RETRIES + 1)
+    with pytest.raises(runner.LiveCaptureError, match="retry_policy_unverified"):
+        runner.capture_catalog(**common, max_retries=1)
     with pytest.raises(runner.LiveCaptureError, match="timeout_invalid"):
         runner.capture_catalog(**common, timeout_seconds=61)
 
@@ -60,6 +60,8 @@ def test_operational_capture_builds_complete_offsets_and_final_recheck(
         ledger = json.loads((Path(directory) / "ledger.json").read_text(encoding="utf-8"))
         assert [page["skip"] for page in ledger["pages"]] == [0, 100, 200]
         assert ledger["final_recheck"]["skip"] == 0
+        assert ledger["retry_count"] == 0
+        assert ledger["max_retries"] == 0
         return {
             "store_id": 1,
             "store_name": "COMISARIATO LOS ANDES",
@@ -89,6 +91,7 @@ def test_operational_capture_builds_complete_offsets_and_final_recheck(
         "final-recheck.json",
     ]
     assert evidence["catalog_products_reported"] == 205
+    assert evidence["retry_count"] == 0
     assert (tmp_path / "snapshot.json").is_file()
     assert json.loads((tmp_path / "evidence.json").read_text())["result"] == "success"
 
