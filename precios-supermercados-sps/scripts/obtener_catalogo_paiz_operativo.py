@@ -13,7 +13,7 @@ import urllib.request
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from precios_supermercados.scrapers.paiz import parse_products
 
@@ -59,6 +59,19 @@ def category_counts(doc: dict) -> dict[str, int]:
     return result
 
 
+def validate_context_url(url: str, seller: str) -> None:
+    parsed = urlsplit(url)
+    query = parse_qs(parsed.query)
+    if parsed.scheme != "https" or parsed.netloc != "www.paiz.com.hn":
+        raise RuntimeError("origin_not_allowed")
+    if f"/accesscontrollist/{seller}" not in parsed.path:
+        raise RuntimeError("selector_scope_changed")
+    if query.get("regionId") != [region_id(seller)]:
+        raise RuntimeError("region_scope_changed")
+    if query.get("sc") != [SALES_CHANNEL] or query.get("country") != [COUNTRY]:
+        raise RuntimeError("commercial_scope_changed")
+
+
 class Capture:
     def __init__(self, raw_dir: Path, delay: float, max_requests: int) -> None:
         self.raw_dir = raw_dir
@@ -71,9 +84,7 @@ class Capture:
         if len(self.records) >= self.max_requests:
             raise RuntimeError("request_budget_exceeded")
         url = BASE + path + "?" + urlencode(query)
-        parsed = urlsplit(url)
-        if parsed.scheme != "https" or parsed.netloc != "www.paiz.com.hn":
-            raise RuntimeError("origin_not_allowed")
+        validate_context_url(url, seller)
         request = urllib.request.Request(
             url,
             headers={"User-Agent": UA, "Accept": "application/json"},
@@ -96,9 +107,11 @@ class Capture:
             error = f"http_{exc.code}"
         except Exception as exc:  # noqa: BLE001 - evidence must preserve transport failure
             error = f"{type(exc).__name__}:{exc}"
-        final = urlsplit(response_url or url)
-        if final.scheme != "https" or final.netloc != "www.paiz.com.hn":
-            error = error or "redirect_origin_not_allowed"
+        if response_url:
+            try:
+                validate_context_url(response_url, seller)
+            except RuntimeError as exc:
+                error = error or str(exc)
         digest = hashlib.sha256(body).hexdigest() if body else None
         raw_path = None
         if body:
@@ -179,8 +192,6 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
             incoming, details = parse_products(products)
             if sku_ids.intersection(details):
                 raise RuntimeError(f"sku_membership_overlap:{tag}")
-            if any(detail.get("seller_id") != seller for detail in details.values()):
-                raise RuntimeError(f"seller_scope_changed:{tag}")
             partition_ids.update(ids)
             product_ids.update(ids)
             sku_ids.update(details)
@@ -239,6 +250,10 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
         "source_details": source_details,
         "page_evidence": page_evidence,
         "binding_evidence": {
+            "selector": seller,
+            "region_id": region_id(seller),
+            "sales_channel": SALES_CHANNEL,
+            "country": COUNTRY,
             "facet_before_sha256": before_record["sha256"],
             "facet_after_sha256": after_record["sha256"],
             "root_before_sha256": root_before_record["sha256"],
