@@ -143,7 +143,12 @@ jobs:
                   'membership_sha256': snapshot['membership_sha256'],
                   'snapshot_sha256': hashlib.sha256(raw_snapshot).hexdigest(),
                   'snapshot_bytes': len(raw_snapshot), 'elapsed_seconds': ledger['elapsed_seconds'],
-                  'store': snapshot['store'],
+                  'store': {
+                      'store_id': snapshot['store_id'], 'store_name': snapshot['store_name'],
+                      'office_code': snapshot['office_code'],
+                      'location_one_code': snapshot['location_one_code'],
+                      'location_two_code': snapshot['location_two_code'],
+                  },
                   'errors': [],
               }
               (out/'evidence.json').write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True), encoding='utf-8')
