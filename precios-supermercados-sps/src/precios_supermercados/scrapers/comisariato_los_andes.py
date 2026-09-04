@@ -1,7 +1,7 @@
 """Contratos públicos SPS y reconciliación offline de Comisariato Los Andes.
 
 Este módulo no abre sockets. La adquisición live vive en un workflow temporal y
-la normalización/reconciliación se puede reproducir únicamente desde evidencia RAW.
+la normalización/reconciliación se reproduce únicamente desde evidencia RAW.
 """
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ IMAGE_BASE = (
 BUSINESS_PARTNER = 1
 STORE_ID = 1
 OFFICE_CODE = "00"
-LOCATION_ONE_CODE = 5
-LOCATION_TWO_CODE = 501
+LOCATION_ONE_CODE = "COR"
+LOCATION_TWO_CODE = "501"
 DELIVERY_TYPE = "PD"
 PAGE_SIZE = 100
 EXTRACTOR_VERSION = "comisariato_los_andes_v1"
@@ -77,7 +77,6 @@ def _positive_int(value: object, reason: str, *, allow_zero: bool = False) -> in
 
 
 def build_store_request() -> dict[str, object]:
-    """Replica la consulta pública del selector de tienda sin autenticación."""
     return {
         "business_partner": BUSINESS_PARTNER,
         "cityCode": None,
@@ -86,7 +85,6 @@ def build_store_request() -> dict[str, object]:
 
 
 def build_catalog_request(skip: int, take: int = PAGE_SIZE) -> tuple[str, dict[str, object]]:
-    """Construye el contrato público observado para el catálogo SPS."""
     _positive_int(skip, "skip_invalid", allow_zero=True)
     _positive_int(take, "take_invalid")
     require(take <= PAGE_SIZE, "take_above_verified_page_size")
@@ -112,6 +110,21 @@ def build_catalog_request(skip: int, take: int = PAGE_SIZE) -> tuple[str, dict[s
     }
 
 
+def validate_store_payload(payload: object) -> dict[str, Any]:
+    """Exige la única tienda SPS observada por el selector público."""
+    require(isinstance(payload, list) and len(payload) == 1, "store_payload_invalid")
+    store = payload[0]
+    require(isinstance(store, dict), "store_payload_invalid")
+    require(store.get("id") == STORE_ID, "store_id_changed")
+    require(store.get("office_code") == OFFICE_CODE, "store_office_changed")
+    require(store.get("location_one_code") == LOCATION_ONE_CODE, "store_department_changed")
+    require(store.get("location_one_name") == "CORTES", "store_department_name_changed")
+    require(store.get("location_two_code") == LOCATION_TWO_CODE, "store_city_changed")
+    require(store.get("location_two_name") == "SAN PEDRO SULA", "store_city_name_changed")
+    require(store.get("name") == "COMISARIATO LOS ANDES", "store_name_changed")
+    return store
+
+
 def _image_url(product: dict[str, Any]) -> str | None:
     images = product.get("images")
     if not images:
@@ -128,12 +141,7 @@ def _image_url(product: dict[str, Any]) -> str | None:
 
 
 def _availability(product: dict[str, Any]) -> tuple[str, Decimal | None]:
-    """No convierte `availibilityCount` en stock sin semántica demostrada.
-
-    El catálogo completo mostró 0 para 6,645/6,646 productos mientras esos
-    productos seguían perteneciendo al catálogo público. Se conserva el valor
-    fuente como evidencia, pero el estado comercial se reporta como desconocido.
-    """
+    """Conserva la señal fuente sin inventarle semántica de disponibilidad."""
     signal = _number(
         product.get("availibilityCount"),
         "availability_signal_invalid",
@@ -154,10 +162,7 @@ def _pricing(
     discount_two = _number(
         product.get("discountTwo"), "discount_two_invalid", allow_none=True
     )
-
-    # `listPrice` fue observado como el literal de modalidad "PD" en los 6,646
-    # registros. Se conserva como fuente; no se interpreta como importe.
-    raw_list_price = product.get("listPrice")
+    raw_list_price = product.get("listPrice")  # literal "PD" en el crawl completo
 
     if current is None or Decimal(current) == 0:
         require(mirrored is None or Decimal(mirrored) == 0, "unpriced_price_mismatch")
@@ -210,7 +215,6 @@ def _pricing(
 def parse_products(
     products: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Normaliza registros ya descargados sin inferir campos no demostrados."""
     require(isinstance(products, list), "products_invalid")
     rows: list[dict[str, Any]] = []
     details: dict[str, dict[str, Any]] = {}
@@ -286,14 +290,14 @@ def parse_catalog_page(
     pages = _positive_int(payload.get("totalPages"), "total_pages_invalid")
     item_per_page = _positive_int(payload.get("itemPerPage"), "item_per_page_invalid")
     current_page = _positive_int(payload.get("currentPage"), "current_page_invalid")
-    require(item_per_page == take, "item_per_page_changed")
-    require(current_page == expected_skip // take + 1, "current_page_mismatch")
-    require(pages == math.ceil(total / take), "total_pages_mismatch")
     data = payload.get("data")
     require(isinstance(data, list), "catalog_data_invalid")
     expected_count = min(take, total - expected_skip)
     require(expected_count >= 0, "page_offset_out_of_range")
     require(len(data) == expected_count, "page_item_count_mismatch")
+    require(item_per_page == len(data), "item_per_page_mismatch")
+    require(current_page == expected_skip // take + 1, "current_page_mismatch")
+    require(pages == math.ceil(total / take), "total_pages_mismatch")
     rows, details = parse_products(data)
     return {
         "total_items": total,
@@ -315,6 +319,21 @@ def _read_hashed(path: Path, expected_sha256: str) -> bytes:
     return raw
 
 
+def _read_json_record(directory: Path, record: dict[str, Any]) -> object:
+    filename = record.get("response_file")
+    digest = record.get("response_sha256")
+    require(
+        isinstance(filename, str) and Path(filename).name == filename,
+        "unsafe_raw_path",
+    )
+    require(isinstance(digest, str) and len(digest) == 64, "response_hash_invalid")
+    raw = _read_hashed(directory / filename, digest)
+    try:
+        return json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise LosAndesError("raw_json_invalid") from exc
+
+
 def reconcile_capture(directory: str | Path) -> dict[str, Any]:
     """Reproduce un crawl SPS completo exclusivamente desde RAW + ledger."""
     directory = Path(directory)
@@ -326,30 +345,28 @@ def reconcile_capture(directory: str | Path) -> dict[str, Any]:
         raise LosAndesError("ledger_invalid") from exc
 
     require(ledger.get("closed") is True, "capture_not_closed")
-    require(
-        ledger.get("supermarket_id") == SUPERMARKET_ID,
-        "capture_supermarket_invalid",
-    )
+    require(ledger.get("supermarket_id") == SUPERMARKET_ID, "capture_supermarket_invalid")
     require(ledger.get("location_id") == LOCATION_ID, "capture_location_invalid")
-    require(
-        ledger.get("store_id") == STORE_ID
-        and ledger.get("office_code") == OFFICE_CODE,
-        "capture_store_binding_invalid",
-    )
-    require(
-        ledger.get("location_two_code") == LOCATION_TWO_CODE,
-        "capture_city_binding_invalid",
-    )
     require(ledger.get("concurrency") == 1, "capture_concurrency_invalid")
-    request_count = _positive_int(
-        ledger.get("request_count"), "request_count_invalid"
-    )
+    request_count = _positive_int(ledger.get("request_count"), "request_count_invalid")
     retry_count = _positive_int(
         ledger.get("retry_count"), "retry_count_invalid", allow_zero=True
     )
     require(request_count <= 400 and retry_count <= 10, "capture_budget_exceeded")
+
+    store_record = ledger.get("store_evidence")
+    require(isinstance(store_record, dict), "store_evidence_missing")
+    require(store_record.get("status") in {200, 201}, "store_request_failed")
+    require(store_record.get("retries") == 0, "store_request_failed")
+    require(store_record.get("url") == STORE_ENDPOINT, "store_url_mismatch")
+    require(store_record.get("request_body") == build_store_request(), "store_body_mismatch")
+    store = validate_store_payload(_read_json_record(directory, store_record))
+
     records = ledger.get("pages")
     require(isinstance(records, list) and records, "page_ledger_invalid")
+    final_record = ledger.get("final_recheck")
+    require(isinstance(final_record, dict), "final_recheck_missing")
+    require(request_count == len(records) + 2, "request_count_mismatch")
 
     all_rows: list[dict[str, Any]] = []
     all_details: dict[str, dict[str, Any]] = {}
@@ -373,39 +390,18 @@ def reconcile_capture(directory: str | Path) -> dict[str, Any]:
         request_url, request_body = build_catalog_request(skip, take)
         require(record.get("url") == request_url, "page_url_mismatch")
         require(record.get("request_body") == request_body, "page_body_mismatch")
-
-        filename = record.get("response_file")
-        digest = record.get("response_sha256")
-        require(
-            isinstance(filename, str) and Path(filename).name == filename,
-            "unsafe_raw_path",
-        )
-        require(
-            isinstance(digest, str) and len(digest) == 64,
-            "response_hash_invalid",
-        )
-        raw = _read_hashed(directory / filename, digest)
-        try:
-            payload = json.loads(raw)
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise LosAndesError("raw_json_invalid") from exc
+        payload = _read_json_record(directory, record)
         parsed = parse_catalog_page(payload, expected_skip=skip, take=take)
         totals.add(parsed["total_items"])
         page_counts.add(parsed["total_pages"])
         for row in parsed["rows"]:
             source_key = row["source_key"]
-            require(
-                source_key not in all_details,
-                "cross_page_source_code_duplicate",
-            )
+            require(source_key not in all_details, "cross_page_source_code_duplicate")
             all_rows.append(row)
             all_details[source_key] = parsed["source_details"][source_key]
 
         stamp = record.get("observed_at_utc")
-        require(
-            isinstance(stamp, str) and stamp.endswith("Z"),
-            "observed_at_invalid",
-        )
+        require(isinstance(stamp, str) and stamp.endswith("Z"), "observed_at_invalid")
         try:
             observed.append(datetime.fromisoformat(stamp[:-1] + "+00:00"))
         except ValueError as exc:
@@ -415,8 +411,8 @@ def reconcile_capture(directory: str | Path) -> dict[str, Any]:
                 "skip": skip,
                 "take": take,
                 "http_status": record.get("status"),
-                "response_sha256": digest,
-                "response_bytes": len(raw),
+                "response_sha256": record["response_sha256"],
+                "response_bytes": record.get("response_bytes"),
             }
         )
 
@@ -427,25 +423,25 @@ def reconcile_capture(directory: str | Path) -> dict[str, Any]:
     total = next(iter(totals))
     total_pages = next(iter(page_counts))
     require(len(records) == total_pages, "catalog_page_count_incomplete")
-    require(
-        offsets == set(range(0, total, PAGE_SIZE)),
-        "catalog_offsets_incomplete",
-    )
+    require(offsets == set(range(0, total, PAGE_SIZE)), "catalog_offsets_incomplete")
     require(
         len(all_rows) == total and len(all_details) == total,
         "catalog_membership_incomplete",
     )
-    require(
-        ledger.get("final_total_items") == total,
-        "final_total_recheck_mismatch",
-    )
+
+    require(final_record.get("status") in {200, 201}, "final_recheck_failed")
+    require(final_record.get("retries") == 0, "final_recheck_failed")
+    final_url, final_body = build_catalog_request(0, PAGE_SIZE)
+    require(final_record.get("url") == final_url, "final_recheck_url_mismatch")
+    require(final_record.get("request_body") == final_body, "final_recheck_body_mismatch")
+    final_payload = _read_json_record(directory, final_record)
+    final_parsed = parse_catalog_page(final_payload, expected_skip=0, take=PAGE_SIZE)
+    require(final_parsed["total_items"] == total, "final_total_recheck_mismatch")
+    require(final_parsed["total_pages"] == total_pages, "final_pages_recheck_mismatch")
 
     all_rows.sort(key=lambda row: row["source_key"])
     observed_at = (
-        max(observed)
-        .astimezone(timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z")
+        max(observed).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     )
     availability_counts = dict(
         sorted(Counter(row["availability"] for row in all_rows).items())
@@ -466,6 +462,7 @@ def reconcile_capture(directory: str | Path) -> dict[str, Any]:
         "currency": CURRENCY,
         "scope": SCOPE,
         "store_id": STORE_ID,
+        "store_name": store["name"],
         "office_code": OFFICE_CODE,
         "location_one_code": LOCATION_ONE_CODE,
         "location_two_code": LOCATION_TWO_CODE,
@@ -478,9 +475,7 @@ def reconcile_capture(directory: str | Path) -> dict[str, Any]:
         "membership_count": total,
         "membership_sha256": membership_sha256,
         "skus_extracted": len(all_rows),
-        "skus_with_price": sum(
-            row["current_price"] is not None for row in all_rows
-        ),
+        "skus_with_price": sum(row["current_price"] is not None for row in all_rows),
         "availability_counts": availability_counts,
         "promotion_counts": promotion_counts,
         "products": all_rows,
