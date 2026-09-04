@@ -1,5 +1,5 @@
 (() => {
-  const BUILD = '20260904-prices-featured-v2';
+  const BUILD = '20260904-six-chain-coverage-v1';
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -117,9 +117,6 @@
       if (prices) prices.dataset.projectPosition = labels.prices;
       if (mundial) mundial.dataset.projectPosition = labels.mundial;
 
-      // Mundial conservaba un rótulo histórico de “proyecto destacado” dentro
-      // del detalle. Se elimina para no competir con la nueva jerarquía pública:
-      // Precios es el proyecto principal y Mundial queda claramente como segundo.
       document.querySelector('#mw-view .mw-kicker')?.remove();
     };
 
@@ -228,11 +225,13 @@
     const projectStyles = [
       'css/i18n.css',
       'precios-supermercados-sps/portfolio/precios-portfolio.css',
+      'precios-supermercados-sps/portfolio/precios-portfolio-current-state.css',
       'mundial-2026/portfolio/mundial-2026.css'
     ];
 
     const projectModules = [
       'precios-supermercados-sps/portfolio/precios-portfolio.js',
+      'precios-supermercados-sps/portfolio/precios-portfolio-current-state.js',
       'mundial-2026/portfolio/mundial-2026.js',
       'mundial-2026/portfolio/mundial-2026-i18n.js',
       'mundial-2026/portfolio/mundial-2026-a11y.js'
