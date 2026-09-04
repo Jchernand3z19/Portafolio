@@ -27,6 +27,22 @@
     "skus_with_price": 6646,
     "unique_products_extracted": 6646
   },
+  "persistence": {
+    "duplicate_open_periods": 0,
+    "history_closed": 0,
+    "history_opened": 6646,
+    "history_unchanged": 0,
+    "location_id": "comisariato_los_andes_sps",
+    "open_price_history": 6646,
+    "persist_run_id": "comisariato-los-andes-initial-33826831402",
+    "products_processed": 6646,
+    "result": "success",
+    "source_artifact_id": 9920279680,
+    "source_json_sha256": "a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc",
+    "verification_artifact_id": 9920510209,
+    "verification_artifact_sha256": "abe7910d66823fd45247d0774042b328891e370e12722579895ee2e69deb87b7",
+    "verification_workflow_run_id": 33827599712
+  },
   "raw_semantics": {
     "availability": {
       "interpretation": "not_proven",
