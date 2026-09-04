@@ -1,0 +1,48 @@
+{
+  "production_status": "PAIZ_COMPLETE_IN_PRODUCTION",
+  "supermarket_id": "paiz",
+  "locations": [
+    {
+      "location_id": "paiz_tgu_multiplaza",
+      "store_name": "Paiz Multiplaza",
+      "sku_count": 8868,
+      "catalog_product_count": 8864,
+      "production_run_id": "paiz-initial-33837881993-multiplaza",
+      "source_artifact_id": "9924053887",
+      "source_json_sha256": "e8c1df4b71d8554a78e0fcc66c4701b85724aafde9a12663f2fb86f1a701d2a2",
+      "open_price_history": 8868
+    },
+    {
+      "location_id": "paiz_tgu_proceres",
+      "store_name": "Paiz Próceres",
+      "sku_count": 8571,
+      "catalog_product_count": 8567,
+      "production_run_id": "paiz-recovery-33839180713-proceres",
+      "source_artifact_id": "9924053887",
+      "source_json_sha256": "82773b2684575ee982158f5b7a81add2397d19a4ae9d4f32b1c6346379ebe4fe",
+      "open_price_history": 8571
+    }
+  ],
+  "paiz_unique_products": 9299,
+  "duplicate_open_periods": 0,
+  "foreign_key_violations": 0,
+  "integrity_check": "ok",
+  "schema": {
+    "price_history_nullable_out_of_stock_for_paiz": true,
+    "multiple_paiz_contexts_same_city": true,
+    "locations_index": "verified_multi_context_paiz"
+  },
+  "recovery_workflow": {
+    "run_id": "33839180713",
+    "artifact_id": "9924313921",
+    "artifact_sha256": "46a9cef6db0eb2f2af1cc6f0923dd1c667d3764fa8982e7a2f0875737f9518d6",
+    "result": "success",
+    "reused_capture": true,
+    "recrawl_performed": false
+  },
+  "notes": [
+    "Multiplaza was already persisted successfully by run 33837881993 before the recovery.",
+    "The recovery migrated only the legacy locations uniqueness index and persisted only Proceres.",
+    "The accepted live runner capture used for production had the same SKU/catalog cardinalities as the versioned acquisition evidence; price and availability counts may differ because it was observed later."
+  ]
+}
