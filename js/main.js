@@ -1,5 +1,5 @@
 (() => {
-  const BUILD = '20260904-portfolio-i18n-prices';
+  const BUILD = '20260904-portfolio-i18n-prices-a11y';
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -185,6 +185,7 @@
     const projectModules = [
       'mundial-2026/portfolio/mundial-2026.js',
       'mundial-2026/portfolio/mundial-2026-i18n.js',
+      'mundial-2026/portfolio/mundial-2026-a11y.js',
       'precios-supermercados-sps/portfolio/precios-portfolio.js'
     ];
 
