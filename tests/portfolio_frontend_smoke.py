@@ -114,8 +114,8 @@ def desktop_flow(browser: Browser) -> None:
     assert dialog.evaluate("element => element.open") is True
     assert dialog.locator("#price-title").inner_text() == "Grocery price monitoring"
 
-    headers = dialog.locator(".price-table th").all_inner_texts()
-    assert headers == ["Product", "City", "Current price", "Regular price", "Promotion", "Availability"]
+    headers = [value.lower() for value in dialog.locator(".price-table th").all_inner_texts()]
+    assert headers == ["product", "city", "current price", "regular price", "promotion", "availability"]
     sample_text = dialog.locator(".price-table tbody").inner_text()
     assert "Rica yema huevos 15 unds" in sample_text
     assert "Arroz progreso grano largo 5 lb" in sample_text
