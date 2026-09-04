@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "as_of_utc": "2026-09-04T01:44:35.172709Z",
+  "city": "San Pedro Sula",
+  "source_scope": "verified_public_source_sps",
+  "source_artifact_id": 9920279680,
+  "snapshot_sha256": "a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc",
+  "evidence_path": "precios-supermercados-sps/reports/comisariato-los-andes/2026-09-04-full/evidence.json",
+  "rows": [
+    {
+      "product": "Rica yema huevos 15 unds",
+      "current_price": "61.85",
+      "regular_price": "88.50",
+      "promotion": true,
+      "availability": "not_confirmed"
+    },
+    {
+      "product": "Arroz progreso grano largo 5 lb",
+      "current_price": "84.50",
+      "regular_price": null,
+      "promotion": false,
+      "availability": "not_confirmed"
+    },
+    {
+      "product": "Nestle agua purificada 0.5 ltr",
+      "current_price": "8.95",
+      "regular_price": null,
+      "promotion": false,
+      "availability": "not_confirmed"
+    }
+  ]
+}

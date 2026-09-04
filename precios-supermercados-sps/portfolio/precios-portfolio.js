@@ -2,219 +2,220 @@
   const PROJECT_ID = 'precios-supermercados';
   const REPO = 'https://github.com/Jchernand3z19/Portafolio/tree/main/precios-supermercados-sps';
 
+  const VERIFIED_SAMPLE = Object.freeze({
+    asOfUtc: '2026-09-04T01:44:35.172709Z',
+    city: 'San Pedro Sula',
+    snapshotSha256: 'a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc',
+    rows: Object.freeze([
+      Object.freeze({
+        product: 'Rica yema huevos 15 unds',
+        currentPrice: '61.85',
+        regularPrice: '88.50',
+        promotion: true,
+        availability: 'not_confirmed'
+      }),
+      Object.freeze({
+        product: 'Arroz progreso grano largo 5 lb',
+        currentPrice: '84.50',
+        regularPrice: null,
+        promotion: false,
+        availability: 'not_confirmed'
+      }),
+      Object.freeze({
+        product: 'Nestle agua purificada 0.5 ltr',
+        currentPrice: '8.95',
+        regularPrice: null,
+        promotion: false,
+        availability: 'not_confirmed'
+      })
+    ])
+  });
+
   const translations = {
     es: {
       'card.preview.sources': 'fuentes integradas',
-      'card.preview.locations': 'ubicaciones',
-      'card.preview.products': 'identidades de producto',
-      'card.preview.cities': 'ciudades',
-      'card.previewLabel': 'Abrir proyecto Precios de Supermercados',
-      'card.title': 'Precios de Supermercados: base para inteligencia de precios',
-      'card.body': 'Construcción de una fuente de datos confiable a partir de precios públicos: recolección, validación, contexto por ubicación e histórico estructurado.',
-      'card.open': 'Ver proyecto completo',
-      'card.repo': 'Ver implementación',
+      'card.preview.locations': 'ubicaciones monitoreadas',
+      'card.preview.products': 'productos registrados',
+      'card.preview.history': 'registros históricos',
+      'card.previewLabel': 'Abrir proyecto de monitoreo de precios de supermercados',
+      'card.title': 'Precios de Supermercados: monitoreo e inteligencia de precios',
+      'card.body': 'Sistema que reúne precios públicos de supermercados, los valida y conserva su historial para detectar cambios, promociones y diferencias entre ciudades o tiendas.',
+      'card.open': 'Explorar proyecto',
+      'card.repo': 'Ver código',
       'dialog.close': 'Cerrar',
       'dialog.back': 'Volver a proyectos',
-      'hero.kicker': 'Proyecto de datos · etapa actual',
-      'hero.title': 'De precios dispersos a información útil',
-      'hero.question': '¿Cuánto puede cambiar el precio de un producto dependiendo de la ubicación o del momento?',
-      'hero.body': 'Para responderlo, primero hay que convertir información pública dispersa en datos estructurados, consistentes y trazables. Esa es la base que ya está construida.',
-      'hero.stageTitle': 'Hoy',
-      'hero.stageBody': 'Recolección, validación, estructuración e histórico por ubicación. La visualización analítica completa todavía no forma parte del MVP actual.',
-      'flow.title': 'Qué hace hoy',
-      'flow.body': 'El sistema transforma fuentes con estructuras diferentes en estados comerciales comparables dentro de cada fuente y ubicación aceptada.',
-      'flow.public.title': 'Fuentes públicas',
-      'flow.public.body': 'Catálogos y superficies de solo lectura evaluadas antes de integrarse.',
-      'flow.collect.title': 'Recolección',
-      'flow.collect.body': 'Capturas completas con límites y evidencia reproducible.',
-      'flow.validate.title': 'Validación',
-      'flow.validate.body': 'Completitud, identidad, precios y consistencia antes de persistir.',
-      'flow.structure.title': 'Estructuración',
-      'flow.structure.body': 'Producto, ubicación y estado comercial bajo un modelo común.',
-      'flow.usable.title': 'Datos utilizables',
-      'flow.usable.body': 'Estado actual e histórico listos para análisis posterior.',
-      'scale.title': 'Escala actual',
-      'scale.body': 'Cobertura verificada en la rama principal del proyecto. Las cifras se muestran redondeadas para comunicar escala sin falsa precisión.',
+      'hero.kicker': 'Proyecto principal · datos reales',
+      'hero.title': 'Monitoreo de precios de supermercados',
+      'hero.question': '¿Cómo cambian los precios de productos cotidianos según la ciudad, la tienda o el momento?',
+      'hero.body': 'El proyecto transforma catálogos públicos en una base organizada y verificable. El objetivo es convertir precios dispersos en información que luego pueda compararse, historizarse y analizarse.',
+      'hero.stageTitle': 'Estado actual',
+      'hero.stageBody': '5 fuentes integradas, 9 ubicaciones y más de 47 mil productos registrados. El histórico ya supera los 90 mil registros de precio.',
+      'flow.title': 'Qué hace el sistema',
+      'flow.body': 'El proceso está pensado para convertir información pública de distintos supermercados en datos claros y utilizables.',
+      'flow.public.title': 'Encuentra precios públicos',
+      'flow.public.body': 'Identifica catálogos y superficies públicas que realmente contienen precios útiles.',
+      'flow.collect.title': 'Recolecta catálogos',
+      'flow.collect.body': 'Captura los productos y precios de cada fuente aceptada.',
+      'flow.validate.title': 'Revisa los datos',
+      'flow.validate.body': 'Comprueba que la captura esté completa antes de aceptar cambios.',
+      'flow.structure.title': 'Organiza la información',
+      'flow.structure.body': 'Guarda producto, ciudad, precio, promoción y otros campos bajo una estructura común.',
+      'flow.usable.title': 'Conserva el historial',
+      'flow.usable.body': 'Mantiene el estado actual y los cambios de precio para análisis posteriores.',
+      'scale.title': 'Cobertura actual',
+      'scale.body': 'Cifras verificadas sobre la rama principal del proyecto al 4 de septiembre de 2026.',
       'scale.sources': 'fuentes integradas',
-      'scale.locations': 'contextos de ubicación',
-      'scale.products': 'identidades de producto',
-      'scale.history': 'periodos históricos',
-      'sample.title': 'Cómo se ve el resultado',
-      'sample.body': 'El navegador no carga el dataset productivo. Esta muestra sintética reproduce únicamente la forma de los campos para explicar el resultado.',
+      'scale.locations': 'ubicaciones monitoreadas',
+      'scale.products': 'productos registrados',
+      'scale.history': 'registros históricos de precio',
+      'sample.title': 'Ejemplo real de los datos',
+      'sample.body': 'Esta muestra proviene de una captura real aceptada el 4 de septiembre de 2026 en San Pedro Sula. Se muestran sólo campos fáciles de entender; el dataset completo no se carga en la página.',
       'sample.product': 'Producto',
       'sample.city': 'Ciudad',
-      'sample.location': 'Ubicación',
-      'sample.context': 'Contexto',
       'sample.current': 'Precio actual',
       'sample.regular': 'Precio regular',
       'sample.promo': 'Promoción',
       'sample.availability': 'Disponibilidad',
       'sample.yes': 'Sí',
       'sample.no': 'No',
-      'sample.unknown': 'Desconocida',
-      'sample.inStock': 'Disponible',
-      'sample.note': 'Muestra sintética de presentación. No corresponde a registros productivos ni identifica cadenas comerciales.',
-      'insights.title': 'Hallazgos que los datos ya permiten demostrar',
-      'insights.body': 'Las comparaciones se limitan a contextos de una misma fuente cuando la identidad del SKU está demostrada. No se asume equivalencia entre cadenas diferentes.',
+      'sample.notConfirmed': 'No confirmada',
+      'sample.note': 'Datos reales del último snapshot aceptado para esta muestra. Captura: 4 sep 2026. La disponibilidad se muestra como “No confirmada” cuando la fuente no permite interpretarla con seguridad.',
+      'insights.title': 'Qué ya permiten ver los datos',
+      'insights.body': 'Las comparaciones se hacen únicamente cuando se sabe que se está observando el mismo artículo dentro de una misma fuente. No se fuerza una comparación entre supermercados distintos.',
       'insights.one.value': '255',
-      'insights.one.body': 'diferencias comerciales entre dos ubicaciones de una misma fuente, sobre 12,042 SKU comparables.',
+      'insights.one.body': 'artículos presentaron diferencias comerciales entre dos tiendas de una misma cadena, dentro de 12,042 artículos comparables.',
       'insights.two.value': '115',
-      'insights.two.body': 'SKU con diferencia de precio actual entre dos clubes de otra fuente, sobre 5,129 con precio en ambos.',
+      'insights.two.body': 'artículos tuvieron distinto precio actual entre dos clubes, dentro de 5,129 productos con precio en ambos.',
       'insights.three.value': '120',
-      'insights.three.body': 'promociones verificadas en una fuente SPS con 6,646 productos con precio; su disponibilidad se conserva como desconocida por falta de semántica fiable.',
-      'quality.title': 'Calidad antes que cobertura',
-      'quality.body': 'No toda fuente encontrada se incorpora. Dos cadenas candidatas fueron descartadas temporalmente para seguimiento de precios porque la superficie pública evaluada no demostró precios estructurados con suficiente calidad y trazabilidad.',
-      'quality.number': '2',
-      'quality.label': 'candidatas no aceptadas',
-      'challenge.title': 'El desafío no es sólo extraer un precio',
-      'challenge.body': 'La dificultad está en construir una fuente consistente cuando cada origen expresa ubicación, precio, promoción, disponibilidad y completitud de forma distinta.',
-      'challenge.structure.title': 'Estructuras distintas',
-      'challenge.structure.body': 'Las fuentes no comparten el mismo contrato, paginación ni forma de identificar producto y ubicación.',
-      'challenge.commercial.title': 'Estado comercial',
-      'challenge.commercial.body': 'Precio actual, precio regular, promoción y disponibilidad se validan sin rellenar campos que la fuente no demuestra.',
-      'challenge.integrity.title': 'Integridad e histórico',
-      'challenge.integrity.body': 'Un snapshot incompleto no modifica el estado aceptado; un replay exacto no duplica historia y un cambio real abre un nuevo periodo.',
-      'roadmap.title': 'Evolución del proyecto',
-      'roadmap.body': 'La base ya genera valor por sí misma y habilita capas posteriores sin presentarlas como terminadas.',
+      'insights.three.body': 'promociones reales fueron verificadas en la captura más reciente de una fuente de San Pedro Sula con 6,646 productos con precio.',
+      'value.title': 'Por qué este proyecto importa',
+      'value.body': 'El valor no está sólo en recolectar páginas. Está en convertir miles de precios en una base que pueda responder preguntas de negocio.',
+      'value.manual.title': 'Reduce trabajo manual',
+      'value.manual.body': 'Centraliza información que de otra manera tendría que revisarse producto por producto y supermercado por supermercado.',
+      'value.changes.title': 'Hace visibles los cambios',
+      'value.changes.body': 'Permite detectar diferencias de precio, promociones y variaciones entre puntos de venta cuando la comparación es válida.',
+      'value.history.title': 'Construye contexto',
+      'value.history.body': 'El histórico permite pasar de “cuánto cuesta hoy” a entender cómo se ha movido un precio con el tiempo.',
+      'roadmap.title': 'Qué sigue',
+      'roadmap.body': 'La recolección y el histórico ya están construidos. Las siguientes etapas convierten esa base en una experiencia de comparación más completa.',
       'roadmap.01.status': 'Completado',
-      'roadmap.01.title': 'Recolección y estructura',
-      'roadmap.01.body': 'Cinco fuentes integradas bajo un modelo común.',
-      'roadmap.02.status': 'En desarrollo',
-      'roadmap.02.title': 'Histórico',
-      'roadmap.02.body': 'Modelo de periodos activo; recurrencia sólo donde existe autorización operativa.',
-      'roadmap.03.status': 'En desarrollo',
-      'roadmap.03.title': 'Comparación por ubicación',
-      'roadmap.03.body': 'Validada dentro de fuentes con identidad y contexto demostrados.',
-      'roadmap.04.status': 'Próximo',
-      'roadmap.04.title': 'Matching entre fuentes',
-      'roadmap.04.body': 'Resolver identidad de productos antes de comparar cadenas diferentes.',
-      'roadmap.05.status': 'Próximo',
-      'roadmap.05.title': 'Análisis y visualización',
-      'roadmap.05.body': 'Convertir el histórico validado en una experiencia analítica.',
-      'future.title': 'La base para algo mayor',
-      'future.today': 'HOY',
-      'future.todayBody': 'Fuentes públicas → datos validados → histórico estructurado',
-      'future.next': 'SIGUIENTE',
-      'future.nextBody': 'Identidad entre fuentes → comparación → análisis → visualización → inteligencia de precios',
-      'tech.title': 'Cómo está construido',
-      'tech.body': 'La sección técnica refleja herramientas que ya participan en el sistema actual; no incluye tecnología planeada como si estuviera operativa.',
+      'roadmap.01.title': 'Fuentes y datos',
+      'roadmap.01.body': 'Cinco fuentes integradas bajo una estructura común.',
+      'roadmap.02.status': 'Activo',
+      'roadmap.02.title': 'Historial de precios',
+      'roadmap.02.body': 'Se conservan los estados aceptados y sus cambios comerciales.',
+      'roadmap.03.status': 'Activo',
+      'roadmap.03.title': 'Comparación dentro de cada fuente',
+      'roadmap.03.body': 'Ya existen comparaciones verificadas entre tiendas o clubes de una misma cadena.',
+      'roadmap.04.status': 'Siguiente',
+      'roadmap.04.title': 'Identificar el mismo producto entre cadenas',
+      'roadmap.04.body': 'Resolver equivalencias confiables antes de comparar supermercados diferentes.',
+      'roadmap.05.status': 'Siguiente',
+      'roadmap.05.title': 'Dashboard de comparación',
+      'roadmap.05.body': 'Convertir el histórico y las comparaciones en una experiencia visual para consulta.',
+      'tech.title': 'Tecnología detrás del proyecto',
+      'tech.body': 'La parte técnica queda al final para que primero se entienda el problema y el valor del proyecto.',
       'tech.python.title': 'Python',
-      'tech.python.body': 'Captura, normalización, validación y persistencia.',
+      'tech.python.body': 'Recolección, limpieza, validación y preparación de datos.',
       'tech.turso.title': 'Turso / SQLite',
-      'tech.turso.body': 'Cinco tablas para fuentes, ubicaciones, productos, histórico y ejecuciones.',
+      'tech.turso.body': 'Almacenamiento del estado actual, histórico y ejecuciones.',
       'tech.actions.title': 'GitHub Actions',
-      'tech.actions.body': 'Ejecuciones controladas, evidencia y automatización autorizada.',
-      'tech.http.title': 'HTTP de solo lectura',
-      'tech.http.body': 'Integraciones públicas con límites, validación y comportamiento de cierre seguro ante fallos.',
-      'tech.tests.title': 'Pytest',
-      'tech.tests.body': 'Más de 2,000 pruebas en el cierre más reciente integrado antes de esta presentación.',
+      'tech.actions.body': 'Ejecuciones controladas y automatización del proceso.',
+      'tech.tests.title': 'Pruebas automatizadas',
+      'tech.tests.body': 'La suite protege reglas de datos, persistencia y seguridad antes de integrar cambios.',
       'end.repo': 'Ver implementación en GitHub'
     },
     en: {
       'card.preview.sources': 'integrated sources',
-      'card.preview.locations': 'location contexts',
-      'card.preview.products': 'product identities',
-      'card.preview.cities': 'cities',
-      'card.previewLabel': 'Open Grocery Price Data project',
-      'card.title': 'Grocery Price Data: building a foundation for price intelligence',
-      'card.body': 'Building a reliable dataset from public pricing sources through collection, validation, location context, and structured history.',
-      'card.open': 'View full project',
-      'card.repo': 'View implementation',
+      'card.preview.locations': 'monitored locations',
+      'card.preview.products': 'products recorded',
+      'card.preview.history': 'historical records',
+      'card.previewLabel': 'Open grocery price monitoring project',
+      'card.title': 'Grocery Prices: monitoring and price intelligence',
+      'card.body': 'A system that gathers public grocery prices, validates them, and keeps their history to reveal changes, promotions, and differences between cities or stores.',
+      'card.open': 'Explore project',
+      'card.repo': 'View code',
       'dialog.close': 'Close',
       'dialog.back': 'Back to projects',
-      'hero.kicker': 'Data project · current stage',
-      'hero.title': 'From scattered prices to useful information',
-      'hero.question': 'How much can a product price change depending on location or time?',
-      'hero.body': 'Answering that question starts with turning scattered public information into structured, consistent, traceable data. That foundation is already in place.',
-      'hero.stageTitle': 'Today',
-      'hero.stageBody': 'Collection, validation, structuring, and location-level history. A complete analytics and visualization layer is not part of the current MVP yet.',
-      'flow.title': 'What it does today',
-      'flow.body': 'The system turns sources with different structures into commercial states that can be compared within each accepted source and location.',
-      'flow.public.title': 'Public sources',
-      'flow.public.body': 'Read-only catalogs and surfaces are evaluated before integration.',
-      'flow.collect.title': 'Collection',
-      'flow.collect.body': 'Complete captures with bounded requests and reproducible evidence.',
-      'flow.validate.title': 'Validation',
-      'flow.validate.body': 'Completeness, identity, pricing, and consistency checks before persistence.',
-      'flow.structure.title': 'Structuring',
-      'flow.structure.body': 'Product, location, and commercial state mapped into one model.',
-      'flow.usable.title': 'Usable data',
-      'flow.usable.body': 'Current state and history ready for downstream analysis.',
-      'scale.title': 'Current scale',
-      'scale.body': 'Coverage verified on the project’s main branch. Figures are rounded to communicate scale without implying false precision.',
+      'hero.kicker': 'Featured project · real data',
+      'hero.title': 'Grocery price monitoring',
+      'hero.question': 'How do everyday product prices change by city, store, or over time?',
+      'hero.body': 'The project turns public catalogs into an organized, verifiable dataset. The goal is to convert scattered prices into information that can be compared, historized, and analyzed.',
+      'hero.stageTitle': 'Current status',
+      'hero.stageBody': '5 integrated sources, 9 locations, and more than 47 thousand products recorded. Price history already exceeds 90 thousand records.',
+      'flow.title': 'What the system does',
+      'flow.body': 'The process turns public information from different retailers into clear, usable data.',
+      'flow.public.title': 'Finds public prices',
+      'flow.public.body': 'Identifies public catalogs and surfaces that actually contain useful pricing information.',
+      'flow.collect.title': 'Collects catalogs',
+      'flow.collect.body': 'Captures products and prices from each accepted source.',
+      'flow.validate.title': 'Checks the data',
+      'flow.validate.body': 'Confirms a capture is complete before accepting changes.',
+      'flow.structure.title': 'Organizes the information',
+      'flow.structure.body': 'Stores product, city, price, promotion, and other fields under one structure.',
+      'flow.usable.title': 'Keeps price history',
+      'flow.usable.body': 'Maintains current state and price changes for later analysis.',
+      'scale.title': 'Current coverage',
+      'scale.body': 'Figures verified on the project’s main branch as of September 4, 2026.',
       'scale.sources': 'integrated sources',
-      'scale.locations': 'location contexts',
-      'scale.products': 'product identities',
-      'scale.history': 'historical periods',
-      'sample.title': 'What the output looks like',
-      'sample.body': 'The browser never loads the production dataset. This synthetic sample mirrors only the field structure needed to explain the output.',
+      'scale.locations': 'monitored locations',
+      'scale.products': 'products recorded',
+      'scale.history': 'historical price records',
+      'sample.title': 'A real data example',
+      'sample.body': 'This sample comes from a real accepted capture on September 4, 2026 in San Pedro Sula. Only easy-to-read fields are shown; the full production dataset is not loaded into the page.',
       'sample.product': 'Product',
       'sample.city': 'City',
-      'sample.location': 'Location',
-      'sample.context': 'Context',
       'sample.current': 'Current price',
       'sample.regular': 'Regular price',
       'sample.promo': 'Promotion',
       'sample.availability': 'Availability',
       'sample.yes': 'Yes',
       'sample.no': 'No',
-      'sample.unknown': 'Unknown',
-      'sample.inStock': 'Available',
-      'sample.note': 'Synthetic presentation sample. It is not a production record and does not identify any retailer.',
-      'insights.title': 'What the data can already demonstrate',
-      'insights.body': 'Comparisons are limited to contexts within the same source when SKU identity is established. Products from different retailers are not assumed to be equivalent.',
+      'sample.notConfirmed': 'Not confirmed',
+      'sample.note': 'Real data from the latest accepted snapshot used for this sample. Capture: Sep 4, 2026. Availability is shown as “Not confirmed” when the source does not support a reliable interpretation.',
+      'insights.title': 'What the data can already reveal',
+      'insights.body': 'Comparisons are made only when the same item is known to be observed within one source. Products from different retailers are not forced into a match.',
       'insights.one.value': '255',
-      'insights.one.body': 'commercial differences between two locations from the same source, across 12,042 comparable SKUs.',
+      'insights.one.body': 'items showed commercial differences between two stores from the same chain, among 12,042 comparable items.',
       'insights.two.value': '115',
-      'insights.two.body': 'SKUs with a current-price difference between two clubs from another source, among 5,129 priced in both.',
+      'insights.two.body': 'items had a different current price between two clubs, among 5,129 products priced in both.',
       'insights.three.value': '120',
-      'insights.three.body': 'verified promotions in one San Pedro Sula source with 6,646 priced products; availability remains unknown because its meaning was not demonstrated reliably.',
-      'quality.title': 'Quality before coverage',
-      'quality.body': 'Not every discovered source is integrated. Two candidate chains were temporarily rejected for price tracking because the evaluated public surface did not demonstrate structured prices with sufficient quality and traceability.',
-      'quality.number': '2',
-      'quality.label': 'candidates not accepted',
-      'challenge.title': 'The hard part is not simply extracting a price',
-      'challenge.body': 'The challenge is building a consistent source when each origin expresses location, price, promotion, availability, and completeness differently.',
-      'challenge.structure.title': 'Different structures',
-      'challenge.structure.body': 'Sources do not share the same contract, pagination, or way of identifying products and locations.',
-      'challenge.commercial.title': 'Commercial state',
-      'challenge.commercial.body': 'Current price, regular price, promotion, and availability are validated without filling fields the source does not actually support.',
-      'challenge.integrity.title': 'Integrity and history',
-      'challenge.integrity.body': 'An incomplete snapshot cannot mutate accepted state; an exact replay does not duplicate history, and a real change opens a new period.',
-      'roadmap.title': 'Project evolution',
-      'roadmap.body': 'The foundation already provides value while enabling future layers without presenting them as finished features.',
+      'insights.three.body': 'real promotions were verified in the latest capture from one San Pedro Sula source containing 6,646 priced products.',
+      'value.title': 'Why this project matters',
+      'value.body': 'The value is not simply scraping pages. It is turning thousands of prices into a dataset that can answer business questions.',
+      'value.manual.title': 'Reduces manual work',
+      'value.manual.body': 'Centralizes information that would otherwise need to be checked product by product and retailer by retailer.',
+      'value.changes.title': 'Makes changes visible',
+      'value.changes.body': 'It can expose price differences, promotions, and variations between stores when the comparison is valid.',
+      'value.history.title': 'Builds context',
+      'value.history.body': 'Price history moves the question beyond “what does it cost today?” toward understanding how a price changes over time.',
+      'roadmap.title': 'What comes next',
+      'roadmap.body': 'Collection and history are already built. The next stages turn that foundation into a richer comparison experience.',
       'roadmap.01.status': 'Completed',
-      'roadmap.01.title': 'Collection and structure',
-      'roadmap.01.body': 'Five integrated sources under a shared model.',
-      'roadmap.02.status': 'In development',
-      'roadmap.02.title': 'History',
-      'roadmap.02.body': 'Period-based history is active; recurrence exists only where operational authorization is in place.',
-      'roadmap.03.status': 'In development',
-      'roadmap.03.title': 'Location comparison',
-      'roadmap.03.body': 'Validated within sources where identity and location context are demonstrated.',
+      'roadmap.01.title': 'Sources and data',
+      'roadmap.01.body': 'Five sources integrated under one shared structure.',
+      'roadmap.02.status': 'Active',
+      'roadmap.02.title': 'Price history',
+      'roadmap.02.body': 'Accepted commercial states and their changes are preserved.',
+      'roadmap.03.status': 'Active',
+      'roadmap.03.title': 'Comparison within each source',
+      'roadmap.03.body': 'Verified comparisons already exist between stores or clubs from the same chain.',
       'roadmap.04.status': 'Next',
-      'roadmap.04.title': 'Cross-source matching',
-      'roadmap.04.body': 'Resolve product identity before comparing different retailers.',
+      'roadmap.04.title': 'Identify the same product across chains',
+      'roadmap.04.body': 'Resolve reliable equivalence before comparing different retailers.',
       'roadmap.05.status': 'Next',
-      'roadmap.05.title': 'Analysis and visualization',
-      'roadmap.05.body': 'Turn validated history into an analytical experience.',
-      'future.title': 'A foundation for something larger',
-      'future.today': 'TODAY',
-      'future.todayBody': 'Public sources → validated data → structured history',
-      'future.next': 'NEXT',
-      'future.nextBody': 'Cross-source identity → comparison → analysis → visualization → price intelligence',
-      'tech.title': 'How it is built',
-      'tech.body': 'This section lists technology already used by the current system; planned tools are not presented as operational.',
+      'roadmap.05.title': 'Comparison dashboard',
+      'roadmap.05.body': 'Turn the history and comparisons into a visual exploration experience.',
+      'tech.title': 'Technology behind the project',
+      'tech.body': 'Technical details come last so the problem and business value are clear first.',
       'tech.python.title': 'Python',
-      'tech.python.body': 'Collection, normalization, validation, and persistence.',
+      'tech.python.body': 'Collection, cleaning, validation, and data preparation.',
       'tech.turso.title': 'Turso / SQLite',
-      'tech.turso.body': 'Five tables for sources, locations, products, price history, and runs.',
+      'tech.turso.body': 'Storage for current state, history, and executions.',
       'tech.actions.title': 'GitHub Actions',
-      'tech.actions.body': 'Controlled execution, evidence, and authorized automation.',
-      'tech.http.title': 'Read-only HTTP',
-      'tech.http.body': 'Public integrations with bounded requests, validation, and fail-closed behavior.',
-      'tech.tests.title': 'Pytest',
-      'tech.tests.body': 'More than 2,000 tests passed in the latest integrated project closeout before this portfolio presentation.',
+      'tech.actions.body': 'Controlled executions and process automation.',
+      'tech.tests.title': 'Automated tests',
+      'tech.tests.body': 'The suite protects data, persistence, and security rules before changes are integrated.',
       'end.repo': 'View implementation on GitHub'
     }
   };
@@ -233,6 +234,19 @@
     api.registerCatalog('prices', translations);
   }
 
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function money(value) {
+    return value == null ? '—' : `L ${value}`;
+  }
+
   function card() {
     return `
       <article class="card project-card price-card fade-in is-visible">
@@ -241,7 +255,7 @@
             <span><strong>5</strong><small>${t('card.preview.sources')}</small></span>
             <span><strong>9</strong><small>${t('card.preview.locations')}</small></span>
             <span><strong>47K+</strong><small>${t('card.preview.products')}</small></span>
-            <span><strong>2</strong><small>${t('card.preview.cities')}</small></span>
+            <span><strong>90K+</strong><small>${t('card.preview.history')}</small></span>
           </span>
         </button>
         <div class="price-card__content">
@@ -261,10 +275,15 @@
   }
 
   function sampleRows() {
-    return `
-      <tr><td>SKU-DEMO-01</td><td>San Pedro Sula</td><td>${t('sample.context')} 01</td><td>L 84.50</td><td>L 89.00</td><td>${t('sample.yes')}</td><td>${t('sample.inStock')}</td></tr>
-      <tr><td>SKU-DEMO-02</td><td>Tegucigalpa</td><td>${t('sample.context')} 02</td><td>L 126.00</td><td>—</td><td>${t('sample.no')}</td><td>${t('sample.unknown')}</td></tr>
-      <tr><td>SKU-DEMO-03</td><td>Tegucigalpa</td><td>${t('sample.context')} 03</td><td>L 51.75</td><td>L 51.75</td><td>${t('sample.no')}</td><td>${t('sample.inStock')}</td></tr>`;
+    return VERIFIED_SAMPLE.rows.map(row => `
+      <tr>
+        <td>${escapeHtml(row.product)}</td>
+        <td>${escapeHtml(VERIFIED_SAMPLE.city)}</td>
+        <td>${money(row.currentPrice)}</td>
+        <td>${money(row.regularPrice)}</td>
+        <td>${row.promotion ? t('sample.yes') : t('sample.no')}</td>
+        <td>${t('sample.notConfirmed')}</td>
+      </tr>`).join('');
   }
 
   function view() {
@@ -328,7 +347,6 @@
                 <thead><tr>
                   <th>${t('sample.product')}</th>
                   <th>${t('sample.city')}</th>
-                  <th>${t('sample.location')}</th>
                   <th>${t('sample.current')}</th>
                   <th>${t('sample.regular')}</th>
                   <th>${t('sample.promo')}</th>
@@ -353,33 +371,22 @@
             </div>
           </section>
 
-          <section class="price-section" aria-labelledby="price-quality-title">
+          <section class="price-section" aria-labelledby="price-value-title">
             <div class="price-section__head">
               <p class="price-eyebrow">05</p>
-              <h3 id="price-quality-title">${t('quality.title')}</h3>
+              <h3 id="price-value-title">${t('value.title')}</h3>
+              <p>${t('value.body')}</p>
             </div>
-            <div class="price-quality">
-              <div class="price-quality__number" aria-hidden="true">${t('quality.number')}</div>
-              <div><strong>${t('quality.label')}</strong><p>${t('quality.body')}</p></div>
-            </div>
-          </section>
-
-          <section class="price-section" aria-labelledby="price-challenge-title">
-            <div class="price-section__head">
-              <p class="price-eyebrow">06</p>
-              <h3 id="price-challenge-title">${t('challenge.title')}</h3>
-              <p>${t('challenge.body')}</p>
-            </div>
-            <div class="price-challenges">
-              <article class="price-challenge"><h4>${t('challenge.structure.title')}</h4><p>${t('challenge.structure.body')}</p></article>
-              <article class="price-challenge"><h4>${t('challenge.commercial.title')}</h4><p>${t('challenge.commercial.body')}</p></article>
-              <article class="price-challenge"><h4>${t('challenge.integrity.title')}</h4><p>${t('challenge.integrity.body')}</p></article>
+            <div class="price-value-grid">
+              <article class="price-value"><h4>${t('value.manual.title')}</h4><p>${t('value.manual.body')}</p></article>
+              <article class="price-value"><h4>${t('value.changes.title')}</h4><p>${t('value.changes.body')}</p></article>
+              <article class="price-value"><h4>${t('value.history.title')}</h4><p>${t('value.history.body')}</p></article>
             </div>
           </section>
 
           <section class="price-section" aria-labelledby="price-roadmap-title">
             <div class="price-section__head">
-              <p class="price-eyebrow">07</p>
+              <p class="price-eyebrow">06</p>
               <h3 id="price-roadmap-title">${t('roadmap.title')}</h3>
               <p>${t('roadmap.body')}</p>
             </div>
@@ -392,21 +399,9 @@
             </div>
           </section>
 
-          <section class="price-section" aria-labelledby="price-future-title">
-            <div class="price-section__head">
-              <p class="price-eyebrow">08</p>
-              <h3 id="price-future-title">${t('future.title')}</h3>
-            </div>
-            <div class="price-future">
-              <div><strong>${t('future.today')}</strong><span>${t('future.todayBody')}</span></div>
-              <div class="price-future__arrow" aria-hidden="true">→</div>
-              <div><strong>${t('future.next')}</strong><span>${t('future.nextBody')}</span></div>
-            </div>
-          </section>
-
           <section class="price-section" aria-labelledby="price-tech-title">
             <div class="price-section__head">
-              <p class="price-eyebrow">09</p>
+              <p class="price-eyebrow">07</p>
               <h3 id="price-tech-title">${t('tech.title')}</h3>
               <p>${t('tech.body')}</p>
             </div>
@@ -414,7 +409,6 @@
               <article class="price-tech__item"><strong>${t('tech.python.title')}</strong><p>${t('tech.python.body')}</p></article>
               <article class="price-tech__item"><strong>${t('tech.turso.title')}</strong><p>${t('tech.turso.body')}</p></article>
               <article class="price-tech__item"><strong>${t('tech.actions.title')}</strong><p>${t('tech.actions.body')}</p></article>
-              <article class="price-tech__item"><strong>${t('tech.http.title')}</strong><p>${t('tech.http.body')}</p></article>
               <article class="price-tech__item"><strong>${t('tech.tests.title')}</strong><p>${t('tech.tests.body')}</p></article>
             </div>
             <div class="price-end-actions">

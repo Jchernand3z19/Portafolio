@@ -52,8 +52,14 @@ def attach_runtime_guards(page: Page) -> tuple[list[str], list[str]]:
 def wait_for_portfolio(page: Page) -> None:
     page.goto(BASE_URL, wait_until="domcontentloaded")
     page.wait_for_selector("#portfolio-language-switcher")
-    page.wait_for_selector("#proyectos .mw-card")
     page.wait_for_selector("#proyectos .price-card")
+    page.wait_for_selector("#proyectos .mw-card")
+    page.wait_for_function(
+        """() => Boolean(
+            document.querySelector('#proyectos .price-card')?.dataset.projectPosition &&
+            document.querySelector('#proyectos .mw-card')?.dataset.projectPosition
+        )"""
+    )
 
 
 def assert_no_global_overflow(page: Page) -> None:
@@ -68,6 +74,13 @@ def assert_no_global_overflow(page: Page) -> None:
     assert metrics["bodyWidth"] <= metrics["clientWidth"] + 1, metrics
 
 
+def assert_project_order(page: Page) -> None:
+    cards = page.locator("#proyectos .projects-grid > [data-portfolio-project]")
+    assert cards.count() == 2
+    assert cards.nth(0).get_attribute("data-portfolio-project") == "precios-supermercados"
+    assert cards.nth(1).get_attribute("data-portfolio-project") == "mundial-2026"
+
+
 def desktop_flow(browser: Browser) -> None:
     context = browser.new_context(viewport={"width": 1440, "height": 900})
     local_only(context)
@@ -77,25 +90,41 @@ def desktop_flow(browser: Browser) -> None:
 
     assert page.locator("html").get_attribute("lang") == "es"
     assert page.locator("#nav-links").get_by_text("Inicio", exact=True).count() == 1
-    assert page.locator("#proyectos .projects-grid > [data-portfolio-project]").count() == 2
+    assert_project_order(page)
     assert "Precios de Supermercados" in page.locator("#proyectos .price-card h3").inner_text()
+    assert page.locator("#proyectos .price-card").get_attribute("data-project-position") == "PROYECTO PRINCIPAL · 01"
+    assert page.locator("#proyectos .mw-card").get_attribute("data-project-position") == "PROYECTO · 02"
+    assert page.locator("#mw-view .mw-kicker").count() == 0
     assert_no_global_overflow(page)
 
     page.locator('[data-locale="en"]').click()
     assert page.locator("html").get_attribute("lang") == "en"
     assert page.locator("#nav-links").get_by_text("Home", exact=True).count() == 1
     assert page.evaluate("localStorage.getItem('portfolio.locale.v1')") == "en"
-    assert "Grocery Price Data" in page.locator("#proyectos .price-card h3").inner_text()
+    assert "Grocery Prices" in page.locator("#proyectos .price-card h3").inner_text()
     assert "World Cup 2026" in page.locator("#proyectos .mw-card h3").inner_text()
+    assert page.locator("#proyectos .price-card").get_attribute("data-project-position") == "FEATURED PROJECT · 01"
+    assert page.locator("#proyectos .mw-card").get_attribute("data-project-position") == "PROJECT · 02"
+    assert page.locator("#mw-view .mw-kicker").count() == 0
+    assert_project_order(page)
 
     opener = page.locator("#proyectos .price-card [data-price-open]").last
     opener.click()
     dialog = page.locator("#price-project-view")
     assert dialog.evaluate("element => element.open") is True
-    assert dialog.locator("#price-title").inner_text() == "From scattered prices to useful information"
+    assert dialog.locator("#price-title").inner_text() == "Grocery price monitoring"
+
+    headers = [value.lower() for value in dialog.locator(".price-table th").all_inner_texts()]
+    assert headers == ["product", "city", "current price", "regular price", "promotion", "availability"]
     sample_text = dialog.locator(".price-table tbody").inner_text()
-    assert "Context 01" in sample_text
-    assert "Contexto" not in sample_text
+    assert "Rica yema huevos 15 unds" in sample_text
+    assert "Arroz progreso grano largo 5 lb" in sample_text
+    assert "Nestle agua purificada 0.5 ltr" in sample_text
+    assert "SKU-DEMO" not in sample_text
+    assert "Context" not in sample_text
+    assert dialog.locator("#price-quality-title").count() == 0
+    assert dialog.locator("#price-value-title").count() == 1
+    assert "Sep 4, 2026" in dialog.locator(".price-note").inner_text()
     assert page.locator(":focus").get_attribute("data-price-close") is not None
     page.keyboard.press("Escape")
     assert dialog.evaluate("element => element.open") is False
@@ -105,6 +134,8 @@ def desktop_flow(browser: Browser) -> None:
     mundial = page.locator("#mw-view")
     assert mundial.is_visible()
     assert "World Cup 2026" in mundial.locator("#mw-title").inner_text()
+    page.wait_for_function("() => document.querySelector('#mw-view .mw-kicker') === null")
+    assert mundial.locator(".mw-kicker").count() == 0
     assert page.locator(":focus").get_attribute("id") == "mw-close"
     page.keyboard.press("Escape")
     assert mundial.is_hidden()
@@ -112,8 +143,10 @@ def desktop_flow(browser: Browser) -> None:
 
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("#proyectos .price-card")
+    page.wait_for_function("() => Boolean(document.querySelector('#proyectos .price-card')?.dataset.projectPosition)")
     assert page.locator("html").get_attribute("lang") == "en"
     assert page.locator("#nav-links").get_by_text("Home", exact=True).count() == 1
+    assert_project_order(page)
 
     page.locator('[data-locale="es"]').click()
     assert page.locator("html").get_attribute("lang") == "es"
@@ -122,7 +155,9 @@ def desktop_flow(browser: Browser) -> None:
     page.evaluate("localStorage.setItem('portfolio.locale.v1', 'invalid-locale')")
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("#portfolio-language-switcher")
+    page.wait_for_function("() => Boolean(document.querySelector('#proyectos .price-card')?.dataset.projectPosition)")
     assert page.locator("html").get_attribute("lang") == "es"
+    assert_project_order(page)
 
     assert page_errors == [], page_errors
     assert bad_local_responses == [], bad_local_responses
@@ -148,6 +183,7 @@ def storage_blocked_flow(browser: Browser) -> None:
     page_errors, bad_local_responses = attach_runtime_guards(page)
     wait_for_portfolio(page)
     assert page.locator("html").get_attribute("lang") == "es"
+    assert_project_order(page)
     page.locator('[data-locale="en"]').click()
     assert page.locator("html").get_attribute("lang") == "en"
     assert page_errors == [], page_errors
@@ -161,6 +197,7 @@ def responsive_flow(browser: Browser, width: int, height: int) -> None:
     page = context.new_page()
     page_errors, bad_local_responses = attach_runtime_guards(page)
     wait_for_portfolio(page)
+    assert_project_order(page)
     assert_no_global_overflow(page)
 
     if width <= 767:
@@ -183,13 +220,12 @@ def responsive_flow(browser: Browser, width: int, height: int) -> None:
         page.keyboard.press("Escape")
     else:
         cards = page.locator("#proyectos .projects-grid > [data-portfolio-project]")
-        assert cards.count() == 2
         first = cards.nth(0).bounding_box()
         second = cards.nth(1).bounding_box()
         assert first is not None and second is not None
         assert abs(first["x"] - second["x"]) < 8, (first, second)
         assert abs(first["width"] - second["width"]) < 8, (first, second)
-        assert second["y"] >= first["y"] + first["height"], (first, second)
+        assert second["y"] >= first["y"] + first["height"] + 24, (first, second)
 
     assert page_errors == [], page_errors
     assert bad_local_responses == [], bad_local_responses

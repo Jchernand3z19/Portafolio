@@ -1,5 +1,5 @@
 (() => {
-  const BUILD = '20260904-portfolio-i18n-prices-a11y';
+  const BUILD = '20260904-prices-featured-v2';
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -105,6 +105,55 @@
     toggle.setAttribute('aria-label', window.PortfolioI18n?.t(key) || fallback);
   }
 
+  function setupProjectPresentation() {
+    const applyHierarchy = () => {
+      const locale = window.PortfolioI18n?.getLocale?.() === 'en' ? 'en' : 'es';
+      const labels = locale === 'en'
+        ? { prices: 'FEATURED PROJECT · 01', mundial: 'PROJECT · 02' }
+        : { prices: 'PROYECTO PRINCIPAL · 01', mundial: 'PROYECTO · 02' };
+
+      const prices = document.querySelector('#proyectos .price-card');
+      const mundial = document.querySelector('#proyectos .mw-card');
+      if (prices) prices.dataset.projectPosition = labels.prices;
+      if (mundial) mundial.dataset.projectPosition = labels.mundial;
+
+      // Mundial conservaba un rótulo histórico de “proyecto destacado” dentro
+      // del detalle. Se elimina para no competir con la nueva jerarquía pública:
+      // Precios es el proyecto principal y Mundial queda claramente como segundo.
+      document.querySelector('#mw-view .mw-kicker')?.remove();
+    };
+
+    const reapplyAfterMundialOpen = () => {
+      queueMicrotask(applyHierarchy);
+      requestAnimationFrame(applyHierarchy);
+      window.setTimeout(applyHierarchy, 0);
+    };
+
+    applyHierarchy();
+    window.PortfolioI18n?.onChange?.(applyHierarchy);
+
+    ['mw-open', 'mw-open-media'].forEach(id => {
+      const control = document.getElementById(id);
+      if (!control || control.dataset.projectHierarchyReady === 'true') return;
+      control.dataset.projectHierarchyReady = 'true';
+      control.addEventListener('click', reapplyAfterMundialOpen);
+    });
+
+    const mundialView = document.getElementById('mw-view');
+    if (
+      mundialView &&
+      !window.__portfolioProjectHierarchyObserver &&
+      'MutationObserver' in window
+    ) {
+      const hierarchyObserver = new MutationObserver(() => applyHierarchy());
+      hierarchyObserver.observe(mundialView, {
+        childList: true,
+        subtree: true
+      });
+      window.__portfolioProjectHierarchyObserver = hierarchyObserver;
+    }
+  }
+
   function setupSite() {
     const toggle = document.getElementById('menu-toggle');
     const links = document.getElementById('nav-links');
@@ -178,15 +227,15 @@
 
     const projectStyles = [
       'css/i18n.css',
-      'mundial-2026/portfolio/mundial-2026.css',
-      'precios-supermercados-sps/portfolio/precios-portfolio.css'
+      'precios-supermercados-sps/portfolio/precios-portfolio.css',
+      'mundial-2026/portfolio/mundial-2026.css'
     ];
 
     const projectModules = [
+      'precios-supermercados-sps/portfolio/precios-portfolio.js',
       'mundial-2026/portfolio/mundial-2026.js',
       'mundial-2026/portfolio/mundial-2026-i18n.js',
-      'mundial-2026/portfolio/mundial-2026-a11y.js',
-      'precios-supermercados-sps/portfolio/precios-portfolio.js'
+      'mundial-2026/portfolio/mundial-2026-a11y.js'
     ];
 
     projectStyles.forEach(loadStylesheet);
@@ -203,6 +252,7 @@
       .then(() => {
         rewriteLegacyProjectLinks();
         window.PortfolioI18n?.refresh();
+        setupProjectPresentation();
       })
       .catch(error => {
         console.error('No se pudieron cargar los proyectos del portafolio.', error);

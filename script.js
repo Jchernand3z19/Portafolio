@@ -1,5 +1,5 @@
 (() => {
-  const BUILD = '20260904-portfolio-i18n-prices-a11y';
+  const BUILD = '20260904-prices-featured-v2';
   const entrypoint = document.createElement('script');
   entrypoint.src = `js/main.js?v=${BUILD}`;
   entrypoint.defer = true;
