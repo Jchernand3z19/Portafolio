@@ -1,0 +1,34 @@
+name: Precios SPS - parche temporal auditoría homologación
+
+on:
+  push:
+    branches:
+      - feature/product-homologation-daily-refresh
+    paths:
+      - ".github/workflows/precios-supermercados-sps-homologation-security-patch-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && contains(github.event.head_commit.message, 'ejecuta parche temporal de auditoría') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Ajustar auditoría y retirar helper temporal
+        run: |
+          python precios-supermercados-sps/scripts/patch_workflow_security_homologation_temp.py
+          rm precios-supermercados-sps/scripts/patch_workflow_security_homologation_temp.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add precios-supermercados-sps/tests/test_workflow_security_audit.py \
+                  precios-supermercados-sps/scripts/patch_workflow_security_homologation_temp.py
+          git diff --cached --check
+          git commit -m "test(precios): audita workflow de refresh de homologación"
+          git push origin HEAD:feature/product-homologation-daily-refresh
