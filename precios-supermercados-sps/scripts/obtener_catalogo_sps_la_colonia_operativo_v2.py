@@ -11,13 +11,22 @@ inverso por el runner operativo.
 Para el catálogo operativo, ``AvailableQuantity`` es además la evidencia primaria
 de disponibilidad: cualquier cantidad positiva implica disponible y una cantidad
 explícita igual a cero implica agotado, aunque VTEX conserve un precio publicado.
+
+Un fallo transitorio de transporte/GraphQL puede invalidar un recorrido completo sin
+que exista evidencia de cambio estructural. En esos casos este wrapper repite una sola
+vez el recorrido desde cero. El primer intento nunca se persiste y el segundo sigue
+pasando por los mismos gates fail-closed del extractor base.
 """
 
 from __future__ import annotations
 
+import json
 import math
+import sys
+import time
 from dataclasses import replace
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import obtener_catalogo_sps_la_colonia_operativo as operational
@@ -32,6 +41,31 @@ from precios_supermercados.scrapers.base import (
 
 BaseExtractor = operational.core.LaColoniaExtractor
 BASE_AVAILABILITY = la_colonia._availability
+RUN_RETRY_DELAY_SECONDS = 15.0
+RETRYABLE_RUN_FAILURE_REASONS = frozenset(
+    {
+        "product_search_graphql_errors",
+        "root_product_search_graphql_errors",
+        "root_product_search_recheck_graphql_errors",
+        "brand_facets_graphql_errors",
+        "product_search_http_500",
+        "product_search_http_502",
+        "product_search_http_503",
+        "product_search_http_504",
+        "root_product_search_http_500",
+        "root_product_search_http_502",
+        "root_product_search_http_503",
+        "root_product_search_http_504",
+        "root_product_search_recheck_http_500",
+        "root_product_search_recheck_http_502",
+        "root_product_search_recheck_http_503",
+        "root_product_search_recheck_http_504",
+        "brand_facets_http_500",
+        "brand_facets_http_502",
+        "brand_facets_http_503",
+        "brand_facets_http_504",
+    }
+)
 
 
 def _operational_availability(
@@ -106,6 +140,25 @@ class RecoveryAwareLaColoniaExtractor(BaseExtractor):
         return result
 
 
+def _output_path(argv: list[str] | None) -> Path:
+    values = list(sys.argv[1:] if argv is None else argv)
+    for index, value in enumerate(values):
+        if value == "--output" and index + 1 < len(values):
+            return Path(values[index + 1])
+        if value.startswith("--output="):
+            return Path(value.split("=", 1)[1])
+    return operational.ROOT / "run-artifacts" / "full-catalog.json"
+
+
+def _failure_reason(path: Path) -> str | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    reason = payload.get("reason") if isinstance(payload, Mapping) else None
+    return reason if isinstance(reason, str) and reason else None
+
+
 def main(argv: list[str] | None = None) -> int:
     # El runner operativo resuelve la clase desde ``core`` al iniciar el catálogo.
     # El ajuste de disponibilidad se limita al mismo recorrido operativo.
@@ -114,6 +167,16 @@ def main(argv: list[str] | None = None) -> int:
     operational.core.LaColoniaExtractor = RecoveryAwareLaColoniaExtractor
     la_colonia._availability = _operational_availability
     try:
+        result = operational.main(argv)
+        if result != 3:
+            return result
+
+        reason = _failure_reason(_output_path(argv))
+        if reason not in RETRYABLE_RUN_FAILURE_REASONS:
+            return result
+
+        print(f"sps_operational_catalog_retrying:{reason}", file=sys.stderr)
+        time.sleep(RUN_RETRY_DELAY_SECONDS)
         return operational.main(argv)
     finally:
         la_colonia._availability = original_availability
