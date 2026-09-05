@@ -30,3 +30,24 @@ def test_portfolio_overlay_hides_legacy_table_and_names_fail_closed_gate() -> No
     assert "Passion Especial" in source
     assert "marca + presentación" in source
     assert "brand + presentation" in source
+
+
+def test_portfolio_can_activate_only_the_verified_fail_closed_sample_contract() -> None:
+    source = (PROJECT_ROOT / "portfolio" / "precios-portfolio-current-state.js").read_text(encoding="utf-8")
+
+    assert "precios-sps-safe-portfolio-sample/v1" in source
+    assert "fail_closed_strong_identity_and_commercial_consistency" in source
+    assert "canonical_gtin" in source
+    assert "^\\d{8,14}$" in source
+    assert "la_colonia_sps" in source
+    assert "walmart_sps" in source
+    assert "verified-strong-identity" in source
+    assert "fetch(new URL(SAFE_SAMPLE_URL, document.baseURI)" in source
+    assert "tableWrap.hidden = false" in source
+    assert "source_name" in source
+    assert "source_presentation" in source
+    lowered = source.lower()
+    assert "function matchbyname" not in lowered
+    assert "function match_by_name" not in lowered
+    assert "matchingbyname(" not in lowered
+    assert "match_by_name(" not in lowered
