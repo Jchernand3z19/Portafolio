@@ -1,0 +1,124 @@
+name: Precios SPS - Publicar analítica segura
+
+on:
+  workflow_run:
+    workflows:
+      - "Precios SPS - Refrescar homologación derivada"
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: precios-sps-safe-analytics-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      ${{ github.repository == 'Jchernand3z19/Portafolio' &&
+          (github.event_name == 'workflow_dispatch' ||
+           (github.event_name == 'workflow_run' &&
+            github.event.workflow_run.conclusion == 'success' &&
+            github.event.workflow_run.head_branch == 'main')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - name: Descargar revisión confiable de main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Configurar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: precios-supermercados-sps/requirements.txt
+
+      - name: Instalar dependencias verificadas
+        run: |
+          set -euo pipefail
+          python -m pip install -r precios-supermercados-sps/requirements.txt
+          python -m pip check
+
+      - name: Exportar comparación segura Colonial vs Walmart SPS
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          rm -rf run-artifacts/analytics/colonial-walmart-sps
+          python scripts/exportar_modelo_analitico.py \
+            --turso \
+            --scope colonial=colonial_sps \
+            --scope walmart=walmart_sps \
+            --output-directory run-artifacts/analytics/colonial-walmart-sps \
+            | tee run-artifacts/analytics/colonial-walmart-sps-run.json
+
+      - name: Generar descriptores fuente de filas seguras
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python scripts/generar_descriptores_publicacion_segura.py \
+            --turso \
+            --publication run-artifacts/analytics/colonial-walmart-sps/publication.json \
+            --output run-artifacts/analytics/colonial-walmart-sps/source-descriptors.json \
+            | tee run-artifacts/analytics/colonial-walmart-sps-descriptors-run.json
+
+      - name: Validar contrato publicado
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('run-artifacts/analytics/colonial-walmart-sps')
+          publication = json.loads((root / 'publication.json').read_text(encoding='utf-8'))
+          manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
+          descriptors = json.loads((root / 'source-descriptors.json').read_text(encoding='utf-8'))
+          assert publication['schema'] == 'precios-sps-publication/v1'
+          assert manifest['schema'] == 'precios-sps-publication-manifest/v1'
+          assert descriptors['schema'] == 'precios-sps-safe-source-descriptors/v1'
+          assert manifest['source_backend'] == 'turso'
+          assert descriptors['source_backend'] == 'turso'
+          assert manifest['comparison_policy'] == 'fail_closed_strong_identity_and_commercial_consistency'
+          assert descriptors['comparison_policy'] == manifest['comparison_policy']
+          assert descriptors['row_count'] == manifest['safe_offers_published']
+          assert descriptors['canonical_product_count'] == manifest['safe_products_published']
+          assert manifest['scope'] == [
+              {'location_id': 'colonial_sps', 'supermarket_id': 'colonial'},
+              {'location_id': 'walmart_sps', 'supermarket_id': 'walmart'},
+          ]
+          serialized = json.dumps({
+              'publication': publication,
+              'manifest': manifest,
+              'descriptors': descriptors,
+          }).casefold()
+          for forbidden in ('turso_database_url', 'turso_auth_token', 'libsql://'):
+              assert forbidden not in serialized
+          print(json.dumps({
+              'safe_products_published': manifest['safe_products_published'],
+              'safe_offers_published': manifest['safe_offers_published'],
+              'common_basket_product_count': manifest['common_basket_product_count'],
+              'excluded_group_counts': manifest['excluded_group_counts'],
+          }, sort_keys=True))
+          PY
+
+      - name: Publicar dataset BI seguro
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
+        with:
+          name: safe-analytics-colonial-walmart-sps-${{ github.run_id }}
+          path: |
+            precios-supermercados-sps/run-artifacts/analytics/colonial-walmart-sps/
+            precios-supermercados-sps/run-artifacts/analytics/colonial-walmart-sps-run.json
+            precios-supermercados-sps/run-artifacts/analytics/colonial-walmart-sps-descriptors-run.json
+          if-no-files-found: warn
+          retention-days: 30
