@@ -66,6 +66,7 @@ def test_sample_keeps_source_names_and_ranks_only_safe_products() -> None:
         "Suavizante Downy Pureza 800 ml",
         "Downy Suavizante Pureza 800 ML",
     ]
+    assert [offer["source_category"] for offer in row["offers"]] == ["Limpieza", "Limpieza"]
     assert row["savings_vs_highest"] == "20.00"
 
 
@@ -81,6 +82,29 @@ def test_sample_fails_if_descriptor_identity_disagrees() -> None:
     broken["rows"][0]["canonical_gtin"] = "4006381333931"
     with pytest.raises(module.SampleError, match="descriptor_publication_identity_mismatch"):
         module.build_sample(publication(), broken, limit=10)
+
+
+def test_sample_rejects_descriptors_not_belonging_to_safe_offers() -> None:
+    broken = descriptors()
+    broken["rows"].append(
+        {"canonical_product_id": "prod_x", "canonical_gtin": "7501031311309", "source_record_id": "colonial:99", "supermarket_id": "colonial", "source_name": "Café Passion Especial 1 lb", "source_brand": "Passion", "source_presentation": "1 lb", "source_category": "Café"}
+    )
+    with pytest.raises(module.SampleError, match="descriptor_set_not_exactly_safe_offers"):
+        module.build_sample(publication(), broken, limit=10)
+
+
+def test_sample_rejects_product_gtin_that_disagrees_with_its_safe_offers() -> None:
+    broken = publication()
+    broken["products"][0]["canonical_gtin"] = "4006381333931"
+    with pytest.raises(module.SampleError, match="publication_product_gtin_conflict"):
+        module.build_sample(broken, descriptors(), limit=10)
+
+
+def test_sample_rejects_nonpositive_current_price() -> None:
+    broken = publication()
+    broken["offers"][0]["current_price"] = "0.00"
+    with pytest.raises(module.SampleError, match="publication_current_price_invalid"):
+        module.build_sample(broken, descriptors(), limit=10)
 
 
 def test_sample_rejects_unbounded_limit() -> None:
