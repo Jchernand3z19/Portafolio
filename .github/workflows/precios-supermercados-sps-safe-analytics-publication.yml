@@ -49,17 +49,17 @@ jobs:
           python -m pip install -r precios-supermercados-sps/requirements.txt
           python -m pip check
 
-      - name: Exportar comparación segura Colonial vs Walmart SPS
+      - name: Exportar comparación segura La Colonia vs Walmart SPS
         working-directory: precios-supermercados-sps
         run: |
           set -euo pipefail
-          rm -rf run-artifacts/analytics/colonial-walmart-sps
+          rm -rf run-artifacts/analytics/la-colonia-walmart-sps
           python scripts/exportar_modelo_analitico.py \
             --turso \
-            --scope colonial=colonial_sps \
+            --scope la_colonia=la_colonia_sps \
             --scope walmart=walmart_sps \
-            --output-directory run-artifacts/analytics/colonial-walmart-sps \
-            | tee run-artifacts/analytics/colonial-walmart-sps-run.json
+            --output-directory run-artifacts/analytics/la-colonia-walmart-sps \
+            | tee run-artifacts/analytics/la-colonia-walmart-sps-run.json
 
       - name: Generar descriptores fuente de filas seguras
         working-directory: precios-supermercados-sps
@@ -67,20 +67,20 @@ jobs:
           set -euo pipefail
           python scripts/generar_descriptores_publicacion_segura.py \
             --turso \
-            --publication run-artifacts/analytics/colonial-walmart-sps/publication.json \
-            --output run-artifacts/analytics/colonial-walmart-sps/source-descriptors.json \
-            | tee run-artifacts/analytics/colonial-walmart-sps-descriptors-run.json
+            --publication run-artifacts/analytics/la-colonia-walmart-sps/publication.json \
+            --output run-artifacts/analytics/la-colonia-walmart-sps/source-descriptors.json \
+            | tee run-artifacts/analytics/la-colonia-walmart-sps-descriptors-run.json
 
       - name: Generar muestra segura para portafolio
         working-directory: precios-supermercados-sps
         run: |
           set -euo pipefail
           python scripts/generar_muestra_portafolio_segura.py \
-            --publication run-artifacts/analytics/colonial-walmart-sps/publication.json \
-            --descriptors run-artifacts/analytics/colonial-walmart-sps/source-descriptors.json \
-            --output run-artifacts/analytics/colonial-walmart-sps/portfolio-sample.json \
+            --publication run-artifacts/analytics/la-colonia-walmart-sps/publication.json \
+            --descriptors run-artifacts/analytics/la-colonia-walmart-sps/source-descriptors.json \
+            --output run-artifacts/analytics/la-colonia-walmart-sps/portfolio-sample.json \
             --limit 10 \
-            | tee run-artifacts/analytics/colonial-walmart-sps-portfolio-run.json
+            | tee run-artifacts/analytics/la-colonia-walmart-sps-portfolio-run.json
 
       - name: Validar contrato publicado
         working-directory: precios-supermercados-sps
@@ -90,7 +90,7 @@ jobs:
           import json
           from pathlib import Path
 
-          root = Path('run-artifacts/analytics/colonial-walmart-sps')
+          root = Path('run-artifacts/analytics/la-colonia-walmart-sps')
           publication = json.loads((root / 'publication.json').read_text(encoding='utf-8'))
           manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
           descriptors = json.loads((root / 'source-descriptors.json').read_text(encoding='utf-8'))
@@ -109,7 +109,7 @@ jobs:
           assert descriptors['canonical_product_count'] == manifest['safe_products_published']
           assert sample['row_count'] <= min(10, manifest['safe_products_published'])
           assert manifest['scope'] == [
-              {'location_id': 'colonial_sps', 'supermarket_id': 'colonial'},
+              {'location_id': 'la_colonia_sps', 'supermarket_id': 'la_colonia'},
               {'location_id': 'walmart_sps', 'supermarket_id': 'walmart'},
           ]
           assert sample['scope'] == manifest['scope']
@@ -134,11 +134,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
-          name: safe-analytics-colonial-walmart-sps-${{ github.run_id }}
+          name: safe-analytics-la-colonia-walmart-sps-${{ github.run_id }}
           path: |
-            precios-supermercados-sps/run-artifacts/analytics/colonial-walmart-sps/
-            precios-supermercados-sps/run-artifacts/analytics/colonial-walmart-sps-run.json
-            precios-supermercados-sps/run-artifacts/analytics/colonial-walmart-sps-descriptors-run.json
-            precios-supermercados-sps/run-artifacts/analytics/colonial-walmart-sps-portfolio-run.json
+            precios-supermercados-sps/run-artifacts/analytics/la-colonia-walmart-sps/
+            precios-supermercados-sps/run-artifacts/analytics/la-colonia-walmart-sps-run.json
+            precios-supermercados-sps/run-artifacts/analytics/la-colonia-walmart-sps-descriptors-run.json
+            precios-supermercados-sps/run-artifacts/analytics/la-colonia-walmart-sps-portfolio-run.json
           if-no-files-found: warn
           retention-days: 30

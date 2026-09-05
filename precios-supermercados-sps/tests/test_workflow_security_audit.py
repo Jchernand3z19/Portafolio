@@ -129,8 +129,9 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     assert "scripts/generar_descriptores_publicacion_segura.py" in raw
     assert "scripts/generar_muestra_portafolio_segura.py" in raw
     assert "portfolio-sample.json" in raw
-    assert "--scope colonial=colonial_sps" in raw
+    assert "--scope la_colonia=la_colonia_sps" in raw
     assert "--scope walmart=walmart_sps" in raw
+    assert "--scope colonial=colonial_sps" not in raw
     assert "precios-sps-publication/v1" in raw
     assert "precios-sps-safe-source-descriptors/v1" in raw
     assert "precios-sps-safe-portfolio-sample/v1" in raw
