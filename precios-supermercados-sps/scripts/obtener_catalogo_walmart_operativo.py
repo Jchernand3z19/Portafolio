@@ -23,7 +23,10 @@ SALES_CHANNEL = "1"
 PAGE_SIZE = 100
 RECOVERY_PAGE_SIZE = 50
 DEFAULT_DELAY = 1.0
+DEFAULT_MAX_RETRIES = 2
+MAX_RETRIES_HARD = 2
 MAX_REQUESTS_HARD = 700
+RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 UA = "Mozilla/5.0 (compatible; PreciosSupermercadosSPS-Walmart/1.0; read-only)"
 CATEGORY2_PARTITIONS = {"articulos-para-el-hogar", "ropa-y-zapateria"}
 
@@ -69,41 +72,39 @@ def validate_context_url(url: str, seller: str) -> None:
         raise RuntimeError("commercial_scope_changed")
 
 
+def _retryable(status: int | None, error: str | None) -> bool:
+    if status in RETRYABLE_HTTP_STATUSES:
+        return True
+    if status is not None or not error:
+        return False
+    return error.startswith(("URLError:", "TimeoutError:", "ConnectionError:", "OSError:"))
+
+
 class Capture:
-    def __init__(self, raw_dir: Path, delay: float, max_requests: int) -> None:
+    def __init__(self, raw_dir: Path, delay: float, max_requests: int, max_retries: int = DEFAULT_MAX_RETRIES) -> None:
         self.raw_dir = raw_dir
         self.delay = delay
         self.max_requests = max_requests
+        self.max_retries = max_retries
         self.records: list[dict] = []
+        self.retry_count = 0
         self.started = time.monotonic()
 
     def _budget(self) -> None:
         if len(self.records) >= self.max_requests:
             raise RuntimeError("request_budget_exceeded")
 
-    def home(self) -> tuple[str, dict]:
-        self._budget()
-        url = BASE + "/"
-        request = urllib.request.Request(url, headers={"User-Agent": UA}, method="GET")
-        body, status, response_url, error, start = b"", None, None, None, time.monotonic()
-        try:
-            with urllib.request.urlopen(request, timeout=45) as response:
-                status, response_url, body = response.status, response.geturl(), response.read()
-        except urllib.error.HTTPError as exc:
-            status, response_url, body, error = exc.code, exc.geturl(), exc.read(), f"http_{exc.code}"
-        except Exception as exc:  # noqa: BLE001
-            error = f"{type(exc).__name__}:{exc}"
-        if response_url and urlsplit(response_url).netloc != "www.walmart.com.hn":
-            error = error or "home_redirect_outside_origin"
-        record = self._record("home", "GET", url, response_url, status, body, error, start)
-        if self.delay:
-            time.sleep(self.delay)
-        if status != 200 or error:
-            raise RuntimeError(f"request_failed:home:{status}:{error}")
-        return body.decode("utf-8"), record
-
-    def _record(self, tag: str, method: str, url: str, response_url: str | None, status: int | None,
-                body: bytes, error: str | None, start: float) -> dict:
+    def _record(
+        self,
+        tag: str,
+        method: str,
+        url: str,
+        response_url: str | None,
+        status: int | None,
+        body: bytes,
+        error: str | None,
+        start: float,
+    ) -> dict:
         digest = hashlib.sha256(body).hexdigest() if body else None
         raw_path = None
         if body:
@@ -128,29 +129,63 @@ class Capture:
         self.records.append(record)
         return record
 
+    def _request(
+        self,
+        tag: str,
+        url: str,
+        headers: dict[str, str],
+        *,
+        seller: str | None = None,
+    ) -> tuple[bytes, dict]:
+        for attempt in range(self.max_retries + 1):
+            self._budget()
+            request = urllib.request.Request(url, headers=headers, method="GET")
+            body, status, response_url, error, start = b"", None, None, None, time.monotonic()
+            try:
+                with urllib.request.urlopen(request, timeout=45) as response:
+                    status, response_url, body = response.status, response.geturl(), response.read()
+            except urllib.error.HTTPError as exc:
+                status, response_url, body, error = exc.code, exc.geturl(), exc.read(), f"http_{exc.code}"
+            except Exception as exc:  # noqa: BLE001
+                error = f"{type(exc).__name__}:{exc}"
+
+            if response_url:
+                if seller is None:
+                    if urlsplit(response_url).netloc != "www.walmart.com.hn":
+                        error = error or "home_redirect_outside_origin"
+                else:
+                    try:
+                        validate_context_url(response_url, seller)
+                    except RuntimeError as exc:
+                        error = error or str(exc)
+
+            record_tag = tag if attempt == 0 else f"{tag}/retry-{attempt}"
+            record = self._record(record_tag, "GET", url, response_url, status, body, error, start)
+            if self.delay:
+                time.sleep(self.delay)
+            if status == 200 and error is None:
+                return body, record
+            if attempt >= self.max_retries or not _retryable(status, error):
+                raise RuntimeError(f"request_failed:{tag}:{status}:{error}")
+            self.retry_count += 1
+        raise AssertionError("retry_loop_exhausted")
+
+    def home(self) -> tuple[str, dict]:
+        body, record = self._request("home", BASE + "/", {"User-Agent": UA})
+        try:
+            return body.decode("utf-8"), record
+        except UnicodeDecodeError as exc:
+            raise RuntimeError("home_response_not_text") from exc
+
     def get(self, seller: str, tag: str, path: str, query: dict[str, str]) -> tuple[dict, dict]:
-        self._budget()
         url = BASE + path + "?" + urlencode(query)
         validate_context_url(url, seller)
-        request = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"}, method="GET")
-        body, status, response_url, error, start = b"", None, None, None, time.monotonic()
-        try:
-            with urllib.request.urlopen(request, timeout=45) as response:
-                status, response_url, body = response.status, response.geturl(), response.read()
-        except urllib.error.HTTPError as exc:
-            status, response_url, body, error = exc.code, exc.geturl(), exc.read(), f"http_{exc.code}"
-        except Exception as exc:  # noqa: BLE001
-            error = f"{type(exc).__name__}:{exc}"
-        if response_url:
-            try:
-                validate_context_url(response_url, seller)
-            except RuntimeError as exc:
-                error = error or str(exc)
-        record = self._record(tag, "GET", url, response_url, status, body, error, start)
-        if self.delay:
-            time.sleep(self.delay)
-        if status != 200 or error:
-            raise RuntimeError(f"request_failed:{tag}:{status}:{error}")
+        body, record = self._request(
+            tag,
+            url,
+            {"User-Agent": UA, "Accept": "application/json"},
+            seller=seller,
+        )
         try:
             doc = json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -202,7 +237,11 @@ def _page_products(
             {**common, "count": str(RECOVERY_PAGE_SIZE), "page": str(recovery_page)},
         )
         part_products = part.get("products")
-        if part.get("recordsFiltered") != expected_total or not isinstance(part_products, list) or len(part_products) != RECOVERY_PAGE_SIZE:
+        if (
+            part.get("recordsFiltered") != expected_total
+            or not isinstance(part_products, list)
+            or len(part_products) != RECOVERY_PAGE_SIZE
+        ):
             raise RuntimeError(f"page_recovery_incomplete:{tag}")
         recovered.extend(part_products)
         evidence.append(part_record)
@@ -264,7 +303,12 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
                 rows.extend(incoming)
                 source_details.update(details)
                 page_evidence.extend(
-                    {"tag": item["tag"], "url": item["url"], "sha256": item["sha256"], "observed_at": item["observed_at"]}
+                    {
+                        "tag": item["tag"],
+                        "url": item["url"],
+                        "sha256": item["sha256"],
+                        "observed_at": item["observed_at"],
+                    }
                     for item in records
                 )
             if len(partition_members) != partition_total:
@@ -339,6 +383,7 @@ def main() -> None:
     parser.add_argument("--evidence-output", type=Path, required=True)
     parser.add_argument("--delay-seconds", type=float, default=DEFAULT_DELAY)
     parser.add_argument("--max-requests", type=int, default=MAX_REQUESTS_HARD)
+    parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES)
     args = parser.parse_args()
     if not args.live_read_only or not args.allow_full_catalog:
         raise SystemExit("explicit_live_full_catalog_authorization_required")
@@ -346,11 +391,13 @@ def main() -> None:
         raise SystemExit("delay_too_small")
     if args.max_requests <= 0 or args.max_requests > MAX_REQUESTS_HARD:
         raise SystemExit("request_budget_invalid")
+    if args.max_retries < 0 or args.max_retries > MAX_RETRIES_HARD:
+        raise SystemExit("retry_budget_invalid")
 
     args.output_directory.mkdir(parents=True, exist_ok=True)
     args.raw_directory.mkdir(parents=True, exist_ok=True)
     args.evidence_output.parent.mkdir(parents=True, exist_ok=True)
-    capture = Capture(args.raw_directory, args.delay_seconds, args.max_requests)
+    capture = Capture(args.raw_directory, args.delay_seconds, args.max_requests, args.max_retries)
     snapshots: list[dict] = []
     error = None
     try:
@@ -366,7 +413,10 @@ def main() -> None:
         }
         for snapshot in snapshots:
             target = args.output_directory / f"snapshot-walmart-{names[snapshot['location_id']]}.json"
-            target.write_text(json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+            target.write_text(
+                json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                encoding="utf-8",
+            )
     except Exception as exc:  # noqa: BLE001
         error = f"{type(exc).__name__}:{exc}"
 
@@ -374,7 +424,8 @@ def main() -> None:
         "result": "success" if error is None else "failed",
         "scope": SCOPE,
         "concurrency": 1,
-        "automatic_retry_count": 0,
+        "automatic_retry_count": capture.retry_count,
+        "max_retries_per_request": args.max_retries,
         "request_budget": args.max_requests,
         "request_count": len(capture.records),
         "elapsed_seconds": round(time.monotonic() - capture.started, 3),
@@ -390,7 +441,9 @@ def main() -> None:
         ],
         "error": error,
     }
-    args.evidence_output.write_text(json.dumps(evidence, ensure_ascii=False, sort_keys=True, indent=2), encoding="utf-8")
+    args.evidence_output.write_text(
+        json.dumps(evidence, ensure_ascii=False, sort_keys=True, indent=2), encoding="utf-8"
+    )
     (args.evidence_output.parent / "requests.json").write_text(
         json.dumps({"records": capture.records}, ensure_ascii=False, sort_keys=True, indent=2), encoding="utf-8"
     )
