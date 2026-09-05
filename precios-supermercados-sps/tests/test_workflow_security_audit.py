@@ -112,7 +112,7 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
             "workflows": ["Precios SPS - Refrescar homologación derivada"],
             "types": ["completed"],
         },
-        "workflow_dispatch": None,
+        "workflow_dispatch": "",
     }
     workflow_jobs = base.jobs(workflow)
     assert set(workflow_jobs) == {"publish"}
@@ -130,9 +130,11 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
 
     raw = path.read_text(encoding="utf-8")
     assert "scripts/exportar_modelo_analitico.py" in raw
+    assert "scripts/generar_descriptores_publicacion_segura.py" in raw
     assert "--scope colonial=colonial_sps" in raw
     assert "--scope walmart=walmart_sps" in raw
     assert "precios-sps-publication/v1" in raw
+    assert "precios-sps-safe-source-descriptors/v1" in raw
     assert "fail_closed_strong_identity_and_commercial_consistency" in raw
     assert "TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}" in raw
     assert "TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}" in raw
