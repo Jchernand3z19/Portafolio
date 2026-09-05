@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import socket
 import subprocess
 import sys
@@ -13,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 HOST = "127.0.0.1"
 PORT = 8766
 BASE_URL = f"http://{HOST}:{PORT}/"
+SAMPLE_PATH = ROOT / "precios-supermercados-sps" / "portfolio" / "sample-data.json"
+SAFE_SAMPLE_SCHEMA = "precios-sps-safe-portfolio-sample/v1"
+SAFE_POLICY = "fail_closed_strong_identity_and_commercial_consistency"
 
 
 def wait_for_server(timeout: float = 10.0) -> None:
@@ -24,6 +28,43 @@ def wait_for_server(timeout: float = 10.0) -> None:
                 return
         time.sleep(0.1)
     raise RuntimeError("Local portfolio server did not start")
+
+
+def public_sample_is_published() -> bool:
+    sample = json.loads(SAMPLE_PATH.read_text(encoding="utf-8"))
+    rows = sample.get("rows")
+    return (
+        sample.get("schema") == SAFE_SAMPLE_SCHEMA
+        and sample.get("comparison_policy") == SAFE_POLICY
+        and isinstance(rows, list)
+        and sample.get("row_count") == len(rows)
+        and bool(rows)
+    )
+
+
+def assert_price_comparison_state(price) -> None:
+    comparison_wrap = price.locator(".price-table-wrap")
+    safety_note = price.locator("#price-sample-title").locator("xpath=../..").locator(".price-note")
+    assert price.locator("[data-price-ranking-legend]").count() == 0
+
+    if public_sample_is_published():
+        sample = json.loads(SAMPLE_PATH.read_text(encoding="utf-8"))
+        comparison_wrap.wait_for(state="visible", timeout=5000)
+        assert safety_note.get_attribute("data-comparison-safety") == "verified-strong-identity"
+        assert comparison_wrap.locator("tbody tr").count() == sample["row_count"]
+        table_text = comparison_wrap.inner_text()
+        first = sample["rows"][0]
+        assert first["canonical_gtin"] in table_text
+        assert "La Colonia" in table_text
+        assert "Walmart" in table_text
+    else:
+        assert price.locator("#price-sample-title").inner_text() == "Comparaciones cross-source con identidad fuerte"
+        assert comparison_wrap.is_hidden()
+        assert comparison_wrap.get_attribute("aria-hidden") == "true"
+        assert safety_note.get_attribute("data-comparison-safety") == "fail-closed"
+        safety_text = safety_note.inner_text()
+        assert "Passion Jaguar" in safety_text
+        assert "Passion Especial" in safety_text
 
 
 def main() -> int:
@@ -86,17 +127,7 @@ def main() -> int:
             assert "SPS 6603 · Florencia 6602" in coverage_text
             assert "TGU Multiplaza · TGU Próceres" in coverage_text
 
-            # Cross-source rows are withheld until they pass the strong-identity gate.
-            assert price.locator("#price-sample-title").inner_text() == "Comparaciones cross-source con identidad fuerte"
-            comparison_wrap = price.locator(".price-table-wrap")
-            assert comparison_wrap.is_hidden()
-            assert comparison_wrap.get_attribute("aria-hidden") == "true"
-            assert price.locator("[data-price-ranking-legend]").count() == 0
-            safety_note = price.locator("#price-sample-title").locator("xpath=../..").locator(".price-note")
-            assert safety_note.get_attribute("data-comparison-safety") == "fail-closed"
-            safety_text = safety_note.inner_text()
-            assert "Passion Jaguar" in safety_text
-            assert "Passion Especial" in safety_text
+            assert_price_comparison_state(price)
 
             price_shell = price.locator(".price-view__body").bounding_box()
             price_top = price.locator(".price-view__top").bounding_box()
