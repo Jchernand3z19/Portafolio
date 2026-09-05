@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from .price_analytics import AnalyticsResult, MONEY, PERCENT, PriceAnalyticsError
 
@@ -40,14 +40,17 @@ class RunChangeSummary:
     removed_from_common_universe: tuple[str, ...]
     changed_offers: tuple[OfferChange, ...]
     basket_changes: tuple[BasketTotalChange, ...]
-    cheapest_supermarket_previous: str
-    cheapest_supermarket_current: str
+    cheapest_supermarket_previous: str | None
+    cheapest_supermarket_current: str | None
 
 
 def _pct(change: int, previous: int) -> Decimal:
     if previous <= 0:
         return Decimal("0.00")
-    return (Decimal(change) * Decimal(100) / Decimal(previous)).quantize(PERCENT)
+    return (Decimal(change) * Decimal(100) / Decimal(previous)).quantize(
+        PERCENT,
+        rounding=ROUND_HALF_UP,
+    )
 
 
 def compare_runs(previous: AnalyticsResult, current: AnalyticsResult) -> RunChangeSummary:
@@ -92,10 +95,11 @@ def compare_runs(previous: AnalyticsResult, current: AnalyticsResult) -> RunChan
                 )
             )
 
-    # Basket totals between runs are only comparable on the intersection. If the
-    # denominator changed, direct totals would mix composition with price change.
+    # Totales de canasta sólo son comparables si ambos runs contienen el mismo
+    # universo no vacío. Comparar dos sumas de conjunto vacío produciría un delta
+    # de cero técnicamente correcto pero comercialmente engañoso.
     basket_changes: list[BasketTotalChange] = []
-    if previous_ids == current_ids:
+    if previous_ids and previous_ids == current_ids:
         old_totals = dict(previous.common_basket.totals_minor)
         new_totals = dict(current.common_basket.totals_minor)
         for supermarket in previous.scope.supermarket_ids:
