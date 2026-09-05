@@ -48,6 +48,22 @@ def test_publication_dataset_exposes_safe_denominator_and_no_internal_authority(
     assert "auth" not in serialized.casefold()
 
 
+def test_publication_marks_all_exact_price_ties_as_best() -> None:
+    homologation = homologate_products((product("colonial:1", "colonial"), product("walmart:2", "walmart")))
+    result = analyze_current_prices(
+        homologation,
+        (
+            CurrentPriceObservation("colonial:1", "colonial", "colonial_sps", 10000),
+            CurrentPriceObservation("walmart:2", "walmart", "walmart_sps", 10000),
+        ),
+        ComparisonScope((("colonial", "colonial_sps"), ("walmart", "walmart_sps"))),
+    )
+    dataset = build_publication_dataset(result)
+
+    assert sum(row.is_best_price for row in dataset.offers) == 2
+    assert sum(row.is_cheapest for row in dataset.common_basket) == 2
+
+
 def test_publication_dataset_counts_excluded_unsafe_groups_without_publishing_prices() -> None:
     records = (
         SourceProductRecord(
@@ -79,3 +95,5 @@ def test_publication_dataset_counts_excluded_unsafe_groups_without_publishing_pr
     assert dataset.offers == ()
     assert dataset.products == ()
     assert dataset.excluded_group_counts == {"not_comparable": 1}
+    assert all(row.product_count == 0 for row in dataset.common_basket)
+    assert not any(row.is_cheapest for row in dataset.common_basket)
