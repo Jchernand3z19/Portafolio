@@ -45,7 +45,7 @@ jobs:
               _query,
               _scalar,
               _source_preflight,
-              persist_homologation,
+              backfill_turso,
           )
           from precios_supermercados.product_homologation_persistence import TABLE_NAME
 
@@ -61,7 +61,7 @@ jobs:
           if before != expected_before:
               raise SystemExit(f'production_preflight_changed:{before}')
 
-          result = persist_homologation(
+          result = backfill_turso(
               database_url=url,
               auth_token=token,
               updated_at_utc='2026-09-05T04:42:32Z',
