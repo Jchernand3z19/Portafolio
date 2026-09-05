@@ -1,0 +1,32 @@
+name: Temporary source export for trusted workflow edit
+
+on:
+  push:
+    branches:
+      - feature/trusted-main-production-trigger
+    paths:
+      - .github/workflows/temp-source-export.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/feature/trusted-main-production-trigger' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact branch commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Export exact source files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
+        with:
+          name: trusted-workflow-source-${{ github.run_id }}
+          path: |
+            .github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml
+            precios-supermercados-sps/tests/test_workflow_security_audit.py
+          if-no-files-found: error
+          retention-days: 1
