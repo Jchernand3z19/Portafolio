@@ -22,7 +22,7 @@ jobs:
   update:
     if: ${{ github.repository == 'Jchernand3z19/Portafolio' && (github.event_name == 'schedule' || inputs.live_read_only_authorized == true) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: precios-supermercados-sps
@@ -112,103 +112,140 @@ jobs:
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
 
+      - name: Descargar catálogo SPS Colonial
+        id: colonial
+        shell: bash
+        run: |
+          set +e
+          python scripts/obtener_catalogo_colonial_operativo.py \
+            --live-read-only \
+            --allow-full-catalog \
+            --max-requests 450 \
+            --deadline-seconds 1200 \
+            --output run-artifacts/colonial
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Descargar catálogos Walmart
+        id: walmart
+        shell: bash
+        run: |
+          set +e
+          python scripts/obtener_catalogo_walmart_operativo.py \
+            --live-read-only \
+            --allow-full-catalog \
+            --delay-seconds 1.0 \
+            --max-requests 700 \
+            --output-directory run-artifacts/walmart \
+            --raw-directory run-artifacts/walmart/raw \
+            --evidence-output run-artifacts/walmart/evidence.json
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Descargar catálogos PriceSmart
+        id: pricesmart
+        shell: bash
+        run: |
+          set +e
+          python scripts/obtener_catalogo_pricesmart_operativo.py \
+            --live-read-only \
+            --allow-full-catalog \
+            --delay-seconds 0.5 \
+            --max-requests 80 \
+            --output-directory run-artifacts/pricesmart \
+            --raw-directory run-artifacts/pricesmart/raw \
+            --evidence-output run-artifacts/pricesmart/evidence.json
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
       - name: Aceptar sólo snapshots completos
         shell: bash
         env:
           SPS_EXIT: ${{ steps.sps.outputs.exit_code }}
           TGU_EXIT: ${{ steps.tgu.outputs.exit_code }}
           LOS_ANDES_EXIT: ${{ steps.los_andes.outputs.exit_code }}
+          PAIZ_EXIT: ${{ steps.paiz.outputs.exit_code }}
+          COLONIAL_EXIT: ${{ steps.colonial.outputs.exit_code }}
+          WALMART_EXIT: ${{ steps.walmart.outputs.exit_code }}
+          PRICESMART_EXIT: ${{ steps.pricesmart.outputs.exit_code }}
         run: |
           set -euo pipefail
           test "$SPS_EXIT" = "0"
           test "$TGU_EXIT" = "0"
           test "$LOS_ANDES_EXIT" = "0"
+          test "$PAIZ_EXIT" = "0"
+          test "$COLONIAL_EXIT" = "0"
+          test "$WALMART_EXIT" = "0"
+          test "$PRICESMART_EXIT" = "0"
           python - <<'PY'
           from pathlib import Path
           import sys
           sys.path.insert(0, 'scripts')
           from actualizar_mvp_sqlite_la_colonia import validate_snapshot_bytes
           from actualizar_mvp_turso_comisariato_los_andes import validate_snapshot_bytes as validate_los_andes
+          from actualizar_mvp_turso_paiz import validate_snapshot_bytes as validate_paiz
+
           for city in ('sps', 'tgu'):
-              validate_snapshot_bytes(Path(f'run-artifacts/{city}/full-catalog.json').read_bytes())
+              snapshot = validate_snapshot_bytes(Path(f'run-artifacts/{city}/full-catalog.json').read_bytes())
+              assert snapshot['catalog_complete'] is True
+              assert snapshot['location_verified_same_run'] is True
+
           los_andes = validate_los_andes(Path('run-artifacts/los-andes/full-catalog.json').read_bytes())
-          assert los_andes['location_verified_same_run'] is True
           assert los_andes['catalog_complete'] is True
+          assert los_andes['location_verified_same_run'] is True
           assert los_andes['catalog_products_reported'] == los_andes['unique_products_extracted']
-          PY
 
-      - name: Persistir SPS La Colonia en Turso
-        id: persist_sps
-        shell: bash
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: |
-          set +e
-          python scripts/actualizar_mvp_turso_la_colonia.py \
-            run-artifacts/sps/full-catalog.json \
-            --run-id "${GITHUB_RUN_ID}-sps" \
-            > /tmp/sps-persist.out 2> /tmp/sps-persist.err
-          code=$?
-          set -e
-          cat /tmp/sps-persist.out || true
-          cat /tmp/sps-persist.err >&2 || true
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-
-      - name: Persistir TGU La Colonia en Turso
-        id: persist_tgu
-        shell: bash
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: |
-          set +e
-          python scripts/actualizar_mvp_turso_la_colonia.py \
-            run-artifacts/tgu/full-catalog.json \
-            --run-id "${GITHUB_RUN_ID}-tgu" \
-            > /tmp/tgu-persist.out 2> /tmp/tgu-persist.err
-          code=$?
-          set -e
-          cat /tmp/tgu-persist.out || true
-          cat /tmp/tgu-persist.err >&2 || true
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-
-      - name: Persistir SPS Comisariato Los Andes en Turso
-        id: persist_los_andes
-        shell: bash
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: |
-          set +e
-          python scripts/actualizar_mvp_turso_comisariato_los_andes.py \
-            run-artifacts/los-andes/full-catalog.json \
-            --run-id "${GITHUB_RUN_ID}-los-andes" \
-            > /tmp/los-andes-persist.out 2> /tmp/los-andes-persist.err
-          code=$?
-          set -e
-          cat /tmp/los-andes-persist.out || true
-          cat /tmp/los-andes-persist.err >&2 || true
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-
-      - name: Validar snapshots completos Paiz
-        shell: bash
-        env:
-          PAIZ_EXIT: ${{ steps.paiz.outputs.exit_code }}
-        run: |
-          set -euo pipefail
-          test "$PAIZ_EXIT" = "0"
-          python - <<'PY'
-          from pathlib import Path
-          import sys
-          sys.path.insert(0, 'scripts')
-          from actualizar_mvp_turso_paiz import validate_snapshot_bytes
           for name in ('multiplaza', 'proceres'):
-              snapshot = validate_snapshot_bytes(Path(f'run-artifacts/paiz/snapshot-paiz-{name}.json').read_bytes())
+              snapshot = validate_paiz(Path(f'run-artifacts/paiz/snapshot-paiz-{name}.json').read_bytes())
+              assert snapshot['catalog_complete'] is True
+              assert snapshot['location_verified_same_run'] is True
+              assert snapshot['catalog_products_reported'] == snapshot['unique_products_extracted']
+
+          for path, supermarket in (
+              ('run-artifacts/colonial/full-catalog.json', 'colonial'),
+              ('run-artifacts/walmart/snapshot-walmart-sps.json', 'walmart'),
+              ('run-artifacts/walmart/snapshot-walmart-tgu-ffaa.json', 'walmart'),
+              ('run-artifacts/walmart/snapshot-walmart-tgu-el-sauce.json', 'walmart'),
+              ('run-artifacts/pricesmart/snapshot-pricesmart-sps.json', 'pricesmart'),
+              ('run-artifacts/pricesmart/snapshot-pricesmart-tgu.json', 'pricesmart'),
+          ):
+              snapshot = validate_snapshot_bytes(Path(path).read_bytes(), supermarket_id=supermarket)
               assert snapshot['catalog_complete'] is True
               assert snapshot['location_verified_same_run'] is True
               assert snapshot['catalog_products_reported'] == snapshot['unique_products_extracted']
           PY
+
+      - name: Persistir La Colonia, Los Andes, Colonial, Walmart y PriceSmart
+        shell: bash
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          persist_generic() {
+            local file="$1"
+            local supermarket="$2"
+            local suffix="$3"
+            python scripts/actualizar_mvp_turso_la_colonia.py \
+              "$file" \
+              --supermarket "$supermarket" \
+              --run-id "${GITHUB_RUN_ID}-${suffix}"
+          }
+
+          persist_generic run-artifacts/sps/full-catalog.json la_colonia sps
+          persist_generic run-artifacts/tgu/full-catalog.json la_colonia tgu
+          python scripts/actualizar_mvp_turso_comisariato_los_andes.py \
+            run-artifacts/los-andes/full-catalog.json \
+            --run-id "${GITHUB_RUN_ID}-los-andes"
+          persist_generic run-artifacts/colonial/full-catalog.json colonial colonial
+          persist_generic run-artifacts/walmart/snapshot-walmart-sps.json walmart walmart-sps
+          persist_generic run-artifacts/walmart/snapshot-walmart-tgu-ffaa.json walmart walmart-tgu-ffaa
+          persist_generic run-artifacts/walmart/snapshot-walmart-tgu-el-sauce.json walmart walmart-tgu-el-sauce
+          persist_generic run-artifacts/pricesmart/snapshot-pricesmart-sps.json pricesmart pricesmart-sps
+          persist_generic run-artifacts/pricesmart/snapshot-pricesmart-tgu.json pricesmart pricesmart-tgu
 
       - name: Asegurar esquema Paiz en Turso
         shell: bash
@@ -217,7 +254,7 @@ jobs:
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: python scripts/migrar_mvp_paiz.py --turso
 
-      - name: Persistir Paiz Multiplaza en Turso
+      - name: Persistir Paiz
         shell: bash
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
@@ -228,14 +265,6 @@ jobs:
             run-artifacts/paiz/snapshot-paiz-multiplaza.json \
             --run-id "${GITHUB_RUN_ID}-paiz-multiplaza" \
             --verify
-
-      - name: Persistir Paiz Próceres en Turso
-        shell: bash
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: |
-          set -euo pipefail
           python scripts/actualizar_mvp_turso_paiz.py \
             run-artifacts/paiz/snapshot-paiz-proceres.json \
             --run-id "${GITHUB_RUN_ID}-paiz-proceres" \
@@ -246,9 +275,6 @@ jobs:
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-          SPS_PERSIST_EXIT: ${{ steps.persist_sps.outputs.exit_code }}
-          TGU_PERSIST_EXIT: ${{ steps.persist_tgu.outputs.exit_code }}
-          LOS_ANDES_PERSIST_EXIT: ${{ steps.persist_los_andes.outputs.exit_code }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -262,14 +288,6 @@ jobs:
           from actualizar_mvp_sqlite_la_colonia import validate_snapshot_bytes
           from actualizar_mvp_turso_comisariato_los_andes import validate_snapshot_bytes as validate_los_andes
           from actualizar_mvp_turso_la_colonia import _execute_rows, _pipeline, _stmt
-
-          if os.environ['SPS_PERSIST_EXIT'] != '0' or os.environ['TGU_PERSIST_EXIT'] != '0' or os.environ['LOS_ANDES_PERSIST_EXIT'] != '0':
-              raise SystemExit(
-                  'persist_failed:'
-                  f"sps={os.environ['SPS_PERSIST_EXIT']}:"
-                  f"tgu={os.environ['TGU_PERSIST_EXIT']}:"
-                  f"los_andes={os.environ['LOS_ANDES_PERSIST_EXIT']}"
-              )
 
           expected_runs = []
           expected_open_by_location = []
@@ -353,20 +371,10 @@ jobs:
               raise SystemExit(f'current_state_incomplete:minimum={expected_open_by_location}:actual={open_by_location}')
           if los_andes_open != expected_los_andes:
               raise SystemExit(f'los_andes_current_state_incomplete:expected={expected_los_andes}:actual={los_andes_open}')
-          retained_absent_by_location = [
-              [actual[0], actual[1] - expected[1]]
-              for actual, expected in zip(open_by_location, expected_open_by_location, strict=True)
-          ]
-          print(json.dumps({
-              'runs': runs,
-              'open_by_location': open_by_location,
-              'los_andes_open': los_andes_open,
-              'retained_absent_by_location': retained_absent_by_location,
-              'duplicate_open_periods': duplicates,
-          }, ensure_ascii=False, sort_keys=True))
+          print(json.dumps({'runs': runs, 'open_by_location': open_by_location, 'los_andes_open': los_andes_open, 'duplicate_open_periods': 0}, ensure_ascii=False, sort_keys=True))
           PY
 
-      - name: Verificar estado Paiz en Turso
+      - name: Verificar nuevos retailers y Paiz en Turso
         shell: bash
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
@@ -374,47 +382,92 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
+          import hashlib
           import json
           import os
           import sys
+          import time
           from pathlib import Path
           sys.path.insert(0, 'scripts')
+          from actualizar_mvp_sqlite_la_colonia import validate_snapshot_bytes
           from actualizar_mvp_turso_la_colonia import _execute_rows, _pipeline, _stmt
-          from actualizar_mvp_turso_paiz import validate_snapshot_bytes
+          from actualizar_mvp_turso_paiz import validate_snapshot_bytes as validate_paiz
 
-          expected = []
-          for name, location in (
-              ('multiplaza', 'paiz_tgu_multiplaza'),
-              ('proceres', 'paiz_tgu_proceres'),
-          ):
-              snap = validate_snapshot_bytes(Path(f'run-artifacts/paiz/snapshot-paiz-{name}.json').read_bytes())
-              expected.append([location, snap['skus_extracted']])
+          run_id = os.environ['GITHUB_RUN_ID']
+          expected_runs = []
+          expected_current = {}
+
+          def add(path, supermarket, suffix, validator):
+              raw = Path(path).read_bytes()
+              snapshot = validator(raw)
+              expected_runs.append([
+                  f'{run_id}-{suffix}', supermarket, snapshot['location_id'], 'success',
+                  snapshot['skus_extracted'], snapshot['catalog_products_reported'],
+                  hashlib.sha256(raw).hexdigest(),
+              ])
+              expected_current[(supermarket, snapshot['location_id'])] = snapshot['skus_extracted']
+
+          add('run-artifacts/paiz/snapshot-paiz-multiplaza.json', 'paiz', 'paiz-multiplaza', validate_paiz)
+          add('run-artifacts/paiz/snapshot-paiz-proceres.json', 'paiz', 'paiz-proceres', validate_paiz)
+          add('run-artifacts/colonial/full-catalog.json', 'colonial', 'colonial', lambda raw: validate_snapshot_bytes(raw, supermarket_id='colonial'))
+          add('run-artifacts/walmart/snapshot-walmart-sps.json', 'walmart', 'walmart-sps', lambda raw: validate_snapshot_bytes(raw, supermarket_id='walmart'))
+          add('run-artifacts/walmart/snapshot-walmart-tgu-ffaa.json', 'walmart', 'walmart-tgu-ffaa', lambda raw: validate_snapshot_bytes(raw, supermarket_id='walmart'))
+          add('run-artifacts/walmart/snapshot-walmart-tgu-el-sauce.json', 'walmart', 'walmart-tgu-el-sauce', lambda raw: validate_snapshot_bytes(raw, supermarket_id='walmart'))
+          add('run-artifacts/pricesmart/snapshot-pricesmart-sps.json', 'pricesmart', 'pricesmart-sps', lambda raw: validate_snapshot_bytes(raw, supermarket_id='pricesmart'))
+          add('run-artifacts/pricesmart/snapshot-pricesmart-tgu.json', 'pricesmart', 'pricesmart-tgu', lambda raw: validate_snapshot_bytes(raw, supermarket_id='pricesmart'))
+          expected_runs.sort()
+
+          run_ids = [row[0] for row in expected_runs]
+          placeholders = ','.join('?' for _ in run_ids)
+          run_sql = f'''SELECT scrape_run_id,supermarket_id,location_id,run_status,sku_count,catalog_product_count,source_json_sha256 FROM scrape_runs WHERE scrape_run_id IN ({placeholders}) ORDER BY scrape_run_id'''
+          runs = []
+          for attempt in range(7):
+              data = _pipeline(
+                  os.environ['TURSO_DATABASE_URL'], os.environ['TURSO_AUTH_TOKEN'],
+                  [{'type':'execute','stmt':_stmt(run_sql, tuple(run_ids))}, {'type':'close'}],
+              )
+              runs = _execute_rows(data['results'][0])
+              if runs == expected_runs:
+                  break
+              if attempt < 6:
+                  time.sleep(20)
+          if runs != expected_runs:
+              raise SystemExit(f'new_retailer_commits_not_confirmed:expected={expected_runs}:actual={runs}')
+
+          pairs = sorted(expected_current)
+          scope_sql = ' OR '.join('(supermarket_id=? AND location_id=?)' for _ in pairs)
+          scope_args = tuple(value for pair in pairs for value in pair)
           data = _pipeline(
               os.environ['TURSO_DATABASE_URL'], os.environ['TURSO_AUTH_TOKEN'],
               [
-                  {'type':'execute','stmt':_stmt("SELECT location_id,COUNT(*) FROM price_history WHERE supermarket_id='paiz' AND location_id IN ('paiz_tgu_multiplaza','paiz_tgu_proceres') AND valid_to_utc IS NULL GROUP BY location_id ORDER BY location_id")},
-                  {'type':'execute','stmt':_stmt("SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE supermarket_id='paiz' AND valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)")},
+                  {'type':'execute','stmt':_stmt(f'''SELECT supermarket_id,location_id,COUNT(*) FROM price_history WHERE valid_to_utc IS NULL AND ({scope_sql}) GROUP BY supermarket_id,location_id ORDER BY supermarket_id,location_id''', scope_args)},
+                  {'type':'execute','stmt':_stmt(f'''SELECT COUNT(*) FROM (SELECT supermarket_id,product_id,location_id FROM price_history WHERE valid_to_utc IS NULL AND ({scope_sql}) GROUP BY supermarket_id,product_id,location_id HAVING COUNT(*)>1)''', scope_args)},
                   {'type':'execute','stmt':_stmt('SELECT COUNT(*) FROM pragma_foreign_key_check')},
                   {'type':'execute','stmt':_stmt('PRAGMA integrity_check')},
                   {'type':'close'},
               ],
           )
-          rows = _execute_rows(data['results'][0])
+          current_rows = _execute_rows(data['results'][0])
           duplicates = _execute_rows(data['results'][1])
-          fk = _execute_rows(data['results'][2])
+          foreign_keys = _execute_rows(data['results'][2])
           integrity = _execute_rows(data['results'][3])
-          if [row[0] for row in rows] != [row[0] for row in expected]:
-              raise SystemExit(f'paiz_location_state_missing:{rows}')
-          if any(actual[1] < minimum[1] for actual, minimum in zip(rows, expected, strict=True)):
-              raise SystemExit(f'paiz_current_state_incomplete:minimum={expected}:actual={rows}')
-          if duplicates != [[0]] or fk != [[0]] or integrity != [['ok']]:
-              raise SystemExit(f'paiz_integrity_failed:{duplicates}:{fk}:{integrity}')
-          print(json.dumps({'open_by_location': rows, 'duplicate_open_periods': 0, 'foreign_key_violations': 0, 'integrity_check': 'ok'}, sort_keys=True))
+          actual_current = {(row[0], row[1]): row[2] for row in current_rows}
+          if set(actual_current) != set(expected_current):
+              raise SystemExit(f'new_retailer_scope_missing:expected={sorted(expected_current)}:actual={sorted(actual_current)}')
+          incomplete = {
+              f'{key[0]}:{key[1]}': (expected_current[key], actual_current[key])
+              for key in expected_current if actual_current[key] < expected_current[key]
+          }
+          if incomplete:
+              raise SystemExit(f'new_retailer_current_state_incomplete:{incomplete}')
+          if duplicates != [[0]] or foreign_keys != [[0]] or integrity != [['ok']]:
+              raise SystemExit(f'new_retailer_integrity_failed:{duplicates}:{foreign_keys}:{integrity}')
+          print(json.dumps({'runs': runs, 'current_open_by_location': current_rows, 'duplicate_open_periods': 0, 'foreign_key_violations': 0, 'integrity_check': 'ok'}, ensure_ascii=False, sort_keys=True))
           PY
 
       - name: Publicar evidencia
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: supermercados-mvp-${{ github.run_id }}
           path: precios-supermercados-sps/run-artifacts/
