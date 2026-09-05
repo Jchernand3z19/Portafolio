@@ -23,7 +23,10 @@ from precios_supermercados.scrapers.pricesmart import (
 
 ROWS = 200
 DEFAULT_DELAY = 0.5
+DEFAULT_MAX_RETRIES = 2
+MAX_RETRIES_HARD = 2
 MAX_REQUESTS_HARD = 80
+RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 PUBLIC_BLOOMREACH_AUTH_KEY = "ev7libhybjg5h1d1"
 ACCOUNT_ID = "7024"
 DOMAIN_KEY = "pricesmart_bloomreach_io_es"
@@ -98,85 +101,101 @@ def query_for(club: str, key: str, name: str, start: int) -> dict:
     }
 
 
+def _retryable(status: int | None, error: str | None) -> bool:
+    if status in RETRYABLE_HTTP_STATUSES:
+        return True
+    if status is not None or not error:
+        return False
+    return error.startswith(("URLError:", "TimeoutError:", "ConnectionError:", "OSError:"))
+
+
 class Capture:
-    def __init__(self, raw_dir: Path, delay: float, max_requests: int) -> None:
+    def __init__(self, raw_dir: Path, delay: float, max_requests: int, max_retries: int = DEFAULT_MAX_RETRIES) -> None:
         self.raw_dir = raw_dir
         self.delay = delay
         self.max_requests = max_requests
+        self.max_retries = max_retries
         self.records: list[dict] = []
+        self.retry_count = 0
         self.started = time.monotonic()
 
     def post(self, club: str, key: str, name: str, start_offset: int) -> tuple[dict, dict]:
-        if len(self.records) >= self.max_requests:
-            raise RuntimeError("request_budget_exceeded")
         query = query_for(club, key, name, start_offset)
         body = json.dumps([query], ensure_ascii=False, separators=(",", ":")).encode()
-        request = urllib.request.Request(
-            ENDPOINT,
-            data=body,
-            headers={
-                "User-Agent": UA,
-                "Accept": "application/json, text/plain, */*",
-                "Content-Type": "application/json",
-                "Referer": query["url"],
-            },
-            method="POST",
-        )
-        response_body = b""
-        status = None
-        response_url = None
-        error = None
-        started = time.monotonic()
-        try:
-            with urllib.request.urlopen(request, timeout=45) as response:
-                status = response.status
-                response_url = response.geturl()
-                response_body = response.read()
-        except urllib.error.HTTPError as exc:
-            status = exc.code
-            response_url = exc.geturl()
-            response_body = exc.read()
-            error = f"http_{exc.code}"
-        except Exception as exc:  # noqa: BLE001
-            error = f"{type(exc).__name__}:{exc}"
-        if response_url and response_url.rstrip("/") != ENDPOINT.rstrip("/"):
-            error = error or "endpoint_redirected"
-        digest = hashlib.sha256(response_body).hexdigest() if response_body else None
-        target = self.raw_dir / club / f"{key}__{start_offset:06d}.json"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if response_body:
-            target.write_bytes(response_body)
-        record = {
-            "index": len(self.records) + 1,
-            "club": club,
-            "category_key": key,
-            "category_name": name,
-            "start": start_offset,
-            "rows": ROWS,
-            "method": "POST",
-            "url": ENDPOINT,
-            "http_status": status,
-            "response_url": response_url,
-            "observed_at": utc_now(),
-            "elapsed_seconds": round(time.monotonic() - started, 3),
-            "request_body_sha256": hashlib.sha256(body).hexdigest(),
-            "response_sha256": digest,
-            "response_bytes": len(response_body),
-            "file": str(target) if response_body else None,
-            "error": error,
-        }
-        self.records.append(record)
-        if self.delay:
-            time.sleep(self.delay)
-        if status != 200 or error:
-            raise RuntimeError(f"request_failed:{club}:{key}:{start_offset}:{status}:{error}")
-        try:
-            payload = json.loads(response_body)
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise RuntimeError(f"response_not_json:{club}:{key}:{start_offset}") from exc
-        if not isinstance(payload, dict) or not isinstance(payload.get("response"), dict):
-            raise RuntimeError(f"response_shape_invalid:{club}:{key}:{start_offset}")
-        return payload, record
+        for attempt in range(self.max_retries + 1):
+            if len(self.records) >= self.max_requests:
+                raise RuntimeError("request_budget_exceeded")
+            request = urllib.request.Request(
+                ENDPOINT,
+                data=body,
+                headers={
+                    "User-Agent": UA,
+                    "Accept": "application/json, text/plain, */*",
+                    "Content-Type": "application/json",
+                    "Referer": query["url"],
+                },
+                method="POST",
+            )
+            response_body = b""
+            status = None
+            response_url = None
+            error = None
+            started = time.monotonic()
+            try:
+                with urllib.request.urlopen(request, timeout=45) as response:
+                    status = response.status
+                    response_url = response.geturl()
+                    response_body = response.read()
+            except urllib.error.HTTPError as exc:
+                status = exc.code
+                response_url = exc.geturl()
+                response_body = exc.read()
+                error = f"http_{exc.code}"
+            except Exception as exc:  # noqa: BLE001
+                error = f"{type(exc).__name__}:{exc}"
+            if response_url and response_url.rstrip("/") != ENDPOINT.rstrip("/"):
+                error = error or "endpoint_redirected"
+            digest = hashlib.sha256(response_body).hexdigest() if response_body else None
+            retry_suffix = "" if attempt == 0 else f"__retry-{attempt}"
+            target = self.raw_dir / club / f"{key}__{start_offset:06d}{retry_suffix}.json"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if response_body:
+                target.write_bytes(response_body)
+            record = {
+                "index": len(self.records) + 1,
+                "attempt": attempt + 1,
+                "club": club,
+                "category_key": key,
+                "category_name": name,
+                "start": start_offset,
+                "rows": ROWS,
+                "method": "POST",
+                "url": ENDPOINT,
+                "http_status": status,
+                "response_url": response_url,
+                "observed_at": utc_now(),
+                "elapsed_seconds": round(time.monotonic() - started, 3),
+                "request_body_sha256": hashlib.sha256(body).hexdigest(),
+                "response_sha256": digest,
+                "response_bytes": len(response_body),
+                "file": str(target) if response_body else None,
+                "error": error,
+            }
+            self.records.append(record)
+            if self.delay:
+                time.sleep(self.delay)
+            if status == 200 and error is None:
+                try:
+                    payload = json.loads(response_body)
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise RuntimeError(f"response_not_json:{club}:{key}:{start_offset}") from exc
+                if not isinstance(payload, dict) or not isinstance(payload.get("response"), dict):
+                    raise RuntimeError(f"response_shape_invalid:{club}:{key}:{start_offset}")
+                return payload, record
+            if attempt >= self.max_retries or not _retryable(status, error):
+                raise RuntimeError(f"request_failed:{club}:{key}:{start_offset}:{status}:{error}")
+            self.retry_count += 1
+        raise AssertionError("retry_loop_exhausted")
 
 
 def capture_club(capture: Capture, club: str) -> dict:
@@ -280,6 +299,7 @@ def main() -> None:
     parser.add_argument("--evidence-output", type=Path, required=True)
     parser.add_argument("--delay-seconds", type=float, default=DEFAULT_DELAY)
     parser.add_argument("--max-requests", type=int, default=MAX_REQUESTS_HARD)
+    parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES)
     args = parser.parse_args()
     if not args.live_read_only or not args.allow_full_catalog:
         raise SystemExit("explicit_live_full_catalog_authorization_required")
@@ -287,11 +307,13 @@ def main() -> None:
         raise SystemExit("delay_too_small")
     if args.max_requests <= 0 or args.max_requests > MAX_REQUESTS_HARD:
         raise SystemExit("request_budget_invalid")
+    if args.max_retries < 0 or args.max_retries > MAX_RETRIES_HARD:
+        raise SystemExit("retry_budget_invalid")
 
     args.output_directory.mkdir(parents=True, exist_ok=True)
     args.raw_directory.mkdir(parents=True, exist_ok=True)
     args.evidence_output.parent.mkdir(parents=True, exist_ok=True)
-    capture = Capture(args.raw_directory, args.delay_seconds, args.max_requests)
+    capture = Capture(args.raw_directory, args.delay_seconds, args.max_requests, args.max_retries)
     snapshots: list[dict] = []
     error = None
     try:
@@ -313,7 +335,8 @@ def main() -> None:
         "excluded_club": "6604",
         "root_count": len(ROOTS),
         "concurrency": 1,
-        "automatic_retry_count": 0,
+        "automatic_retry_count": capture.retry_count,
+        "max_retries_per_request": args.max_retries,
         "request_budget": args.max_requests,
         "request_count": len(capture.records),
         "elapsed_seconds": round(time.monotonic() - capture.started, 3),
