@@ -42,13 +42,16 @@ Estado público verificado al **4 de septiembre de 2026**:
 - Cobertura actual en **San Pedro Sula y Tegucigalpa**.
 - Cadenas con datos aceptados: **La Colonia, Supermercados Colonial, Walmart, PriceSmart, Comisariato Los Andes y Paiz**.
 - Evidencia pública de una captura aceptada con **6,646 productos con precio** y **120 promociones**.
-- Comparación pública homologada de **10 productos** entre Comisariato Los Andes y Supermercados Colonial. Esa tabla es una muestra de matching verificado, no el límite de cobertura del proyecto.
+- Comparador cross-source **fail-closed**: una fila sólo puede entrar a ahorro, mejor precio o canasta cuando existe identidad fuerte y coherencia comercial; marca + presentación por sí solas no autorizan una equivalencia.
+- Analítica intra-cadena respaldada por evidencia, como la comparación completa de Walmart TGU con `12,042` artículos comercialmente comparables y `255` con al menos una diferencia comercial.
 
 El detalle del sitio enlaza la **página de origen**, la **evidencia versionada en GitHub** y el **código de extracción** para que la capacidad de web scraping sea comprobable y no sólo declarativa.
 
 **Carpeta completa:** [`precios-supermercados-sps/`](precios-supermercados-sps/)
 
 **Procedencia de la presentación:** [`precios-supermercados-sps/docs/portfolio-showcase.md`](precios-supermercados-sps/docs/portfolio-showcase.md)
+
+**Metodología del comparador:** [`precios-supermercados-sps/docs/COMPARATOR-METHODOLOGY.md`](precios-supermercados-sps/docs/COMPARATOR-METHODOLOGY.md)
 
 ### 2. Mundial 2026: análisis histórico y predicción
 
