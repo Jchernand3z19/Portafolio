@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Mapping
 
 from .price_analytics import AnalyticsResult, BasketComparison, PriceAnalyticsError, analyze_subbasket
@@ -16,10 +17,14 @@ class BuyerProfile:
     def __post_init__(self) -> None:
         if not self.profile_id.strip() or not self.label.strip():
             raise PriceAnalyticsError("buyer_profile_identity_missing")
-        if not self.product_quantities:
+        quantities = dict(self.product_quantities)
+        if not quantities:
             raise PriceAnalyticsError("buyer_profile_empty")
-        if any(type(quantity) is not int or quantity <= 0 for quantity in self.product_quantities.values()):
+        if any(not isinstance(product_id, str) or not product_id.strip() for product_id in quantities):
+            raise PriceAnalyticsError("buyer_profile_product_identity_invalid")
+        if any(type(quantity) is not int or quantity <= 0 for quantity in quantities.values()):
             raise PriceAnalyticsError("buyer_profile_quantity_invalid")
+        object.__setattr__(self, "product_quantities", MappingProxyType(quantities))
 
 
 @dataclass(frozen=True, slots=True)
