@@ -61,6 +61,16 @@ jobs:
             --output-directory run-artifacts/analytics/colonial-walmart-sps \
             | tee run-artifacts/analytics/colonial-walmart-sps-run.json
 
+      - name: Generar descriptores fuente de filas seguras
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python scripts/generar_descriptores_publicacion_segura.py \
+            --turso \
+            --publication run-artifacts/analytics/colonial-walmart-sps/publication.json \
+            --output run-artifacts/analytics/colonial-walmart-sps/source-descriptors.json \
+            | tee run-artifacts/analytics/colonial-walmart-sps-descriptors-run.json
+
       - name: Validar contrato publicado
         working-directory: precios-supermercados-sps
         run: |
@@ -72,16 +82,26 @@ jobs:
           root = Path('run-artifacts/analytics/colonial-walmart-sps')
           publication = json.loads((root / 'publication.json').read_text(encoding='utf-8'))
           manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
+          descriptors = json.loads((root / 'source-descriptors.json').read_text(encoding='utf-8'))
           assert publication['schema'] == 'precios-sps-publication/v1'
           assert manifest['schema'] == 'precios-sps-publication-manifest/v1'
+          assert descriptors['schema'] == 'precios-sps-safe-source-descriptors/v1'
           assert manifest['source_backend'] == 'turso'
+          assert descriptors['source_backend'] == 'turso'
           assert manifest['comparison_policy'] == 'fail_closed_strong_identity_and_commercial_consistency'
+          assert descriptors['comparison_policy'] == manifest['comparison_policy']
+          assert descriptors['row_count'] == manifest['safe_offers_published']
+          assert descriptors['canonical_product_count'] == manifest['safe_products_published']
           assert manifest['scope'] == [
               {'location_id': 'colonial_sps', 'supermarket_id': 'colonial'},
               {'location_id': 'walmart_sps', 'supermarket_id': 'walmart'},
           ]
-          serialized = json.dumps({'publication': publication, 'manifest': manifest}).casefold()
-          for forbidden in ('turso_database_url', 'turso_auth_token', 'libsql://', 'authorization'):
+          serialized = json.dumps({
+              'publication': publication,
+              'manifest': manifest,
+              'descriptors': descriptors,
+          }).casefold()
+          for forbidden in ('turso_database_url', 'turso_auth_token', 'libsql://'):
               assert forbidden not in serialized
           print(json.dumps({
               'safe_products_published': manifest['safe_products_published'],
@@ -99,5 +119,6 @@ jobs:
           path: |
             precios-supermercados-sps/run-artifacts/analytics/colonial-walmart-sps/
             precios-supermercados-sps/run-artifacts/analytics/colonial-walmart-sps-run.json
+            precios-supermercados-sps/run-artifacts/analytics/colonial-walmart-sps-descriptors-run.json
           if-no-files-found: warn
           retention-days: 30
