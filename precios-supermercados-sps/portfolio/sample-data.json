@@ -10,7 +10,7 @@
   "withheld_reason": "The previous sample paired products using brand and presentation only. That rule is not sufficient to prove commercial identity, so no cross-retailer best-price row is published until it passes the strong-identity comparator.",
   "safety_regression": {
     "example": "Passion Jaguar vs Passion Especial",
-    "previous_rule": "same_brand_and_same_presentation",
+    "previous_rule": "brand_plus_presentation_only",
     "decision": "not_authorized_for_direct_price_comparison_without_safe_comparator",
     "automatic_best_price_allowed": false
   },
