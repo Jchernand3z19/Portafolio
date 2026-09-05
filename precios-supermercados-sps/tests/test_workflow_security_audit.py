@@ -31,6 +31,76 @@ base.ALLOWED_SECRET_REFERENCES[base.SAFE_ANALYTICS_WORKFLOW] = {
     base.TURSO_AUTH_TOKEN_SECRET,
 }
 
+
+def _checkout_identity_with_derived_workflows() -> None:
+    """Conserva el audit histórico y reconoce ambos derivados por workflow_run."""
+
+    derived_ref = "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+    for path, workflow in base.workflows():
+        if path.name == base.PROBE_WORKFLOW:
+            probe_jobs = base.jobs(workflow)
+            privileged_checkout = [
+                step
+                for step in base.job_steps(probe_jobs["controlled-probe"])
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            ]
+            assert privileged_checkout == [], "El job con OIDC de sonda no debe ejecutar código del repositorio"
+            verifier_checkout = [
+                step
+                for step in base.job_steps(probe_jobs["verify-evidence"])
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            ]
+            assert len(verifier_checkout) == 1
+            assert verifier_checkout[0]["with"] == {
+                "ref": "${{ github.sha }}",
+                "persist-credentials": "false",
+            }
+            continue
+
+        checkout_steps = [
+            step
+            for step in base.steps(workflow)
+            if str(step.get("uses", "")).startswith("actions/checkout@")
+        ]
+        if path.name == base.LOCATION_BINDING_WORKFLOW:
+            assert base.all_jobs_blocked(workflow)
+            assert checkout_steps == []
+            continue
+        if path.name == base.PRESERVE_INITIAL_SNAPSHOT_WORKFLOW:
+            assert checkout_steps == []
+            continue
+        if path.name == base.AUDIT_WORKFLOW:
+            assert len(checkout_steps) == 1
+            assert checkout_steps[0]["with"] == {
+                "ref": "${{ github.sha }}",
+                "persist-credentials": "false",
+                "fetch-depth": "0",
+            }
+            continue
+        if path.name in {base.HOMOLOGATION_REFRESH_WORKFLOW, base.SAFE_ANALYTICS_WORKFLOW}:
+            assert len(checkout_steps) == 1
+            assert checkout_steps[0]["with"] == {
+                "ref": derived_ref,
+                "persist-credentials": "false",
+            }
+            continue
+
+        expected_ref = (
+            "${{ github.workflow_sha }}"
+            if path.name in {base.COMMAND_WORKFLOW, base.RECOVERY_WORKFLOW}
+            else "${{ github.sha }}"
+        )
+        assert checkout_steps, path.name
+        for step in checkout_steps:
+            inputs = step.get("with")
+            assert isinstance(inputs, dict)
+            assert inputs == {"ref": expected_ref, "persist-credentials": "false"}
+
+
+base.test_checkout_identity_is_immutable_and_credentials_are_not_persisted = (
+    _checkout_identity_with_derived_workflows
+)
+
 for name, value in vars(base).items():
     if name.startswith("test_"):
         globals()[name] = value
@@ -152,6 +222,6 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
         if str(step.get("uses", "")).startswith("actions/checkout@")
     )
     assert checkout["with"] == {
-        "ref": "${{ github.sha }}",
+        "ref": "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}",
         "persist-credentials": "false",
     }
