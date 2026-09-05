@@ -15,6 +15,7 @@ from .safe_comparator import COMPARABLE, SafeComparisonGroup, safe_group_decisio
 
 MONEY = Decimal("0.01")
 PERCENT = Decimal("0.01")
+ALLOWED_AVAILABILITY = frozenset({None, "in_stock", "out_of_stock", "unknown"})
 
 
 class PriceAnalyticsError(ValueError):
@@ -34,10 +35,18 @@ class CurrentPriceObservation:
             raise PriceAnalyticsError("price_observation_identity_missing")
         if self.price_minor is not None and (type(self.price_minor) is not int or self.price_minor < 0):
             raise PriceAnalyticsError("price_minor_invalid")
+        if self.availability not in ALLOWED_AVAILABILITY:
+            raise PriceAnalyticsError("price_observation_availability_invalid")
 
     @property
     def priced(self) -> bool:
-        return self.price_minor is not None and self.price_minor > 0
+        """Un precio sólo entra a canasta cuando no está explícitamente agotado."""
+
+        return (
+            self.price_minor is not None
+            and self.price_minor > 0
+            and self.availability != "out_of_stock"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,11 +114,11 @@ class BasketComparison:
     canonical_product_ids: tuple[str, ...]
     product_count: int
     totals_minor: tuple[tuple[str, int], ...]
-    cheapest_supermarket_id: str
-    cheapest_total_minor: int
-    highest_total_minor: int
-    savings_vs_highest_minor: int
-    savings_vs_highest_pct: Decimal
+    cheapest_supermarket_id: str | None
+    cheapest_total_minor: int | None
+    highest_total_minor: int | None
+    savings_vs_highest_minor: int | None
+    savings_vs_highest_pct: Decimal | None
     denominator_definition: str = "products_comparable_and_priced_in_every_supermarket_in_scope"
 
     @property
@@ -131,7 +140,10 @@ class AnalyticsResult:
 def _pct(saving: int, denominator: int) -> Decimal:
     if denominator <= 0:
         return Decimal("0.00")
-    return (Decimal(saving) * Decimal(100) / Decimal(denominator)).quantize(PERCENT, rounding=ROUND_HALF_UP)
+    return (Decimal(saving) * Decimal(100) / Decimal(denominator)).quantize(
+        PERCENT,
+        rounding=ROUND_HALF_UP,
+    )
 
 
 def _safe_groups(result: HomologationResult) -> tuple[SafeComparisonGroup, ...]:
@@ -149,7 +161,7 @@ def analyze_current_prices(
     - homologados por identidad fuerte;
     - comercialmente coherentes por ``safe_comparator``;
     - con una sola fila fuente por supermercado del alcance;
-    - con precio positivo en la ubicación explícita de cada supermercado.
+    - con precio positivo y no explícitamente agotado en cada ubicación.
     """
 
     profile_by_id = {profile.record.source_record_id: profile for profile in homologation.profiles}
@@ -208,7 +220,7 @@ def analyze_current_prices(
                 )
             )
         if missing_price:
-            excluded.append((canonical_id, "price_missing_in_scope"))
+            excluded.append((canonical_id, "price_missing_or_unavailable_in_scope"))
             continue
 
         offers.sort(key=lambda offer: (offer.price_minor, offer.supermarket_id, offer.source_record_id))
@@ -236,9 +248,21 @@ def analyze_current_prices(
             totals[offer.supermarket_id] += offer.price_minor
 
     ordered_totals = tuple((supermarket, totals[supermarket]) for supermarket in scope.supermarket_ids)
-    cheapest_supermarket, cheapest_total = min(ordered_totals, key=lambda item: (item[1], item[0]))
-    highest_total = max(total for _, total in ordered_totals)
-    saving = highest_total - cheapest_total
+    if products:
+        cheapest_supermarket, cheapest_total = min(
+            ordered_totals,
+            key=lambda item: (item[1], item[0]),
+        )
+        highest_total = max(total for _, total in ordered_totals)
+        saving = highest_total - cheapest_total
+        savings_pct: Decimal | None = _pct(saving, highest_total)
+    else:
+        cheapest_supermarket = None
+        cheapest_total = None
+        highest_total = None
+        saving = None
+        savings_pct = None
+
     basket = BasketComparison(
         scope=scope,
         canonical_product_ids=tuple(product.canonical_product_id for product in products),
@@ -248,7 +272,7 @@ def analyze_current_prices(
         cheapest_total_minor=cheapest_total,
         highest_total_minor=highest_total,
         savings_vs_highest_minor=saving,
-        savings_vs_highest_pct=_pct(saving, highest_total),
+        savings_vs_highest_pct=savings_pct,
     )
     return AnalyticsResult(
         scope=scope,
