@@ -1,0 +1,126 @@
+name: Precios SPS - verifica no-op homologación temporal
+
+on:
+  push:
+    branches:
+      - ops/product-homologation-noop-verify
+    paths:
+      - ".github/workflows/precios-supermercados-sps-homologation-noop-verify-temp.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Configurar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Verificar refresh productivo no-op
+        working-directory: precios-supermercados-sps
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, 'scripts')
+          from backfill_homologacion_turso import _scalar, _source_preflight, backfill_turso
+
+          url = os.environ['TURSO_DATABASE_URL']
+          token = os.environ['TURSO_AUTH_TOKEN']
+          expected = {
+              'products': 56779,
+              'price_history': 110002,
+              'scrape_runs': 21,
+              'profiles': 56779,
+          }
+          before = _source_preflight(url, token)
+          if before != expected:
+              raise SystemExit(f'noop_preflight_changed:{before}')
+
+          result = backfill_turso(
+              database_url=url,
+              auth_token=token,
+              updated_at_utc='2026-09-05T05:12:00Z',
+          )
+          after = _source_preflight(url, token)
+          if after != before:
+              raise SystemExit(f'noop_source_mutated:before={before}:after={after}')
+
+          required = {
+              'processed': 56779,
+              'inserted': 0,
+              'updated': 0,
+              'unchanged': 56779,
+              'no_op': True,
+              'staging_written': False,
+              'profiles': 56779,
+              'foreign_key_violations': 0,
+              'duplicate_open_periods': 0,
+              'integrity_check': 'ok',
+              'products_unchanged': True,
+              'price_history_unchanged': True,
+              'scrape_runs_unchanged': True,
+          }
+          mismatches = {key: (required[key], result.get(key)) for key in required if result.get(key) != required[key]}
+          if mismatches:
+              raise SystemExit(f'noop_result_mismatch:{mismatches}')
+
+          expected_statuses = {
+              'ready': 18773,
+              'review_required': 2558,
+              'single_source': 13034,
+              'unmapped': 22414,
+          }
+          if result.get('comparison_status') != expected_statuses:
+              raise SystemExit(f'noop_status_mismatch:{result.get("comparison_status")}')
+          if result.get('classified_product_type') != 18748:
+              raise SystemExit(f'noop_type_count_mismatch:{result.get("classified_product_type")}')
+
+          stage_count = _scalar(
+              url,
+              token,
+              "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='product_homologation_profiles_stage'",
+          )
+          if stage_count != 0:
+              raise SystemExit('noop_staging_table_present')
+
+          evidence = {
+              'result': 'success',
+              'mode': 'product_homologation_noop_verification',
+              'source_commit': '1b427026f1383ca5087a5617fae34f1ae15cfad3',
+              'preflight': before,
+              'refresh': result,
+              'postflight': after,
+              'staging_table_present': False,
+          }
+          out = Path('run-artifacts/homologation/noop-verification.json')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print('HOMOLOGATION_NOOP_PRODUCTION=' + json.dumps(evidence, sort_keys=True))
+          PY
+
+      - name: Publicar evidencia
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
+        with:
+          name: product-homologation-noop-${{ github.run_id }}
+          path: precios-supermercados-sps/run-artifacts/homologation/noop-verification.json
+          if-no-files-found: error
+          retention-days: 30
