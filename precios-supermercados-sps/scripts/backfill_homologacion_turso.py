@@ -192,6 +192,32 @@ def _fetch_products(url: str, token: str) -> tuple[tuple[int, object], ...]:
     return tuple(records)
 
 
+
+def _fetch_profile_state(url: str, token: str) -> dict[int, tuple[str, str]]:
+    expected = _scalar(url, token, f"SELECT COUNT(*) FROM {TABLE_NAME}")
+    result: dict[int, tuple[str, str]] = {}
+    cursor = 0
+    while True:
+        rows = _query(
+            url,
+            token,
+            f"SELECT product_id,profile_hash,normalization_version FROM {TABLE_NAME} WHERE product_id>? ORDER BY product_id LIMIT 2000",
+            (cursor,),
+        )
+        if not rows:
+            break
+        for product_id, profile_hash, version in rows:
+            if type(product_id) is not int or not isinstance(profile_hash, str) or not isinstance(version, str):
+                raise SnapshotError("homologation_profile_state_invalid")
+            result[int(product_id)] = (profile_hash, version)
+        cursor = int(rows[-1][0])
+        if len(rows) < 2000:
+            break
+    if len(result) != expected:
+        raise SnapshotError(f"homologation_profile_state_count_mismatch:{expected}:{len(result)}")
+    return result
+
+
 def _chunks(rows: tuple[ProductHomologationRow, ...], size: int) -> Iterable[tuple[ProductHomologationRow, ...]]:
     for start in range(0, len(rows), size):
         yield rows[start : start + size]
@@ -349,17 +375,24 @@ def _delta_counts(url: str, token: str) -> dict[str, int]:
     }
 
 
-def _apply_stage(url: str, token: str, before: dict[str, int], expected: int) -> None:
+def _apply_stage(
+    url: str,
+    token: str,
+    before: dict[str, int],
+    *,
+    staged_expected: int,
+    profile_expected: int,
+) -> None:
     steps = [
         ("drop_guard", "DROP TABLE IF EXISTS temp.homologation_guard", ()),
         ("guard_table", "CREATE TEMP TABLE homologation_guard(value INTEGER NOT NULL CHECK(value=0)) STRICT", ()),
         ("begin", "BEGIN IMMEDIATE", ()),
-        ("guard_stage", f"INSERT INTO homologation_guard SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM {STAGE_TABLE}", (expected,)),
+        ("guard_stage", f"INSERT INTO homologation_guard SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM {STAGE_TABLE}", (staged_expected,)),
         ("guard_products_before", "INSERT INTO homologation_guard SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM products", (before["products"],)),
         ("guard_history_before", "INSERT INTO homologation_guard SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM price_history", (before["price_history"],)),
         ("guard_runs_before", "INSERT INTO homologation_guard SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM scrape_runs", (before["scrape_runs"],)),
         ("upsert_profiles", _TARGET_UPSERT, ()),
-        ("guard_profile_count", f"INSERT INTO homologation_guard SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM {TABLE_NAME}", (expected,)),
+        ("guard_profile_count", f"INSERT INTO homologation_guard SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM {TABLE_NAME}", (profile_expected,)),
         ("guard_fk", "INSERT INTO homologation_guard SELECT COUNT(*) FROM pragma_foreign_key_check", ()),
         ("commit", "COMMIT", ()),
     ]
@@ -413,10 +446,11 @@ def backfill_turso(
     if not database_url.strip() or not auth_token.strip():
         raise ProductHomologationPersistenceError("turso_credentials_missing")
     before = _source_preflight(database_url, auth_token)
-    _ensure_schema(database_url, auth_token)
-    after_schema = _preflight(database_url, auth_token)
-    if after_schema != before:
-        raise SnapshotError("homologation_source_changed_during_schema_transition")
+    if before["profiles"] == 0:
+        _ensure_schema(database_url, auth_token)
+        after_schema = _preflight(database_url, auth_token)
+        if after_schema != before:
+            raise SnapshotError("homologation_source_changed_during_schema_transition")
 
     products = _fetch_products(database_url, auth_token)
     if len(products) != before["products"]:
@@ -426,18 +460,57 @@ def backfill_turso(
         updated_at_utc=updated_at_utc,
         normalization_version=NORMALIZATION_VERSION,
     )
+    derived_state = {
+        row.product_id: (row.profile_hash, row.normalization_version)
+        for row in derived
+    }
+    existing_state = _fetch_profile_state(database_url, auth_token)
+    extra_profiles = set(existing_state) - set(derived_state)
+    if extra_profiles:
+        raise SnapshotError("homologation_profile_ids_not_in_products")
+
+    changed = tuple(
+        row for row in derived
+        if existing_state.get(row.product_id) != (row.profile_hash, row.normalization_version)
+    )
+    if not changed:
+        post = _postflight(database_url, auth_token, before, len(derived))
+        return {
+            "normalization_version": NORMALIZATION_VERSION,
+            "processed": len(derived),
+            "inserted": 0,
+            "updated": 0,
+            "unchanged": len(derived),
+            "no_op": True,
+            "staging_written": False,
+            **post,
+        }
+
     delta: dict[str, int] = {}
     post: dict[str, object] = {}
     try:
-        _stage_rows(database_url, auth_token, derived)
-        delta = _delta_counts(database_url, auth_token)
-        _apply_stage(database_url, auth_token, before, len(derived))
+        _stage_rows(database_url, auth_token, changed)
+        staged_delta = _delta_counts(database_url, auth_token)
+        _apply_stage(
+            database_url,
+            auth_token,
+            before,
+            staged_expected=len(changed),
+            profile_expected=len(derived),
+        )
         post = _postflight(database_url, auth_token, before, len(derived))
+        delta = {
+            "inserted": staged_delta["inserted"],
+            "updated": staged_delta["updated"],
+            "unchanged": len(derived) - staged_delta["inserted"] - staged_delta["updated"],
+        }
     finally:
         _drop_stage(database_url, auth_token)
     return {
         "normalization_version": NORMALIZATION_VERSION,
         "processed": len(derived),
+        "no_op": False,
+        "staging_written": True,
         **delta,
         **post,
     }
