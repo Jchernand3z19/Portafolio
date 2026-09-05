@@ -24,3 +24,13 @@ def test_preflight_still_rejects_missing_or_unknown_tables() -> None:
         updater._validate_table_names(updater.EXPECTED_TABLES - {"price_history"})
     with pytest.raises(SnapshotError, match="turso_schema_mismatch"):
         updater._validate_table_names(updater.EXPECTED_TABLES | {"unexpected_table"})
+
+
+def test_all_turso_persistors_share_optional_derived_table_guard() -> None:
+    for filename in (
+        "actualizar_mvp_turso_comisariato_los_andes.py",
+        "actualizar_mvp_turso_paiz.py",
+    ):
+        source = (ROOT / "scripts" / filename).read_text(encoding="utf-8")
+        assert "_validate_table_names(str(row[0]) for row in _execute_rows(results[0]))" in source
+        assert "!= EXPECTED_TABLES" not in source

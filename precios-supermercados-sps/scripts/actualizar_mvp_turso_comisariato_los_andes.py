@@ -16,7 +16,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from actualizar_mvp_sqlite_la_colonia import SnapshotError, _minor  # noqa: E402
 from actualizar_mvp_turso_la_colonia import (  # noqa: E402
-    EXPECTED_TABLES,
     _affected,
     _execute_rows,
     _mutation_steps,
@@ -24,6 +23,7 @@ from actualizar_mvp_turso_la_colonia import (  # noqa: E402
     _pipeline,
     _run_batch,
     _stmt,
+    _validate_table_names,
 )
 
 SUPERMARKET_ID = "comisariato_los_andes"
@@ -225,8 +225,7 @@ def _preflight(
     results = data.get("results")
     if not isinstance(results, list) or len(results) < 4:
         raise SnapshotError("los_andes_turso_preflight_invalid")
-    if {str(row[0]) for row in _execute_rows(results[0])} != EXPECTED_TABLES:
-        raise SnapshotError("turso_schema_mismatch")
+    _validate_table_names(str(row[0]) for row in _execute_rows(results[0]))
     supermarket = _execute_rows(results[1])
     if supermarket and supermarket != [[SUPERMARKET_NAME, COUNTRY]]:
         raise SnapshotError("los_andes_turso_supermarket_mismatch")
