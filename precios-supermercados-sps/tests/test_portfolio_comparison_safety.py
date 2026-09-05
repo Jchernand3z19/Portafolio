@@ -46,4 +46,8 @@ def test_portfolio_can_activate_only_the_verified_fail_closed_sample_contract() 
     assert "tableWrap.hidden = false" in source
     assert "source_name" in source
     assert "source_presentation" in source
-    assert "matching by name" not in source.lower()
+    lowered = source.lower()
+    assert "function matchbyname" not in lowered
+    assert "function match_by_name" not in lowered
+    assert "matchingbyname(" not in lowered
+    assert "match_by_name(" not in lowered
