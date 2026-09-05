@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -29,6 +30,18 @@ def _read(path: Path) -> dict[str, Any]:
         raise SampleError("sample_input_invalid") from exc
     if not isinstance(value, dict):
         raise SampleError("sample_input_not_object")
+    return value
+
+
+def _positive_money(value: object, *, error: str) -> str:
+    if not isinstance(value, str):
+        raise SampleError(error)
+    try:
+        amount = Decimal(value)
+    except InvalidOperation as exc:
+        raise SampleError(error) from exc
+    if not amount.is_finite() or amount <= 0:
+        raise SampleError(error)
     return value
 
 
@@ -58,61 +71,105 @@ def build_sample(publication: dict[str, Any], descriptors: dict[str, Any], *, li
         descriptor_by_source[source_id] = row
 
     offers_by_product: dict[str, list[dict[str, Any]]] = {}
+    gtin_by_product: dict[str, str] = {}
+    safe_source_ids: set[str] = set()
     for offer in offer_rows:
         if not isinstance(offer, dict):
             raise SampleError("publication_offer_invalid")
         source_id = offer.get("source_record_id")
         canonical_id = offer.get("canonical_product_id")
         canonical_gtin = offer.get("canonical_gtin")
-        if not all(isinstance(value, str) and value for value in (source_id, canonical_id, canonical_gtin)):
+        supermarket_id = offer.get("supermarket_id")
+        location_id = offer.get("location_id")
+        if not all(isinstance(value, str) and value for value in (
+            source_id,
+            canonical_id,
+            canonical_gtin,
+            supermarket_id,
+            location_id,
+        )):
             raise SampleError("publication_offer_identity_invalid")
+        if source_id in safe_source_ids:
+            raise SampleError("publication_source_offer_duplicate")
+        safe_source_ids.add(source_id)
+        previous_gtin = gtin_by_product.setdefault(canonical_id, canonical_gtin)
+        if previous_gtin != canonical_gtin:
+            raise SampleError("publication_product_gtin_conflict")
+
         descriptor = descriptor_by_source.get(source_id)
         if descriptor is None:
             raise SampleError("descriptor_missing_for_safe_offer")
-        if descriptor.get("canonical_product_id") != canonical_id or descriptor.get("canonical_gtin") != canonical_gtin:
+        if (
+            descriptor.get("canonical_product_id") != canonical_id
+            or descriptor.get("canonical_gtin") != canonical_gtin
+            or descriptor.get("supermarket_id") != supermarket_id
+        ):
             raise SampleError("descriptor_publication_identity_mismatch")
+        if not isinstance(descriptor.get("source_name"), str) or not descriptor["source_name"].strip():
+            raise SampleError("descriptor_source_name_invalid")
+        current_price = _positive_money(offer.get("current_price"), error="publication_current_price_invalid")
         offers_by_product.setdefault(canonical_id, []).append({
-            "supermarket_id": offer.get("supermarket_id"),
-            "location_id": offer.get("location_id"),
+            "supermarket_id": supermarket_id,
+            "location_id": location_id,
             "source_record_id": source_id,
-            "source_name": descriptor.get("source_name"),
+            "source_name": descriptor["source_name"].strip(),
             "source_brand": descriptor.get("source_brand"),
             "source_presentation": descriptor.get("source_presentation"),
-            "current_price": offer.get("current_price"),
+            "source_category": descriptor.get("source_category"),
+            "current_price": current_price,
             "is_best_price": offer.get("is_best_price") is True,
         })
 
+    if set(descriptor_by_source) != safe_source_ids:
+        raise SampleError("descriptor_set_not_exactly_safe_offers")
+
     rows: list[dict[str, Any]] = []
+    seen_products: set[str] = set()
     for product in product_rows:
         if not isinstance(product, dict):
             raise SampleError("publication_product_invalid")
         canonical_id = product.get("canonical_product_id")
         canonical_gtin = product.get("canonical_gtin")
-        if not isinstance(canonical_id, str) or not isinstance(canonical_gtin, str):
+        if not isinstance(canonical_id, str) or not canonical_id or not isinstance(canonical_gtin, str) or not canonical_gtin:
             raise SampleError("publication_product_identity_invalid")
+        if canonical_id in seen_products:
+            raise SampleError("publication_product_duplicate")
+        seen_products.add(canonical_id)
+        if gtin_by_product.get(canonical_id) != canonical_gtin:
+            raise SampleError("publication_product_gtin_conflict")
         offers = offers_by_product.get(canonical_id, [])
         expected_count = product.get("supermarket_count")
         if type(expected_count) is not int or len(offers) != expected_count or expected_count < 2:
             raise SampleError("safe_offer_count_mismatch")
+        best_price = _positive_money(product.get("best_price"), error="publication_best_price_invalid")
+        highest_price = _positive_money(product.get("highest_price"), error="publication_highest_price_invalid")
+        savings = product.get("savings_vs_highest")
+        if not isinstance(savings, str):
+            raise SampleError("sample_savings_invalid")
+        try:
+            saving_amount = Decimal(savings)
+        except InvalidOperation as exc:
+            raise SampleError("sample_savings_invalid") from exc
+        if not saving_amount.is_finite() or saving_amount < 0:
+            raise SampleError("sample_savings_invalid")
         offers.sort(key=lambda item: (str(item["supermarket_id"]), str(item["location_id"])))
         rows.append({
             "canonical_product_id": canonical_id,
             "canonical_gtin": canonical_gtin,
             "best_supermarket_id": product.get("best_supermarket_id"),
-            "best_price": product.get("best_price"),
-            "highest_price": product.get("highest_price"),
-            "savings_vs_highest": product.get("savings_vs_highest"),
+            "best_price": best_price,
+            "highest_price": highest_price,
+            "savings_vs_highest": savings,
             "savings_vs_highest_pct": product.get("savings_vs_highest_pct"),
             "offers": offers,
         })
 
+    if set(offers_by_product) != seen_products:
+        raise SampleError("publication_offer_product_set_mismatch")
+
     # Prioriza ejemplos con ahorro real; desempate estable por GTIN/id.
-    def rank(row: dict[str, Any]) -> tuple[float, str, str]:
-        try:
-            saving = float(row["savings_vs_highest"])
-        except (TypeError, ValueError) as exc:
-            raise SampleError("sample_savings_invalid") from exc
-        return (-saving, str(row["canonical_gtin"]), str(row["canonical_product_id"]))
+    def rank(row: dict[str, Any]) -> tuple[Decimal, str, str]:
+        return (-Decimal(str(row["savings_vs_highest"])), str(row["canonical_gtin"]), str(row["canonical_product_id"]))
 
     rows.sort(key=rank)
     selected = rows[:limit]
