@@ -8,7 +8,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
-from statistics import mean
 from typing import Iterable
 
 
@@ -63,6 +62,15 @@ def _pct(numerator: int, denominator: int) -> Decimal:
     )
 
 
+def _mean_minor(prices: list[int]) -> int:
+    return int(
+        (Decimal(sum(prices)) / Decimal(len(prices))).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP,
+        )
+    )
+
+
 def summarize_price_series(observations: Iterable[HistoricalPriceObservation]) -> PriceSeriesSummary:
     rows = sorted(observations, key=lambda item: item.observed_at_utc)
     if not rows:
@@ -97,7 +105,7 @@ def summarize_price_series(observations: Iterable[HistoricalPriceObservation]) -
         last_price_minor=last,
         minimum_price_minor=minimum,
         maximum_price_minor=maximum,
-        mean_price_minor=round(mean(prices)),
+        mean_price_minor=_mean_minor(prices),
         absolute_change_minor=change,
         change_pct=_pct(change, first),
         range_minor=maximum - minimum,
