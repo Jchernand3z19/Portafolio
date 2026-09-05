@@ -76,8 +76,26 @@ def test_missing_price_removes_product_from_common_basket_instead_of_imputing() 
     result = analyze_current_prices(homologation, observations, scope)
 
     assert len(result.products) == 1
-    assert any(reason == "price_missing_in_scope" for _, reason in result.excluded_groups)
+    assert any(reason == "price_missing_or_unavailable_in_scope" for _, reason in result.excluded_groups)
     assert result.common_basket.product_count == 1
+
+
+def test_explicitly_out_of_stock_price_is_not_treated_as_buyable() -> None:
+    homologation, observations, scope = safe_fixture()
+    observations = tuple(
+        CurrentPriceObservation(
+            item.source_record_id,
+            item.supermarket_id,
+            item.location_id,
+            item.price_minor,
+            "out_of_stock" if item.source_record_id == "walmart:arroz" else item.availability,
+        )
+        for item in observations
+    )
+    result = analyze_current_prices(homologation, observations, scope)
+
+    assert len(result.products) == 1
+    assert any(reason == "price_missing_or_unavailable_in_scope" for _, reason in result.excluded_groups)
 
 
 def test_unsafe_commercial_variant_never_enters_savings_or_basket() -> None:
@@ -96,6 +114,9 @@ def test_unsafe_commercial_variant_never_enters_savings_or_basket() -> None:
     assert result.products == ()
     assert result.common_basket.product_count == 0
     assert result.common_basket.totals_minor == (("colonial", 0), ("walmart", 0))
+    assert result.common_basket.cheapest_supermarket_id is None
+    assert result.common_basket.cheapest_total_minor is None
+    assert result.common_basket.savings_vs_highest_minor is None
     assert result.excluded_groups[0][1] == "not_comparable"
 
 
@@ -107,14 +128,16 @@ def test_subbasket_supports_explicit_quantities_only_inside_common_universe() ->
 
     assert sub.product_count == 5
     assert sub.denominator_definition == "explicit_quantities_drawn_only_from_current_common_comparable_universe"
-    assert sub.cheapest_total_minor > 0
+    assert sub.cheapest_total_minor is not None and sub.cheapest_total_minor > 0
 
     with pytest.raises(PriceAnalyticsError, match="subbasket_product_not_in_common_universe"):
         analyze_subbasket(result, {"prod_gtin_unknown": 1})
 
 
-def test_scope_rejects_duplicate_supermarket_and_observation_rejects_bad_price() -> None:
+def test_scope_rejects_duplicate_supermarket_and_observation_rejects_bad_values() -> None:
     with pytest.raises(PriceAnalyticsError, match="comparison_scope_supermarket_duplicate"):
         ComparisonScope((("walmart", "a"), ("walmart", "b")))
     with pytest.raises(PriceAnalyticsError, match="price_minor_invalid"):
         CurrentPriceObservation("x", "walmart", "a", -1)
+    with pytest.raises(PriceAnalyticsError, match="price_observation_availability_invalid"):
+        CurrentPriceObservation("x", "walmart", "a", 100, "maybe")
