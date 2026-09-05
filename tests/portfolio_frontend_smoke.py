@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import socket
 import subprocess
 import sys
@@ -13,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 HOST = "127.0.0.1"
 PORT = 8765
 BASE_URL = f"http://{HOST}:{PORT}/"
+SAMPLE_PATH = ROOT / "precios-supermercados-sps" / "portfolio" / "sample-data.json"
+SAFE_SAMPLE_SCHEMA = "precios-sps-safe-portfolio-sample/v1"
+SAFE_POLICY = "fail_closed_strong_identity_and_commercial_consistency"
 
 
 def wait_for_server(timeout: float = 10.0) -> None:
@@ -47,6 +51,21 @@ def attach_runtime_guards(page: Page) -> tuple[list[str], list[str]]:
 
     page.on("response", record_response)
     return page_errors, bad_local_responses
+
+
+def load_public_sample() -> dict[str, object]:
+    return json.loads(SAMPLE_PATH.read_text(encoding="utf-8"))
+
+
+def public_sample_is_published() -> bool:
+    sample = load_public_sample()
+    return (
+        sample.get("schema") == SAFE_SAMPLE_SCHEMA
+        and sample.get("comparison_policy") == SAFE_POLICY
+        and isinstance(sample.get("rows"), list)
+        and sample.get("row_count") == len(sample["rows"])
+        and bool(sample["rows"])
+    )
 
 
 def wait_for_portfolio(page: Page) -> None:
@@ -94,17 +113,33 @@ def assert_price_evidence(dialog) -> None:
     assert proof.locator('a[href*="src/precios_supermercados"]').count() == 1
 
 
-def assert_safe_comparison_state(dialog) -> None:
+def assert_comparison_state(dialog) -> None:
     section = dialog.locator("#price-sample-title").locator("xpath=../..")
     assert "strong identity" in section.locator("#price-sample-title").inner_text().lower()
-    assert section.locator(".price-table-wrap").is_hidden()
     assert section.locator('[data-price-ranking-legend]').count() == 0
     note = section.locator(".price-note")
-    assert note.get_attribute("data-comparison-safety") == "fail-closed"
-    text = note.inner_text().lower()
-    assert "fail-closed" in text
-    assert "passion jaguar" in text
-    assert "passion especial" in text
+    table_wrap = section.locator(".price-table-wrap")
+
+    if public_sample_is_published():
+        sample = load_public_sample()
+        table_wrap.wait_for(state="visible", timeout=5000)
+        assert note.get_attribute("data-comparison-safety") == "verified-strong-identity"
+        rows = table_wrap.locator("tbody tr")
+        assert rows.count() == sample["row_count"]
+        first = sample["rows"][0]
+        table_text = table_wrap.inner_text()
+        assert first["canonical_gtin"] in table_text
+        assert "La Colonia" in table_text
+        assert "Walmart" in table_text
+        for offer in first["offers"]:
+            assert offer["source_name"] in table_text
+    else:
+        assert table_wrap.is_hidden()
+        assert note.get_attribute("data-comparison-safety") == "fail-closed"
+        text = note.inner_text().lower()
+        assert "fail-closed" in text
+        assert "passion jaguar" in text
+        assert "passion especial" in text
 
 
 def desktop_flow(browser: Browser) -> None:
@@ -145,7 +180,7 @@ def desktop_flow(browser: Browser) -> None:
     assert dialog.locator("#price-title").inner_text() == "Grocery prices collected from the web"
     assert "Web Scraping" in dialog.locator("#price-flow-title").locator("xpath=../..").inner_text()
     assert_price_evidence(dialog)
-    assert_safe_comparison_state(dialog)
+    assert_comparison_state(dialog)
     assert dialog.locator("#price-quality-title").count() == 0
     assert dialog.locator("#price-cap-title").count() == 1
     assert dialog.locator("#price-value-title").count() == 1
@@ -241,8 +276,7 @@ def responsive_flow(browser: Browser, width: int, height: int) -> None:
         assert dialog.evaluate("element => element.open") is True
         rect = dialog.bounding_box()
         assert rect is not None and rect["width"] <= width + 1, rect
-        assert dialog.locator(".price-table-wrap").is_hidden()
-        assert_safe_comparison_state(dialog)
+        assert_comparison_state(dialog)
         assert_no_global_overflow(page)
         page.keyboard.press("Escape")
     else:
