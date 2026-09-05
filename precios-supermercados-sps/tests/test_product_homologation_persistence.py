@@ -358,3 +358,28 @@ def test_records_from_product_rows_rejects_bad_shape() -> None:
         match="product_row_shape_invalid",
     ):
         records_from_product_rows(((1, "la_colonia"),))
+
+
+def test_partial_recalculation_fails_even_with_preexisting_full_profiles(tmp_path: Path) -> None:
+    con = create_base_db(tmp_path / "mvp.sqlite")
+    try:
+        insert_product(con, 1, "la_colonia", "Arroz Uno 1 lb")
+        insert_product(con, 2, "walmart", "Arroz Dos 1 lb")
+        full = build_homologation_rows(
+            fetch_source_rows(con), updated_at_utc="2026-09-04T20:00:00Z"
+        )
+        persist_sqlite_rows(con, full)
+        con.commit()
+
+        partial = build_homologation_rows(
+            (source(1, "la_colonia", "Arroz Uno 1 lb"),),
+            updated_at_utc="2026-09-04T21:00:00Z",
+        )
+        with pytest.raises(
+            ProductHomologationPersistenceError,
+            match="profile_product_count_mismatch",
+        ):
+            persist_sqlite_rows(con, partial)
+        assert con.execute(f"SELECT COUNT(*) FROM {TABLE_NAME}").fetchone() == (2,)
+    finally:
+        con.close()

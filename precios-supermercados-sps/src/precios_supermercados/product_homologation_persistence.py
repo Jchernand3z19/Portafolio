@@ -298,7 +298,7 @@ def persist_sqlite_rows(
     row_ids = {row.product_id for row in rows}
     if len(rows) != len(source_ids) or row_ids != source_ids:
         raise ProductHomologationPersistenceError(
-            f"source_profile_coverage_mismatch:{len(rows)}:{len(source_ids)}"
+            f"profile_product_count_mismatch:{len(rows)}:{len(source_ids)}"
         )
 
     ensure_sqlite_schema(con)

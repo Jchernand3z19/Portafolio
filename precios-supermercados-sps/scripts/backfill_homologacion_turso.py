@@ -24,6 +24,7 @@ from actualizar_mvp_turso_la_colonia import (  # noqa: E402
     _pipeline,
     _run_batch,
     _stmt,
+    _validate_table_names,
 )
 from precios_supermercados.product_homologation_persistence import (  # noqa: E402
     NORMALIZATION_VERSION,
@@ -250,6 +251,37 @@ WHERE {TABLE_NAME}.profile_hash <> excluded.profile_hash
    OR {TABLE_NAME}.normalization_version <> excluded.normalization_version"""
 
 
+
+def _source_preflight(url: str, token: str) -> dict[str, int]:
+    table_rows = _query(
+        url,
+        token,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    )
+    _validate_table_names(str(row[0]) for row in table_rows)
+    target_exists = any(str(row[0]) == TABLE_NAME for row in table_rows)
+    state = {
+        "products": _scalar(url, token, "SELECT COUNT(*) FROM products"),
+        "price_history": _scalar(url, token, "SELECT COUNT(*) FROM price_history"),
+        "scrape_runs": _scalar(url, token, "SELECT COUNT(*) FROM scrape_runs"),
+        "profiles": (
+            _scalar(url, token, f"SELECT COUNT(*) FROM {TABLE_NAME}")
+            if target_exists
+            else 0
+        ),
+    }
+    foreign_keys = _scalar(url, token, "SELECT COUNT(*) FROM pragma_foreign_key_check")
+    duplicate_current = _scalar(
+        url,
+        token,
+        "SELECT COUNT(*) FROM (SELECT product_id,location_id FROM price_history WHERE valid_to_utc IS NULL GROUP BY product_id,location_id HAVING COUNT(*)>1)",
+    )
+    integrity = _query(url, token, "PRAGMA integrity_check")
+    if foreign_keys != 0 or duplicate_current != 0 or integrity != [["ok"]]:
+        raise SnapshotError("homologation_source_preflight_integrity_failed")
+    return state
+
+
 def _preflight(url: str, token: str) -> dict[str, int]:
     return {
         "products": _scalar(url, token, "SELECT COUNT(*) FROM products"),
@@ -283,6 +315,19 @@ def _stage_rows(url: str, token: str, rows: tuple[ProductHomologationRow, ...]) 
     staged = _scalar(url, token, f"SELECT COUNT(*) FROM {STAGE_TABLE}")
     if staged != len(rows):
         raise SnapshotError(f"homologation_stage_count_mismatch:{staged}:{len(rows)}")
+
+
+
+def _drop_stage(url: str, token: str) -> None:
+    _run_batch(
+        url,
+        token,
+        [
+            ("begin", "BEGIN IMMEDIATE", ()),
+            ("drop_stage", f"DROP TABLE IF EXISTS {STAGE_TABLE}", ()),
+            ("commit", "COMMIT", ()),
+        ],
+    )
 
 
 def _delta_counts(url: str, token: str) -> dict[str, int]:
@@ -367,8 +412,12 @@ def backfill_turso(
 ) -> dict[str, object]:
     if not database_url.strip() or not auth_token.strip():
         raise ProductHomologationPersistenceError("turso_credentials_missing")
+    before = _source_preflight(database_url, auth_token)
     _ensure_schema(database_url, auth_token)
-    before = _preflight(database_url, auth_token)
+    after_schema = _preflight(database_url, auth_token)
+    if after_schema != before:
+        raise SnapshotError("homologation_source_changed_during_schema_transition")
+
     products = _fetch_products(database_url, auth_token)
     if len(products) != before["products"]:
         raise SnapshotError("homologation_source_changed_during_read")
@@ -377,19 +426,15 @@ def backfill_turso(
         updated_at_utc=updated_at_utc,
         normalization_version=NORMALIZATION_VERSION,
     )
-    _stage_rows(database_url, auth_token, derived)
-    delta = _delta_counts(database_url, auth_token)
-    _apply_stage(database_url, auth_token, before, len(derived))
-    post = _postflight(database_url, auth_token, before, len(derived))
-    _run_batch(
-        database_url,
-        auth_token,
-        [
-            ("begin", "BEGIN IMMEDIATE", ()),
-            ("drop_stage", f"DROP TABLE IF EXISTS {STAGE_TABLE}", ()),
-            ("commit", "COMMIT", ()),
-        ],
-    )
+    delta: dict[str, int] = {}
+    post: dict[str, object] = {}
+    try:
+        _stage_rows(database_url, auth_token, derived)
+        delta = _delta_counts(database_url, auth_token)
+        _apply_stage(database_url, auth_token, before, len(derived))
+        post = _postflight(database_url, auth_token, before, len(derived))
+    finally:
+        _drop_stage(database_url, auth_token)
     return {
         "normalization_version": NORMALIZATION_VERSION,
         "processed": len(derived),
