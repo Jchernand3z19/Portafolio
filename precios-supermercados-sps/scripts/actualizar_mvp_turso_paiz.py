@@ -13,13 +13,13 @@ from urllib.parse import parse_qs, urlsplit
 
 from actualizar_mvp_sqlite_la_colonia import SnapshotError, _minor
 from actualizar_mvp_turso_la_colonia import (
-    EXPECTED_TABLES,
     _affected,
     _execute_rows,
     _mutation_steps,
     _pipeline,
     _run_batch,
     _stmt,
+    _validate_table_names,
 )
 from migrar_mvp_paiz import schema_ready_sql
 
@@ -250,8 +250,7 @@ def _preflight(url: str, token: str, *, location_id: str, run_id: str) -> dict[s
     results = data.get("results")
     if not isinstance(results, list) or len(results) < 5:
         raise SnapshotError("paiz_turso_preflight_invalid")
-    if {str(row[0]) for row in _execute_rows(results[0])} != EXPECTED_TABLES:
-        raise SnapshotError("turso_schema_mismatch")
+    _validate_table_names(str(row[0]) for row in _execute_rows(results[0]))
     ddl = _execute_rows(results[1])
     if len(ddl) != 1 or not schema_ready_sql(ddl[0][0]):
         raise SnapshotError("paiz_schema_migration_required")

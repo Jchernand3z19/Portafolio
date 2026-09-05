@@ -28,6 +28,18 @@ from actualizar_mvp_sqlite_la_colonia import (  # noqa: E402
 )
 
 EXPECTED_TABLES = {"supermarkets", "locations", "products", "price_history", "scrape_runs"}
+OPTIONAL_DERIVED_TABLES = {"product_homologation_profiles"}
+
+
+def _validate_table_names(names: object) -> None:
+    try:
+        observed = {str(name) for name in names}
+    except TypeError as exc:
+        raise SnapshotError("turso_schema_mismatch") from exc
+    if not EXPECTED_TABLES <= observed:
+        raise SnapshotError("turso_schema_mismatch")
+    if not observed <= EXPECTED_TABLES | OPTIONAL_DERIVED_TABLES:
+        raise SnapshotError("turso_schema_mismatch")
 
 
 def _http_url(value: str) -> str:
@@ -152,8 +164,7 @@ def _preflight(
     results = data.get("results")
     if not isinstance(results, list) or len(results) < 3:
         raise SnapshotError("turso_preflight_response_invalid")
-    if {str(row[0]) for row in _execute_rows(results[0])} != EXPECTED_TABLES:
-        raise SnapshotError("turso_schema_mismatch")
+    _validate_table_names(str(row[0]) for row in _execute_rows(results[0]))
     locations = {
         SUPERMARKET_ID: LOCATIONS, "colonial": COLONIAL_LOCATIONS,
         "walmart": WALMART_LOCATIONS, "pricesmart": PRICESMART_LOCATIONS,
