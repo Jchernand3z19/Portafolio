@@ -14,9 +14,6 @@ assert SPEC is not None and SPEC.loader is not None
 base = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(base)
 
-# La implementación previa se conserva byte-for-byte en el módulo base. Esta
-# capa registra operadores/workflows confiables nuevos y mantiene cerrados los
-# conjuntos de permisos y triggers que la auditoría exige.
 base.PRODUCTION_OPERATOR_WORKFLOW = "precios-supermercados-sps-production-operator.yml"
 base.PRODUCTION_UPDATE_REQUEST = (
     "precios-supermercados-sps/.automation/production-update-request.json"
@@ -34,8 +31,6 @@ base.ALLOWED_SECRET_REFERENCES[base.SAFE_ANALYTICS_WORKFLOW] = {
     base.TURSO_AUTH_TOKEN_SECRET,
 }
 
-# Reexporta íntegramente los tests existentes; sus globals siguen apuntando al
-# módulo base ya extendido, de modo que no se pierde ninguna comprobación.
 for name, value in vars(base).items():
     if name.startswith("test_"):
         globals()[name] = value
@@ -132,10 +127,13 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     raw = path.read_text(encoding="utf-8")
     assert "scripts/exportar_modelo_analitico.py" in raw
     assert "scripts/generar_descriptores_publicacion_segura.py" in raw
+    assert "scripts/generar_muestra_portafolio_segura.py" in raw
+    assert "portfolio-sample.json" in raw
     assert "--scope colonial=colonial_sps" in raw
     assert "--scope walmart=walmart_sps" in raw
     assert "precios-sps-publication/v1" in raw
     assert "precios-sps-safe-source-descriptors/v1" in raw
+    assert "precios-sps-safe-portfolio-sample/v1" in raw
     assert "fail_closed_strong_identity_and_commercial_consistency" in raw
     assert "TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}" in raw
     assert "TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}" in raw
