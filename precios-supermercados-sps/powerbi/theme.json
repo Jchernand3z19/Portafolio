@@ -1,0 +1,14 @@
+{
+  "name": "Precios Supermercados SPS",
+  "dataColors": ["#17324D", "#2C6E6F", "#D69E2E", "#6B7280", "#9B4D4D", "#3F7C5B", "#725A9A", "#A15C38"],
+  "background": "#F7F8FA",
+  "foreground": "#17202A",
+  "tableAccent": "#2C6E6F",
+  "good": "#2E7D32",
+  "neutral": "#D69E2E",
+  "bad": "#B3261E",
+  "maximum": "#17324D",
+  "center": "#D69E2E",
+  "minimum": "#2E7D32",
+  "null": "#9CA3AF"
+}

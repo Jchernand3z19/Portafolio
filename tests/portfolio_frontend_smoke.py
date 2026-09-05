@@ -94,43 +94,17 @@ def assert_price_evidence(dialog) -> None:
     assert proof.locator('a[href*="src/precios_supermercados"]').count() == 1
 
 
-def assert_comparison_table(dialog) -> None:
-    headers = [value.lower() for value in dialog.locator(".price-table th").all_inner_texts()]
-    assert headers == [
-        "product",
-        "brand",
-        "presentation",
-        "city",
-        "comisariato los andes",
-        "supermercados colonial",
-        "best price",
-    ]
-
-    rows = dialog.locator(".price-table tbody tr")
-    assert rows.count() == 10
-    sample_text = dialog.locator(".price-table tbody").inner_text()
-    for value in (
-        "Arroz blanco",
-        "Progreso",
-        "1 lb / 454 g",
-        "Rica Yema",
-        "Maseca",
-        "Gold Star",
-        "La Chula",
-        "Norteño",
-        "Leyde",
-        "Quaker",
-        "Monarca",
-        "Passion",
-        "L 15.79",
-        "L 215.99",
-    ):
-        assert value in sample_text
-
-    assert "SKU-DEMO" not in sample_text
-    assert "Context" not in sample_text
-    assert rows.locator(".price-number.is-best").count() == 10
-    assert rows.locator(".price-best").count() == 10
+def assert_safe_comparison_state(dialog) -> None:
+    section = dialog.locator("#price-sample-title").locator("xpath=../..")
+    assert "strong identity" in section.locator("#price-sample-title").inner_text().lower()
+    assert section.locator(".price-table-wrap").is_hidden()
+    assert section.locator('[data-price-ranking-legend]').count() == 0
+    note = section.locator(".price-note")
+    assert note.get_attribute("data-comparison-safety") == "fail-closed"
+    text = note.inner_text().lower()
+    assert "fail-closed" in text
+    assert "passion jaguar" in text
+    assert "passion especial" in text
 
 
 def desktop_flow(browser: Browser) -> None:
@@ -171,13 +145,10 @@ def desktop_flow(browser: Browser) -> None:
     assert dialog.locator("#price-title").inner_text() == "Grocery prices collected from the web"
     assert "Web Scraping" in dialog.locator("#price-flow-title").locator("xpath=../..").inner_text()
     assert_price_evidence(dialog)
-    assert_comparison_table(dialog)
+    assert_safe_comparison_state(dialog)
     assert dialog.locator("#price-quality-title").count() == 0
     assert dialog.locator("#price-cap-title").count() == 1
     assert dialog.locator("#price-value-title").count() == 1
-    note = dialog.locator("#price-sample-title").locator("xpath=../..").locator(".price-note").inner_text()
-    assert "Sep 4, 2026" in note
-    assert "official basic basket" in note
     assert page.locator(":focus").get_attribute("data-price-close") is not None
     page.keyboard.press("Escape")
     assert dialog.evaluate("element => element.open") is False
@@ -270,8 +241,8 @@ def responsive_flow(browser: Browser, width: int, height: int) -> None:
         assert dialog.evaluate("element => element.open") is True
         rect = dialog.bounding_box()
         assert rect is not None and rect["width"] <= width + 1, rect
-        table_wrap = dialog.locator(".price-table-wrap")
-        assert table_wrap.evaluate("el => el.scrollWidth > el.clientWidth") is True
+        assert dialog.locator(".price-table-wrap").is_hidden()
+        assert_safe_comparison_state(dialog)
         assert_no_global_overflow(page)
         page.keyboard.press("Escape")
     else:

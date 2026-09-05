@@ -85,25 +85,18 @@ def main() -> int:
                 assert chain in coverage_text
             assert "SPS 6603 · Florencia 6602" in coverage_text
             assert "TGU Multiplaza · TGU Próceres" in coverage_text
-            assert price.locator("#price-sample-title").inner_text() == "Comparación homologada: 10 productos en 2 supermercados"
 
-            # The redundant best-price column is hidden from the interface. Price rank is read in place.
-            comparison = price.locator(".price-table")
-            assert comparison.locator("thead th:visible").count() == 6
-            assert comparison.locator("thead th.price-best-legacy:visible").count() == 0
-            assert comparison.locator("tbody tr").count() == 10
-            assert comparison.locator("tbody td.price-rank--best").count() == 10
-            assert comparison.locator("tbody td.price-rank--highest").count() == 10
-            assert comparison.locator("tbody td.price-rank--middle").count() == 0
-            assert price.locator("[data-price-ranking-legend]").count() == 1
-            legend_text = price.locator("[data-price-ranking-legend]").inner_text()
-            assert "Mejor precio" in legend_text
-            assert "Precio intermedio" in legend_text
-            assert "Precio más alto" in legend_text
-            first_best = comparison.locator("tbody td.price-rank--best").first
-            first_highest = comparison.locator("tbody td.price-rank--highest").first
-            assert "Mejor precio" in (first_best.get_attribute("aria-label") or "")
-            assert "Precio más alto" in (first_highest.get_attribute("aria-label") or "")
+            # Cross-source rows are withheld until they pass the strong-identity gate.
+            assert price.locator("#price-sample-title").inner_text() == "Comparaciones cross-source con identidad fuerte"
+            comparison_wrap = price.locator(".price-table-wrap")
+            assert comparison_wrap.is_hidden()
+            assert comparison_wrap.get_attribute("aria-hidden") == "true"
+            assert price.locator("[data-price-ranking-legend]").count() == 0
+            safety_note = price.locator("#price-sample-title").locator("xpath=../..").locator(".price-note")
+            assert safety_note.get_attribute("data-comparison-safety") == "fail-closed"
+            safety_text = safety_note.inner_text()
+            assert "Passion Jaguar" in safety_text
+            assert "Passion Especial" in safety_text
 
             price_shell = price.locator(".price-view__body").bounding_box()
             price_top = price.locator(".price-view__top").bounding_box()

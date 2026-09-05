@@ -1,335 +1,388 @@
 # Modelo común de datos y almacenamiento
 
-Este documento describe el contrato físico BigQuery cerrado en código. El estado operativo mutable vive en [`PROJECT_STATE.md`](PROJECT_STATE.md).
+Este documento describe el modelo físico productivo actual y las capas derivadas de homologación/publicación. El estado operativo mutable vive en [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
-**BigQuery es el único backend persistente activo.** El layout Google Sheets/current-period permanece sólo como legado y motor backend-neutral de transición; no define las tablas productivas.
+## 1. Backend productivo
 
-## 1. Identidades
+El backend persistente principal es **Turso/libSQL**, con SQLite como equivalente local/reproducible. Componentes históricos de BigQuery y Google Sheets permanecen en el repositorio, pero no definen la ruta productiva vigente.
+
+La base es única para todas las cadenas y ubicaciones.
+
+## 2. Identidades
 
 ```text
-supermarket_id    = supermercado
-location_id       = ubicación comercial demostrada
-source_product_id = identidad estable del producto dentro de la fuente
-product_id        = identidad canónica/comparable cuando puede demostrarse
-offer_id          = supermercado + ubicación + source_product_id
-scrape_run_id     = ejecución terminal
+supermarket_id    = cadena
+location_id       = ubicación/contexto comercial demostrado
+source_key        = identidad estable entregada por la fuente
+product_id        = PK interna de un producto fuente persistido
+canonical_gtin    = GTIN validado/canonizado cuando existe
+canonical_product_id = identidad derivada fuerte usada por homologación
+scrape_run_id     = ejecución persistida
 ```
 
-Precio, promoción, disponibilidad y timestamps no participan en identidades estables.
+Precio, promoción, disponibilidad y timestamps no forman parte de la identidad estable del producto.
 
-BigQuery no aplica primary keys. Cada tabla declara una **logical key** que el adapter debe validar durante insert/upsert/replay.
+`canonical_product_id` no sustituye `product_id`: una identidad canónica puede agrupar perfiles de varios supermercados únicamente cuando la evidencia lo permite.
 
-## 2. Relaciones
+## 3. Relaciones físicas principales
 
 ```text
 supermarkets 1 ─── N locations
-supermarkets 1 ─── N productos
-productos    1 ─── N precios_historicos
-locations    1 ─── N precios_historicos
-productos    1 ─── N inventario_historico
-locations    1 ─── N inventario_historico
-scrape_runs  1 ─── N precios_historicos
-scrape_runs  1 ─── N inventario_historico
-scrape_runs  1 ─── N quality_events
-source product ─── product_mapping ─── product_id
+supermarkets 1 ─── N products
+products     1 ─── N price_history
+locations    1 ─── N price_history
+scrape_runs  1 ─── N periodos originados/confirmados
+products     1 ─── 0..1 product_homologation_profiles   # derivada
 ```
 
-La ciudad pertenece a `locations` y a la observación mediante `location_id`; no se duplica dentro de `productos`.
+La ciudad pertenece a `locations`. Un producto fuente puede observarse en varias ubicaciones sin duplicar su identidad descriptiva.
 
-## 3. `supermarkets`
+## 4. `supermarkets`
 
-**Grain:** una fila por supermercado.  
-**Logical key:** `(supermarket_id)`.
+**Grain:** una fila por cadena.
+
+Responsabilidad: catálogo de retailers y atributos mínimos de identidad. No contiene precios ni reglas específicas de scraping.
+
+## 5. `locations`
+
+**Grain:** una fila por ubicación/contexto comercial persistible.
+
+Responsabilidad:
+
+- relación con `supermarket_id`;
+- ciudad/contexto;
+- identidad fuente de la tienda/club cuando existe;
+- alcance operativo.
+
+La existencia de una fila no implica que un run concreto haya demostrado esa ubicación. Esa evidencia pertenece al snapshot/run.
+
+## 6. `products`
+
+**Grain:** una identidad fuente estable de producto dentro de un supermercado.
+
+Campos relevantes del contrato productivo incluyen:
 
 ```text
-supermarket_id STRING NOT NULL
-supermarket_name STRING NOT NULL
-country_code STRING NOT NULL
-location_selection_mode STRING NOT NULL
-is_active BOOL NOT NULL
+product_id
+supermarket_id
+source_key_type
+source_key
+source_sku / IDs fuente disponibles
+name
+brand
+presentation
+category
+ean / referencia equivalente cuando la fuente la provee
 ```
 
-Sin partición ni clustering: dimensión pequeña.
+Reglas:
 
-## 4. `locations`
+- no contiene ciudad ni precio;
+- el nombre no es una clave;
+- marca + presentación no forman una clave cross-source;
+- atributos descriptivos pueden actualizarse sin reemplazar la identidad estable del producto fuente.
 
-**Grain:** una fila por ubicación comercial.  
-**Logical key:** `(location_id)`.  
-**Clustering:** `supermarket_id`.
+## 7. `price_history`
+
+**Grain:** un periodo comercial por `product_id + location_id`.
+
+Campos conceptuales:
 
 ```text
-location_id STRING NOT NULL
-supermarket_id STRING NOT NULL
-city_id STRING NOT NULL
-city_name STRING NOT NULL
-granularity STRING NOT NULL
-source_location_key STRING
-is_available BOOL NOT NULL
-in_scope BOOL NOT NULL
-extraction_enabled BOOL NOT NULL
-technical_binding_confirmed BOOL NOT NULL
-evidence STRING
+product_id
+supermarket_id
+location_id
+current_price_minor
+reported_regular_price_minor
+is_promotion / promotion evidence
+availability
+currency
+valid_from_utc
+valid_to_utc
+scrape_run_id
 ```
 
-`extraction_enabled` controla tráfico futuro. No se convierte en `true` por existir evidencia técnica ni es requisito para persistir un snapshot histórico ya obtenido y aprobado.
-
-## 5. `productos`
-
-**Grain:** una fila por producto fuente estable dentro de un supermercado.  
-**Logical key:** `(supermarket_id, source_product_id)`.  
-**Clustering:** `supermarket_id`, `normalized_brand`, `category`.
+### Estado actual
 
 ```text
-supermarket_id STRING NOT NULL
-source_product_id STRING NOT NULL
-product_id STRING NOT NULL
-source_key_type STRING NOT NULL
-source_key STRING NOT NULL
-source_sku STRING
-source_name STRING NOT NULL
-normalized_name STRING NOT NULL
-source_brand STRING
-normalized_brand STRING
-source_presentation STRING
-source_category STRING
-category STRING
-subcategory STRING
-variant STRING
-unit_count INT64
-content_per_unit NUMERIC
-measurement_unit STRING
-total_content NUMERIC
-barcode STRING
-product_url STRING
-image_url STRING
-review_status STRING NOT NULL
-first_seen_at_utc TIMESTAMP NOT NULL
-last_seen_at_utc TIMESTAMP NOT NULL
-last_scrape_run_id STRING NOT NULL
+valid_to_utc IS NULL
 ```
 
-Los valores `source_*` se preservan separados de los normalizados. La tabla no contiene ciudad, precio ni inventario. `product_url` es nullable porque el artifact sanitizado inicial no conserva URLs de producto; no se inventan URLs para llenar ese campo.
+representa el periodo vigente. No existe necesidad de una segunda tabla `current` que pueda divergir del histórico.
 
-## 6. `precios_historicos`
+### Regla de cambio
 
-**Grain:** una observación de precio por producto + ubicación + run aceptado.  
-**Logical key:** `(price_observation_id)`.  
-**Partición:** `DATE(observed_at_utc)`.  
-**Clustering:** `supermarket_id`, `location_id`, `source_product_id`.
+Si el nuevo estado comercial aceptado es igual al periodo abierto, el periodo permanece abierto. Si cambia precio, promoción, disponibilidad u otro atributo comercial relevante, se cierra el periodo anterior y se abre uno nuevo.
+
+Por ello `price_history` no es una copia diaria redundante.
+
+## 8. Precio
+
+Los importes persistidos se almacenan como enteros de unidad menor.
 
 ```text
-price_observation_id STRING NOT NULL
-supermarket_id STRING NOT NULL
-location_id STRING NOT NULL
-source_product_id STRING NOT NULL
-product_id STRING NOT NULL
-currency STRING NOT NULL
-current_price NUMERIC
-reported_regular_price NUMERIC
-is_promotion BOOL NOT NULL
-promotion_evidence STRING
-observed_at_utc TIMESTAMP NOT NULL
-scrape_run_id STRING NOT NULL
-extractor_version STRING NOT NULL
-schema_version STRING NOT NULL
+current_price_minor
+reported_regular_price_minor
 ```
 
-`current_price` es nullable porque una observación `out_of_stock`, `not_listed` o `unknown` puede no tener precio. `reported_regular_price` nunca representa `previous_price`.
+`reported_regular_price_minor` es una referencia declarada por la fuente. No se usa automáticamente como “precio anterior” ni como prueba de ahorro real.
 
-Se persiste una observación por run comercial aceptado aunque el precio sea igual al run anterior. Así se distingue:
+Para análisis histórico:
 
 ```text
-precio igual observado hoy
+historical_previous_price = current_price del periodo aceptado inmediatamente anterior
+```
+
+Si ese periodo no existe, no se inventa baseline.
+
+## 9. Disponibilidad
+
+Ausencia de evidencia no se convierte en `out_of_stock`.
+
+Estados fuente normalizados pueden incluir, según el contrato:
+
+```text
+in_stock
+out_of_stock
+unknown
+```
+
+La capa analítica considera un precio explícitamente `out_of_stock` como no utilizable para una canasta actual, aunque permanezca un valor de precio en el registro.
+
+## 10. `scrape_runs`
+
+**Grain:** una ejecución persistida por supermercado/ubicación.
+
+Responsabilidades:
+
+- identidad del run;
+- `supermarket_id`;
+- `location_id`;
+- estado terminal;
+- conteos de catálogo/SKU;
+- digest del snapshot aceptado;
+- timestamps/metadata necesarios para auditoría.
+
+El postflight productivo verifica que los `scrape_run_id` esperados existan con conteos y SHA-256 correspondientes al snapshot que se persistió.
+
+## 11. Integridad productiva
+
+Después de persistir se comprueban, según el flujo:
+
+- `PRAGMA integrity_check`;
+- `pragma_foreign_key_check`;
+- ausencia de periodos actuales duplicados por producto/ubicación;
+- presencia de los run IDs exactos;
+- reconciliación de conteos de estado actual con snapshots aceptados.
+
+Un `HTTP 200` del backend no sustituye estas verificaciones.
+
+## 12. `product_homologation_profiles`
+
+Tabla **derivada** de `products`. No es la fuente de verdad del producto original.
+
+**Grain:** un perfil por `product_id`.
+
+Contrato actual:
+
+```text
+product_id
+supermarket_id
+normalized_name
+normalized_brand
+canonical_gtin
+canonical_product_id
+category
+subcategory
+product_type
+taxonomy_rule_id
+presentation_dimension
+presentation_total_base
+presentation_pack_count
+presentation_unit_amount_base
+presentation_status
+comparison_status
+conflict_reasons_json
+normalization_version
+profile_hash
+updated_at_utc
+```
+
+### Presentación
+
+La presentación se estructura para poder distinguir, por ejemplo:
+
+- masa;
+- volumen;
+- conteo;
+- multipack;
+- conflicto/ambigüedad.
+
+No se reduce un multipack ambiguo a una cantidad arbitraria.
+
+### `comparison_status`
+
+El perfil puede describir estados como `ready`, `review_required`, `single_source` o `unmapped`, pero este campo **no autoriza por sí solo** una comparación de precio. La autorización final pertenece a `safe_comparator` y evalúa el grupo completo.
+
+## 13. Identidad cross-source
+
+Un GTIN sólo se considera fuerte cuando:
+
+- tiene longitud GTIN válida;
+- supera check digit;
+- se canoniza de forma determinista.
+
+Sin identidad fuerte, el sistema puede conservar un candidato para revisión, pero no lo usa automáticamente en ahorro/canasta.
+
+Incluso con el mismo GTIN, contradicciones comerciales pueden producir `not_comparable`.
+
+Regresión explícita:
+
+```text
+Passion Jaguar 1 lb
 !=
-no hubo observación hoy
+Passion Especial 1 lb
 ```
 
-`previous_price`, cambio, porcentaje y ahorro real se derivan posteriormente con ventanas SQL sobre observaciones aceptadas.
+Marca y presentación iguales no son suficientes.
 
-## 7. `inventario_historico`
+## 14. Capa de comparación segura
 
-**Grain:** una observación de disponibilidad por producto + ubicación + seller cuando exista + run aceptado.  
-**Logical key:** `(inventory_observation_id)`.  
-**Partición:** `DATE(observed_at_utc)`.  
-**Clustering:** `supermarket_id`, `location_id`, `source_product_id`.
+`safe_comparator.py` no crea una tabla física adicional obligatoria. Produce decisiones deterministas derivadas de perfiles homologados:
 
 ```text
-inventory_observation_id STRING NOT NULL
-supermarket_id STRING NOT NULL
-location_id STRING NOT NULL
-source_product_id STRING NOT NULL
-product_id STRING NOT NULL
-seller_id STRING
-available_quantity_observed NUMERIC
-availability STRING NOT NULL
-availability_evidence STRING
-quantity_is_exact BOOL NOT NULL
-observed_at_utc TIMESTAMP NOT NULL
-scrape_run_id STRING NOT NULL
-extractor_version STRING NOT NULL
-schema_version STRING NOT NULL
+comparable
+review_required
+not_comparable
 ```
 
-El snapshot actual no conserva cantidad/seller/evidencia suficiente para completar esos campos. Por tanto:
+Los consumidores analíticos sólo usan `comparable`.
+
+Razones de bloqueo incluyen, entre otras:
+
+- `strong_identity_missing`;
+- `brand_identity_conflict`;
+- `product_type_conflict`;
+- `presentation_conflict`;
+- `presentation_evidence_conflict`;
+- `commercial_identity_conflict`.
+
+## 15. Modelo analítico actual
+
+`CurrentPriceObservation` proyecta el estado vigente mínimo necesario para analítica:
 
 ```text
-unknown -> unknown
-available_quantity_observed = null cuando no existe evidencia
-seller_id = null cuando no existe evidencia
-quantity_is_exact = false cuando no puede demostrarse exactitud
+source_record_id
+supermarket_id
+location_id
+price_minor
+availability
 ```
 
-No se inventa `out_of_stock`, cantidad ni seller.
+`ComparisonScope` exige exactamente una ubicación explícita por supermercado incluido.
 
-## 8. `scrape_runs`
+### Producto comparable
 
-**Grain:** una fila por ejecución terminal.  
-**Logical key:** `(scrape_run_id)`.  
-**Partición:** `DATE(started_at_utc)`.  
-**Clustering:** `supermarket_id`, `location_id`, `run_status`.
+`ProductComparison` agrupa sólo ofertas seguras de un `canonical_product_id` y calcula:
+
+- mínimo actual;
+- máximo actual;
+- ahorro absoluto contra el máximo;
+- ahorro porcentual;
+- todos los precios del alcance.
+
+### Canasta común
+
+`BasketComparison` usa el mismo universo en todas las cadenas del alcance:
 
 ```text
-scrape_run_id STRING NOT NULL
-run_fingerprint STRING NOT NULL
-run_evidence_id STRING
-supermarket_id STRING NOT NULL
-location_id STRING NOT NULL
-run_status STRING NOT NULL
-catalog_accepted BOOL NOT NULL
-commercial_update_allowed BOOL NOT NULL
-started_at_utc TIMESTAMP NOT NULL
-finished_at_utc TIMESTAMP NOT NULL
-products_observed INT64 NOT NULL
-offers_observed INT64 NOT NULL
-quality_event_count INT64 NOT NULL
-current_created INT64 NOT NULL
-current_changed INT64 NOT NULL
-current_confirmed INT64 NOT NULL
-offers_ignored INT64 NOT NULL
-catalog_products_reported INT64
-unique_products_extracted INT64
-skus_extracted INT64
-skus_with_price INT64
-catalog_product_coverage NUMERIC
-extractor_version STRING
-schema_version STRING
+products_comparable_and_priced_in_every_supermarket_in_scope
 ```
 
-`run_fingerprint` liga el ID del run al plan durable completo. Replay exacto con el mismo fingerprint es no-op; el mismo `scrape_run_id` con evidencia diferente falla cerrado.
+Un faltante no se imputa. Un universo vacío no tiene ganador.
 
-Todo run terminal se registra. Un run rechazado conserva ledger/quality events, pero no crea productos, precios, inventario ni mapping comerciales.
+## 16. Dataset de publicación
 
-## 9. `quality_events`
-
-**Grain:** una fila por evento auditable.  
-**Logical key:** `(quality_event_id)`.  
-**Partición:** `DATE(observed_at_utc)`.  
-**Clustering:** `supermarket_id`, `location_id`, `event_code`.
+Contrato:
 
 ```text
-quality_event_id STRING NOT NULL
-scrape_run_id STRING NOT NULL
-supermarket_id STRING NOT NULL
-location_id STRING NOT NULL
-source_product_id STRING
-offer_id STRING
-category STRING NOT NULL
-severity STRING NOT NULL
-event_code STRING NOT NULL
-observed_at_utc TIMESTAMP NOT NULL
+precios-sps-publication/v1
 ```
 
-## 10. `normalization_overrides`
-
-**Grain:** una corrección manual/versionada explícita.  
-**Logical key:** `(override_id)`.  
-**Clustering:** `supermarket_id`, `source_product_id`, `status`.
+Estructura raíz:
 
 ```text
-override_id STRING NOT NULL
-supermarket_id STRING NOT NULL
-source_product_id STRING NOT NULL
-source_signature STRING NOT NULL
-field_name STRING NOT NULL
-source_value STRING
-override_value STRING
-reason STRING NOT NULL
-status STRING NOT NULL
-created_at_utc TIMESTAMP NOT NULL
-updated_at_utc TIMESTAMP NOT NULL
+schema
+comparison_policy
+currency
+scope
+offers
+products
+common_basket
+excluded_group_counts
 ```
 
-No existe una fila por producto por defecto. Un override se materializa sólo cuando existe una excepción explícita. `source_signature` impide reutilizar silenciosamente la corrección si cambia la evidencia fuente.
+### `offers`
 
-Durante el MVP, Git/versionado sigue siendo la autoridad de las reglas; BigQuery materializa evidencia operativa/auditable.
+Una fila por producto canónico + supermercado + ubicación publicada.
 
-## 11. `product_mapping`
+### `products`
 
-**Grain:** relación fuente → producto canónico dentro del supermercado.  
-**Logical key:** `(supermarket_id, source_product_id)`.  
-**Clustering:** `supermarket_id`, `mapping_status`.
+Una fila por producto canónico con mínimo, máximo y ahorro.
+
+### `common_basket`
+
+Una fila por supermercado con el total del mismo denominador.
+
+### `excluded_group_counts`
+
+Sólo conteos agregados de grupos bloqueados; no publica precios que puedan inducir una equivalencia falsa.
+
+Diccionario completo: [`PUBLICATION-DATA-DICTIONARY.md`](PUBLICATION-DATA-DICTIONARY.md).
+
+## 17. Exportación
+
+`scripts/exportar_modelo_analitico.py` puede leer:
 
 ```text
-supermarket_id STRING NOT NULL
-source_product_id STRING NOT NULL
-product_id STRING NOT NULL
-mapping_status STRING NOT NULL
-mapping_method STRING NOT NULL
-canonical_gtin STRING
-review_reason STRING
-last_observed_at_utc TIMESTAMP NOT NULL
-last_scrape_run_id STRING NOT NULL
+SQLite en modo read-only
+Turso usando credenciales del entorno confiable
 ```
 
-GTIN válido puede resolver mapping automáticamente. Sin identidad fuerte se conserva mapping `pending`/singleton; la observación no se descarta.
-
-## 12. Atomicidad e idempotencia
-
-El adapter productivo no confía en “insert succeeded”. El flujo es:
+y genera:
 
 ```text
-BigQueryWritePlan validado
--> staging efímero por tabla/run
--> una transacción DML sobre tablas destino
--> COMMIT
--> limpieza best-effort de staging
+publication.json
+offers.csv
+products.csv
+common-basket.csv
+excluded-groups.csv
+manifest.json
 ```
 
-Las observaciones y ledger son inmutables por logical key. Dimensiones/mapping/overrides son upsertables. Un fallo antes o dentro de la transacción no debe dejar un subconjunto durable del run.
+El manifest contiene el backend lógico y conteos, pero nunca la URL ni el token de Turso.
 
-El fake client replica estas invariantes offline y permite inyectar fallo después de N mutaciones staged para demostrar rollback.
+## 18. Consumidores
 
-## 13. Read-back / reconciliación
+Power BI y el portafolio consumen el dataset publicado. No deben volver a inferir:
 
-`BigQueryAdapter.read_back()` reconstruye por supermercado/ubicación:
+- identidad;
+- ubicación;
+- aceptación del run;
+- matching por nombre;
+- equivalencia por marca/presentación.
 
-- productos;
-- última observación de precio por `source_product_id`;
-- última observación de inventario por `source_product_id`;
-- runs ordenados.
+La lógica crítica se mantiene una sola vez en Python y está cubierta por tests.
 
-Los tests reconcilian dos representaciones deliberadamente distintas:
+## 19. Evolución de esquema
 
-```text
-motor Python current/history = periodos y transición comercial
-BigQuery                   = observaciones analíticas por run aceptado
-```
+Las migraciones se mantienen explícitas y fail-closed. Un persistidor que requiere un esquema nuevo verifica su presencia antes de modificar estado comercial.
 
-Un run con precio idéntico confirma el periodo Python sin abrir otro, pero añade una nueva observación BigQuery. Un cambio real abre/cierra periodos Python y también añade su observación BigQuery.
+La tabla derivada de homologación puede reconstruirse desde `products`, por lo que su refresh no modifica la fuente comercial original.
 
-## 14. Views derivadas — siguiente consumidor, no parte del bootstrap actual
+## 20. Fuente de verdad
 
-Cuando exista la primera carga durable se crearán/validarán las views de consumo:
-
-- `vw_precios_actuales`;
-- `vw_inventario_actual`;
-- `vw_ofertas_actuales`;
-- derivaciones de `previous_price`, `price_change`, `price_change_pct`, `real_saving`.
-
-Dash consumirá estas reglas; no las redefinirá.
-
-## 15. Google Sheets legado
-
-El planner/adapter de Sheets se conserva sólo como evidencia de la etapa anterior y está ligado a nombres `LEGACY_SHEETS_*`. No importa `ACTIVE_STORAGE_TABLE_SPECS`.
-
-El workflow legado queda fail-closed con `allowed=false`, por lo que el job que porta credenciales no puede ejecutar. No se agregará funcionalidad nueva a esa ruta.
+- arquitectura: [`arquitectura.md`](arquitectura.md);
+- estado operativo: [`PROJECT_STATE.md`](PROJECT_STATE.md);
+- metodología de comparación: [`COMPARATOR-METHODOLOGY.md`](COMPARATOR-METHODOLOGY.md);
+- contrato BI/publicación: [`PUBLICATION-DATA-DICTIONARY.md`](PUBLICATION-DATA-DICTIONARY.md).

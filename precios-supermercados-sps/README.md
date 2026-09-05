@@ -14,8 +14,8 @@ La versión pública muestra:
 - una extracción real comprobable con enlace a la fuente, la evidencia y el código;
 - cifras de escala verificadas;
 - una tabla de cobertura con **todos los supermercados que ya tienen datos productivos aceptados**;
-- una comparación homologada de 10 productos representativos entre dos supermercados;
-- marca y presentación/cantidad para evitar comparaciones engañosas.
+- evidencia analítica intra-cadena reproducible cuando la identidad del artículo está demostrada;
+- la política fail-closed que impide publicar comparaciones cross-source basadas sólo en marca y presentación.
 
 Cifras públicas verificadas al **4 de septiembre de 2026**:
 
@@ -53,25 +53,13 @@ Evidencia versionada: [`reports/comisariato-los-andes/2026-09-04-full/`](reports
 
 ### Comparación pública
 
-La tabla visible de precios usa 10 productos cotidianos con esta estructura:
+La cobertura de scraping y la cobertura de comparación se tratan como conceptos distintos. Tener precio para un producto en dos supermercados **no autoriza** a compararlos automáticamente.
 
-```text
-Producto
-Marca
-Presentación / cantidad
-Ciudad
-Precio Comisariato Los Andes
-Precio Supermercados Colonial
-Mejor precio
-```
+La muestra histórica de 10 filas entre Comisariato Los Andes y Supermercados Colonial fue retirada de la publicación porque su regla anterior —misma marca + misma presentación— no demuestra identidad comercial. El caso `Passion Jaguar` frente a `Passion Especial` queda como regresión explícita: compartir marca y presentación no basta para calcular ni mostrar un “mejor precio”.
 
-La cobertura total del proyecto es de seis cadenas. Esta tabla de precios usa sólo dos porque esos 10 artículos tienen una equivalencia curada y comprobada. La regla para incluir una fila es **misma marca + misma presentación/cantidad**.
+Una fila cross-source sólo puede publicarse cuando supera el gate conservador que exige identidad fuerte y coherencia comercial. La metodología completa está en [`docs/COMPARATOR-METHODOLOGY.md`](docs/COMPARATOR-METHODOLOGY.md) y el contrato de publicación en [`docs/PUBLICATION-DATA-DICTIONARY.md`](docs/PUBLICATION-DATA-DICTIONARY.md).
 
-No se agregan columnas de La Colonia, Walmart, PriceSmart o Paiz usando coincidencias aproximadas sólo para llenar la tabla. Cuando el matching cross-source esté verificado para una equivalencia, entonces puede entrar a una comparación pública.
-
-La selección sirve para demostrar la comparación y **no se presenta como la canasta básica oficial de Honduras**.
-
-Los Andes usa el snapshot aceptado indicado arriba. Los valores de Colonial fueron comprobados el 4 de septiembre de 2026 contra su catálogo web público oficial. La muestra versionada está en [`portfolio/sample-data.json`](portfolio/sample-data.json).
+Mientras no exista una fila autorizada por ese gate, [`portfolio/sample-data.json`](portfolio/sample-data.json) publica un estado vacío y explícito en lugar de una comparación dudosa.
 
 La procedencia completa y los límites de interpretación se documentan en [`docs/portfolio-showcase.md`](docs/portfolio-showcase.md).
 
@@ -79,6 +67,9 @@ La procedencia completa y los límites de interpretación se documentan en [`doc
 
 - **Estado operativo mutable, autorizaciones, blockers y último CI:** [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)
 - **Presentación pública y evidencia de cifras del portafolio:** [`docs/portfolio-showcase.md`](docs/portfolio-showcase.md)
+- **Metodología del comparador:** [`docs/COMPARATOR-METHODOLOGY.md`](docs/COMPARATOR-METHODOLOGY.md)
+- **Contrato del dataset analítico/publicable:** [`docs/PUBLICATION-DATA-DICTIONARY.md`](docs/PUBLICATION-DATA-DICTIONARY.md)
+- **Guía de implementación en Power BI:** [`docs/BI-IMPLEMENTATION-GUIDE.md`](docs/BI-IMPLEMENTATION-GUIDE.md)
 - **Arquitectura estable:** [`docs/arquitectura.md`](docs/arquitectura.md)
 - **Modelo de datos:** [`docs/modelo-datos.md`](docs/modelo-datos.md)
 - **Decisiones técnicas:** [`docs/decisiones-tecnicas.md`](docs/decisiones-tecnicas.md)
@@ -97,6 +88,8 @@ El README no replica SHAs de ejecución, authorization IDs ni flags operativos m
 8. Una entidad lógica no obliga a crear una tabla física antes de existir una necesidad real.
 9. No se crea una tabla por supermercado.
 10. Power BI consume datos curados; no decide limpieza, ubicación, identidad ni aceptación.
+11. Marca + presentación nunca bastan para autorizar una comparación cross-source de precio.
+12. Si la identidad o la equivalencia comercial es ambigua, la comparación queda fuera de ahorro, mejor precio y canasta común.
 
 ## Flujo de datos
 
@@ -117,12 +110,18 @@ current/history                   # CURATED
   ↓
 Turso / SQLite
   ↓
-proyección semántica
+homologación descriptiva
   ↓
-consumo analítico                 # SERVE
+safe_comparator                   # gate fail-closed
+  ↓
+price_analytics
+  ↓
+publication_dataset               # SERVE
+  ↓
+Power BI / portafolio
 ```
 
-La visualización completa de comparación todavía es una capa posterior. La presentación actual muestra la cobertura productiva completa de seis cadenas y, de forma separada, una comparación pública curada de 10 productos entre dos supermercados; no presenta un dashboard cross-source productivo terminado.
+La cobertura productiva completa de seis cadenas no implica que todos los artículos sean comparables entre cadenas. La capa analítica publica únicamente la intersección cuya identidad y precio están demostrados para el alcance solicitado.
 
 ## Identidad
 
@@ -135,6 +134,8 @@ offer_id          = supermercado + ubicación comercial + producto fuente
 Precio, promoción, disponibilidad y fecha no forman parte de IDs estables.
 
 Un GTIN-8/12/13/14 sólo se considera identidad cross-source fuerte si supera check digit y se normaliza de forma canónica. Sin identidad fuerte, el producto puede permanecer bajo `prod_pending_*` y `pending_product_mapping`; semejanza textual no basta para unir productos de supermercados distintos.
+
+Incluso con un GTIN común, una contradicción de marca, tipo, presentación o variante comercial puede bloquear el uso automático del grupo en comparaciones de precio.
 
 ## Precio e histórico
 
@@ -150,15 +151,33 @@ historical_previous_price
 
 `fact_offer_history` representa periodos comerciales, no snapshots diarios duplicados. Si el estado no cambia, se confirma el periodo existente.
 
+## Analítica y publicación
+
+`price_analytics` sólo recibe grupos autorizados por `safe_comparator`. Para una canasta común exige el mismo producto comparable y un precio actual utilizable en cada supermercado/ubicación del alcance. No imputa precios ni sustituye faltantes por productos parecidos.
+
+El denominador base se publica de forma explícita como:
+
+```text
+products_comparable_and_priced_in_every_supermarket_in_scope
+```
+
+El exportador reproducible [`scripts/exportar_modelo_analitico.py`](scripts/exportar_modelo_analitico.py) genera JSON/CSV para BI o portafolio desde estado ya persistido, sin hacer scraping y sin serializar credenciales.
+
+## Power BI
+
+Power BI consume el contrato derivado; no vuelve a hacer matching. Los activos versionables viven en [`powerbi/`](powerbi/) y la guía en [`docs/BI-IMPLEMENTATION-GUIDE.md`](docs/BI-IMPLEMENTATION-GUIDE.md).
+
+Un `.pbix` binario no es la fuente de verdad del cálculo: las reglas críticas permanecen en Python, documentación y tests para que el dashboard sea reproducible y auditable.
+
 ## Almacenamiento físico activo
 
 Turso / SQLite mantiene el estado productivo integrado bajo un modelo común. El detalle operativo, la huella de esquema vigente y las verificaciones de cada integración se consultan en `PROJECT_STATE.md` y en los reportes de evidencia versionados.
 
 ## Seguridad y tráfico live
 
-La autonomía de desarrollo cubre trabajo offline, GitHub, tests, documentación y preparación fail-closed. No crea una autorización permanente para tráfico contra supermercados.
+La autonomía de desarrollo cubre trabajo offline, GitHub, tests, documentación y preparación fail-closed. El tráfico live y las escrituras productivas se ejecutan únicamente bajo una autorización humana explícita y vigente para su alcance.
 
-Cualquier nueva observación live exige autorización humana explícita y vigente para su alcance concreto. Autorizaciones históricas consumidas no se reutilizan. Los detalles vigentes se consultan exclusivamente en [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
+Los workflows que usan secretos o autoridad de escritura ejecutan código confiable de `main`; un head de PR no recibe esas credenciales. Los detalles vigentes se consultan exclusivamente en [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
 
 ## Pruebas
 

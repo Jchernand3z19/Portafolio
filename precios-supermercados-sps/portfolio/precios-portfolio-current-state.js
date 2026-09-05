@@ -23,19 +23,16 @@
       scaleBody: 'Estado verificado al 4 de septiembre de 2026. La cobertura productiva incluye las seis cadenas que ya tienen datos aceptados en la base.',
       scaleLabels: ['supermercados', 'ubicaciones monitoreadas', 'productos registrados', 'registros históricos de precio'],
       coverageTitle: 'Supermercados con datos disponibles',
-      coverageBody: 'Esta es la cobertura real del proyecto. Cada fila corresponde a una cadena con datos productivos aceptados; no se ocultan las cadenas que todavía no tienen matching de producto entre sí.',
+      coverageBody: 'Cada fila corresponde a una cadena con datos productivos aceptados. La cobertura de scraping y la cobertura de comparación cross-source se muestran como conceptos separados.',
       chain: 'Supermercado',
       locations: 'Ubicaciones con datos',
       status: 'Estado',
       accepted: 'Datos aceptados',
-      sampleTitle: 'Comparación homologada: 10 productos en 2 supermercados',
-      sampleBody: 'La cobertura total incluye 6 supermercados. Esta tabla compara únicamente Comisariato Los Andes y Supermercados Colonial porque esos 10 productos sí fueron homologados por marca y presentación. El precio más bajo se resalta en verde, el más alto en rojo y los valores intermedios se marcarán en amarillo cuando haya 3 o más precios comparables.',
-      legendTitle: 'Lectura de precios',
-      best: 'Mejor precio',
-      middle: 'Precio intermedio',
-      highest: 'Precio más alto',
-      tie: 'Mejor precio (empate)',
-      legendNote: 'El amarillo aparece cuando una fila tiene 3 o más precios comparables.',
+      sampleTitle: 'Comparaciones cross-source con identidad fuerte',
+      sampleBody: 'La muestra anterior se retiró porque marca + presentación no demuestran que dos registros sean el mismo producto. El comparador ahora exige identidad fuerte y consistencia comercial antes de calcular un mejor precio.',
+      sampleNote: 'El dataset público se vuelve a habilitar únicamente con filas que superen el gate fail-closed. Passion Jaguar y Passion Especial quedan bloqueados como comparación automática aunque compartan marca y presentación.',
+      matchingBody: 'La homologación propone identidades; el gate de comparación exige evidencia fuerte y coherencia comercial antes de calcular ahorros. Marca + presentación nunca bastan por sí solas.',
+      insightsBody: 'Los hallazgos actuales usan identidades demostradas dentro de una misma cadena. Las comparaciones cross-source permanecen cerradas si la identidad comercial es ambigua.',
       roadmap: 'Seis cadenas productivas integradas bajo una estructura común.'
     },
     en: {
@@ -45,19 +42,16 @@
       scaleBody: 'Verified state as of September 4, 2026. Production coverage includes all six chains with accepted data in the database.',
       scaleLabels: ['retail chains', 'monitored locations', 'products recorded', 'historical price records'],
       coverageTitle: 'Retail chains with available data',
-      coverageBody: 'This is the project’s real coverage. Every row is a chain with accepted production data; chains are not hidden just because cross-source product matching is not complete yet.',
+      coverageBody: 'Each row is a chain with accepted production data. Scraping coverage and cross-source comparison coverage are shown as separate concepts.',
       chain: 'Retail chain',
       locations: 'Locations with data',
       status: 'Status',
       accepted: 'Accepted data',
-      sampleTitle: 'Matched comparison: 10 products across 2 retailers',
-      sampleBody: 'Total coverage includes 6 retail chains. This table compares only Comisariato Los Andes and Supermercados Colonial because these 10 products were matched by brand and presentation. The lowest price is highlighted in green, the highest in red, and intermediate values will be yellow when 3 or more comparable prices are available.',
-      legendTitle: 'Price guide',
-      best: 'Best price',
-      middle: 'Intermediate price',
-      highest: 'Highest price',
-      tie: 'Best price (tie)',
-      legendNote: 'Yellow appears when a row contains 3 or more comparable prices.',
+      sampleTitle: 'Cross-source comparisons with strong identity',
+      sampleBody: 'The previous sample was removed because brand + presentation do not prove that two records are the same commercial product. The comparator now requires strong identity and commercial consistency before calculating a best price.',
+      sampleNote: 'The public comparison dataset is enabled only for rows that pass the fail-closed gate. Passion Jaguar and Passion Especial remain blocked from automatic comparison even when brand and presentation match.',
+      matchingBody: 'Homologation proposes identities; the comparison gate requires strong evidence and commercial consistency before calculating savings. Brand + presentation are never sufficient on their own.',
+      insightsBody: 'Current findings use proven identities within the same retail chain. Cross-source comparisons remain closed whenever commercial identity is ambiguous.',
       roadmap: 'Six production retail chains integrated under one shared structure.'
     }
   };
@@ -77,7 +71,6 @@
   function patchCard() {
     const card = document.querySelector('#proyectos .price-card');
     if (!card) return;
-
     const values = ['6', '11', '56K+', '108K+'];
     card.querySelectorAll('.price-card__signal > span').forEach((item, index) => {
       setText(item.querySelector('strong'), values[index]);
@@ -115,90 +108,32 @@
       </div>`;
   }
 
-  function rankingLegendMarkup() {
+  function disableLegacyCrossSourceSample(detail) {
     const c = text();
-    return `
-      <div class="price-rank-legend" data-price-ranking-legend aria-label="${c.legendTitle}">
-        <strong class="price-rank-legend__label">${c.legendTitle}</strong>
-        <span class="price-rank-legend__item"><i class="price-rank-dot is-best" aria-hidden="true"></i>${c.best}</span>
-        <span class="price-rank-legend__item"><i class="price-rank-dot is-middle" aria-hidden="true"></i>${c.middle}</span>
-        <span class="price-rank-legend__item"><i class="price-rank-dot is-highest" aria-hidden="true"></i>${c.highest}</span>
-        <small>${c.legendNote}</small>
-      </div>`;
-  }
+    const sampleTitle = detail.querySelector('#price-sample-title');
+    setText(sampleTitle, c.sampleTitle);
+    const sampleSection = sampleTitle?.closest('.price-section');
+    const sampleHead = sampleTitle?.closest('.price-section__head');
+    setText(sampleHead?.querySelector('p:not(.price-eyebrow)'), c.sampleBody);
 
-  function parsePrice(cell) {
-    const numeric = cell.textContent.replace(/[^0-9.,-]/g, '').replaceAll(',', '');
-    const value = Number(numeric);
-    return Number.isFinite(value) ? value : null;
-  }
-
-  function rankComparisonPrices(detail) {
-    const c = text();
-    const table = detail.querySelector('.price-table');
-    if (!table) return;
-
-    const headerRow = table.querySelector('thead tr');
-    const legacyBestHeader = headerRow?.lastElementChild;
-    const rows = Array.from(table.querySelectorAll('tbody tr'));
-    const hasLegacyBestColumn = Boolean(
-      legacyBestHeader &&
-      rows.length &&
-      rows.every(row => row.lastElementChild?.classList.contains('price-best'))
-    );
-
-    if (hasLegacyBestColumn) {
-      legacyBestHeader.classList.add('price-best-legacy');
-      legacyBestHeader.setAttribute('aria-hidden', 'true');
-      rows.forEach(row => {
-        row.lastElementChild.classList.add('price-best-legacy');
-        row.lastElementChild.setAttribute('aria-hidden', 'true');
-      });
+    const tableWrap = sampleSection?.querySelector('.price-table-wrap');
+    if (tableWrap) {
+      tableWrap.hidden = true;
+      tableWrap.setAttribute('aria-hidden', 'true');
     }
+    sampleSection?.querySelector('[data-price-ranking-legend]')?.remove();
+    const note = sampleSection?.querySelector('.price-note');
+    setText(note, c.sampleNote);
+    if (note) note.dataset.comparisonSafety = 'fail-closed';
+  }
 
-    rows.forEach(row => {
-      const priceCells = Array.from(row.querySelectorAll('td.price-number:not(.price-best)'));
-      const priced = priceCells
-        .map(cell => ({ cell, value: parsePrice(cell) }))
-        .filter(item => item.value !== null);
-
-      priced.forEach(({ cell }) => {
-        cell.classList.remove('is-best', 'price-rank--best', 'price-rank--middle', 'price-rank--highest');
-        cell.removeAttribute('data-price-rank');
-      });
-
-      if (!priced.length) return;
-
-      const values = priced.map(item => item.value);
-      const minimum = Math.min(...values);
-      const maximum = Math.max(...values);
-      const tied = minimum === maximum;
-
-      priced.forEach(({ cell, value }) => {
-        let rank = 'middle';
-        let label = c.middle;
-
-        if (tied || value === minimum) {
-          rank = 'best';
-          label = tied ? c.tie : c.best;
-          cell.classList.add('is-best', 'price-rank--best');
-        } else if (value === maximum) {
-          rank = 'highest';
-          label = c.highest;
-          cell.classList.add('price-rank--highest');
-        } else {
-          cell.classList.add('price-rank--middle');
-        }
-
-        cell.dataset.priceRank = rank;
-        cell.title = label;
-        cell.setAttribute('aria-label', `${cell.textContent.trim()}. ${label}`);
-      });
-    });
-
-    detail.querySelector('[data-price-ranking-legend]')?.remove();
-    const wrap = table.closest('.price-table-wrap');
-    wrap?.insertAdjacentHTML('beforebegin', rankingLegendMarkup());
+  function patchAnalyticalCopy(detail) {
+    const c = text();
+    const capabilities = detail.querySelectorAll('.price-capabilities .price-value');
+    if (capabilities.length >= 3) setText(capabilities[2].querySelector('p'), c.matchingBody);
+    const insightsTitle = detail.querySelector('#price-insights-title');
+    const insightsHead = insightsTitle?.closest('.price-section__head');
+    setText(insightsHead?.querySelector('p:not(.price-eyebrow)'), c.insightsBody);
   }
 
   function patchDetail() {
@@ -220,15 +155,11 @@
     });
 
     const scaleSection = scaleTitle?.closest('.price-section');
-    const existingCoverage = scaleSection?.querySelector('[data-price-coverage]');
-    if (existingCoverage) existingCoverage.remove();
+    scaleSection?.querySelector('[data-price-coverage]')?.remove();
     scaleSection?.insertAdjacentHTML('beforeend', coverageMarkup());
 
-    const sampleTitle = detail.querySelector('#price-sample-title');
-    setText(sampleTitle, c.sampleTitle);
-    const sampleHead = sampleTitle?.closest('.price-section__head');
-    setText(sampleHead?.querySelector('p:not(.price-eyebrow)'), c.sampleBody);
-    rankComparisonPrices(detail);
+    disableLegacyCrossSourceSample(detail);
+    patchAnalyticalCopy(detail);
 
     const roadmap = detail.querySelector('.price-roadmap__item.is-done span');
     setText(roadmap, c.roadmap);
