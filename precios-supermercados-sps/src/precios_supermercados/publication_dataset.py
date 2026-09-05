@@ -105,22 +105,25 @@ def build_publication_dataset(result: AnalyticsResult, *, currency: str = "HNL")
                 location_id=offer.location_id,
                 source_record_id=offer.source_record_id,
                 current_price=_money(offer.price_minor),
-                is_best_price=(
-                    offer.supermarket_id == product.best_supermarket_id
-                    and offer.location_id == product.best_location_id
-                    and offer.price_minor == product.best_price_minor
-                ),
+                # Todos los mínimos son ganadores. El campo singular de Products
+                # sólo conserva un desempate determinista para consumidores que
+                # necesitan una fila representativa.
+                is_best_price=offer.price_minor == product.best_price_minor,
             )
             for offer in product.offers
         )
 
     location_by_supermarket = result.scope.location_by_supermarket
+    basket_minimum = result.common_basket.cheapest_total_minor
+    basket_has_products = result.common_basket.product_count > 0 and basket_minimum is not None
     basket = tuple(
         PublishedBasketRow(
             supermarket_id=supermarket,
             location_id=location_by_supermarket[supermarket],
             total=_money(total_minor),
-            is_cheapest=supermarket == result.common_basket.cheapest_supermarket_id,
+            # Un universo vacío nunca produce un ganador. En empate se marcan
+            # todas las cadenas con el mismo total mínimo.
+            is_cheapest=basket_has_products and total_minor == basket_minimum,
             product_count=result.common_basket.product_count,
             denominator_definition=result.common_basket.denominator_definition,
         )
