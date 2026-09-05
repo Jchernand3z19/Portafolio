@@ -61,6 +61,7 @@ PRESERVE_INITIAL_SNAPSHOT_WORKFLOW = (
     "precios-supermercados-sps-preserve-initial-snapshot.yml"
 )
 BIGQUERY_FIRST_LOAD_WORKFLOW = "precios-supermercados-sps-bigquery-first-load.yml"
+HOMOLOGATION_REFRESH_WORKFLOW = "precios-supermercados-sps-homologation-refresh.yml"
 GOOGLE_SHEETS_STORAGE_REQUEST = (
     "precios-supermercados-sps/.automation/google-sheets-storage-request.json"
 )
@@ -97,6 +98,7 @@ EXPECTED_PERMISSIONS = {
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"contents": "read"},
     PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"actions": "read", "contents": "read"},
     BIGQUERY_FIRST_LOAD_WORKFLOW: {"actions": "read", "contents": "read"},
+    HOMOLOGATION_REFRESH_WORKFLOW: {"contents": "read"},
     TEST_WORKFLOW: {"contents": "read"},
 }
 
@@ -128,6 +130,7 @@ EXPECTED_TRIGGERS = {
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {"workflow_dispatch", "push"},
     PRESERVE_INITIAL_SNAPSHOT_WORKFLOW: {"workflow_dispatch", "push"},
     BIGQUERY_FIRST_LOAD_WORKFLOW: {"workflow_dispatch"},
+    HOMOLOGATION_REFRESH_WORKFLOW: {"workflow_dispatch", "workflow_run"},
     TEST_WORKFLOW: {"workflow_dispatch", "pull_request", "push"},
 }
 
@@ -143,6 +146,7 @@ ALLOWED_SECRET_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_GATEWAY_SECRET, PROBE_OBSERVABILITY_SECRET},
     GOOGLE_SHEETS_STORAGE_WORKFLOW: {GOOGLE_SHEETS_SERVICE_ACCOUNT_SECRET},
     MVP_UPDATE_WORKFLOW: {TURSO_DATABASE_URL_SECRET, TURSO_AUTH_TOKEN_SECRET},
+    HOMOLOGATION_REFRESH_WORKFLOW: {TURSO_DATABASE_URL_SECRET, TURSO_AUTH_TOKEN_SECRET},
 }
 ALLOWED_VAR_REFERENCES = {
     PROBE_WORKFLOW: {PROBE_PUBLIC_KEY_VAR, CLOUDFLARE_ACCOUNT_VAR},
@@ -276,6 +280,14 @@ def test_checkout_identity_is_immutable_and_credentials_are_not_persisted():
                 "ref": "${{ github.sha }}",
                 "persist-credentials": "false",
                 "fetch-depth": "0",
+            }
+            continue
+
+        if path.name == HOMOLOGATION_REFRESH_WORKFLOW:
+            assert len(checkout_steps) == 1
+            assert checkout_steps[0]["with"] == {
+                "ref": "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}",
+                "persist-credentials": "false",
             }
             continue
 
