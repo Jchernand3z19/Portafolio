@@ -15,17 +15,20 @@ base = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(base)
 
 # La implementación previa se conserva byte-for-byte en el módulo base. Esta
-# capa sólo registra el nuevo operador productivo y mantiene cerrados los
-# conjuntos de workflows/permisos/triggers que la auditoría exige.
+# capa registra operadores/workflows confiables nuevos y mantiene cerrados los
+# conjuntos de permisos y triggers que la auditoría exige.
 base.PRODUCTION_OPERATOR_WORKFLOW = "precios-supermercados-sps-production-operator.yml"
 base.PRODUCTION_UPDATE_REQUEST = (
     "precios-supermercados-sps/.automation/production-update-request.json"
 )
+base.SAFE_ANALYTICS_WORKFLOW = "precios-supermercados-sps-safe-analytics-publication.yml"
 base.EXPECTED_PERMISSIONS[base.PRODUCTION_OPERATOR_WORKFLOW] = {
     "actions": "write",
     "contents": "read",
 }
 base.EXPECTED_TRIGGERS[base.PRODUCTION_OPERATOR_WORKFLOW] = {"push"}
+base.EXPECTED_PERMISSIONS[base.SAFE_ANALYTICS_WORKFLOW] = {"contents": "read"}
+base.EXPECTED_TRIGGERS[base.SAFE_ANALYTICS_WORKFLOW] = {"workflow_run", "workflow_dispatch"}
 
 # Reexporta íntegramente los tests existentes; sus globals siguen apuntando al
 # módulo base ya extendido, de modo que no se pierde ninguna comprobación.
@@ -84,6 +87,62 @@ def test_production_operator_is_main_only_closed_and_least_privilege() -> None:
     checkout = next(
         step
         for step in parsed["jobs"]["dispatch"]["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    )
+    assert checkout["with"] == {
+        "ref": "${{ github.sha }}",
+        "persist-credentials": "false",
+    }
+
+
+def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> None:
+    path = base.WORKFLOW_DIR / base.SAFE_ANALYTICS_WORKFLOW
+    workflow = base.load_workflow(path)
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"] == {
+        "group": "precios-sps-safe-analytics-publication",
+        "cancel-in-progress": "false",
+    }
+    assert workflow["on"] == {
+        "workflow_run": {
+            "workflows": ["Precios SPS - Refrescar homologación derivada"],
+            "types": ["completed"],
+        },
+        "workflow_dispatch": None,
+    }
+    workflow_jobs = base.jobs(workflow)
+    assert set(workflow_jobs) == {"publish"}
+    publish = workflow_jobs["publish"]
+    assert publish["timeout-minutes"] == "20"
+    assert "permissions" not in publish
+    assert "environment" not in publish
+    assert publish["if"] == (
+        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
+        "(github.event_name == 'workflow_dispatch' || "
+        "(github.event_name == 'workflow_run' && "
+        "github.event.workflow_run.conclusion == 'success' && "
+        "github.event.workflow_run.head_branch == 'main')) }}"
+    )
+
+    raw = path.read_text(encoding="utf-8")
+    assert "scripts/exportar_modelo_analitico.py" in raw
+    assert "--scope colonial=colonial_sps" in raw
+    assert "--scope walmart=walmart_sps" in raw
+    assert "precios-sps-publication/v1" in raw
+    assert "fail_closed_strong_identity_and_commercial_consistency" in raw
+    assert "TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}" in raw
+    assert "TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}" in raw
+    assert "pull_request:" not in raw
+    assert "pull_request_target:" not in raw
+    assert "issue_comment:" not in raw
+    assert "schedule:" not in raw
+    assert "id-token" not in raw
+    assert "contents: write" not in raw
+
+    parsed = yaml.load(raw, Loader=yaml.BaseLoader)
+    checkout = next(
+        step
+        for step in parsed["jobs"]["publish"]["steps"]
         if str(step.get("uses", "")).startswith("actions/checkout@")
     )
     assert checkout["with"] == {
