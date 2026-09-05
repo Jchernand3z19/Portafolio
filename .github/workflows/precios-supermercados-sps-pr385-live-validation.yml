@@ -1,6 +1,13 @@
 name: Precios SPS - PR 385 validación live read-only final
 
 on:
+  push:
+    branches:
+      - feature/daily-all-productive-retailers
+    paths:
+      - .github/workflows/precios-supermercados-sps-pr385-live-validation.yml
+      - precios-supermercados-sps/scripts/obtener_catalogo_walmart_operativo.py
+      - precios-supermercados-sps/scripts/obtener_catalogo_pricesmart_operativo.py
   pull_request:
     types: [synchronize]
     paths:
@@ -19,9 +26,7 @@ jobs:
   validate-live:
     if: >-
       ${{ github.repository == 'Jchernand3z19/Portafolio'
-          && github.event.pull_request.number == 385
-          && github.event.pull_request.head.repo.full_name == 'Jchernand3z19/Portafolio'
-          && github.event.pull_request.head.ref == 'feature/daily-all-productive-retailers' }}
+          && github.ref == 'refs/heads/feature/daily-all-productive-retailers' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
@@ -31,10 +36,10 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
 
     steps:
-      - name: Descargar head exacto del PR sin credenciales persistidas
+      - name: Descargar head exacto sin credenciales persistidas
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Configurar Python
