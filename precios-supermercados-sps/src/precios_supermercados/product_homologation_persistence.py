@@ -291,9 +291,16 @@ def persist_sqlite_rows(
     con: sqlite3.Connection,
     rows: Iterable[ProductHomologationRow],
 ) -> dict[str, int]:
-    """Upsert idempotente; no toca products ni price_history."""
+    """Upsert idempotente de cobertura total; no toca estado comercial."""
 
     rows = tuple(rows)
+    source_ids = {int(product_id) for (product_id,) in con.execute("SELECT product_id FROM products")}
+    row_ids = {row.product_id for row in rows}
+    if len(rows) != len(source_ids) or row_ids != source_ids:
+        raise ProductHomologationPersistenceError(
+            f"source_profile_coverage_mismatch:{len(rows)}:{len(source_ids)}"
+        )
+
     ensure_sqlite_schema(con)
     existing = {
         int(product_id): (str(profile_hash), str(version))
