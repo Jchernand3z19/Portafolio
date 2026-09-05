@@ -1,0 +1,105 @@
+{
+  "status": "PRODUCT_HOMOLOGATION_REFRESH_COMPLETE_IN_PRODUCTION",
+  "date_utc": "2026-09-05",
+  "normalization_version": "product-homologation-v1",
+  "schema": {
+    "table": "product_homologation_profiles",
+    "role": "derived_product_profile",
+    "separate_from_products_and_price_history": true
+  },
+  "implementation": {
+    "persistence_pr": 382,
+    "daily_refresh_pr": 383,
+    "main_merge_commit": "1b427026f1383ca5087a5617fae34f1ae15cfad3",
+    "refresh_workflow": ".github/workflows/precios-supermercados-sps-homologation-refresh.yml",
+    "refresh_trigger": "successful La Colonia - Actualización MVP workflow_run on main for schedule/workflow_dispatch, plus direct workflow_dispatch",
+    "differential_write_contract": {
+      "comparison_keys": [
+        "profile_hash",
+        "normalization_version"
+      ],
+      "unchanged_profiles_are_not_staged": true,
+      "new_or_changed_profiles_only_are_staged": true,
+      "stale_profile_without_source_product_fails_closed": true
+    }
+  },
+  "initial_backfill": {
+    "run_id": 33945353115,
+    "artifact_id": 9963151121,
+    "artifact_sha256": "3f141235a982975305b794912203c281a46157c7a93cc2ca5daf4f090a4ca89c",
+    "updated_at_utc": "2026-09-05T04:42:32Z",
+    "preflight": {
+      "products": 56779,
+      "price_history": 110002,
+      "scrape_runs": 21,
+      "profiles": 0
+    },
+    "result": {
+      "processed": 56779,
+      "inserted": 56779,
+      "updated": 0,
+      "unchanged": 0,
+      "profiles": 56779
+    },
+    "postflight": {
+      "products": 56779,
+      "price_history": 110002,
+      "scrape_runs": 21,
+      "profiles": 56779
+    }
+  },
+  "production_noop_verification": {
+    "run_id": 33946558257,
+    "artifact_id": 9963520883,
+    "artifact_sha256": "f8e3a9540ba46081c3d7815ac12d384e2940c5c8ca374bdfe017496e4ec6c4e7",
+    "source_commit": "1b427026f1383ca5087a5617fae34f1ae15cfad3",
+    "preflight": {
+      "products": 56779,
+      "price_history": 110002,
+      "scrape_runs": 21,
+      "profiles": 56779
+    },
+    "result": {
+      "processed": 56779,
+      "inserted": 0,
+      "updated": 0,
+      "unchanged": 56779,
+      "no_op": true,
+      "staging_written": false,
+      "profiles": 56779
+    },
+    "postflight": {
+      "products": 56779,
+      "price_history": 110002,
+      "scrape_runs": 21,
+      "profiles": 56779
+    },
+    "staging_table_present": false
+  },
+  "profile_metrics": {
+    "valid_gtin": 34365,
+    "classified_product_type": 18748,
+    "comparison_status": {
+      "ready": 18773,
+      "review_required": 2558,
+      "single_source": 13034,
+      "unmapped": 22414
+    },
+    "ready_canonical_groups": 8126,
+    "review_required_canonical_groups": 961
+  },
+  "integrity": {
+    "foreign_key_violations": 0,
+    "duplicate_open_price_periods": 0,
+    "integrity_check": "ok",
+    "products_unchanged_by_homologation": true,
+    "price_history_unchanged_by_homologation": true,
+    "scrape_runs_unchanged_by_homologation": true
+  },
+  "ci": {
+    "pr_383_run_id": 33946205303,
+    "pr_383_result": "2123 passed in 190.41s",
+    "postmerge_main_run_id": 33946387842,
+    "postmerge_main_result": "2123 passed in 173.22s"
+  }
+}
