@@ -51,6 +51,22 @@ def test_buyer_profile_fails_closed_if_any_requested_product_is_not_comparable()
         )
 
 
-def test_buyer_profile_requires_positive_quantities() -> None:
+def test_buyer_profile_requires_positive_quantities_and_valid_product_ids() -> None:
     with pytest.raises(PriceAnalyticsError, match="buyer_profile_quantity_invalid"):
         BuyerProfile("familia", "Familia", {"x": 0})
+    with pytest.raises(PriceAnalyticsError, match="buyer_profile_product_identity_invalid"):
+        BuyerProfile("familia", "Familia", {" ": 1})
+
+
+def test_buyer_profile_copies_quantities_so_external_mutation_cannot_change_analysis() -> None:
+    result = analytics()
+    canonical_id = result.products[0].canonical_product_id
+    source = {canonical_id: 2}
+    profile = BuyerProfile("estable", "Estable", source)
+    source[canonical_id] = 99
+
+    evaluated = analyze_buyer_profile(result, profile)
+    assert profile.product_quantities[canonical_id] == 2
+    assert evaluated.basket.product_count == 2
+    with pytest.raises(TypeError):
+        profile.product_quantities[canonical_id] = 3  # type: ignore[index]
