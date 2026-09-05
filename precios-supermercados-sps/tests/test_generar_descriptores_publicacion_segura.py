@@ -117,7 +117,7 @@ def test_descriptors_fail_closed_if_persisted_gtin_no_longer_matches_publication
 
     backend = exporter.SQLiteBackend(database)
     try:
-        with pytest.raises(exporter.ExportError, match="descriptor_gtin_mismatch"):
+        with pytest.raises(descriptors.ExportError, match="descriptor_gtin_mismatch"):
             descriptors.build_descriptors(backend, output / "publication.json")
     finally:
         backend.close()
