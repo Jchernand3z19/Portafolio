@@ -1,0 +1,10 @@
+{
+  "schema": "precios-sps-production-update-request/v1",
+  "request_id": "postflight-20260905-173239z",
+  "operation": "daily_all_productive_retailers",
+  "authorized_at_utc": "2026-09-05T17:32:39Z",
+  "authorized_until_utc": "2026-09-06T17:32:39Z",
+  "live_read_only_authorized": true,
+  "production_persistence_authorized": true,
+  "requested_ref": "main"
+}
