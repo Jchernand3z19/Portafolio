@@ -152,6 +152,6 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
         if str(step.get("uses", "")).startswith("actions/checkout@")
     )
     assert checkout["with"] == {
-        "ref": "${{ github.sha }}",
+        "ref": "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}",
         "persist-credentials": "false",
     }
