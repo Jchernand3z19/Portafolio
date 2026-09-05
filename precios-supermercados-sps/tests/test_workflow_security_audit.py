@@ -120,13 +120,14 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     assert publish["timeout-minutes"] == "20"
     assert "permissions" not in publish
     assert "environment" not in publish
-    assert publish["if"] == (
+    expected_if = (
         "${{ github.repository == 'Jchernand3z19/Portafolio' && "
         "(github.event_name == 'workflow_dispatch' || "
         "(github.event_name == 'workflow_run' && "
         "github.event.workflow_run.conclusion == 'success' && "
         "github.event.workflow_run.head_branch == 'main')) }}"
     )
+    assert " ".join(str(publish["if"]).split()) == " ".join(expected_if.split())
 
     raw = path.read_text(encoding="utf-8")
     assert "scripts/exportar_modelo_analitico.py" in raw
