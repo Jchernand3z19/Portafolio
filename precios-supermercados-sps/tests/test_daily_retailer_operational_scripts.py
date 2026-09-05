@@ -133,6 +133,54 @@ def test_pricesmart_operational_contract_is_bounded_to_two_accepted_clubs() -> N
     assert "availability_HN_6603" in sps_fields
     assert "_HN_6604" not in sps_fields
     assert pricesmart.MAX_REQUESTS_HARD == 80
+    assert pricesmart.DEFAULT_MAX_RETRIES == 2
+    assert pricesmart.MAX_RETRIES_HARD == 2
+    assert pricesmart.RETRYABLE_HTTP_STATUSES == {429, 500, 502, 503, 504}
+
+
+def test_pricesmart_retries_transient_http_failure_within_request_budget(monkeypatch, tmp_path: Path) -> None:
+    calls = 0
+
+    class Response:
+        status = 200
+
+        def geturl(self) -> str:
+            return pricesmart.ENDPOINT
+
+        def read(self) -> bytes:
+            return b'{"response":{"numFound":0,"start":0,"docs":[]}}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> bool:
+            return False
+
+    def fake_urlopen(request, timeout: int):
+        nonlocal calls
+        assert timeout == 45
+        calls += 1
+        if calls == 1:
+            raise pricesmart.urllib.error.HTTPError(
+                request.full_url,
+                503,
+                "transient",
+                {},
+                io.BytesIO(b'{"error":"transient"}'),
+            )
+        return Response()
+
+    monkeypatch.setattr(pricesmart.urllib.request, "urlopen", fake_urlopen)
+    capture = pricesmart.Capture(tmp_path, delay=0, max_requests=3, max_retries=2)
+    payload, record = capture.post("6603", "G10D03", "Alimentos", 0)
+
+    assert payload == {"response": {"numFound": 0, "start": 0, "docs": []}}
+    assert record["http_status"] == 200
+    assert calls == 2
+    assert capture.retry_count == 1
+    assert [item["http_status"] for item in capture.records] == [503, 200]
+    assert [item["attempt"] for item in capture.records] == [1, 2]
+    assert len(list((tmp_path / "6603").glob("*.json"))) == 2
 
 
 @pytest.mark.parametrize(
