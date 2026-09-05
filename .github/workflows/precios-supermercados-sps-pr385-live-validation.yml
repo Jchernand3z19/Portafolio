@@ -6,21 +6,13 @@ on:
       - feature/daily-all-productive-retailers
     paths:
       - .github/workflows/precios-supermercados-sps-pr385-live-validation.yml
-      - precios-supermercados-sps/scripts/obtener_catalogo_walmart_operativo.py
-      - precios-supermercados-sps/scripts/obtener_catalogo_pricesmart_operativo.py
-  pull_request:
-    types: [synchronize]
-    paths:
-      - .github/workflows/precios-supermercados-sps-pr385-live-validation.yml
-      - precios-supermercados-sps/scripts/obtener_catalogo_walmart_operativo.py
-      - precios-supermercados-sps/scripts/obtener_catalogo_pricesmart_operativo.py
 
 permissions:
   contents: read
 
 concurrency:
   group: precios-sps-pr385-live-read-only-final
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate-live:
