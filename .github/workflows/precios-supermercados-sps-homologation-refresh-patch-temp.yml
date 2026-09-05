@@ -21,17 +21,24 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Aplicar parche y retirar auxiliares temporales
+      - name: Aplicar parche de código y retirar helper temporal
         run: |
-          python precios-supermercados-sps/scripts/optimizar_refresh_homologacion_temp.py
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          path = Path('precios-supermercados-sps/scripts/optimizar_refresh_homologacion_temp.py')
+          spec = importlib.util.spec_from_file_location('refresh_patch', path)
+          module = importlib.util.module_from_spec(spec)
+          assert spec.loader is not None
+          spec.loader.exec_module(module)
+          module.patch_backfill()
+          PY
           rm precios-supermercados-sps/scripts/optimizar_refresh_homologacion_temp.py
-          rm .github/workflows/precios-supermercados-sps-homologation-refresh-patch-temp.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add precios-supermercados-sps/scripts/backfill_homologacion_turso.py \
-                  .github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml \
-                  precios-supermercados-sps/scripts/optimizar_refresh_homologacion_temp.py \
-                  .github/workflows/precios-supermercados-sps-homologation-refresh-patch-temp.yml
+                  precios-supermercados-sps/scripts/optimizar_refresh_homologacion_temp.py
           git diff --cached --check
           git commit -m "feat(precios): refresca homologación de forma diferencial"
           git push origin HEAD:feature/product-homologation-daily-refresh
