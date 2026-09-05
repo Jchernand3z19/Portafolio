@@ -31,6 +31,8 @@
       sampleTitle: 'Comparaciones cross-source con identidad fuerte',
       sampleBody: 'La muestra anterior se retiró porque marca + presentación no demuestran que dos registros sean el mismo producto. El comparador ahora exige identidad fuerte y consistencia comercial antes de calcular un mejor precio.',
       sampleNote: 'El dataset público se vuelve a habilitar únicamente con filas que superen el gate fail-closed. Passion Jaguar y Passion Especial quedan bloqueados como comparación automática aunque compartan marca y presentación.',
+      matchingBody: 'La homologación propone identidades; el gate de comparación exige evidencia fuerte y coherencia comercial antes de calcular ahorros. Marca + presentación nunca bastan por sí solas.',
+      insightsBody: 'Los hallazgos actuales usan identidades demostradas dentro de una misma cadena. Las comparaciones cross-source permanecen cerradas si la identidad comercial es ambigua.',
       roadmap: 'Seis cadenas productivas integradas bajo una estructura común.'
     },
     en: {
@@ -48,6 +50,8 @@
       sampleTitle: 'Cross-source comparisons with strong identity',
       sampleBody: 'The previous sample was removed because brand + presentation do not prove that two records are the same commercial product. The comparator now requires strong identity and commercial consistency before calculating a best price.',
       sampleNote: 'The public comparison dataset is enabled only for rows that pass the fail-closed gate. Passion Jaguar and Passion Especial remain blocked from automatic comparison even when brand and presentation match.',
+      matchingBody: 'Homologation proposes identities; the comparison gate requires strong evidence and commercial consistency before calculating savings. Brand + presentation are never sufficient on their own.',
+      insightsBody: 'Current findings use proven identities within the same retail chain. Cross-source comparisons remain closed whenever commercial identity is ambiguous.',
       roadmap: 'Six production retail chains integrated under one shared structure.'
     }
   };
@@ -123,6 +127,15 @@
     if (note) note.dataset.comparisonSafety = 'fail-closed';
   }
 
+  function patchAnalyticalCopy(detail) {
+    const c = text();
+    const capabilities = detail.querySelectorAll('.price-capabilities .price-value');
+    if (capabilities.length >= 3) setText(capabilities[2].querySelector('p'), c.matchingBody);
+    const insightsTitle = detail.querySelector('#price-insights-title');
+    const insightsHead = insightsTitle?.closest('.price-section__head');
+    setText(insightsHead?.querySelector('p:not(.price-eyebrow)'), c.insightsBody);
+  }
+
   function patchDetail() {
     const detail = document.querySelector('#price-project-view');
     if (!detail) return;
@@ -146,6 +159,7 @@
     scaleSection?.insertAdjacentHTML('beforeend', coverageMarkup());
 
     disableLegacyCrossSourceSample(detail);
+    patchAnalyticalCopy(detail);
 
     const roadmap = detail.querySelector('.price-roadmap__item.is-done span');
     setText(roadmap, c.roadmap);
