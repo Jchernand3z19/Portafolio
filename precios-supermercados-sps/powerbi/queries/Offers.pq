@@ -18,7 +18,7 @@ let
             {"current_price", Currency.Type},
             {"is_best_price", type logical}
         },
-        "es-HN"
+        "en-US"
     ),
     WithScopeKey = Table.AddColumn(
         Typed,
