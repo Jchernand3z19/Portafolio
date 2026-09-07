@@ -22,6 +22,20 @@ def page(total: int, *product_ids: str) -> dict:
     }
 
 
+def facets(key: str, **values: int) -> dict:
+    return {
+        "facets": [
+            {
+                "key": key,
+                "values": [
+                    {"value": value, "quantity": quantity}
+                    for value, quantity in values.items()
+                ],
+            }
+        ]
+    }
+
+
 class FakeCapture:
     def __init__(self, responses: dict[str, dict]) -> None:
         self.responses = responses
@@ -45,6 +59,25 @@ def total_drift_responses() -> dict[str, dict]:
         f"{recovery}/page-001": page(5, "1", "2"),
         f"{recovery}/page-002": page(5, "3", "4"),
         f"{recovery}/page-003": page(5, "5"),
+    }
+
+
+def category2_drift_responses() -> dict[str, dict]:
+    prefix = "seller/category-1/electronica/category-2"
+    recovery = "/recovery-total-drift"
+    return {
+        "seller/electronica/category2-facets": facets("category-2", audio=4, video=2),
+        f"{prefix}/audio/page-001": page(5, "1", "2"),
+        "seller/electronica/category2-facets/recovery-total-drift": facets(
+            "category-2", audio=5, video=2
+        ),
+        f"{prefix}/audio{recovery}/page-001": page(5, "1", "2"),
+        f"{prefix}/audio{recovery}/page-002": page(5, "3", "4"),
+        f"{prefix}/audio{recovery}/page-003": page(5, "5"),
+        f"{prefix}/video{recovery}/page-001": page(2, "6", "7"),
+        "seller/electronica/category2-facets/recovery-confirmation": facets(
+            "category-2", audio=5, video=2
+        ),
     }
 
 
@@ -111,27 +144,65 @@ def test_category_total_recovery_rejects_repeated_membership(monkeypatch):
         )
 
 
-def test_prepartitioned_category_does_not_guess_a_new_parent_total(monkeypatch):
+def test_category2_total_drift_rechecks_facets_and_restarts_all_child_partitions(monkeypatch):
     monkeypatch.setattr(operational, "PAGE_SIZE", 2)
     monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", {"electronica"})
-    responses = {
-        "seller/electronica/category2-facets": {
-            "facets": [
-                {
-                    "key": "category-2",
-                    "values": [{"value": "audio", "quantity": 4}],
-                }
-            ]
-        },
-        "seller/category-1/electronica/category-2/audio/page-001": page(5, "1", "2"),
-    }
+    capture = FakeCapture(category2_drift_responses())
 
-    with pytest.raises(RuntimeError, match="category2_partition_total_changed"):
+    products, evidence, final_total, recovery = operational._capture_category(
+        capture,
+        seller="seller",
+        category="electronica",
+        expected_total=6,
+        common={},
+        facets_root="/facets/seller",
+    )
+
+    assert set(products) == {"1", "2", "3", "4", "5", "6", "7"}
+    assert final_total == 7
+    assert len(evidence) == 4
+    assert recovery is not None
+    assert recovery["strategy"] == "category2_exact_restart"
+    assert recovery["previous_total"] == 6
+    assert recovery["recovered_total"] == 7
+    assert recovery["previous_partition_total"] == 4
+    assert recovery["recovered_partition_total"] == 5
+    assert capture.calls[-1] == "seller/electronica/category2-facets/recovery-confirmation"
+
+
+def test_category2_total_drift_requires_facet_confirmation_of_observed_total(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", {"electronica"})
+    responses = category2_drift_responses()
+    responses["seller/electronica/category2-facets/recovery-total-drift"] = facets(
+        "category-2", audio=4, video=2
+    )
+
+    with pytest.raises(RuntimeError, match="category2_drift_not_confirmed"):
         operational._capture_category(
             FakeCapture(responses),
             seller="seller",
             category="electronica",
-            expected_total=4,
+            expected_total=6,
+            common={},
+            facets_root="/facets/seller",
+        )
+
+
+def test_category2_total_recovery_fails_closed_if_facets_change_again(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", {"electronica"})
+    responses = category2_drift_responses()
+    responses["seller/electronica/category2-facets/recovery-confirmation"] = facets(
+        "category-2", audio=5, video=3
+    )
+
+    with pytest.raises(RuntimeError, match="category2_changed_during_recovery"):
+        operational._capture_category(
+            FakeCapture(responses),
+            seller="seller",
+            category="electronica",
+            expected_total=6,
             common={},
             facets_root="/facets/seller",
         )
