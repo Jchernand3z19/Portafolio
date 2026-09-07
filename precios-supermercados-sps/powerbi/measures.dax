@@ -1,0 +1,62 @@
+Productos comparables =
+DISTINCTCOUNT(Products[canonical_product_id])
+
+Ofertas comparables =
+COUNTROWS(Offers)
+
+Mejor precio promedio =
+AVERAGE(Products[best_price])
+
+Ahorro potencial total =
+SUM(Products[savings_vs_highest])
+
+Productos canasta común =
+MAX(CommonBasket[product_count])
+
+Canasta más barata =
+VAR ProductCount = [Productos canasta común]
+RETURN
+    IF(
+        ISBLANK(ProductCount) || ProductCount = 0,
+        BLANK(),
+        MIN(CommonBasket[total])
+    )
+
+Canasta más cara =
+VAR ProductCount = [Productos canasta común]
+RETURN
+    IF(
+        ISBLANK(ProductCount) || ProductCount = 0,
+        BLANK(),
+        MAX(CommonBasket[total])
+    )
+
+Diferencia entre canastas =
+VAR Cheapest = [Canasta más barata]
+VAR Highest = [Canasta más cara]
+RETURN
+    IF(
+        ISBLANK(Cheapest) || ISBLANK(Highest),
+        BLANK(),
+        Highest - Cheapest
+    )
+
+Diferencia entre canastas % =
+VAR Cheapest = [Canasta más barata]
+VAR Highest = [Canasta más cara]
+RETURN
+    IF(
+        ISBLANK(Cheapest) || ISBLANK(Highest) || Highest = 0,
+        BLANK(),
+        DIVIDE(Highest - Cheapest, Highest)
+    )
+
+Estado universo comparable =
+IF(
+    [Productos comparables] = 0,
+    "Sin productos comparables para este alcance",
+    "Comparación disponible"
+)
+
+Última publicación UTC =
+MAX(RefreshMetadata[published_at_utc])
