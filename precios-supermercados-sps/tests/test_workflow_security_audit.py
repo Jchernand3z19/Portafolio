@@ -19,6 +19,7 @@ base.PRODUCTION_UPDATE_REQUEST = (
     "precios-supermercados-sps/.automation/production-update-request.json"
 )
 base.SAFE_ANALYTICS_WORKFLOW = "precios-supermercados-sps-safe-analytics-publication.yml"
+base.TURSO_SCHEMA_MIGRATION_WORKFLOW = "precios-supermercados-sps-turso-schema-migration.yml"
 base.EXPECTED_PERMISSIONS[base.PRODUCTION_OPERATOR_WORKFLOW] = {
     "actions": "write",
     "contents": "read",
@@ -27,6 +28,12 @@ base.EXPECTED_TRIGGERS[base.PRODUCTION_OPERATOR_WORKFLOW] = {"push"}
 base.EXPECTED_PERMISSIONS[base.SAFE_ANALYTICS_WORKFLOW] = {"contents": "read"}
 base.EXPECTED_TRIGGERS[base.SAFE_ANALYTICS_WORKFLOW] = {"workflow_run", "workflow_dispatch"}
 base.ALLOWED_SECRET_REFERENCES[base.SAFE_ANALYTICS_WORKFLOW] = {
+    base.TURSO_DATABASE_URL_SECRET,
+    base.TURSO_AUTH_TOKEN_SECRET,
+}
+base.EXPECTED_PERMISSIONS[base.TURSO_SCHEMA_MIGRATION_WORKFLOW] = {"contents": "read"}
+base.EXPECTED_TRIGGERS[base.TURSO_SCHEMA_MIGRATION_WORKFLOW] = {"workflow_dispatch"}
+base.ALLOWED_SECRET_REFERENCES[base.TURSO_SCHEMA_MIGRATION_WORKFLOW] = {
     base.TURSO_DATABASE_URL_SECRET,
     base.TURSO_AUTH_TOKEN_SECRET,
 }
@@ -225,3 +232,42 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
         "ref": "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}",
         "persist-credentials": "false",
     }
+
+
+def test_turso_schema_migration_is_manual_scoped_and_fail_closed() -> None:
+    path = base.WORKFLOW_DIR / base.TURSO_SCHEMA_MIGRATION_WORKFLOW
+    workflow = base.load_workflow(path)
+    assert workflow["permissions"] == {"contents": "read"}
+    assert set(workflow["on"]) == {"workflow_dispatch"}
+    dispatch = workflow["on"]["workflow_dispatch"]
+    assert isinstance(dispatch, dict)
+    authorization = dispatch["inputs"]["schema_migration_authorized"]
+    assert authorization["required"] == "true"
+    assert authorization["default"] == "false"
+    assert authorization["type"] == "boolean"
+    assert workflow["concurrency"] == {
+        "group": "precios-sps-turso-schema-migration",
+        "cancel-in-progress": "false",
+    }
+
+    workflow_jobs = base.jobs(workflow)
+    assert set(workflow_jobs) == {"migrate"}
+    migrate = workflow_jobs["migrate"]
+    assert migrate["if"] == (
+        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
+        "inputs.schema_migration_authorized == true }}"
+    )
+    assert migrate["timeout-minutes"] == "15"
+    assert "permissions" not in migrate
+    assert "environment" not in migrate
+
+    raw = path.read_text(encoding="utf-8")
+    assert "scripts/migrar_mvp_turso_walmart_pricesmart.py" in raw
+    assert "TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}" in raw
+    assert "TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}" in raw
+    assert "pull_request:" not in raw
+    assert "pull_request_target:" not in raw
+    assert "issue_comment:" not in raw
+    assert "schedule:" not in raw
+    assert "id-token" not in raw
+    assert "contents: write" not in raw
