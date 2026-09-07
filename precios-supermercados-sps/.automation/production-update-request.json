@@ -1,9 +1,9 @@
 {
   "schema": "precios-sps-production-update-request/v1",
-  "request_id": "postflight-retry-20260905-1920z",
+  "request_id": "six-store-retry-20260907-1715z",
   "operation": "daily_all_productive_retailers",
-  "authorized_at_utc": "2026-09-05T17:32:39Z",
-  "authorized_until_utc": "2026-09-06T17:32:39Z",
+  "authorized_at_utc": "2026-09-07T17:15:50Z",
+  "authorized_until_utc": "2026-09-08T17:15:50Z",
   "live_read_only_authorized": true,
   "production_persistence_authorized": true,
   "requested_ref": "main"
