@@ -1,7 +1,11 @@
 let
     Source = StaticDataset,
     Rows = Record.Field(Source, "source_descriptors"),
-    RawTable = Table.FromRecords(Rows),
+    RawTable = Table.FromRecords(
+        Rows,
+        {"canonical_product_id", "canonical_gtin", "source_record_id", "supermarket_id", "source_name", "source_brand", "source_presentation", "source_category"},
+        MissingField.UseNull
+    ),
     Typed = Table.TransformColumnTypes(
         RawTable,
         {
