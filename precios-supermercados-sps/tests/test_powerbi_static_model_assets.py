@@ -44,6 +44,19 @@ def test_powerbi_static_dataset_is_the_only_web_query() -> None:
             assert "Source = StaticDataset" in raw
 
 
+def test_powerbi_row_queries_keep_schema_when_safe_universe_is_empty() -> None:
+    for filename in (
+        "Offers.pq",
+        "Products.pq",
+        "CommonBasket.pq",
+        "Scope.pq",
+        "SourceDescriptors.pq",
+    ):
+        raw = (QUERY_ROOT / filename).read_text(encoding="utf-8")
+        assert "Table.FromRecords(" in raw
+        assert "MissingField.UseNull" in raw
+
+
 def test_powerbi_model_uses_stable_ids_and_explicit_scope_keys() -> None:
     offers = (QUERY_ROOT / "Offers.pq").read_text(encoding="utf-8")
     products = (QUERY_ROOT / "Products.pq").read_text(encoding="utf-8")
