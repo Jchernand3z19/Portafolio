@@ -199,6 +199,23 @@ def common_query(seller: str) -> dict[str, str]:
     return {"regionId": region_id(seller), "sc": SALES_CHANNEL, "country": COUNTRY}
 
 
+class PartitionTotalChanged(RuntimeError):
+    """The source changed a partition total while that partition was paged."""
+
+    def __init__(
+        self,
+        tag: str,
+        expected_total: int,
+        observed_total: int,
+        record: dict,
+    ) -> None:
+        self.tag = tag
+        self.expected_total = expected_total
+        self.observed_total = observed_total
+        self.record = record
+        super().__init__(f"page_total_changed:{tag}:{expected_total}:{observed_total}")
+
+
 def _page_products(
     capture: Capture,
     seller: str,
@@ -216,7 +233,10 @@ def _page_products(
         {**common, "count": str(PAGE_SIZE), "page": str(page)},
     )
     products = doc.get("products")
-    if doc.get("recordsFiltered") != expected_total or not isinstance(products, list):
+    observed_total = doc.get("recordsFiltered")
+    if observed_total != expected_total or not isinstance(products, list):
+        if type(observed_total) is int and observed_total > 0:
+            raise PartitionTotalChanged(tag, expected_total, observed_total, record)
         raise RuntimeError(f"page_total_changed:{tag}")
     ids = [product.get("productId") for product in products if isinstance(product, dict)]
     page_valid = len(products) == expected_count and len(ids) == len(products) and len(set(ids)) == len(ids)
@@ -251,6 +271,116 @@ def _page_products(
     return recovered, evidence
 
 
+def _capture_partitions(
+    capture: Capture,
+    *,
+    seller: str,
+    common: dict[str, str],
+    partitions: list[tuple[str, int]],
+    tag_suffix: str = "",
+) -> tuple[dict[str, dict], list[dict]]:
+    category_products: dict[str, dict] = {}
+    page_evidence: list[dict] = []
+    for relative, partition_total in partitions:
+        path = (
+            f"/api/io/_v/api/intelligent-search/product_search/"
+            f"accesscontrollist/{seller}/{relative}"
+        )
+        partition_products: dict[str, dict] = {}
+        pages = math.ceil(partition_total / PAGE_SIZE)
+        for page in range(1, pages + 1):
+            tag = f"{seller}/{relative}{tag_suffix}/page-{page:03d}"
+            products, records = _page_products(
+                capture, seller, tag, path, common, partition_total, page
+            )
+            for product in products:
+                if not isinstance(product, dict):
+                    raise RuntimeError(f"product_id_invalid:{tag}")
+                product_id = product.get("productId")
+                if not isinstance(product_id, str) or not product_id:
+                    raise RuntimeError(f"product_id_invalid:{tag}")
+                if product_id in partition_products or product_id in category_products:
+                    raise RuntimeError(f"product_membership_overlap:{tag}")
+                partition_products[product_id] = product
+            page_evidence.extend(
+                {
+                    "tag": item["tag"],
+                    "url": item["url"],
+                    "sha256": item["sha256"],
+                    "observed_at": item["observed_at"],
+                }
+                for item in records
+            )
+        if len(partition_products) != partition_total:
+            raise RuntimeError(f"partition_membership_incomplete:{seller}:{relative}")
+        category_products.update(partition_products)
+    return category_products, page_evidence
+
+
+def _capture_category(
+    capture: Capture,
+    *,
+    seller: str,
+    category: str,
+    expected_total: int,
+    common: dict[str, str],
+    facets_root: str,
+) -> tuple[dict[str, dict], list[dict], int, dict | None]:
+    partitions: list[tuple[str, int]] = [(f"category-1/{category}", expected_total)]
+    if category in CATEGORY2_PARTITIONS:
+        facet_path = f"{facets_root}/category-1/{category}"
+        child_doc, _ = capture.get(
+            seller, f"{seller}/{category}/category2-facets", facet_path, common
+        )
+        children = facet_counts(child_doc, "category-2")
+        if sum(children.values()) != expected_total:
+            raise RuntimeError(f"category2_total_mismatch:{seller}:{category}")
+        partitions = [
+            (f"category-1/{category}/category-2/{child}", count)
+            for child, count in children.items()
+        ]
+
+    try:
+        products, evidence = _capture_partitions(
+            capture,
+            seller=seller,
+            common=common,
+            partitions=partitions,
+        )
+        if len(products) != expected_total:
+            raise RuntimeError(f"category_membership_incomplete:{seller}:{category}")
+        return products, evidence, expected_total, None
+    except PartitionTotalChanged as drift:
+        if category in CATEGORY2_PARTITIONS:
+            raise RuntimeError(
+                f"category2_partition_total_changed:{seller}:{category}:{drift.tag}"
+            ) from drift
+        try:
+            products, evidence = _capture_partitions(
+                capture,
+                seller=seller,
+                common=common,
+                partitions=[(f"category-1/{category}", drift.observed_total)],
+                tag_suffix="/recovery-total-drift",
+            )
+        except PartitionTotalChanged as repeated:
+            raise RuntimeError(
+                f"category_total_changed_again:{seller}:{category}:{repeated.tag}"
+            ) from repeated
+        if len(products) != drift.observed_total:
+            raise RuntimeError(f"category_recovery_incomplete:{seller}:{category}")
+        recovery = {
+            "category": category,
+            "strategy": "parent_category_exact_restart",
+            "trigger_tag": drift.tag,
+            "trigger_sha256": drift.record["sha256"],
+            "trigger_observed_at": drift.record["observed_at"],
+            "previous_total": drift.expected_total,
+            "recovered_total": drift.observed_total,
+        }
+        return products, evidence, drift.observed_total, recovery
+
+
 def capture_store(capture: Capture, seller: str, location_id: str, city: str, store_name: str, home_sha: str) -> dict:
     common = common_query(seller)
     facets_root = f"/api/io/_v/api/intelligent-search/facets/accesscontrollist/{seller}"
@@ -264,68 +394,46 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
     if root_before.get("recordsFiltered") != root_total or len(root_before.get("products", [])) != 1:
         raise RuntimeError(f"root_total_disagrees_with_facets:{seller}")
 
-    product_ids: set[str] = set()
-    sku_ids: set[str] = set()
-    rows: list[dict] = []
-    source_details: dict[str, dict] = {}
+    products_by_id: dict[str, dict] = {}
     page_evidence: list[dict] = []
+    category_total_recoveries: list[dict] = []
+    final_category1 = dict(category1)
 
     for category, expected_total in category1.items():
-        partitions: list[tuple[str, int]] = [(f"category-1/{category}", expected_total)]
-        if category in CATEGORY2_PARTITIONS:
-            facet_path = f"{facets_root}/category-1/{category}"
-            child_doc, _ = capture.get(seller, f"{seller}/{category}/category2-facets", facet_path, common)
-            children = facet_counts(child_doc, "category-2")
-            if sum(children.values()) != expected_total:
-                raise RuntimeError(f"category2_total_mismatch:{seller}:{category}")
-            partitions = [(f"category-1/{category}/category-2/{child}", count) for child, count in children.items()]
-
-        category_members: set[str] = set()
-        for relative, partition_total in partitions:
-            path = f"{search_root}/{relative}"
-            pages = math.ceil(partition_total / PAGE_SIZE)
-            partition_members: set[str] = set()
-            for page in range(1, pages + 1):
-                tag = f"{seller}/{relative}/page-{page:03d}"
-                products, records = _page_products(capture, seller, tag, path, common, partition_total, page)
-                ids = [product.get("productId") for product in products]
-                if any(not isinstance(pid, str) or not pid for pid in ids):
-                    raise RuntimeError(f"product_id_invalid:{tag}")
-                if partition_members.intersection(ids) or category_members.intersection(ids) or product_ids.intersection(ids):
-                    raise RuntimeError(f"product_membership_overlap:{tag}")
-                incoming, details = parse_products(products)
-                if sku_ids.intersection(details):
-                    raise RuntimeError(f"sku_membership_overlap:{tag}")
-                partition_members.update(ids)
-                category_members.update(ids)
-                product_ids.update(ids)
-                sku_ids.update(details)
-                rows.extend(incoming)
-                source_details.update(details)
-                page_evidence.extend(
-                    {
-                        "tag": item["tag"],
-                        "url": item["url"],
-                        "sha256": item["sha256"],
-                        "observed_at": item["observed_at"],
-                    }
-                    for item in records
-                )
-            if len(partition_members) != partition_total:
-                raise RuntimeError(f"partition_membership_incomplete:{seller}:{relative}")
-        if len(category_members) != expected_total:
-            raise RuntimeError(f"category_membership_incomplete:{seller}:{category}")
+        category_products, category_evidence, final_total, recovery = _capture_category(
+            capture,
+            seller=seller,
+            category=category,
+            expected_total=expected_total,
+            common=common,
+            facets_root=facets_root,
+        )
+        overlap = set(products_by_id).intersection(category_products)
+        if overlap:
+            raise RuntimeError(f"product_membership_overlap:{seller}:category-1/{category}")
+        products_by_id.update(category_products)
+        page_evidence.extend(category_evidence)
+        final_category1[category] = final_total
+        if recovery is not None:
+            category_total_recoveries.append(recovery)
 
     after, after_record = capture.get(seller, f"{seller}/facets-after", facets_root, common)
-    if facet_counts(after, "category-1") != category1:
+    if facet_counts(after, "category-1") != final_category1:
         raise RuntimeError(f"catalog_changed_during_capture:{seller}")
+    final_root_total = sum(final_category1.values())
     root_after, root_after_record = capture.get(
         seller, f"{seller}/root-after", search_root, {**common, "count": "1", "page": "1"}
     )
-    if root_after.get("recordsFiltered") != root_total or len(root_after.get("products", [])) != 1:
+    if root_after.get("recordsFiltered") != final_root_total or len(root_after.get("products", [])) != 1:
         raise RuntimeError(f"root_changed_during_capture:{seller}")
-    if len(product_ids) != root_total or len(rows) != len(sku_ids):
+    if len(products_by_id) != final_root_total:
         raise RuntimeError(f"catalog_membership_incomplete:{seller}")
+
+    source_products = [products_by_id[pid] for pid in sorted(products_by_id)]
+    rows, source_details = parse_products(source_products)
+    if len(rows) != len(source_details):
+        raise RuntimeError(f"sku_membership_overlap:{seller}")
+    product_ids = set(products_by_id)
 
     times = [datetime.fromisoformat(item["observed_at"].replace("Z", "+00:00")) for item in page_evidence]
     rows.sort(key=lambda row: row["source_key"])
@@ -345,7 +453,7 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
         "location_verified_same_run": True,
         "observed_at_utc": max(times).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "observation_started_at_utc": min(times).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "catalog_products_reported": root_total,
+        "catalog_products_reported": final_root_total,
         "unique_products_extracted": len(product_ids),
         "skus_extracted": len(rows),
         "skus_with_price": sum(row["current_price"] is not None for row in rows),
@@ -360,6 +468,7 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
         "products": rows,
         "source_details": source_details,
         "page_evidence": page_evidence,
+        "category_total_recoveries": category_total_recoveries,
         "binding_evidence": {
             "selector": seller,
             "region_id": region_id(seller),
@@ -436,6 +545,7 @@ def main() -> None:
                 "catalog_products_reported": snapshot["catalog_products_reported"],
                 "skus_extracted": snapshot["skus_extracted"],
                 "skus_with_price": snapshot["skus_with_price"],
+                "category_total_recovery_count": len(snapshot["category_total_recoveries"]),
             }
             for snapshot in snapshots
         ],

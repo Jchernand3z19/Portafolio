@@ -16,7 +16,7 @@ def product(product_id: str, *, name: str | None = None) -> dict:
     return {
         "productId": product_id,
         "productName": name or f"Product {product_id}",
-        "items": [{"itemId": product_id}],
+        "items": [{"itemId": product_id, "ean": f"ean-{product_id}"}],
     }
 
 
@@ -98,9 +98,33 @@ def test_identical_product_repeated_between_categories_is_reconciled_by_source_i
     assert set(first) == {"1", "2", "3"}
 
 
+def test_non_identity_document_drift_triggers_exact_repartition(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    responses = recovery_responses()
+    repeated = product("2", name="Updated display name")
+    repeated["link"] = "/updated-link/p"
+    responses["seller/category-1/abarrotes/page-002"] = {
+        "recordsFiltered": 4,
+        "products": [repeated, product("3")],
+    }
+
+    products, _evidence, recovery = operational._capture_category(
+        FakeCapture(responses),
+        seller="seller",
+        category="abarrotes",
+        expected_total=4,
+        common={},
+    )
+
+    assert set(products) == {"1", "2", "3", "4"}
+    assert recovery is not None
+    assert recovery["trigger_tag"].endswith("page-002")
+
+
 def test_contradictory_source_identity_remains_fail_closed():
     first = {"2": product("2")}
-    changed = product("2", name="Different source document")
+    changed = product("2")
+    changed["items"][0]["itemId"] = "different-item"
 
     with pytest.raises(RuntimeError, match="product_identity_conflict"):
         operational._merge_exact_products(
