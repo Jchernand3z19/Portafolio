@@ -160,12 +160,32 @@ def _common(seller: str) -> dict[str, str]:
 
 
 class ExactMembershipOverlap(RuntimeError):
-    """A page repeated source documents already observed in the same partition."""
+    """A page repeated source identities already observed in the same partition."""
 
     def __init__(self, tag: str, product_ids: set[str]) -> None:
         self.tag = tag
         self.product_ids = frozenset(product_ids)
         super().__init__(f"product_membership_overlap:{tag}")
+
+
+def _product_identity(product: dict) -> tuple[str, tuple[str, ...]]:
+    """Return the stable source identity, excluding mutable presentation fields."""
+
+    product_id = product.get("productId")
+    items = product.get("items")
+    if not isinstance(product_id, str) or not product_id or not isinstance(items, list) or not items:
+        raise RuntimeError("product_identity_invalid")
+    item_identities: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise RuntimeError("product_identity_invalid")
+        item_id = item.get("itemId")
+        if not isinstance(item_id, str) or not item_id:
+            raise RuntimeError("product_identity_invalid")
+        item_identities.append(item_id)
+    if len(set(item_identities)) != len(item_identities):
+        raise RuntimeError("product_identity_invalid")
+    return product_id, tuple(sorted(item_identities))
 
 
 def _merge_exact_products(
@@ -175,10 +195,14 @@ def _merge_exact_products(
     tag: str,
     recover_on_identical_overlap: bool,
 ) -> set[str]:
-    """Merge documents by source ID and reject any contradictory observation."""
+    """Merge by stable source identity and reject contradictory item membership."""
 
     overlap = set(target).intersection(incoming)
-    conflicting = {pid for pid in overlap if target[pid] != incoming[pid]}
+    conflicting = {
+        pid
+        for pid in overlap
+        if _product_identity(target[pid]) != _product_identity(incoming[pid])
+    }
     if conflicting:
         raise RuntimeError(f"product_identity_conflict:{tag}:{','.join(sorted(conflicting))}")
     if overlap and recover_on_identical_overlap:
