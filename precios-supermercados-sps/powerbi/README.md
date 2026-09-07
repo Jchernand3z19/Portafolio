@@ -33,11 +33,32 @@ Ese archivo contiene el contrato `precios-sps-static-bi-dataset/v1` con:
 
 La actualización de esta fuente **no ejecuta una consulta adicional a Turso**: copia y valida el artifact creado por `Precios SPS - Publicar analítica segura`. De esta forma Power BI y el portafolio reutilizan la misma publicación y las visitas o refresh del dashboard no consumen Turso.
 
-## Activos
+## Activos reproducibles
 
 - `theme.json`: tema base importable en Power BI.
+- `queries/StaticDataset.pq`: única consulta Web; valida schema y política antes de exponer el documento.
+- `queries/Offers.pq`: precios actuales seguros por producto, supermercado y ubicación.
+- `queries/Products.pq`: mínimo, máximo y ahorro por producto comparable.
+- `queries/CommonBasket.pq`: canasta común con denominador idéntico.
+- `queries/Scope.pq`: alcance explícito y `scope_key`.
+- `queries/SourceDescriptors.pq`: nombres, marca, presentación y categoría de las ofertas autorizadas.
+- `queries/RefreshMetadata.pq`: run, SHA, timestamp y conteos del corte publicado.
+- `measures.dax`: medidas base fail-closed para resumen, ahorro y canasta.
 
-Los artefactos binarios `.pbix` no se consideran la definición reproducible del modelo. Cuando se publique un PBIX, debe poder reconstruirse usando el contrato de datos y la guía conservados en Git.
+En Power BI, crear primero la consulta `StaticDataset` y después las consultas que la referencian con los nombres de archivo indicados. Sólo `StaticDataset` debe acceder a Web. Las demás transformaciones trabajan en memoria sobre el mismo documento descargado.
+
+Relaciones base:
+
+```text
+Products[canonical_product_id] 1 ─── * Offers[canonical_product_id]
+SourceDescriptors[source_record_id] 1 ─── * Offers[source_record_id]
+Scope[scope_key] 1 ─── * Offers[scope_key]
+Scope[scope_key] 1 ─── * CommonBasket[scope_key]
+```
+
+No crear relaciones por nombre, marca o presentación.
+
+Los artefactos binarios `.pbix` no se consideran la definición reproducible del modelo. Cuando se publique un PBIX, debe poder reconstruirse usando el contrato, estas consultas y la guía conservados en Git.
 
 ## Páginas sugeridas
 
@@ -47,6 +68,8 @@ Los artefactos binarios `.pbix` no se consideran la definición reproducible del
 4. Cambios desde la ejecución anterior.
 5. Histórico y variabilidad.
 6. Cobertura y exclusiones del matching.
+
+Las páginas 4 y 5 requieren que el contrato público incorpore explícitamente series/cambios históricos; no deben simularse usando sólo el snapshot actual.
 
 ## Regla visual crítica
 
