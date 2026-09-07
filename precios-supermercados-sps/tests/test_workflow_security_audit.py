@@ -382,6 +382,10 @@ def test_portfolio_data_sync_reuses_safe_artifact_without_turso_reads() -> None:
     assert "run-id: ${{ github.event.workflow_run.id }}" in raw
     assert "safe-analytics-la-colonia-walmart-sps-${{ github.event.workflow_run.id }}" in raw
     assert "precios-supermercados-sps/portfolio/sample-data.json" in raw
+    assert "candidates = sorted(artifact_root.rglob('portfolio-sample.json'))" in raw
+    assert "portfolio_sync_sample_cardinality_invalid" in raw
+    assert "const dataBranch = 'portfolio-data';" in raw
+    assert "branch: dataBranch" in raw
     assert "createOrUpdateFileContents" in raw
     assert "portfolio_sync_secret_material_detected" in raw
     assert "TURSO_DATABASE_URL: ${{ secrets." not in raw
@@ -401,7 +405,8 @@ def test_portfolio_data_sync_reuses_safe_artifact_without_turso_reads() -> None:
         / "portfolio"
         / "precios-portfolio-current-state.js"
     ).read_text(encoding="utf-8")
-    assert "raw.githubusercontent.com/Jchernand3z19/Portafolio/main/precios-supermercados-sps/portfolio/sample-data.json" in frontend
+    assert "raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/portfolio/sample-data.json" in frontend
+    assert "raw.githubusercontent.com/Jchernand3z19/Portafolio/main/precios-supermercados-sps/portfolio/sample-data.json" not in frontend
     assert "['localhost', '127.0.0.1'].includes(window.location.hostname)" in frontend
     assert "cache: 'no-store'" in frontend
     assert "TURSO_DATABASE_URL" not in frontend
