@@ -20,7 +20,7 @@ let
             {"savings_vs_highest_pct", type number},
             {"supermarket_count", Int64.Type}
         },
-        "es-HN"
+        "en-US"
     )
 in
     Typed
