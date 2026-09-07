@@ -4,22 +4,55 @@
 
 Construir el dashboard sobre el dataset de publicación seguro, sin repetir homologación ni lógica de identidad en Power Query o DAX.
 
-## Fuentes recomendadas
+## Fuente recomendada
 
-El modelo semántico debe consumir artefactos generados por el proyecto, no conectarse directamente a páginas de supermercados.
+El modelo semántico debe consumir artefactos generados por el proyecto, no conectarse directamente a páginas de supermercados ni a Turso.
 
-Tablas mínimas:
+La fuente estable para refresh es:
 
-- `Offers`: una fila por producto canónico, supermercado y ubicación dentro del alcance comparable.
-- `Products`: una fila por producto canónico con mínimo, máximo y ahorro dentro del alcance.
-- `CommonBasket`: un total por supermercado para el mismo denominador.
-- `Scope`: supermercados y ubicaciones incluidas.
+```text
+https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/bi/la-colonia-walmart-sps/dataset.json
+```
+
+El workflow `Precios SPS - Sincronizar datos estáticos del portafolio` crea ese archivo a partir del mismo artifact que ya generó la publicación analítica. La sincronización no ejecuta scraping ni consultas adicionales a Turso. Power BI y la página pública consumen copias estáticas derivadas de una misma ejecución segura.
+
+El documento usa el schema `precios-sps-static-bi-dataset/v1` y conserva procedencia exacta mediante `source_workflow_run_id`, `source_head_sha`, `published_at_utc` y el `manifest` original.
+
+Tablas mínimas a derivar del JSON:
+
+- `Offers`: `publication.offers`, una fila por producto canónico, supermercado y ubicación dentro del alcance comparable.
+- `Products`: `publication.products`, una fila por producto canónico con mínimo, máximo y ahorro dentro del alcance.
+- `CommonBasket`: `publication.common_basket`, un total por supermercado para el mismo denominador.
+- `Scope`: `publication.scope`, supermercados y ubicaciones incluidas.
+- `SourceDescriptors`: `source_descriptors`, nombres, marca, presentación y categoría de las filas fuente ya verificadas.
+
+Relacionar `SourceDescriptors[source_record_id]` con `Offers[source_record_id]`; no reconstruir la identidad por texto.
 
 Tablas analíticas adicionales pueden incorporar series históricas y cambios entre ejecuciones, siempre manteniendo `canonical_product_id`, `supermarket_id`, `location_id` y timestamps como claves explícitas.
 
+## Refresh
+
+El refresh del dashboard debe apuntar únicamente al JSON estático de `portfolio-data`.
+
+Flujo:
+
+```text
+actualización productiva
+  → Turso
+  → homologación
+  → publicación analítica segura
+  → artifact validado
+  → dataset.json en portfolio-data
+  → Power BI / portafolio
+```
+
+Por tanto, abrir la página o refrescar Power BI no consulta Turso. Turso sólo se usa dentro de los workflows controlados que ya forman parte del procesamiento del dato.
+
+Si el workflow analítico falla, la sincronización no corre y el archivo estático conserva el último corte válido.
+
 ## Tipos de datos
 
-Al importar JSON/CSV:
+Al importar JSON:
 
 - `current_price`, `best_price`, `highest_price`, `savings_vs_highest` y `total`: Decimal fijo / moneda HNL.
 - porcentajes: número decimal; si el archivo entrega 16.67 significa 16.67 %, no 0.1667.
@@ -32,6 +65,7 @@ Al importar JSON/CSV:
 Relaciones sugeridas:
 
 - `Products[canonical_product_id]` 1 → * `Offers[canonical_product_id]`.
+- `SourceDescriptors[source_record_id]` 1 → * `Offers[source_record_id]`.
 - `Scope[supermarket_id + location_id]` 1 → * `Offers[supermarket_id + location_id]`.
 - `Scope[supermarket_id + location_id]` 1 → * `CommonBasket[supermarket_id + location_id]`.
 
@@ -67,6 +101,7 @@ Para una tarjeta de canasta, usar `CommonBasket[total]` filtrado por supermercad
 Tabla con:
 
 - producto canónico/GTIN;
+- nombre y presentación fuente;
 - supermercado;
 - ubicación;
 - precio actual;
@@ -114,7 +149,7 @@ No incluir en PBIX/PBIP, parámetros, consultas o archivos públicos:
 - encabezados de autenticación;
 - secretos de GitHub Actions.
 
-La fuente pública debe ser el dataset derivado y sanitizado.
+La fuente pública debe ser el dataset derivado y sanitizado de `portfolio-data`.
 
 ## Reproducibilidad
 
