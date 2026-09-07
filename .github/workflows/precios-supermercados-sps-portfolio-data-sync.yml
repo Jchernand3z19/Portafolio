@@ -33,7 +33,7 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ github.event.workflow_run.id }}
 
-      - name: Validar y materializar muestra web sin consultar Turso
+      - name: Validar y materializar publicación estática sin consultar Turso
         env:
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
           SOURCE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -46,80 +46,182 @@ jobs:
           from pathlib import Path
 
           artifact_root = Path('/tmp/precios-sps-safe-analytics')
-          candidates = sorted(artifact_root.rglob('portfolio-sample.json'))
-          if len(candidates) != 1:
-              raise SystemExit(f'portfolio_sync_sample_cardinality_invalid:{len(candidates)}')
-          source = candidates[0]
-          target = Path('/tmp/precios-sps-portfolio-sample.json')
-          document = json.loads(source.read_text(encoding='utf-8'))
           expected_scope = [
               {'location_id': 'la_colonia_sps', 'supermarket_id': 'la_colonia'},
               {'location_id': 'walmart_sps', 'supermarket_id': 'walmart'},
           ]
-          if document.get('schema') != 'precios-sps-safe-portfolio-sample/v1':
+          policy = 'fail_closed_strong_identity_and_commercial_consistency'
+
+          candidates = sorted(artifact_root.rglob('portfolio-sample.json'))
+          if len(candidates) != 1:
+              raise SystemExit(f'portfolio_sync_sample_cardinality_invalid:{len(candidates)}')
+          sample_path = candidates[0]
+
+          def only(filename: str, error_prefix: str) -> Path:
+              matches = sorted(artifact_root.rglob(filename))
+              if len(matches) != 1:
+                  raise SystemExit(f'{error_prefix}_cardinality_invalid:{len(matches)}')
+              return matches[0]
+
+          publication_path = only('publication.json', 'portfolio_sync_publication')
+          manifest_path = only('manifest.json', 'portfolio_sync_manifest')
+          descriptors_path = only('source-descriptors.json', 'portfolio_sync_descriptors')
+
+          sample = json.loads(sample_path.read_text(encoding='utf-8'))
+          publication = json.loads(publication_path.read_text(encoding='utf-8'))
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          descriptors = json.loads(descriptors_path.read_text(encoding='utf-8'))
+
+          if sample.get('schema') != 'precios-sps-safe-portfolio-sample/v1':
               raise SystemExit('portfolio_sync_schema_invalid')
-          if document.get('comparison_policy') != 'fail_closed_strong_identity_and_commercial_consistency':
-              raise SystemExit('portfolio_sync_policy_invalid')
-          if document.get('scope') != expected_scope:
+          if publication.get('schema') != 'precios-sps-publication/v1':
+              raise SystemExit('portfolio_sync_publication_schema_invalid')
+          if manifest.get('schema') != 'precios-sps-publication-manifest/v1':
+              raise SystemExit('portfolio_sync_manifest_schema_invalid')
+          if descriptors.get('schema') != 'precios-sps-safe-source-descriptors/v1':
+              raise SystemExit('portfolio_sync_descriptors_schema_invalid')
+
+          for document, error in (
+              (sample, 'portfolio_sync_policy_invalid'),
+              (publication, 'portfolio_sync_publication_policy_invalid'),
+              (manifest, 'portfolio_sync_manifest_policy_invalid'),
+              (descriptors, 'portfolio_sync_descriptors_policy_invalid'),
+          ):
+              if document.get('comparison_policy') != policy:
+                  raise SystemExit(error)
+
+          if sample.get('scope') != expected_scope or publication.get('scope') != expected_scope or manifest.get('scope') != expected_scope:
               raise SystemExit('portfolio_sync_scope_invalid')
-          rows = document.get('rows')
-          if not isinstance(rows, list) or document.get('row_count') != len(rows) or len(rows) > 10:
+
+          rows = sample.get('rows')
+          if not isinstance(rows, list) or sample.get('row_count') != len(rows) or len(rows) > 10:
               raise SystemExit('portfolio_sync_rows_invalid')
 
-          serialized = json.dumps(document, ensure_ascii=False).casefold()
+          offers = publication.get('offers')
+          products = publication.get('products')
+          common_basket = publication.get('common_basket')
+          descriptor_rows = descriptors.get('rows')
+          if not isinstance(offers, list) or not isinstance(products, list) or not isinstance(common_basket, list):
+              raise SystemExit('portfolio_sync_publication_rows_invalid')
+          if not isinstance(descriptor_rows, list):
+              raise SystemExit('portfolio_sync_descriptor_rows_invalid')
+          if manifest.get('safe_offers_published') != len(offers):
+              raise SystemExit('portfolio_sync_offer_count_mismatch')
+          if manifest.get('safe_products_published') != len(products):
+              raise SystemExit('portfolio_sync_product_count_mismatch')
+          if descriptors.get('row_count') != len(descriptor_rows) or descriptors.get('row_count') != len(offers):
+              raise SystemExit('portfolio_sync_descriptor_count_mismatch')
+          if descriptors.get('canonical_product_count') != len(products):
+              raise SystemExit('portfolio_sync_descriptor_product_count_mismatch')
+          if sample.get('row_count', 0) > len(products):
+              raise SystemExit('portfolio_sync_sample_exceeds_publication')
+
+          descriptor_ids = {row.get('source_record_id') for row in descriptor_rows if isinstance(row, dict)}
+          offer_ids = {row.get('source_record_id') for row in offers if isinstance(row, dict)}
+          if descriptor_ids != offer_ids or None in descriptor_ids:
+              raise SystemExit('portfolio_sync_descriptor_offer_identity_mismatch')
+
+          provenance = {
+              'published_at_utc': os.environ['SOURCE_COMPLETED_AT'],
+              'source_workflow_run_id': int(os.environ['SOURCE_RUN_ID']),
+              'source_head_sha': os.environ['SOURCE_HEAD_SHA'],
+          }
+          sample.update(provenance)
+          bi_dataset = {
+              'schema': 'precios-sps-static-bi-dataset/v1',
+              'comparison_policy': policy,
+              'scope': expected_scope,
+              **provenance,
+              'source_publication_generated_at_utc': manifest.get('generated_at_utc'),
+              'manifest': manifest,
+              'publication': publication,
+              'source_descriptors': descriptor_rows,
+          }
+
+          serialized = json.dumps({'sample': sample, 'bi_dataset': bi_dataset}, ensure_ascii=False).casefold()
           for forbidden in ('turso_database_url', 'turso_auth_token', 'libsql://'):
               if forbidden in serialized:
                   raise SystemExit(f'portfolio_sync_secret_material_detected:{forbidden}')
 
-          document['published_at_utc'] = os.environ['SOURCE_COMPLETED_AT']
-          document['source_workflow_run_id'] = int(os.environ['SOURCE_RUN_ID'])
-          document['source_head_sha'] = os.environ['SOURCE_HEAD_SHA']
-          target.write_text(
-              json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
+          sample_target = Path('/tmp/precios-sps-portfolio-sample.json')
+          bi_target = Path('/tmp/precios-sps-static-bi-dataset.json')
+          sample_target.write_text(
+              json.dumps(sample, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          bi_target.write_text(
+              json.dumps(bi_dataset, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
               encoding='utf-8',
           )
           print(json.dumps({
-              'schema': document['schema'],
-              'row_count': document['row_count'],
-              'published_at_utc': document['published_at_utc'],
-              'source_workflow_run_id': document['source_workflow_run_id'],
+              'sample_schema': sample['schema'],
+              'sample_rows': sample['row_count'],
+              'bi_schema': bi_dataset['schema'],
+              'bi_products': len(products),
+              'bi_offers': len(offers),
+              'source_workflow_run_id': provenance['source_workflow_run_id'],
           }, sort_keys=True))
           PY
 
-      - name: Actualizar sólo el JSON público derivado
+      - name: Actualizar muestra web y dataset BI estático
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
         env:
           PUBLIC_SAMPLE_PATH: /tmp/precios-sps-portfolio-sample.json
+          STATIC_BI_PATH: /tmp/precios-sps-static-bi-dataset.json
         with:
           script: |
             const fs = require('fs');
-            const targetPath = 'precios-supermercados-sps/portfolio/sample-data.json';
             const dataBranch = 'portfolio-data';
-            const bytes = fs.readFileSync(process.env.PUBLIC_SAMPLE_PATH);
-            const nextContent = bytes.toString('utf8');
+            const targets = [
+              {
+                sourcePath: process.env.STATIC_BI_PATH,
+                targetPath: 'precios-supermercados-sps/published/bi/la-colonia-walmart-sps/dataset.json',
+                label: 'static BI dataset',
+              },
+              {
+                sourcePath: process.env.PUBLIC_SAMPLE_PATH,
+                targetPath: 'precios-supermercados-sps/portfolio/sample-data.json',
+                label: 'portfolio sample',
+              },
+            ];
 
-            const current = await github.rest.repos.getContent({
+            const ref = await github.rest.git.getRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              path: targetPath,
-              ref: dataBranch,
+              ref: `heads/${dataBranch}`,
             });
-            if (Array.isArray(current.data) || current.data.type !== 'file' || !current.data.sha) {
-              core.setFailed('portfolio_sync_target_invalid');
-              return;
-            }
-            const currentContent = Buffer.from(current.data.content, 'base64').toString('utf8');
-            if (currentContent === nextContent) {
-              core.info('portfolio_sample_unchanged');
-              return;
-            }
-
-            await github.rest.repos.createOrUpdateFileContents({
+            const commit = await github.rest.git.getCommit({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              path: targetPath,
-              message: `data: refresh verified portfolio sample from run ${context.payload.workflow_run.id}`,
-              content: bytes.toString('base64'),
-              sha: current.data.sha,
-              branch: dataBranch,
+              commit_sha: ref.data.object.sha,
             });
+            const tree = await github.rest.git.getTree({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tree_sha: commit.data.tree.sha,
+              recursive: 'true',
+            });
+            if (tree.data.truncated) {
+              core.setFailed('portfolio_sync_data_tree_truncated');
+              return;
+            }
+            const currentShaByPath = new Map(
+              tree.data.tree
+                .filter(item => item.type === 'blob' && item.path && item.sha)
+                .map(item => [item.path, item.sha])
+            );
+
+            for (const target of targets) {
+              const bytes = fs.readFileSync(target.sourcePath);
+              const currentSha = currentShaByPath.get(target.targetPath);
+              const request = {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: target.targetPath,
+                message: `data: refresh ${target.label} from run ${context.payload.workflow_run.id}`,
+                content: bytes.toString('base64'),
+                branch: dataBranch,
+              };
+              if (currentSha) request.sha = currentSha;
+              await github.rest.repos.createOrUpdateFileContents(request);
+            }
