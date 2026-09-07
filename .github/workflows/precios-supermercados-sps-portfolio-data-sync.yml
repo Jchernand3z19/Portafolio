@@ -45,7 +45,11 @@ jobs:
           import os
           from pathlib import Path
 
-          source = Path('/tmp/precios-sps-safe-analytics/la-colonia-walmart-sps/portfolio-sample.json')
+          artifact_root = Path('/tmp/precios-sps-safe-analytics')
+          candidates = sorted(artifact_root.rglob('portfolio-sample.json'))
+          if len(candidates) != 1:
+              raise SystemExit(f'portfolio_sync_sample_cardinality_invalid:{len(candidates)}')
+          source = candidates[0]
           target = Path('/tmp/precios-sps-portfolio-sample.json')
           document = json.loads(source.read_text(encoding='utf-8'))
           expected_scope = [
