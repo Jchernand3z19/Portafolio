@@ -325,17 +325,17 @@ def _resolve_root_total_after_partitions(
 ) -> int:
     """Relee una sola vez el total raíz si el binding inicial quedó transitorio.
 
-    Sólo corrige el total cuando las dos señales de partición ya coinciden
-    exactamente con las identidades únicas extraídas. Cualquier otra discrepancia
-    conserva el comportamiento fail-closed.
+    Sólo corrige el total cuando los totales observados durante la travesía de
+    todas las particiones coinciden exactamente con las identidades únicas
+    extraídas. La estimación previa del árbol de facets puede quedar obsoleta
+    mientras se recorre el catálogo; sus cambios quedan auditados por
+    ``partition_total_adjustments`` y no sustituyen a la evidencia observada.
+    Cualquier otra discrepancia conserva el comportamiento fail-closed.
     """
 
     if unique_product_count == initial_total:
         return initial_total
-    if (
-        diagnostic["partition_quantity_estimate_sum"] != unique_product_count
-        or diagnostic["partition_observed_total_sum"] != unique_product_count
-    ):
+    if diagnostic["partition_observed_total_sum"] != unique_product_count:
         raise full.FullCatalogError(
             "unique_product_coverage_mismatch", diagnostic=diagnostic
         )

@@ -39,23 +39,29 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def category_counts(doc: dict) -> dict[str, int]:
+def category_counts(doc: dict, key: str = "category-1") -> dict[str, int]:
     facets = doc.get("facets")
     if not isinstance(facets, list):
         raise RuntimeError("facets_missing")
-    roots = [facet for facet in facets if isinstance(facet, dict) and facet.get("key") == "category-1"]
+    roots = [facet for facet in facets if isinstance(facet, dict) and facet.get("key") == key]
     if len(roots) != 1 or not isinstance(roots[0].get("values"), list):
-        raise RuntimeError("category_1_missing_or_ambiguous")
+        raise RuntimeError(f"{key.replace('-', '_')}_missing_or_ambiguous")
     result: dict[str, int] = {}
     for value in roots[0]["values"]:
         if not isinstance(value, dict):
-            raise RuntimeError("category_1_value_invalid")
-        key, quantity = value.get("value"), value.get("quantity")
-        if not isinstance(key, str) or not key or type(quantity) is not int or quantity <= 0 or key in result:
-            raise RuntimeError("category_1_value_invalid")
-        result[key] = quantity
+            raise RuntimeError(f"{key.replace('-', '_')}_value_invalid")
+        value_key, quantity = value.get("value"), value.get("quantity")
+        if (
+            not isinstance(value_key, str)
+            or not value_key
+            or type(quantity) is not int
+            or quantity <= 0
+            or value_key in result
+        ):
+            raise RuntimeError(f"{key.replace('-', '_')}_value_invalid")
+        result[value_key] = quantity
     if not result:
-        raise RuntimeError("category_1_empty")
+        raise RuntimeError(f"{key.replace('-', '_')}_empty")
     return result
 
 
@@ -153,6 +159,164 @@ def _common(seller: str) -> dict[str, str]:
     return {"regionId": region_id(seller), "sc": SALES_CHANNEL, "country": COUNTRY}
 
 
+class ExactMembershipOverlap(RuntimeError):
+    """A page repeated source documents already observed in the same partition."""
+
+    def __init__(self, tag: str, product_ids: set[str]) -> None:
+        self.tag = tag
+        self.product_ids = frozenset(product_ids)
+        super().__init__(f"product_membership_overlap:{tag}")
+
+
+def _merge_exact_products(
+    target: dict[str, dict],
+    incoming: dict[str, dict],
+    *,
+    tag: str,
+    recover_on_identical_overlap: bool,
+) -> set[str]:
+    """Merge documents by source ID and reject any contradictory observation."""
+
+    overlap = set(target).intersection(incoming)
+    conflicting = {pid for pid in overlap if target[pid] != incoming[pid]}
+    if conflicting:
+        raise RuntimeError(f"product_identity_conflict:{tag}:{','.join(sorted(conflicting))}")
+    if overlap and recover_on_identical_overlap:
+        raise ExactMembershipOverlap(tag, overlap)
+    target.update({pid: product for pid, product in incoming.items() if pid not in overlap})
+    return overlap
+
+
+def _products_by_id(products: object, tag: str) -> dict[str, dict]:
+    if not isinstance(products, list):
+        raise RuntimeError(f"products_invalid:{tag}")
+    result: dict[str, dict] = {}
+    for product in products:
+        if not isinstance(product, dict):
+            raise RuntimeError(f"product_id_invalid:{tag}")
+        pid = product.get("productId")
+        if not isinstance(pid, str) or not pid:
+            raise RuntimeError(f"product_id_invalid:{tag}")
+        _merge_exact_products(
+            result,
+            {pid: product},
+            tag=tag,
+            recover_on_identical_overlap=True,
+        )
+    return result
+
+
+def _capture_partition(
+    capture: Capture,
+    *,
+    seller: str,
+    relative_path: str,
+    expected_total: int,
+    common: dict[str, str],
+    tag_prefix: str,
+) -> tuple[dict[str, dict], list[dict]]:
+    path = f"/api/io/_v/api/intelligent-search/product_search/accesscontrollist/{seller}/{relative_path}"
+    products_by_id: dict[str, dict] = {}
+    page_evidence: list[dict] = []
+    pages = math.ceil(expected_total / PAGE_SIZE)
+    for page in range(1, pages + 1):
+        expected_count = min(PAGE_SIZE, expected_total - (page - 1) * PAGE_SIZE)
+        tag = f"{tag_prefix}/page-{page:03d}"
+        doc, record = capture.get(
+            seller,
+            tag,
+            path,
+            {**common, "count": str(PAGE_SIZE), "page": str(page)},
+        )
+        products = doc.get("products")
+        if (
+            doc.get("recordsFiltered") != expected_total
+            or not isinstance(products, list)
+            or len(products) != expected_count
+        ):
+            raise RuntimeError(f"page_count_changed:{tag}")
+        incoming = _products_by_id(products, tag)
+        _merge_exact_products(
+            products_by_id,
+            incoming,
+            tag=tag,
+            recover_on_identical_overlap=True,
+        )
+        page_evidence.append(
+            {
+                "tag": tag,
+                "url": record["url"],
+                "sha256": record["sha256"],
+                "observed_at": record["observed_at"],
+            }
+        )
+    if len(products_by_id) != expected_total:
+        raise RuntimeError(f"partition_membership_incomplete:{tag_prefix}")
+    return products_by_id, page_evidence
+
+
+def _capture_category(
+    capture: Capture,
+    *,
+    seller: str,
+    category: str,
+    expected_total: int,
+    common: dict[str, str],
+) -> tuple[dict[str, dict], list[dict], dict | None]:
+    primary = f"{seller}/category-1/{category}"
+    try:
+        products, evidence = _capture_partition(
+            capture,
+            seller=seller,
+            relative_path=f"category-1/{category}",
+            expected_total=expected_total,
+            common=common,
+            tag_prefix=primary,
+        )
+        return products, evidence, None
+    except ExactMembershipOverlap as overlap:
+        facet_path = f"/api/io/_v/api/intelligent-search/facets/accesscontrollist/{seller}/category-1/{category}"
+        facet_tag = f"{primary}/recovery-category-2-facets"
+        facet_doc, facet_record = capture.get(seller, facet_tag, facet_path, common)
+        children = category_counts(facet_doc, "category-2")
+        if sum(children.values()) != expected_total:
+            raise RuntimeError(f"category_2_total_mismatch:{seller}:{category}")
+
+        recovered: dict[str, dict] = {}
+        recovered_evidence: list[dict] = []
+        for child, child_total in children.items():
+            child_products, child_evidence = _capture_partition(
+                capture,
+                seller=seller,
+                relative_path=f"category-1/{category}/category-2/{child}",
+                expected_total=child_total,
+                common=common,
+                tag_prefix=f"{primary}/recovery/category-2/{child}",
+            )
+            _merge_exact_products(
+                recovered,
+                child_products,
+                tag=f"{primary}/recovery/category-2/{child}",
+                recover_on_identical_overlap=False,
+            )
+            recovered_evidence.extend(child_evidence)
+        if len(recovered) != expected_total:
+            raise RuntimeError(f"category_recovery_incomplete:{seller}:{category}")
+        duplicate_ids = sorted(overlap.product_ids)
+        recovery = {
+            "category": category,
+            "strategy": "category_2_exhaustive_repartition",
+            "trigger_tag": overlap.tag,
+            "duplicate_product_count": len(duplicate_ids),
+            "duplicate_product_ids_sha256": hashlib.sha256(
+                "\n".join(duplicate_ids).encode()
+            ).hexdigest(),
+            "category_2_partitions": len(children),
+            "facet_sha256": facet_record["sha256"],
+        }
+        return recovered, recovered_evidence, recovery
+
+
 def capture_store(capture: Capture, seller: str, location_id: str, city: str, store_name: str) -> dict:
     common = _common(seller)
     facets_path = f"/api/io/_v/api/intelligent-search/facets/accesscontrollist/{seller}"
@@ -166,44 +330,26 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
     if root_before.get("recordsFiltered") != root_total or len(root_before.get("products", [])) != 1:
         raise RuntimeError(f"root_total_disagrees_with_facets:{seller}")
 
-    product_ids: set[str] = set()
-    sku_ids: set[str] = set()
-    rows: list[dict] = []
-    source_details: dict[str, dict] = {}
+    products_by_id: dict[str, dict] = {}
     page_evidence: list[dict] = []
+    membership_recoveries: list[dict] = []
     for category, expected_total in counts.items():
-        path = f"{root_path}/category-1/{category}"
-        pages = math.ceil(expected_total / PAGE_SIZE)
-        partition_ids: set[str] = set()
-        for page in range(1, pages + 1):
-            expected_count = min(PAGE_SIZE, expected_total - (page - 1) * PAGE_SIZE)
-            tag = f"{seller}/category-1/{category}/page-{page:03d}"
-            doc, record = capture.get(
-                seller, tag, path, {**common, "count": str(PAGE_SIZE), "page": str(page)}
-            )
-            products = doc.get("products")
-            if doc.get("recordsFiltered") != expected_total or not isinstance(products, list) or len(products) != expected_count:
-                raise RuntimeError(f"page_count_changed:{tag}")
-            ids = [product.get("productId") for product in products if isinstance(product, dict)]
-            if len(ids) != len(products) or any(not isinstance(pid, str) or not pid for pid in ids):
-                raise RuntimeError(f"product_id_invalid:{tag}")
-            if len(ids) != len(set(ids)) or partition_ids.intersection(ids) or product_ids.intersection(ids):
-                raise RuntimeError(f"product_membership_overlap:{tag}")
-            incoming, details = parse_products(products)
-            if sku_ids.intersection(details):
-                raise RuntimeError(f"sku_membership_overlap:{tag}")
-            partition_ids.update(ids)
-            product_ids.update(ids)
-            sku_ids.update(details)
-            rows.extend(incoming)
-            source_details.update(details)
-            page_evidence.append({
-                "url": record["url"],
-                "sha256": record["sha256"],
-                "observed_at": record["observed_at"],
-            })
-        if len(partition_ids) != expected_total:
-            raise RuntimeError(f"partition_membership_incomplete:{seller}:{category}")
+        category_products, category_evidence, recovery = _capture_category(
+            capture,
+            seller=seller,
+            category=category,
+            expected_total=expected_total,
+            common=common,
+        )
+        _merge_exact_products(
+            products_by_id,
+            category_products,
+            tag=f"{seller}/category-1/{category}",
+            recover_on_identical_overlap=False,
+        )
+        page_evidence.extend(category_evidence)
+        if recovery is not None:
+            membership_recoveries.append(recovery)
 
     after, after_record = capture.get(seller, f"{seller}/facets-after", facets_path, common)
     if category_counts(after) != counts:
@@ -213,8 +359,14 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
     )
     if root_after.get("recordsFiltered") != root_total or len(root_after.get("products", [])) != 1:
         raise RuntimeError(f"root_changed_during_capture:{seller}")
-    if len(product_ids) != root_total or len(rows) != len(sku_ids):
+    if len(products_by_id) != root_total:
         raise RuntimeError(f"catalog_membership_incomplete:{seller}")
+
+    source_products = [products_by_id[pid] for pid in sorted(products_by_id)]
+    rows, source_details = parse_products(source_products)
+    if len(rows) != len(source_details):
+        raise RuntimeError(f"sku_membership_overlap:{seller}")
+    product_ids = set(products_by_id)
 
     times = [datetime.fromisoformat(item["observed_at"].replace("Z", "+00:00")) for item in page_evidence]
     rows.sort(key=lambda row: row["source_key"])
@@ -249,6 +401,7 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
         "products": rows,
         "source_details": source_details,
         "page_evidence": page_evidence,
+        "membership_recoveries": membership_recoveries,
         "binding_evidence": {
             "selector": seller,
             "region_id": region_id(seller),
@@ -308,6 +461,7 @@ def main() -> None:
                 "catalog_products_reported": snapshot["catalog_products_reported"],
                 "skus_extracted": snapshot["skus_extracted"],
                 "skus_with_price": snapshot["skus_with_price"],
+                "membership_recovery_count": len(snapshot["membership_recoveries"]),
             }
             for snapshot in snapshots
         ],
