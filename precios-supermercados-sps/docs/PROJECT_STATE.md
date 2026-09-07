@@ -179,7 +179,10 @@ El fingerprint productivo canónico de la región SPS de La Colonia se conserva 
 
 ```text
 SPS_REGION_FINGERPRINT = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+ACTIVE_AUTHORIZATION_IDS = []
 ```
+
+`ACTIVE_AUTHORIZATION_IDS` registra únicamente autorizaciones puntuales one-shot; no representa ni revoca la operación recurrente expresamente autorizada. Las autorizaciones temporales one-shot conservadas en la evidencia histórica siguen siendo hechos auditables, pero **no se interpreta como autorización abierta** ninguna autorización temporal ya consumida o vencida.
 
 Las autorizaciones one-shot se consideran válidas únicamente dentro de su ventana explícita. Un schedule configurado no amplía por sí solo la autoridad live a nuevas cadenas, ubicaciones o fuentes. Cualquier tráfico live fuera del alcance ya autorizado requiere autorización humana explícita vigente.
 
