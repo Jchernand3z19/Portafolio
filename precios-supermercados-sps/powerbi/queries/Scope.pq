@@ -1,7 +1,11 @@
 let
     Source = StaticDataset,
     Rows = Record.Field(Source, "scope"),
-    RawTable = Table.FromRecords(Rows),
+    RawTable = Table.FromRecords(
+        Rows,
+        {"supermarket_id", "location_id"},
+        MissingField.UseNull
+    ),
     Typed = Table.TransformColumnTypes(
         RawTable,
         {
