@@ -17,7 +17,10 @@
 
   const SAFE_SAMPLE_SCHEMA = 'precios-sps-safe-portfolio-sample/v1';
   const SAFE_POLICY = 'fail_closed_strong_identity_and_commercial_consistency';
-  const SAFE_SAMPLE_URL = 'precios-supermercados-sps/portfolio/sample-data.json';
+  const SAFE_SAMPLE_REPOSITORY_URL = 'https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/portfolio/sample-data.json';
+  const SAFE_SAMPLE_URL = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+    ? 'precios-supermercados-sps/portfolio/sample-data.json'
+    : SAFE_SAMPLE_REPOSITORY_URL;
   const EXPECTED_SCOPE = Object.freeze([
     Object.freeze({ supermarket_id: 'la_colonia', location_id: 'la_colonia_sps' }),
     Object.freeze({ supermarket_id: 'walmart', location_id: 'walmart_sps' })
@@ -50,7 +53,7 @@
       safeWalmart: 'Walmart · SPS',
       safeBest: 'Mejor precio',
       safeSavings: 'Ahorro vs. mayor',
-      safeNote: 'Muestra pública derivada únicamente de productos comparables y con precio en ambas ubicaciones del alcance. Los nombres mostrados se conservan tal como cada fuente los publicó.',
+      safeNote: 'Muestra pública derivada únicamente de productos comparables y con precio en ambas ubicaciones del alcance. Se refresca automáticamente después de cada actualización analítica válida y el navegador nunca consulta Turso.',
       matchingBody: 'La homologación propone identidades; el gate de comparación exige evidencia fuerte y coherencia comercial antes de calcular ahorros. Marca + presentación nunca bastan por sí solas.',
       insightsBody: 'Los hallazgos actuales usan identidades demostradas dentro de una misma cadena. Las comparaciones cross-source permanecen cerradas si la identidad comercial es ambigua.',
       roadmap: 'Seis cadenas productivas integradas bajo una estructura común.'
@@ -78,7 +81,7 @@
       safeWalmart: 'Walmart · SPS',
       safeBest: 'Best price',
       safeSavings: 'Savings vs. highest',
-      safeNote: 'This public sample contains only products that are comparable and priced in both locations in scope. Displayed names are preserved exactly as published by each source.',
+      safeNote: 'This public sample contains only products that are comparable and priced in both locations in scope. It refreshes automatically after every valid analytics update, and the browser never queries Turso.',
       matchingBody: 'Homologation proposes identities; the comparison gate requires strong evidence and commercial consistency before calculating savings. Brand + presentation are never sufficient on their own.',
       insightsBody: 'Current findings use proven identities within the same retail chain. Cross-source comparisons remain closed whenever commercial identity is ambiguous.',
       roadmap: 'Six production retail chains integrated under one shared structure.'

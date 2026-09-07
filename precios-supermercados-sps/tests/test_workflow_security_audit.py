@@ -26,6 +26,7 @@ base.TURSO_SCHEMA_MIGRATION_OPERATOR_WORKFLOW = (
 base.TURSO_SCHEMA_MIGRATION_REQUEST = (
     "precios-supermercados-sps/.automation/turso-schema-migration-request.json"
 )
+base.PORTFOLIO_DATA_SYNC_WORKFLOW = "precios-supermercados-sps-portfolio-data-sync.yml"
 base.EXPECTED_PERMISSIONS[base.PRODUCTION_OPERATOR_WORKFLOW] = {
     "actions": "write",
     "contents": "read",
@@ -48,10 +49,15 @@ base.EXPECTED_PERMISSIONS[base.TURSO_SCHEMA_MIGRATION_OPERATOR_WORKFLOW] = {
     "contents": "read",
 }
 base.EXPECTED_TRIGGERS[base.TURSO_SCHEMA_MIGRATION_OPERATOR_WORKFLOW] = {"push"}
+base.EXPECTED_PERMISSIONS[base.PORTFOLIO_DATA_SYNC_WORKFLOW] = {
+    "actions": "read",
+    "contents": "write",
+}
+base.EXPECTED_TRIGGERS[base.PORTFOLIO_DATA_SYNC_WORKFLOW] = {"workflow_run"}
 
 
 def _checkout_identity_with_derived_workflows() -> None:
-    """Conserva el audit histórico y reconoce ambos derivados por workflow_run."""
+    """Conserva el audit histórico y reconoce derivados y publicadores aislados."""
 
     derived_ref = "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
     for path, workflow in base.workflows():
@@ -85,6 +91,9 @@ def _checkout_identity_with_derived_workflows() -> None:
             assert checkout_steps == []
             continue
         if path.name == base.PRESERVE_INITIAL_SNAPSHOT_WORKFLOW:
+            assert checkout_steps == []
+            continue
+        if path.name == base.PORTFOLIO_DATA_SYNC_WORKFLOW:
             assert checkout_steps == []
             continue
         if path.name == base.AUDIT_WORKFLOW:
@@ -339,3 +348,67 @@ def test_turso_schema_migration_operator_is_main_only_closed_and_least_privilege
         "ref": "${{ github.sha }}",
         "persist-credentials": "false",
     }
+
+
+def test_portfolio_data_sync_reuses_safe_artifact_without_turso_reads() -> None:
+    path = base.WORKFLOW_DIR / base.PORTFOLIO_DATA_SYNC_WORKFLOW
+    workflow = base.load_workflow(path)
+    assert workflow["permissions"] == {"actions": "read", "contents": "write"}
+    assert workflow["concurrency"] == {
+        "group": "precios-sps-portfolio-data-sync",
+        "cancel-in-progress": "false",
+    }
+    assert workflow["on"] == {
+        "workflow_run": {
+            "workflows": ["Precios SPS - Publicar analítica segura"],
+            "types": ["completed"],
+        }
+    }
+    workflow_jobs = base.jobs(workflow)
+    assert set(workflow_jobs) == {"sync"}
+    sync = workflow_jobs["sync"]
+    assert sync["timeout-minutes"] == "10"
+    assert "permissions" not in sync
+    assert "environment" not in sync
+    expected_if = (
+        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
+        "github.event.workflow_run.conclusion == 'success' && "
+        "github.event.workflow_run.head_branch == 'main' }}"
+    )
+    assert " ".join(str(sync["if"]).split()) == " ".join(expected_if.split())
+
+    raw = path.read_text(encoding="utf-8")
+    assert "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" in raw
+    assert "run-id: ${{ github.event.workflow_run.id }}" in raw
+    assert "safe-analytics-la-colonia-walmart-sps-${{ github.event.workflow_run.id }}" in raw
+    assert "precios-supermercados-sps/portfolio/sample-data.json" in raw
+    assert "candidates = sorted(artifact_root.rglob('portfolio-sample.json'))" in raw
+    assert "portfolio_sync_sample_cardinality_invalid" in raw
+    assert "const dataBranch = 'portfolio-data';" in raw
+    assert "branch: dataBranch" in raw
+    assert "createOrUpdateFileContents" in raw
+    assert "portfolio_sync_secret_material_detected" in raw
+    assert "TURSO_DATABASE_URL: ${{ secrets." not in raw
+    assert "TURSO_AUTH_TOKEN: ${{ secrets." not in raw
+    assert "scripts/exportar_modelo_analitico.py" not in raw
+    assert "scripts/generar_descriptores_publicacion_segura.py" not in raw
+    assert "actions/checkout@" not in raw
+    assert "pull_request:" not in raw
+    assert "pull_request_target:" not in raw
+    assert "issue_comment:" not in raw
+    assert "schedule:" not in raw
+    assert "id-token" not in raw
+
+    frontend = (
+        base.REPO_ROOT
+        / "precios-supermercados-sps"
+        / "portfolio"
+        / "precios-portfolio-current-state.js"
+    ).read_text(encoding="utf-8")
+    assert "raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/portfolio/sample-data.json" in frontend
+    assert "raw.githubusercontent.com/Jchernand3z19/Portafolio/main/precios-supermercados-sps/portfolio/sample-data.json" not in frontend
+    assert "['localhost', '127.0.0.1'].includes(window.location.hostname)" in frontend
+    assert "cache: 'no-store'" in frontend
+    assert "TURSO_DATABASE_URL" not in frontend
+    assert "TURSO_AUTH_TOKEN" not in frontend
+    assert "libsql://" not in frontend
