@@ -80,6 +80,36 @@ def test_single_recheck_accepts_only_exact_coherent_total(monkeypatch):
     assert diagnostic["catalog_products_reported"] == 9469
 
 
+@pytest.mark.parametrize(
+    ("initial_total", "facet_estimate", "observed_total"),
+    [
+        (9466, 9457, 9461),
+        (9487, 9495, 9497),
+    ],
+)
+def test_recheck_uses_completed_partition_observations_when_facet_estimate_moved(
+    monkeypatch, initial_total, facet_estimate, observed_total
+):
+    """Regression for production run 34148356089 SPS and TGU."""
+
+    _patch_shape(monkeypatch)
+    context = _Context({"total": observed_total})
+    diagnostic = _diagnostic(observed_total)
+    diagnostic["partition_quantity_estimate_sum"] = facet_estimate
+
+    result = operational._resolve_root_total_after_partitions(
+        context=context,
+        root_url="root",
+        initial_total=initial_total,
+        unique_product_count=observed_total,
+        diagnostic=diagnostic,
+    )
+
+    assert result == observed_total
+    assert context.request.calls == 1
+    assert diagnostic["catalog_products_reported"] == observed_total
+
+
 def test_recheck_stays_fail_closed_when_root_still_disagrees(monkeypatch):
     _patch_shape(monkeypatch)
     context = _Context({"total": 9493})
