@@ -94,6 +94,7 @@ jobs:
           script: |
             const fs = require('fs');
             const targetPath = 'precios-supermercados-sps/portfolio/sample-data.json';
+            const dataBranch = 'portfolio-data';
             const bytes = fs.readFileSync(process.env.PUBLIC_SAMPLE_PATH);
             const nextContent = bytes.toString('utf8');
 
@@ -101,7 +102,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               path: targetPath,
-              ref: 'main',
+              ref: dataBranch,
             });
             if (Array.isArray(current.data) || current.data.type !== 'file' || !current.data.sha) {
               core.setFailed('portfolio_sync_target_invalid');
@@ -120,5 +121,5 @@ jobs:
               message: `data: refresh verified portfolio sample from run ${context.payload.workflow_run.id}`,
               content: bytes.toString('base64'),
               sha: current.data.sha,
-              branch: 'main',
+              branch: dataBranch,
             });
