@@ -1,0 +1,120 @@
+name: Precios SPS - Sincronizar datos estáticos del portafolio
+
+on:
+  workflow_run:
+    workflows:
+      - "Precios SPS - Publicar analítica segura"
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: precios-sps-portfolio-data-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: >-
+      ${{ github.repository == 'Jchernand3z19/Portafolio' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Descargar exactamente el dataset BI ya generado
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v5.0.0
+        with:
+          name: safe-analytics-la-colonia-walmart-sps-${{ github.event.workflow_run.id }}
+          path: /tmp/precios-sps-safe-analytics
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Validar y materializar muestra web sin consultar Turso
+        env:
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_COMPLETED_AT: ${{ github.event.workflow_run.updated_at }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          source = Path('/tmp/precios-sps-safe-analytics/la-colonia-walmart-sps/portfolio-sample.json')
+          target = Path('/tmp/precios-sps-portfolio-sample.json')
+          document = json.loads(source.read_text(encoding='utf-8'))
+          expected_scope = [
+              {'location_id': 'la_colonia_sps', 'supermarket_id': 'la_colonia'},
+              {'location_id': 'walmart_sps', 'supermarket_id': 'walmart'},
+          ]
+          if document.get('schema') != 'precios-sps-safe-portfolio-sample/v1':
+              raise SystemExit('portfolio_sync_schema_invalid')
+          if document.get('comparison_policy') != 'fail_closed_strong_identity_and_commercial_consistency':
+              raise SystemExit('portfolio_sync_policy_invalid')
+          if document.get('scope') != expected_scope:
+              raise SystemExit('portfolio_sync_scope_invalid')
+          rows = document.get('rows')
+          if not isinstance(rows, list) or document.get('row_count') != len(rows) or len(rows) > 10:
+              raise SystemExit('portfolio_sync_rows_invalid')
+
+          serialized = json.dumps(document, ensure_ascii=False).casefold()
+          for forbidden in ('turso_database_url', 'turso_auth_token', 'libsql://'):
+              if forbidden in serialized:
+                  raise SystemExit(f'portfolio_sync_secret_material_detected:{forbidden}')
+
+          document['published_at_utc'] = os.environ['SOURCE_COMPLETED_AT']
+          document['source_workflow_run_id'] = int(os.environ['SOURCE_RUN_ID'])
+          document['source_head_sha'] = os.environ['SOURCE_HEAD_SHA']
+          target.write_text(
+              json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          print(json.dumps({
+              'schema': document['schema'],
+              'row_count': document['row_count'],
+              'published_at_utc': document['published_at_utc'],
+              'source_workflow_run_id': document['source_workflow_run_id'],
+          }, sort_keys=True))
+          PY
+
+      - name: Actualizar sólo el JSON público derivado
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
+        env:
+          PUBLIC_SAMPLE_PATH: /tmp/precios-sps-portfolio-sample.json
+        with:
+          script: |
+            const fs = require('fs');
+            const targetPath = 'precios-supermercados-sps/portfolio/sample-data.json';
+            const bytes = fs.readFileSync(process.env.PUBLIC_SAMPLE_PATH);
+            const nextContent = bytes.toString('utf8');
+
+            const current = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: targetPath,
+              ref: 'main',
+            });
+            if (Array.isArray(current.data) || current.data.type !== 'file' || !current.data.sha) {
+              core.setFailed('portfolio_sync_target_invalid');
+              return;
+            }
+            const currentContent = Buffer.from(current.data.content, 'base64').toString('utf8');
+            if (currentContent === nextContent) {
+              core.info('portfolio_sample_unchanged');
+              return;
+            }
+
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: targetPath,
+              message: `data: refresh verified portfolio sample from run ${context.payload.workflow_run.id}`,
+              content: bytes.toString('base64'),
+              sha: current.data.sha,
+              branch: 'main',
+            });
