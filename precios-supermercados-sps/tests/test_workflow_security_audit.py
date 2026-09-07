@@ -20,6 +20,12 @@ base.PRODUCTION_UPDATE_REQUEST = (
 )
 base.SAFE_ANALYTICS_WORKFLOW = "precios-supermercados-sps-safe-analytics-publication.yml"
 base.TURSO_SCHEMA_MIGRATION_WORKFLOW = "precios-supermercados-sps-turso-schema-migration.yml"
+base.TURSO_SCHEMA_MIGRATION_OPERATOR_WORKFLOW = (
+    "precios-supermercados-sps-turso-schema-migration-operator.yml"
+)
+base.TURSO_SCHEMA_MIGRATION_REQUEST = (
+    "precios-supermercados-sps/.automation/turso-schema-migration-request.json"
+)
 base.EXPECTED_PERMISSIONS[base.PRODUCTION_OPERATOR_WORKFLOW] = {
     "actions": "write",
     "contents": "read",
@@ -37,6 +43,11 @@ base.ALLOWED_SECRET_REFERENCES[base.TURSO_SCHEMA_MIGRATION_WORKFLOW] = {
     base.TURSO_DATABASE_URL_SECRET,
     base.TURSO_AUTH_TOKEN_SECRET,
 }
+base.EXPECTED_PERMISSIONS[base.TURSO_SCHEMA_MIGRATION_OPERATOR_WORKFLOW] = {
+    "actions": "write",
+    "contents": "read",
+}
+base.EXPECTED_TRIGGERS[base.TURSO_SCHEMA_MIGRATION_OPERATOR_WORKFLOW] = {"push"}
 
 
 def _checkout_identity_with_derived_workflows() -> None:
@@ -271,3 +282,60 @@ def test_turso_schema_migration_is_manual_scoped_and_fail_closed() -> None:
     assert "schedule:" not in raw
     assert "id-token" not in raw
     assert "contents: write" not in raw
+
+
+def test_turso_schema_migration_operator_is_main_only_closed_and_least_privilege() -> None:
+    path = base.WORKFLOW_DIR / base.TURSO_SCHEMA_MIGRATION_OPERATOR_WORKFLOW
+    workflow = base.load_workflow(path)
+    assert workflow["permissions"] == {"actions": "write", "contents": "read"}
+    assert workflow["concurrency"] == {
+        "group": "precios-sps-turso-schema-migration-operator",
+        "cancel-in-progress": "false",
+    }
+    assert workflow["on"] == {
+        "push": {
+            "branches": ["main"],
+            "paths": [base.TURSO_SCHEMA_MIGRATION_REQUEST],
+        }
+    }
+    workflow_jobs = base.jobs(workflow)
+    assert set(workflow_jobs) == {"dispatch"}
+    dispatch = workflow_jobs["dispatch"]
+    assert dispatch["if"] == (
+        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
+        "github.ref == 'refs/heads/main' && github.event_name == 'push' }}"
+    )
+    assert dispatch["timeout-minutes"] == "5"
+    assert "permissions" not in dispatch
+    assert "environment" not in dispatch
+
+    raw = path.read_text(encoding="utf-8")
+    assert base.TURSO_SCHEMA_MIGRATION_REQUEST in raw
+    assert "precios-sps-turso-schema-migration-request/v1" in raw
+    assert "migrate_walmart_pricesmart_schema" in raw
+    assert "schema_migration_request_schema_closed_set_mismatch" in raw
+    assert "schema_migration_request_authorization_window_too_long" in raw
+    assert "schema_migration_request_authorization_not_current" in raw
+    assert "schema_migration_request_authority_missing" in raw
+    assert "createWorkflowDispatch" in raw
+    assert "precios-supermercados-sps-turso-schema-migration.yml" in raw
+    assert "schema_migration_authorized: 'true'" in raw
+    assert "ref: 'main'" in raw
+    assert "secrets." not in raw
+    assert "vars." not in raw
+    assert "pull_request:" not in raw
+    assert "pull_request_target:" not in raw
+    assert "issue_comment:" not in raw
+    assert "schedule:" not in raw
+    assert "id-token" not in raw
+
+    parsed = yaml.load(raw, Loader=yaml.BaseLoader)
+    checkout = next(
+        step
+        for step in parsed["jobs"]["dispatch"]["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    )
+    assert checkout["with"] == {
+        "ref": "${{ github.sha }}",
+        "persist-credentials": "false",
+    }
