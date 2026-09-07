@@ -2,7 +2,11 @@ let
     Source = StaticDataset,
     Publication = Record.Field(Source, "publication"),
     Rows = Record.Field(Publication, "products"),
-    RawTable = Table.FromRecords(Rows),
+    RawTable = Table.FromRecords(
+        Rows,
+        {"canonical_product_id", "canonical_gtin", "best_supermarket_id", "best_location_id", "best_price", "highest_price", "savings_vs_highest", "savings_vs_highest_pct", "supermarket_count"},
+        MissingField.UseNull
+    ),
     Typed = Table.TransformColumnTypes(
         RawTable,
         {
