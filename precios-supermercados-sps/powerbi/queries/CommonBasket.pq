@@ -17,7 +17,7 @@ let
             {"product_count", Int64.Type},
             {"denominator_definition", type text}
         },
-        "es-HN"
+        "en-US"
     ),
     WithScopeKey = Table.AddColumn(
         Typed,
