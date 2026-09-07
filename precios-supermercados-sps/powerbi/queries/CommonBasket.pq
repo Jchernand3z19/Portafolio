@@ -14,6 +14,12 @@ let
             {"denominator_definition", type text}
         },
         "es-HN"
+    ),
+    WithScopeKey = Table.AddColumn(
+        Typed,
+        "scope_key",
+        each [supermarket_id] & "|" & [location_id],
+        type text
     )
 in
-    Typed
+    WithScopeKey
