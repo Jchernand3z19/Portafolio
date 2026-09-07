@@ -327,6 +327,8 @@ def _capture_category(
     facets_root: str,
 ) -> tuple[dict[str, dict], list[dict], int, dict | None]:
     partitions: list[tuple[str, int]] = [(f"category-1/{category}", expected_total)]
+    facet_path: str | None = None
+    children: dict[str, int] | None = None
     if category in CATEGORY2_PARTITIONS:
         facet_path = f"{facets_root}/category-1/{category}"
         child_doc, _ = capture.get(
@@ -352,9 +354,64 @@ def _capture_category(
         return products, evidence, expected_total, None
     except PartitionTotalChanged as drift:
         if category in CATEGORY2_PARTITIONS:
-            raise RuntimeError(
-                f"category2_partition_total_changed:{seller}:{category}:{drift.tag}"
-            ) from drift
+            if facet_path is None or children is None:
+                raise AssertionError("category2_partition_state_missing")
+            prefix = f"{seller}/category-1/{category}/category-2/"
+            if not drift.tag.startswith(prefix):
+                raise RuntimeError(f"category2_drift_tag_invalid:{seller}:{category}") from drift
+            drift_child = drift.tag[len(prefix):].split("/", 1)[0]
+            rechecked_doc, rechecked_record = capture.get(
+                seller,
+                f"{seller}/{category}/category2-facets/recovery-total-drift",
+                facet_path,
+                common,
+            )
+            rechecked_children = facet_counts(rechecked_doc, "category-2")
+            if rechecked_children.get(drift_child) != drift.observed_total:
+                raise RuntimeError(
+                    f"category2_drift_not_confirmed:{seller}:{category}:{drift_child}"
+                ) from drift
+            recovered_total = sum(rechecked_children.values())
+            recovered_partitions = [
+                (f"category-1/{category}/category-2/{child}", count)
+                for child, count in rechecked_children.items()
+            ]
+            try:
+                products, evidence = _capture_partitions(
+                    capture,
+                    seller=seller,
+                    common=common,
+                    partitions=recovered_partitions,
+                    tag_suffix="/recovery-total-drift",
+                )
+            except PartitionTotalChanged as repeated:
+                raise RuntimeError(
+                    f"category2_total_changed_again:{seller}:{category}:{repeated.tag}"
+                ) from repeated
+            if len(products) != recovered_total:
+                raise RuntimeError(f"category2_recovery_incomplete:{seller}:{category}")
+            confirmation_doc, confirmation_record = capture.get(
+                seller,
+                f"{seller}/{category}/category2-facets/recovery-confirmation",
+                facet_path,
+                common,
+            )
+            if facet_counts(confirmation_doc, "category-2") != rechecked_children:
+                raise RuntimeError(f"category2_changed_during_recovery:{seller}:{category}")
+            recovery = {
+                "category": category,
+                "strategy": "category2_exact_restart",
+                "trigger_tag": drift.tag,
+                "trigger_sha256": drift.record["sha256"],
+                "trigger_observed_at": drift.record["observed_at"],
+                "previous_total": expected_total,
+                "recovered_total": recovered_total,
+                "previous_partition_total": drift.expected_total,
+                "recovered_partition_total": drift.observed_total,
+                "facet_recheck_sha256": rechecked_record["sha256"],
+                "facet_confirmation_sha256": confirmation_record["sha256"],
+            }
+            return products, evidence, recovered_total, recovery
         try:
             products, evidence = _capture_partitions(
                 capture,
