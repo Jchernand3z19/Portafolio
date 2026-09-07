@@ -15,6 +15,12 @@ let
             {"is_best_price", type logical}
         },
         "es-HN"
+    ),
+    WithScopeKey = Table.AddColumn(
+        Typed,
+        "scope_key",
+        each [supermarket_id] & "|" & [location_id],
+        type text
     )
 in
-    Typed
+    WithScopeKey
