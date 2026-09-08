@@ -50,10 +50,15 @@
         </div>
         <p id="cart-stats">0 productos · 0 unidades · 0 supermercados · 0 incompletos · 0 stale</p>
       </div>
+      <aside id="price-refresh" class="price-refresh" role="status" aria-live="polite" hidden>
+        <p id="price-refresh-message"></p>
+        <button id="price-refresh-button" class="refresh-button" type="button">Actualizar precios</button>
+        <small>Se conserva exactamente el producto, supermercado y cantidad que elegiste. Una oferta faltante se marca; nunca se sustituye en silencio.</small>
+      </aside>
       <div id="cart-groups"></div>
       <div class="cart-total-card">
         <strong id="cart-total">TOTAL ESTIMADO L 0.00</strong>
-        <p>Total estimado con precios públicos observados. Los precios pueden cambiar en tienda.</p>
+        <p>Total estimado calculado con los precios públicos observados en cada supermercado. Los precios pueden cambiar en tienda.</p>
       </div>
     </section>
   </main>
