@@ -24,4 +24,23 @@ describe('BAC parser', () => {
     expect(result.home).toBeUndefined();
     expect(result.warnings).toContain('home_missing');
   });
+
+  it('handles a BAC receipt with no detail field without inventing a home', () => {
+    const receipt = [
+      'BAC CREDOMATIC',
+      'Transferencia realizada',
+      'Remitente: PERSONA DEMO',
+      'Fecha: 07/09/2026',
+      'Hora: 10:20 AM',
+      'Monto: L150.00',
+      'Referencia: DEMOREF000099',
+      'Beneficiario: RESIDENCIAL DEMO',
+      'Cuenta destino: 000000000099',
+    ].join('\n');
+    const result = bacParser.parse(receipt);
+    expect(result.detail).toBeUndefined();
+    expect(result.home).toBeUndefined();
+    expect(result.reference).toBe('DEMOREF000099');
+    expect(result.warnings).toContain('home_missing');
+  });
 });
