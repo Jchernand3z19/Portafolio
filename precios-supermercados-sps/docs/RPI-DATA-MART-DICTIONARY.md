@@ -16,6 +16,8 @@ estado comercial aceptado y no escriben en Turso.
 La versión `v2` del Consumer Mart conserva el contrato actual y añade contexto
 histórico resumido calculado en Python desde los periodos compactos ya persistidos.
 No publica la serie histórica completa ni obliga al navegador a reconstruirla.
+El Business Mart sí conserva los periodos históricos del universo seguro para
+Power BI, sin publicar RAW ni ampliar la identidad aceptada.
 
 ## Metadatos compartidos
 
@@ -46,8 +48,9 @@ competitivos quedan nulos. `REJECTED` nunca se elige como último run válido.
 | `dim_category` | categoría observada/normalizada presente | `category` |
 | `dim_brand` | marca fuente presente | `brand` |
 
-Las dimensiones de fecha e histórico se incorporarán junto con los facts
-históricos; no se crean tablas vacías anticipadas.
+Los hechos históricos conservan sus timestamps UTC (`period_start`, `as_of`) y
+se relacionan por las mismas dimensiones estables del universo seguro. No se
+crean relaciones por nombre, presentación ni similitud textual.
 
 ### `fact_current_comparison`
 
@@ -59,6 +62,42 @@ y spread.
 Los importes JSON/CSV se serializan como decimal-texto con dos posiciones. PCI y
 porcentajes también son decimal-texto. `reported_regular_price` nunca sustituye
 `current_price`.
+
+### `fact_price_history`
+
+Una fila por periodo comercial realmente observado de cada oferta segura. Se
+materializa desde los periodos compactos persistidos y contiene:
+
+- `period_start`;
+- `current_price`;
+- `reported_regular_price` sólo como referencia;
+- `is_promotion`;
+- `previous_price`;
+- `change_abs` y `change_pct`;
+- `direction` (`initial`, `up`, `down`, `unchanged`);
+- `is_current`;
+- `source_last_successful_at` y `freshness_status`.
+
+No interpola días ausentes. Un cambio de promoción o referencia regular puede
+producir un nuevo periodo aun si el precio efectivo no cambia; en ese caso la
+dirección queda `unchanged`.
+
+### `fact_promotion_analysis`
+
+Una fila por oferta segura en el corte `as_of`. Mantiene separadas:
+
+- `source_reports_promotion`;
+- `historical_price_reduction`;
+- `source_discount_depth_pct` contra el regular declarado, cuando existe;
+- `current_vs_previous_pct`;
+- `current_vs_average_30d_pct` y `current_vs_average_90d_pct`;
+- `current_vs_minimum_90d_pct`;
+- `promotion_duration_days`, `promotion_event_count`, `promotion_share_pct`;
+- `historical_position`;
+- conteo real de observaciones y freshness.
+
+La clasificación histórica se calcula en Python y puede declarar
+`insufficient_history`; Power BI no reconstruye esa decisión.
 
 ### `fact_basket_cost`
 
@@ -93,6 +132,7 @@ oferta conserva:
 | `reported_regular_price` | referencia visual opcional |
 | `is_promotion` | declaración fuente |
 | `rank`, `is_best_price` | recomendación calculada en Python; queda nula/inactiva cuando comparar no es seguro |
+| `difference_vs_best_abs`, `difference_vs_best_pct` | diferencia contra el mínimo seguro; nula cuando comparar no es seguro |
 | `availability` | `in_stock` o `unknown` para ofertas publicadas |
 | `observed_at` | inicio observado del estado comercial persistido |
 | `last_successful_run`, `source_last_successful_at` | último corte fuente aceptado |
