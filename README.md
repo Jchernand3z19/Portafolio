@@ -33,12 +33,12 @@ La única excepción a la regla de encapsulación es `.github/workflows/`: GitHu
 
 Proyecto principal del portafolio. Obtiene precios y promociones desde sitios web públicos de supermercados, valida las capturas, estructura los datos y conserva su histórico para análisis.
 
-Estado público verificado al **4 de septiembre de 2026**:
+Estado público verificado al **8 de septiembre de 2026**:
 
 - **6 supermercados / cadenas productivas integradas**.
 - **11 ubicaciones monitoreadas**.
-- **56K+ productos registrados** (`56,769` en el corte verificado).
-- **108K+ registros históricos de precio** (`108,315` en el corte verificado).
+- **58K+ productos registrados** (`58,114` en el corte verificado).
+- **127K+ registros históricos de precio** (`127,980` en el corte verificado).
 - Cobertura actual en **San Pedro Sula y Tegucigalpa**.
 - Cadenas con datos aceptados: **La Colonia, Supermercados Colonial, Walmart, PriceSmart, Comisariato Los Andes y Paiz**.
 - Evidencia pública de una captura aceptada con **6,646 productos con precio** y **120 promociones**.

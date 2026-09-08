@@ -19,8 +19,8 @@ El portafolio debe reflejar el último estado productivo confirmado en `PROJECT_
 | --- | ---: | ---: |
 | Supermercados / cadenas productivas | 6 | 6 |
 | Ubicaciones monitoreadas | 11 | 11 |
-| Productos registrados | 56,769 | 56K+ |
-| Periodos históricos de precio | 108,315 | 108K+ |
+| Productos registrados | 58,114 | 58K+ |
+| Periodos históricos de precio | 127,980 | 127K+ |
 | Ciudades con cobertura integrada | 2 | 2 |
 
 ### Cobertura por supermercado
@@ -62,9 +62,9 @@ La antigua muestra de 10 productos entre Comisariato Los Andes y Supermercados C
 
 Por tanto:
 
-- [`../portfolio/sample-data.json`](../portfolio/sample-data.json) publica actualmente `rows: []`;
-- no se muestra un “mejor precio” cross-source mientras la fila no supere el gate seguro;
-- falta de comparación no se interpreta como precio cero, empate ni ausencia del supermercado;
+- la rama `portfolio-data` publica 10 filas seleccionadas de 92 productos que superaron el gate seguro entre La Colonia SPS y Walmart SPS;
+- [`../portfolio/sample-data.json`](../portfolio/sample-data.json) permanece vacío como fallback local fail-closed, mientras producción consume el archivo versionado de `portfolio-data`;
+- una fila que no supera el gate no muestra “mejor precio” y no se interpreta como precio cero, empate ni ausencia del supermercado;
 - una coincidencia textual puede servir como candidato de revisión, pero no como autorización analítica.
 
 La política que autoriza una comparación exige identidad fuerte y coherencia de marca, tipo, presentación y descriptores comerciales. El detalle está en [`COMPARATOR-METHODOLOGY.md`](COMPARATOR-METHODOLOGY.md).
@@ -73,7 +73,9 @@ El contrato público derivado es [`PUBLICATION-DATA-DICTIONARY.md`](PUBLICATION-
 
 ## Evidencia analítica segura que sí puede mostrarse
 
-Mientras la muestra cross-source se mantiene cerrada, el portafolio puede mostrar hallazgos reproducibles donde la identidad ya está demostrada dentro de una misma cadena.
+La publicación cross-source vigente contiene 92 productos y 184 ofertas con identidad fuerte y precio utilizable en ambas ubicaciones del alcance. La muestra pública expone 10 filas, conserva GTIN canónico y descriptores fuente, y fue sincronizada por el run `34250590641` desde el artifact analítico `10065801433`.
+
+El portafolio también puede mostrar hallazgos reproducibles donde la identidad ya está demostrada dentro de una misma cadena.
 
 ### Walmart TGU
 
