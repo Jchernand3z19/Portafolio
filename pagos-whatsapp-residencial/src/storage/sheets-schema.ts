@@ -10,7 +10,7 @@ export const SHEETS = {
 } as const;
 
 export const PAYMENT_HEADERS = [
-  'id', 'created_at', 'updated_at', 'source_message_id', 'phone', 'media_id', 'bank', 'depositor',
+  'id', 'created_at', 'updated_at', 'source_message_id', 'phone', 'media_id', 'receipt_file_id', 'bank', 'depositor',
   'transaction_date', 'transaction_time', 'amount', 'detail', 'reference', 'beneficiary', 'destination_account_masked',
   'block', 'house', 'period', 'status', 'file_hash', 'duplicate_of', 'review_reason', 'verification_source', 'verified_at',
 ] as const;
@@ -26,8 +26,8 @@ const bool = (value: unknown): boolean => value === true || String(value).toLowe
 
 export function paymentToRow(payment: PaymentRecord): Array<string | number | boolean> {
   return [
-    payment.id, payment.createdAt, payment.updatedAt, payment.sourceMessageId, payment.phone, cell(payment.mediaId), payment.bank,
-    cell(payment.depositor), cell(payment.transactionDate), cell(payment.transactionTime), payment.amount, cell(payment.detail),
+    payment.id, payment.createdAt, payment.updatedAt, payment.sourceMessageId, payment.phone, cell(payment.mediaId), cell(payment.receiptFileId),
+    payment.bank, cell(payment.depositor), cell(payment.transactionDate), cell(payment.transactionTime), payment.amount, cell(payment.detail),
     cell(payment.reference), cell(payment.beneficiary), cell(payment.destinationAccountMasked), cell(payment.block), cell(payment.house),
     payment.period, payment.status, payment.fileHash, cell(payment.duplicateOf), cell(payment.reviewReason), cell(payment.verificationSource),
     cell(payment.verifiedAt),
@@ -35,16 +35,16 @@ export function paymentToRow(payment: PaymentRecord): Array<string | number | bo
 }
 
 export function paymentFromRow(row: unknown[]): PaymentRecord | undefined {
-  if (!row[0] || !row[3] || !row[6] || !row[18] || !row[19]) return undefined;
-  const status = String(row[18]);
+  if (!row[0] || !row[3] || !row[7] || !row[19] || !row[20]) return undefined;
+  const status = String(row[19]);
   if (!PAYMENT_STATUSES.includes(status as PaymentRecord['status'])) return undefined;
   return {
     id: String(row[0]), createdAt: String(row[1] ?? ''), updatedAt: String(row[2] ?? ''), sourceMessageId: String(row[3]),
-    phone: String(row[4] ?? ''), mediaId: text(row[5]), bank: String(row[6]), depositor: text(row[7]), transactionDate: text(row[8]),
-    transactionTime: text(row[9]), amount: num(row[10]), detail: text(row[11]), reference: text(row[12]), beneficiary: text(row[13]),
-    destinationAccountMasked: text(row[14]), block: int(row[15]), house: int(row[16]), period: String(row[17] ?? ''),
-    status: status as PaymentRecord['status'], fileHash: String(row[19]), duplicateOf: text(row[20]), reviewReason: text(row[21]),
-    verificationSource: text(row[22]), verifiedAt: text(row[23]),
+    phone: String(row[4] ?? ''), mediaId: text(row[5]), receiptFileId: text(row[6]), bank: String(row[7]), depositor: text(row[8]),
+    transactionDate: text(row[9]), transactionTime: text(row[10]), amount: num(row[11]), detail: text(row[12]), reference: text(row[13]),
+    beneficiary: text(row[14]), destinationAccountMasked: text(row[15]), block: int(row[16]), house: int(row[17]), period: String(row[18] ?? ''),
+    status: status as PaymentRecord['status'], fileHash: String(row[20]), duplicateOf: text(row[21]), reviewReason: text(row[22]),
+    verificationSource: text(row[23]), verifiedAt: text(row[24]),
   };
 }
 
