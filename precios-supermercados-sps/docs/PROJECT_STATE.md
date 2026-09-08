@@ -49,6 +49,13 @@ un ítem no disponible queda `INCOMPLETE` y su total es `null`; no imputa cero,
 no usa el precio regular y no admite impuestos o cargos de checkout dentro de
 la oferta.
 
+`rpi_data_marts.py` proyecta la misma salida segura a contratos separados
+`rpi-business-mart/v1` y `rpi-consumer-mart/v1`. Ambos comparten scope, freshness
+y cobertura; el mart privado conserva hechos competitivos y el público sólo los
+descriptores/ofertas necesarios. Si la ventana está bloqueada, el último precio
+válido sigue visible con su staleness, mientras `rank`, PCI y métricas de mercado
+quedan nulos.
+
 No se inventan ubicaciones cuando la fuente no las demuestra. Paiz no tiene un contexto selector SPS aceptado; sus dos contextos demostrados siguen siendo Multiplaza y Próceres en Tegucigalpa. PriceSmart El Sauce 6604 permanece excluido. Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
 
 ## Operación recurrente vigente
