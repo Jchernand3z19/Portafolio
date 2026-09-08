@@ -30,6 +30,12 @@ rank, spread y cobertura sólo cuando la ventana de mercado es comparable. El
 dataset público vigente aún conserva el contrato v1 descrito abajo y por eso no
 expone todavía esas nuevas métricas.
 
+El módulo histórico conserva observaciones reales sin interpolación y ya deriva
+mediana, duración observada, frecuencia de cambios, volatilidad y días desde el
+último cambio. Las ventanas 7/30/60/90/365 días exigen una observación baseline
+anterior al inicio solicitado; cuando no existe, devuelven
+`insufficient_history` en vez de acortar silenciosamente el periodo.
+
 No se inventan ubicaciones cuando la fuente no las demuestra. Paiz no tiene un contexto selector SPS aceptado; sus dos contextos demostrados siguen siendo Multiplaza y Próceres en Tegucigalpa. PriceSmart El Sauce 6604 permanece excluido. Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
 
 ## Operación recurrente vigente
