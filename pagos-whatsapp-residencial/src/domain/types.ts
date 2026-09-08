@@ -52,6 +52,7 @@ export interface PaymentRecord {
   sourceMessageId: string;
   phone: string;
   mediaId?: string;
+  receiptFileId?: string;
   bank: string;
   depositor?: string;
   transactionDate?: string;
