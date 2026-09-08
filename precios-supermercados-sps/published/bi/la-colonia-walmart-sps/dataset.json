@@ -1,0 +1,4604 @@
+{
+  "comparison_policy": "fail_closed_strong_identity_and_commercial_consistency",
+  "manifest": {
+    "common_basket_product_count": 92,
+    "comparison_policy": "fail_closed_strong_identity_and_commercial_consistency",
+    "current_price_observations": 24293,
+    "excluded_group_counts": {
+      "not_comparable": 1468,
+      "price_missing_or_unavailable_in_scope": 35,
+      "review_required": 1914
+    },
+    "files": [
+      "publication.json",
+      "offers.csv",
+      "products.csv",
+      "common-basket.csv",
+      "excluded-groups.csv"
+    ],
+    "generated_at_utc": "2026-09-08T16:21:47.304430Z",
+    "homologation_profiles": 26489,
+    "safe_offers_published": 184,
+    "safe_products_published": 92,
+    "schema": "precios-sps-publication-manifest/v1",
+    "scope": [
+      {
+        "location_id": "la_colonia_sps",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "location_id": "walmart_sps",
+        "supermarket_id": "walmart"
+      }
+    ],
+    "source_backend": "turso",
+    "source_product_records": 26489
+  },
+  "publication": {
+    "common_basket": [
+      {
+        "denominator_definition": "products_comparable_and_priced_in_every_supermarket_in_scope",
+        "is_cheapest": false,
+        "location_id": "la_colonia_sps",
+        "product_count": 92,
+        "supermarket_id": "la_colonia",
+        "total": "9935.36"
+      },
+      {
+        "denominator_definition": "products_comparable_and_priced_in_every_supermarket_in_scope",
+        "is_cheapest": true,
+        "location_id": "walmart_sps",
+        "product_count": 92,
+        "supermarket_id": "walmart",
+        "total": "9842.48"
+      }
+    ],
+    "comparison_policy": "fail_closed_strong_identity_and_commercial_consistency",
+    "currency": "HNL",
+    "excluded_group_counts": {
+      "not_comparable": 1468,
+      "price_missing_or_unavailable_in_scope": 35,
+      "review_required": 1914
+    },
+    "offers": [
+      {
+        "canonical_gtin": "00000075001629",
+        "canonical_product_id": "prod_gtin_00000075001629",
+        "current_price": "41.70",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:9408",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00000075001629",
+        "canonical_product_id": "prod_gtin_00000075001629",
+        "current_price": "41.70",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:20727",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00000075076719",
+        "canonical_product_id": "prod_gtin_00000075076719",
+        "current_price": "109.35",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:510",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00000075076719",
+        "canonical_product_id": "prod_gtin_00000075076719",
+        "current_price": "122.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23550",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00041331011051",
+        "canonical_product_id": "prod_gtin_00041331011051",
+        "current_price": "197.56",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2868",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00041331011051",
+        "canonical_product_id": "prod_gtin_00041331011051",
+        "current_price": "233.40",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:20760",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00041331038041",
+        "canonical_product_id": "prod_gtin_00041331038041",
+        "current_price": "126.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:3281",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00041331038041",
+        "canonical_product_id": "prod_gtin_00041331038041",
+        "current_price": "124.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:20781",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00085000019894",
+        "canonical_product_id": "prod_gtin_00085000019894",
+        "current_price": "345.00",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:7169",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00085000019894",
+        "canonical_product_id": "prod_gtin_00085000019894",
+        "current_price": "345.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:24132",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00099176132608",
+        "canonical_product_id": "prod_gtin_00099176132608",
+        "current_price": "33.90",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:4541",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00099176132608",
+        "canonical_product_id": "prod_gtin_00099176132608",
+        "current_price": "33.80",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23007",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00099176132905",
+        "canonical_product_id": "prod_gtin_00099176132905",
+        "current_price": "33.90",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:4543",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00099176132905",
+        "canonical_product_id": "prod_gtin_00099176132905",
+        "current_price": "33.80",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23036",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00099176231813",
+        "canonical_product_id": "prod_gtin_00099176231813",
+        "current_price": "196.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:3868",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00099176231813",
+        "canonical_product_id": "prod_gtin_00099176231813",
+        "current_price": "193.50",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23045",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00099176231837",
+        "canonical_product_id": "prod_gtin_00099176231837",
+        "current_price": "487.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:3869",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00099176231837",
+        "canonical_product_id": "prod_gtin_00099176231837",
+        "current_price": "456.10",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23047",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00099176232223",
+        "canonical_product_id": "prod_gtin_00099176232223",
+        "current_price": "73.90",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:3872",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00099176232223",
+        "canonical_product_id": "prod_gtin_00099176232223",
+        "current_price": "70.60",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23050",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00099176264163",
+        "canonical_product_id": "prod_gtin_00099176264163",
+        "current_price": "44.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:3768",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00099176264163",
+        "canonical_product_id": "prod_gtin_00099176264163",
+        "current_price": "44.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23074",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00707517002182",
+        "canonical_product_id": "prod_gtin_00707517002182",
+        "current_price": "60.00",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:8382",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00707517002182",
+        "canonical_product_id": "prod_gtin_00707517002182",
+        "current_price": "60.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:24285",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00721282410102",
+        "canonical_product_id": "prod_gtin_00721282410102",
+        "current_price": "19.95",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:4874",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00721282410102",
+        "canonical_product_id": "prod_gtin_00721282410102",
+        "current_price": "20.50",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:27280",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00748757007506",
+        "canonical_product_id": "prod_gtin_00748757007506",
+        "current_price": "39.01",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2648",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00748757007506",
+        "canonical_product_id": "prod_gtin_00748757007506",
+        "current_price": "38.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:24335",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00750894621217",
+        "canonical_product_id": "prod_gtin_00750894621217",
+        "current_price": "103.62",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:4441",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00750894621217",
+        "canonical_product_id": "prod_gtin_00750894621217",
+        "current_price": "115.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:28321",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00750894621491",
+        "canonical_product_id": "prod_gtin_00750894621491",
+        "current_price": "35.90",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:4633",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00750894621491",
+        "canonical_product_id": "prod_gtin_00750894621491",
+        "current_price": "34.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:24975",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00752290060058",
+        "canonical_product_id": "prod_gtin_00752290060058",
+        "current_price": "13.75",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:8924",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00752290060058",
+        "canonical_product_id": "prod_gtin_00752290060058",
+        "current_price": "11.80",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:25087",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00753081008914",
+        "canonical_product_id": "prod_gtin_00753081008914",
+        "current_price": "26.65",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6037",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00753081008914",
+        "canonical_product_id": "prod_gtin_00753081008914",
+        "current_price": "27.80",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:21604",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00753081010801",
+        "canonical_product_id": "prod_gtin_00753081010801",
+        "current_price": "10.10",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:8066",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00753081010801",
+        "canonical_product_id": "prod_gtin_00753081010801",
+        "current_price": "10.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:27048",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00787003000649",
+        "canonical_product_id": "prod_gtin_00787003000649",
+        "current_price": "125.35",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2626",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00787003000649",
+        "canonical_product_id": "prod_gtin_00787003000649",
+        "current_price": "125.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26085",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00795893303221",
+        "canonical_product_id": "prod_gtin_00795893303221",
+        "current_price": "155.00",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:863",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00795893303221",
+        "canonical_product_id": "prod_gtin_00795893303221",
+        "current_price": "155.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26149",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00803275305593",
+        "canonical_product_id": "prod_gtin_00803275305593",
+        "current_price": "27.90",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:1988",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00803275305593",
+        "canonical_product_id": "prod_gtin_00803275305593",
+        "current_price": "32.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26172",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00884394002495",
+        "canonical_product_id": "prod_gtin_00884394002495",
+        "current_price": "101.50",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:5455",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00884394002495",
+        "canonical_product_id": "prod_gtin_00884394002495",
+        "current_price": "77.90",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26824",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "00884394002518",
+        "canonical_product_id": "prod_gtin_00884394002518",
+        "current_price": "39.75",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:5456",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "00884394002518",
+        "canonical_product_id": "prod_gtin_00884394002518",
+        "current_price": "35.50",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26825",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "04022025811030",
+        "canonical_product_id": "prod_gtin_04022025811030",
+        "current_price": "420.95",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6857",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "04022025811030",
+        "canonical_product_id": "prod_gtin_04022025811030",
+        "current_price": "443.80",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:28213",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "06111239100042",
+        "canonical_product_id": "prod_gtin_06111239100042",
+        "current_price": "50.95",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:8343",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "06111239100042",
+        "canonical_product_id": "prod_gtin_06111239100042",
+        "current_price": "53.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:29139",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07401001500644",
+        "canonical_product_id": "prod_gtin_07401001500644",
+        "current_price": "83.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:7174",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07401001500644",
+        "canonical_product_id": "prod_gtin_07401001500644",
+        "current_price": "80.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31457",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07401004202163",
+        "canonical_product_id": "prod_gtin_07401004202163",
+        "current_price": "35.60",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:5527",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07401004202163",
+        "canonical_product_id": "prod_gtin_07401004202163",
+        "current_price": "34.90",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31477",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07401006106032",
+        "canonical_product_id": "prod_gtin_07401006106032",
+        "current_price": "17.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:8966",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07401006106032",
+        "canonical_product_id": "prod_gtin_07401006106032",
+        "current_price": "15.73",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31516",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07401063400029",
+        "canonical_product_id": "prod_gtin_07401063400029",
+        "current_price": "226.55",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:8210",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07401063400029",
+        "canonical_product_id": "prod_gtin_07401063400029",
+        "current_price": "232.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31532",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07401090800649",
+        "canonical_product_id": "prod_gtin_07401090800649",
+        "current_price": "187.25",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:3048",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07401090800649",
+        "canonical_product_id": "prod_gtin_07401090800649",
+        "current_price": "174.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:22462",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07404003390015",
+        "canonical_product_id": "prod_gtin_07404003390015",
+        "current_price": "140.60",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:7688",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07404003390015",
+        "canonical_product_id": "prod_gtin_07404003390015",
+        "current_price": "152.90",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26854",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07404003390039",
+        "canonical_product_id": "prod_gtin_07404003390039",
+        "current_price": "189.25",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:7689",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07404003390039",
+        "canonical_product_id": "prod_gtin_07404003390039",
+        "current_price": "203.90",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26853",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07406189002959",
+        "canonical_product_id": "prod_gtin_07406189002959",
+        "current_price": "19.25",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6642",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07406189002959",
+        "canonical_product_id": "prod_gtin_07406189002959",
+        "current_price": "20.20",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31663",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07411000204238",
+        "canonical_product_id": "prod_gtin_07411000204238",
+        "current_price": "27.15",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2310",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07411000204238",
+        "canonical_product_id": "prod_gtin_07411000204238",
+        "current_price": "26.70",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26837",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07411000204818",
+        "canonical_product_id": "prod_gtin_07411000204818",
+        "current_price": "92.90",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2299",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07411000204818",
+        "canonical_product_id": "prod_gtin_07411000204818",
+        "current_price": "102.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23499",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07411002505616",
+        "canonical_product_id": "prod_gtin_07411002505616",
+        "current_price": "23.90",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:7218",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07411002505616",
+        "canonical_product_id": "prod_gtin_07411002505616",
+        "current_price": "23.20",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26022",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421000811633",
+        "canonical_product_id": "prod_gtin_07421000811633",
+        "current_price": "67.45",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:744",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421000811633",
+        "canonical_product_id": "prod_gtin_07421000811633",
+        "current_price": "60.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31797",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421000811640",
+        "canonical_product_id": "prod_gtin_07421000811640",
+        "current_price": "79.15",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:740",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421000811640",
+        "canonical_product_id": "prod_gtin_07421000811640",
+        "current_price": "53.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31798",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421000823254",
+        "canonical_product_id": "prod_gtin_07421000823254",
+        "current_price": "36.25",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:735",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421000823254",
+        "canonical_product_id": "prod_gtin_07421000823254",
+        "current_price": "35.90",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31802",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421000826217",
+        "canonical_product_id": "prod_gtin_07421000826217",
+        "current_price": "56.40",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:1221",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421000826217",
+        "canonical_product_id": "prod_gtin_07421000826217",
+        "current_price": "52.50",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31803",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421000830900",
+        "canonical_product_id": "prod_gtin_07421000830900",
+        "current_price": "67.45",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:742",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421000830900",
+        "canonical_product_id": "prod_gtin_07421000830900",
+        "current_price": "60.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31807",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421000843030",
+        "canonical_product_id": "prod_gtin_07421000843030",
+        "current_price": "47.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:1212",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421000843030",
+        "canonical_product_id": "prod_gtin_07421000843030",
+        "current_price": "42.80",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31821",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421001641338",
+        "canonical_product_id": "prod_gtin_07421001641338",
+        "current_price": "200.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:4848",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421001641338",
+        "canonical_product_id": "prod_gtin_07421001641338",
+        "current_price": "162.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:31901",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421600302821",
+        "canonical_product_id": "prod_gtin_07421600302821",
+        "current_price": "11.50",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:7678",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421600302821",
+        "canonical_product_id": "prod_gtin_07421600302821",
+        "current_price": "11.50",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:32011",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421600304672",
+        "canonical_product_id": "prod_gtin_07421600304672",
+        "current_price": "14.70",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:7691",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421600304672",
+        "canonical_product_id": "prod_gtin_07421600304672",
+        "current_price": "10.90",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:32021",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421600304702",
+        "canonical_product_id": "prod_gtin_07421600304702",
+        "current_price": "14.70",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:7693",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421600304702",
+        "canonical_product_id": "prod_gtin_07421600304702",
+        "current_price": "10.90",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:32023",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421800110172",
+        "canonical_product_id": "prod_gtin_07421800110172",
+        "current_price": "258.35",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:7842",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421800110172",
+        "canonical_product_id": "prod_gtin_07421800110172",
+        "current_price": "200.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:27920",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07421830790115",
+        "canonical_product_id": "prod_gtin_07421830790115",
+        "current_price": "113.00",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:5985",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07421830790115",
+        "canonical_product_id": "prod_gtin_07421830790115",
+        "current_price": "113.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:27586",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07422540000136",
+        "canonical_product_id": "prod_gtin_07422540000136",
+        "current_price": "32.30",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:729",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07422540000136",
+        "canonical_product_id": "prod_gtin_07422540000136",
+        "current_price": "32.10",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:32194",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07422540015123",
+        "canonical_product_id": "prod_gtin_07422540015123",
+        "current_price": "43.00",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:791",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07422540015123",
+        "canonical_product_id": "prod_gtin_07422540015123",
+        "current_price": "43.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:32198",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07422540015161",
+        "canonical_product_id": "prod_gtin_07422540015161",
+        "current_price": "34.30",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:811",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07422540015161",
+        "canonical_product_id": "prod_gtin_07422540015161",
+        "current_price": "39.80",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:32201",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07422540030515",
+        "canonical_product_id": "prod_gtin_07422540030515",
+        "current_price": "24.50",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:721",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07422540030515",
+        "canonical_product_id": "prod_gtin_07422540030515",
+        "current_price": "22.80",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26391",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07423407509106",
+        "canonical_product_id": "prod_gtin_07423407509106",
+        "current_price": "69.95",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:1042",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07423407509106",
+        "canonical_product_id": "prod_gtin_07423407509106",
+        "current_price": "72.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:21699",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07429905700878",
+        "canonical_product_id": "prod_gtin_07429905700878",
+        "current_price": "46.50",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:8089",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07429905700878",
+        "canonical_product_id": "prod_gtin_07429905700878",
+        "current_price": "45.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:18769",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07441001607363",
+        "canonical_product_id": "prod_gtin_07441001607363",
+        "current_price": "104.85",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:1192",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07441001607363",
+        "canonical_product_id": "prod_gtin_07441001607363",
+        "current_price": "103.50",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:18790",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07441001607400",
+        "canonical_product_id": "prod_gtin_07441001607400",
+        "current_price": "89.01",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:1190",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07441001607400",
+        "canonical_product_id": "prod_gtin_07441001607400",
+        "current_price": "99.60",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:18793",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07441001609541",
+        "canonical_product_id": "prod_gtin_07441001609541",
+        "current_price": "175.95",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:664",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07441001609541",
+        "canonical_product_id": "prod_gtin_07441001609541",
+        "current_price": "204.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:18799",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07441001637032",
+        "canonical_product_id": "prod_gtin_07441001637032",
+        "current_price": "25.50",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:1442",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07441001637032",
+        "canonical_product_id": "prod_gtin_07441001637032",
+        "current_price": "23.10",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23264",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07441014704257",
+        "canonical_product_id": "prod_gtin_07441014704257",
+        "current_price": "31.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2639",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07441014704257",
+        "canonical_product_id": "prod_gtin_07441014704257",
+        "current_price": "29.30",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:21481",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07441029500301",
+        "canonical_product_id": "prod_gtin_07441029500301",
+        "current_price": "54.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2336",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07441029500301",
+        "canonical_product_id": "prod_gtin_07441029500301",
+        "current_price": "52.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:18917",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07441029556025",
+        "canonical_product_id": "prod_gtin_07441029556025",
+        "current_price": "60.05",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2338",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07441029556025",
+        "canonical_product_id": "prod_gtin_07441029556025",
+        "current_price": "55.80",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:18947",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07441042510004",
+        "canonical_product_id": "prod_gtin_07441042510004",
+        "current_price": "46.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:4718",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07441042510004",
+        "canonical_product_id": "prod_gtin_07441042510004",
+        "current_price": "45.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:18988",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07452017663434",
+        "canonical_product_id": "prod_gtin_07452017663434",
+        "current_price": "9.95",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:4605",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07452017663434",
+        "canonical_product_id": "prod_gtin_07452017663434",
+        "current_price": "10.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:19162",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07500435155847",
+        "canonical_product_id": "prod_gtin_07500435155847",
+        "current_price": "224.40",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2543",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07500435155847",
+        "canonical_product_id": "prod_gtin_07500435155847",
+        "current_price": "246.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:19217",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07500435155922",
+        "canonical_product_id": "prod_gtin_07500435155922",
+        "current_price": "224.50",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:1962",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07500435155922",
+        "canonical_product_id": "prod_gtin_07500435155922",
+        "current_price": "233.80",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:19221",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07500435182225",
+        "canonical_product_id": "prod_gtin_07500435182225",
+        "current_price": "353.40",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:5781",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07500435182225",
+        "canonical_product_id": "prod_gtin_07500435182225",
+        "current_price": "346.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23340",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07500435183697",
+        "canonical_product_id": "prod_gtin_07500435183697",
+        "current_price": "125.90",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2122",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07500435183697",
+        "canonical_product_id": "prod_gtin_07500435183697",
+        "current_price": "100.50",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:21717",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07500435252089",
+        "canonical_product_id": "prod_gtin_07500435252089",
+        "current_price": "303.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6313",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07500435252089",
+        "canonical_product_id": "prod_gtin_07500435252089",
+        "current_price": "270.10",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26923",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07500435252133",
+        "canonical_product_id": "prod_gtin_07500435252133",
+        "current_price": "163.20",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6312",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07500435252133",
+        "canonical_product_id": "prod_gtin_07500435252133",
+        "current_price": "159.20",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26924",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07500435254137",
+        "canonical_product_id": "prod_gtin_07500435254137",
+        "current_price": "90.75",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6314",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07500435254137",
+        "canonical_product_id": "prod_gtin_07500435254137",
+        "current_price": "80.80",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:28340",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07500443005950",
+        "canonical_product_id": "prod_gtin_07500443005950",
+        "current_price": "36.68",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2945",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07500443005950",
+        "canonical_product_id": "prod_gtin_07500443005950",
+        "current_price": "40.40",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23850",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07501008041703",
+        "canonical_product_id": "prod_gtin_07501008041703",
+        "current_price": "168.80",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2935",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07501008041703",
+        "canonical_product_id": "prod_gtin_07501008041703",
+        "current_price": "141.50",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:22678",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07501018310103",
+        "canonical_product_id": "prod_gtin_07501018310103",
+        "current_price": "14.35",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:5025",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07501018310103",
+        "canonical_product_id": "prod_gtin_07501018310103",
+        "current_price": "13.40",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:28909",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07501018311353",
+        "canonical_product_id": "prod_gtin_07501018311353",
+        "current_price": "42.15",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:5026",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07501018311353",
+        "canonical_product_id": "prod_gtin_07501018311353",
+        "current_price": "48.50",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:28903",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07501035911017",
+        "canonical_product_id": "prod_gtin_07501035911017",
+        "current_price": "58.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:1078",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07501035911017",
+        "canonical_product_id": "prod_gtin_07501035911017",
+        "current_price": "58.40",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:19437",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07501199413242",
+        "canonical_product_id": "prod_gtin_07501199413242",
+        "current_price": "346.52",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:7329",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07501199413242",
+        "canonical_product_id": "prod_gtin_07501199413242",
+        "current_price": "350.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:23281",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07503037746437",
+        "canonical_product_id": "prod_gtin_07503037746437",
+        "current_price": "7.25",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:3559",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07503037746437",
+        "canonical_product_id": "prod_gtin_07503037746437",
+        "current_price": "7.50",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:28232",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07509546015842",
+        "canonical_product_id": "prod_gtin_07509546015842",
+        "current_price": "98.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6023",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07509546015842",
+        "canonical_product_id": "prod_gtin_07509546015842",
+        "current_price": "94.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:19809",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07509546056111",
+        "canonical_product_id": "prod_gtin_07509546056111",
+        "current_price": "81.80",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:1087",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07509546056111",
+        "canonical_product_id": "prod_gtin_07509546056111",
+        "current_price": "81.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:19821",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07509546076195",
+        "canonical_product_id": "prod_gtin_07509546076195",
+        "current_price": "109.95",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:3776",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07509546076195",
+        "canonical_product_id": "prod_gtin_07509546076195",
+        "current_price": "111.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:19846",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07610113025239",
+        "canonical_product_id": "prod_gtin_07610113025239",
+        "current_price": "268.56",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6301",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07610113025239",
+        "canonical_product_id": "prod_gtin_07610113025239",
+        "current_price": "301.30",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:27279",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07622202008450",
+        "canonical_product_id": "prod_gtin_07622202008450",
+        "current_price": "6.05",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:5980",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07622202008450",
+        "canonical_product_id": "prod_gtin_07622202008450",
+        "current_price": "7.30",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26370",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07622202338656",
+        "canonical_product_id": "prod_gtin_07622202338656",
+        "current_price": "33.15",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:3014",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07622202338656",
+        "canonical_product_id": "prod_gtin_07622202338656",
+        "current_price": "32.50",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:29153",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07702425632189",
+        "canonical_product_id": "prod_gtin_07702425632189",
+        "current_price": "68.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2810",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07702425632189",
+        "canonical_product_id": "prod_gtin_07702425632189",
+        "current_price": "68.00",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:26274",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07702425934108",
+        "canonical_product_id": "prod_gtin_07702425934108",
+        "current_price": "26.90",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6318",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07702425934108",
+        "canonical_product_id": "prod_gtin_07702425934108",
+        "current_price": "19.05",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:25424",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07750885019606",
+        "canonical_product_id": "prod_gtin_07750885019606",
+        "current_price": "61.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:8636",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07750885019606",
+        "canonical_product_id": "prod_gtin_07750885019606",
+        "current_price": "57.20",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:22300",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07804320706009",
+        "canonical_product_id": "prod_gtin_07804320706009",
+        "current_price": "242.05",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6992",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07804320706009",
+        "canonical_product_id": "prod_gtin_07804320706009",
+        "current_price": "285.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:20170",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07804320985633",
+        "canonical_product_id": "prod_gtin_07804320985633",
+        "current_price": "275.35",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:6692",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07804320985633",
+        "canonical_product_id": "prod_gtin_07804320985633",
+        "current_price": "297.00",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:20171",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "07891024030806",
+        "canonical_product_id": "prod_gtin_07891024030806",
+        "current_price": "174.95",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:564",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "07891024030806",
+        "canonical_product_id": "prod_gtin_07891024030806",
+        "current_price": "173.10",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:20190",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "08410352910254",
+        "canonical_product_id": "prod_gtin_08410352910254",
+        "current_price": "285.60",
+        "is_best_price": false,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:3310",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "08410352910254",
+        "canonical_product_id": "prod_gtin_08410352910254",
+        "current_price": "271.40",
+        "is_best_price": true,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:25623",
+        "supermarket_id": "walmart"
+      },
+      {
+        "canonical_gtin": "08410352910384",
+        "canonical_product_id": "prod_gtin_08410352910384",
+        "current_price": "255.95",
+        "is_best_price": true,
+        "location_id": "la_colonia_sps",
+        "source_record_id": "la_colonia:2861",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "canonical_gtin": "08410352910384",
+        "canonical_product_id": "prod_gtin_08410352910384",
+        "current_price": "256.30",
+        "is_best_price": false,
+        "location_id": "walmart_sps",
+        "source_record_id": "walmart:25626",
+        "supermarket_id": "walmart"
+      }
+    ],
+    "products": [
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "41.70",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "00000075001629",
+        "canonical_product_id": "prod_gtin_00000075001629",
+        "highest_price": "41.70",
+        "savings_vs_highest": "0.00",
+        "savings_vs_highest_pct": "0.00",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "109.35",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "00000075076719",
+        "canonical_product_id": "prod_gtin_00000075076719",
+        "highest_price": "122.00",
+        "savings_vs_highest": "12.65",
+        "savings_vs_highest_pct": "10.37",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "197.56",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "00041331011051",
+        "canonical_product_id": "prod_gtin_00041331011051",
+        "highest_price": "233.40",
+        "savings_vs_highest": "35.84",
+        "savings_vs_highest_pct": "15.36",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "124.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00041331038041",
+        "canonical_product_id": "prod_gtin_00041331038041",
+        "highest_price": "126.95",
+        "savings_vs_highest": "2.95",
+        "savings_vs_highest_pct": "2.32",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "345.00",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "00085000019894",
+        "canonical_product_id": "prod_gtin_00085000019894",
+        "highest_price": "345.00",
+        "savings_vs_highest": "0.00",
+        "savings_vs_highest_pct": "0.00",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "33.80",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00099176132608",
+        "canonical_product_id": "prod_gtin_00099176132608",
+        "highest_price": "33.90",
+        "savings_vs_highest": "0.10",
+        "savings_vs_highest_pct": "0.29",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "33.80",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00099176132905",
+        "canonical_product_id": "prod_gtin_00099176132905",
+        "highest_price": "33.90",
+        "savings_vs_highest": "0.10",
+        "savings_vs_highest_pct": "0.29",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "193.50",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00099176231813",
+        "canonical_product_id": "prod_gtin_00099176231813",
+        "highest_price": "196.95",
+        "savings_vs_highest": "3.45",
+        "savings_vs_highest_pct": "1.75",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "456.10",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00099176231837",
+        "canonical_product_id": "prod_gtin_00099176231837",
+        "highest_price": "487.95",
+        "savings_vs_highest": "31.85",
+        "savings_vs_highest_pct": "6.53",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "70.60",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00099176232223",
+        "canonical_product_id": "prod_gtin_00099176232223",
+        "highest_price": "73.90",
+        "savings_vs_highest": "3.30",
+        "savings_vs_highest_pct": "4.47",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "44.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00099176264163",
+        "canonical_product_id": "prod_gtin_00099176264163",
+        "highest_price": "44.95",
+        "savings_vs_highest": "0.95",
+        "savings_vs_highest_pct": "2.11",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "60.00",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "00707517002182",
+        "canonical_product_id": "prod_gtin_00707517002182",
+        "highest_price": "60.00",
+        "savings_vs_highest": "0.00",
+        "savings_vs_highest_pct": "0.00",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "19.95",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "00721282410102",
+        "canonical_product_id": "prod_gtin_00721282410102",
+        "highest_price": "20.50",
+        "savings_vs_highest": "0.55",
+        "savings_vs_highest_pct": "2.68",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "38.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00748757007506",
+        "canonical_product_id": "prod_gtin_00748757007506",
+        "highest_price": "39.01",
+        "savings_vs_highest": "1.01",
+        "savings_vs_highest_pct": "2.59",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "103.62",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "00750894621217",
+        "canonical_product_id": "prod_gtin_00750894621217",
+        "highest_price": "115.00",
+        "savings_vs_highest": "11.38",
+        "savings_vs_highest_pct": "9.90",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "34.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00750894621491",
+        "canonical_product_id": "prod_gtin_00750894621491",
+        "highest_price": "35.90",
+        "savings_vs_highest": "1.90",
+        "savings_vs_highest_pct": "5.29",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "11.80",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00752290060058",
+        "canonical_product_id": "prod_gtin_00752290060058",
+        "highest_price": "13.75",
+        "savings_vs_highest": "1.95",
+        "savings_vs_highest_pct": "14.18",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "26.65",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "00753081008914",
+        "canonical_product_id": "prod_gtin_00753081008914",
+        "highest_price": "27.80",
+        "savings_vs_highest": "1.15",
+        "savings_vs_highest_pct": "4.14",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "10.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00753081010801",
+        "canonical_product_id": "prod_gtin_00753081010801",
+        "highest_price": "10.10",
+        "savings_vs_highest": "0.10",
+        "savings_vs_highest_pct": "0.99",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "125.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00787003000649",
+        "canonical_product_id": "prod_gtin_00787003000649",
+        "highest_price": "125.35",
+        "savings_vs_highest": "0.35",
+        "savings_vs_highest_pct": "0.28",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "155.00",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "00795893303221",
+        "canonical_product_id": "prod_gtin_00795893303221",
+        "highest_price": "155.00",
+        "savings_vs_highest": "0.00",
+        "savings_vs_highest_pct": "0.00",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "27.90",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "00803275305593",
+        "canonical_product_id": "prod_gtin_00803275305593",
+        "highest_price": "32.00",
+        "savings_vs_highest": "4.10",
+        "savings_vs_highest_pct": "12.81",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "77.90",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00884394002495",
+        "canonical_product_id": "prod_gtin_00884394002495",
+        "highest_price": "101.50",
+        "savings_vs_highest": "23.60",
+        "savings_vs_highest_pct": "23.25",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "35.50",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "00884394002518",
+        "canonical_product_id": "prod_gtin_00884394002518",
+        "highest_price": "39.75",
+        "savings_vs_highest": "4.25",
+        "savings_vs_highest_pct": "10.69",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "420.95",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "04022025811030",
+        "canonical_product_id": "prod_gtin_04022025811030",
+        "highest_price": "443.80",
+        "savings_vs_highest": "22.85",
+        "savings_vs_highest_pct": "5.15",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "50.95",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "06111239100042",
+        "canonical_product_id": "prod_gtin_06111239100042",
+        "highest_price": "53.00",
+        "savings_vs_highest": "2.05",
+        "savings_vs_highest_pct": "3.87",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "80.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07401001500644",
+        "canonical_product_id": "prod_gtin_07401001500644",
+        "highest_price": "83.95",
+        "savings_vs_highest": "3.95",
+        "savings_vs_highest_pct": "4.71",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "34.90",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07401004202163",
+        "canonical_product_id": "prod_gtin_07401004202163",
+        "highest_price": "35.60",
+        "savings_vs_highest": "0.70",
+        "savings_vs_highest_pct": "1.97",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "15.73",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07401006106032",
+        "canonical_product_id": "prod_gtin_07401006106032",
+        "highest_price": "17.95",
+        "savings_vs_highest": "2.22",
+        "savings_vs_highest_pct": "12.37",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "226.55",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07401063400029",
+        "canonical_product_id": "prod_gtin_07401063400029",
+        "highest_price": "232.00",
+        "savings_vs_highest": "5.45",
+        "savings_vs_highest_pct": "2.35",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "174.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07401090800649",
+        "canonical_product_id": "prod_gtin_07401090800649",
+        "highest_price": "187.25",
+        "savings_vs_highest": "13.25",
+        "savings_vs_highest_pct": "7.08",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "140.60",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07404003390015",
+        "canonical_product_id": "prod_gtin_07404003390015",
+        "highest_price": "152.90",
+        "savings_vs_highest": "12.30",
+        "savings_vs_highest_pct": "8.04",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "189.25",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07404003390039",
+        "canonical_product_id": "prod_gtin_07404003390039",
+        "highest_price": "203.90",
+        "savings_vs_highest": "14.65",
+        "savings_vs_highest_pct": "7.18",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "19.25",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07406189002959",
+        "canonical_product_id": "prod_gtin_07406189002959",
+        "highest_price": "20.20",
+        "savings_vs_highest": "0.95",
+        "savings_vs_highest_pct": "4.70",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "26.70",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07411000204238",
+        "canonical_product_id": "prod_gtin_07411000204238",
+        "highest_price": "27.15",
+        "savings_vs_highest": "0.45",
+        "savings_vs_highest_pct": "1.66",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "92.90",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07411000204818",
+        "canonical_product_id": "prod_gtin_07411000204818",
+        "highest_price": "102.00",
+        "savings_vs_highest": "9.10",
+        "savings_vs_highest_pct": "8.92",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "23.20",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07411002505616",
+        "canonical_product_id": "prod_gtin_07411002505616",
+        "highest_price": "23.90",
+        "savings_vs_highest": "0.70",
+        "savings_vs_highest_pct": "2.93",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "60.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07421000811633",
+        "canonical_product_id": "prod_gtin_07421000811633",
+        "highest_price": "67.45",
+        "savings_vs_highest": "7.45",
+        "savings_vs_highest_pct": "11.05",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "53.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07421000811640",
+        "canonical_product_id": "prod_gtin_07421000811640",
+        "highest_price": "79.15",
+        "savings_vs_highest": "26.15",
+        "savings_vs_highest_pct": "33.04",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "35.90",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07421000823254",
+        "canonical_product_id": "prod_gtin_07421000823254",
+        "highest_price": "36.25",
+        "savings_vs_highest": "0.35",
+        "savings_vs_highest_pct": "0.97",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "52.50",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07421000826217",
+        "canonical_product_id": "prod_gtin_07421000826217",
+        "highest_price": "56.40",
+        "savings_vs_highest": "3.90",
+        "savings_vs_highest_pct": "6.91",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "60.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07421000830900",
+        "canonical_product_id": "prod_gtin_07421000830900",
+        "highest_price": "67.45",
+        "savings_vs_highest": "7.45",
+        "savings_vs_highest_pct": "11.05",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "42.80",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07421000843030",
+        "canonical_product_id": "prod_gtin_07421000843030",
+        "highest_price": "47.95",
+        "savings_vs_highest": "5.15",
+        "savings_vs_highest_pct": "10.74",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "162.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07421001641338",
+        "canonical_product_id": "prod_gtin_07421001641338",
+        "highest_price": "200.95",
+        "savings_vs_highest": "38.95",
+        "savings_vs_highest_pct": "19.38",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "11.50",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07421600302821",
+        "canonical_product_id": "prod_gtin_07421600302821",
+        "highest_price": "11.50",
+        "savings_vs_highest": "0.00",
+        "savings_vs_highest_pct": "0.00",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "10.90",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07421600304672",
+        "canonical_product_id": "prod_gtin_07421600304672",
+        "highest_price": "14.70",
+        "savings_vs_highest": "3.80",
+        "savings_vs_highest_pct": "25.85",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "10.90",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07421600304702",
+        "canonical_product_id": "prod_gtin_07421600304702",
+        "highest_price": "14.70",
+        "savings_vs_highest": "3.80",
+        "savings_vs_highest_pct": "25.85",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "200.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07421800110172",
+        "canonical_product_id": "prod_gtin_07421800110172",
+        "highest_price": "258.35",
+        "savings_vs_highest": "58.35",
+        "savings_vs_highest_pct": "22.59",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "113.00",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07421830790115",
+        "canonical_product_id": "prod_gtin_07421830790115",
+        "highest_price": "113.00",
+        "savings_vs_highest": "0.00",
+        "savings_vs_highest_pct": "0.00",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "32.10",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07422540000136",
+        "canonical_product_id": "prod_gtin_07422540000136",
+        "highest_price": "32.30",
+        "savings_vs_highest": "0.20",
+        "savings_vs_highest_pct": "0.62",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "43.00",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07422540015123",
+        "canonical_product_id": "prod_gtin_07422540015123",
+        "highest_price": "43.00",
+        "savings_vs_highest": "0.00",
+        "savings_vs_highest_pct": "0.00",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "34.30",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07422540015161",
+        "canonical_product_id": "prod_gtin_07422540015161",
+        "highest_price": "39.80",
+        "savings_vs_highest": "5.50",
+        "savings_vs_highest_pct": "13.82",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "22.80",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07422540030515",
+        "canonical_product_id": "prod_gtin_07422540030515",
+        "highest_price": "24.50",
+        "savings_vs_highest": "1.70",
+        "savings_vs_highest_pct": "6.94",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "69.95",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07423407509106",
+        "canonical_product_id": "prod_gtin_07423407509106",
+        "highest_price": "72.00",
+        "savings_vs_highest": "2.05",
+        "savings_vs_highest_pct": "2.85",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "45.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07429905700878",
+        "canonical_product_id": "prod_gtin_07429905700878",
+        "highest_price": "46.50",
+        "savings_vs_highest": "1.50",
+        "savings_vs_highest_pct": "3.23",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "103.50",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07441001607363",
+        "canonical_product_id": "prod_gtin_07441001607363",
+        "highest_price": "104.85",
+        "savings_vs_highest": "1.35",
+        "savings_vs_highest_pct": "1.29",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "89.01",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07441001607400",
+        "canonical_product_id": "prod_gtin_07441001607400",
+        "highest_price": "99.60",
+        "savings_vs_highest": "10.59",
+        "savings_vs_highest_pct": "10.63",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "175.95",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07441001609541",
+        "canonical_product_id": "prod_gtin_07441001609541",
+        "highest_price": "204.00",
+        "savings_vs_highest": "28.05",
+        "savings_vs_highest_pct": "13.75",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "23.10",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07441001637032",
+        "canonical_product_id": "prod_gtin_07441001637032",
+        "highest_price": "25.50",
+        "savings_vs_highest": "2.40",
+        "savings_vs_highest_pct": "9.41",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "29.30",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07441014704257",
+        "canonical_product_id": "prod_gtin_07441014704257",
+        "highest_price": "31.95",
+        "savings_vs_highest": "2.65",
+        "savings_vs_highest_pct": "8.29",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "52.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07441029500301",
+        "canonical_product_id": "prod_gtin_07441029500301",
+        "highest_price": "54.95",
+        "savings_vs_highest": "2.95",
+        "savings_vs_highest_pct": "5.37",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "55.80",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07441029556025",
+        "canonical_product_id": "prod_gtin_07441029556025",
+        "highest_price": "60.05",
+        "savings_vs_highest": "4.25",
+        "savings_vs_highest_pct": "7.08",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "45.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07441042510004",
+        "canonical_product_id": "prod_gtin_07441042510004",
+        "highest_price": "46.95",
+        "savings_vs_highest": "1.95",
+        "savings_vs_highest_pct": "4.15",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "9.95",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07452017663434",
+        "canonical_product_id": "prod_gtin_07452017663434",
+        "highest_price": "10.00",
+        "savings_vs_highest": "0.05",
+        "savings_vs_highest_pct": "0.50",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "224.40",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07500435155847",
+        "canonical_product_id": "prod_gtin_07500435155847",
+        "highest_price": "246.00",
+        "savings_vs_highest": "21.60",
+        "savings_vs_highest_pct": "8.78",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "224.50",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07500435155922",
+        "canonical_product_id": "prod_gtin_07500435155922",
+        "highest_price": "233.80",
+        "savings_vs_highest": "9.30",
+        "savings_vs_highest_pct": "3.98",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "346.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07500435182225",
+        "canonical_product_id": "prod_gtin_07500435182225",
+        "highest_price": "353.40",
+        "savings_vs_highest": "7.40",
+        "savings_vs_highest_pct": "2.09",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "100.50",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07500435183697",
+        "canonical_product_id": "prod_gtin_07500435183697",
+        "highest_price": "125.90",
+        "savings_vs_highest": "25.40",
+        "savings_vs_highest_pct": "20.17",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "270.10",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07500435252089",
+        "canonical_product_id": "prod_gtin_07500435252089",
+        "highest_price": "303.95",
+        "savings_vs_highest": "33.85",
+        "savings_vs_highest_pct": "11.14",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "159.20",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07500435252133",
+        "canonical_product_id": "prod_gtin_07500435252133",
+        "highest_price": "163.20",
+        "savings_vs_highest": "4.00",
+        "savings_vs_highest_pct": "2.45",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "80.80",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07500435254137",
+        "canonical_product_id": "prod_gtin_07500435254137",
+        "highest_price": "90.75",
+        "savings_vs_highest": "9.95",
+        "savings_vs_highest_pct": "10.96",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "36.68",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07500443005950",
+        "canonical_product_id": "prod_gtin_07500443005950",
+        "highest_price": "40.40",
+        "savings_vs_highest": "3.72",
+        "savings_vs_highest_pct": "9.21",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "141.50",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07501008041703",
+        "canonical_product_id": "prod_gtin_07501008041703",
+        "highest_price": "168.80",
+        "savings_vs_highest": "27.30",
+        "savings_vs_highest_pct": "16.17",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "13.40",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07501018310103",
+        "canonical_product_id": "prod_gtin_07501018310103",
+        "highest_price": "14.35",
+        "savings_vs_highest": "0.95",
+        "savings_vs_highest_pct": "6.62",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "42.15",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07501018311353",
+        "canonical_product_id": "prod_gtin_07501018311353",
+        "highest_price": "48.50",
+        "savings_vs_highest": "6.35",
+        "savings_vs_highest_pct": "13.09",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "58.40",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07501035911017",
+        "canonical_product_id": "prod_gtin_07501035911017",
+        "highest_price": "58.95",
+        "savings_vs_highest": "0.55",
+        "savings_vs_highest_pct": "0.93",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "346.52",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07501199413242",
+        "canonical_product_id": "prod_gtin_07501199413242",
+        "highest_price": "350.00",
+        "savings_vs_highest": "3.48",
+        "savings_vs_highest_pct": "0.99",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "7.25",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07503037746437",
+        "canonical_product_id": "prod_gtin_07503037746437",
+        "highest_price": "7.50",
+        "savings_vs_highest": "0.25",
+        "savings_vs_highest_pct": "3.33",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "94.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07509546015842",
+        "canonical_product_id": "prod_gtin_07509546015842",
+        "highest_price": "98.95",
+        "savings_vs_highest": "4.95",
+        "savings_vs_highest_pct": "5.00",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "81.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07509546056111",
+        "canonical_product_id": "prod_gtin_07509546056111",
+        "highest_price": "81.80",
+        "savings_vs_highest": "0.80",
+        "savings_vs_highest_pct": "0.98",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "109.95",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07509546076195",
+        "canonical_product_id": "prod_gtin_07509546076195",
+        "highest_price": "111.00",
+        "savings_vs_highest": "1.05",
+        "savings_vs_highest_pct": "0.95",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "268.56",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07610113025239",
+        "canonical_product_id": "prod_gtin_07610113025239",
+        "highest_price": "301.30",
+        "savings_vs_highest": "32.74",
+        "savings_vs_highest_pct": "10.87",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "6.05",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07622202008450",
+        "canonical_product_id": "prod_gtin_07622202008450",
+        "highest_price": "7.30",
+        "savings_vs_highest": "1.25",
+        "savings_vs_highest_pct": "17.12",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "32.50",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07622202338656",
+        "canonical_product_id": "prod_gtin_07622202338656",
+        "highest_price": "33.15",
+        "savings_vs_highest": "0.65",
+        "savings_vs_highest_pct": "1.96",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "68.00",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07702425632189",
+        "canonical_product_id": "prod_gtin_07702425632189",
+        "highest_price": "68.95",
+        "savings_vs_highest": "0.95",
+        "savings_vs_highest_pct": "1.38",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "19.05",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07702425934108",
+        "canonical_product_id": "prod_gtin_07702425934108",
+        "highest_price": "26.90",
+        "savings_vs_highest": "7.85",
+        "savings_vs_highest_pct": "29.18",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "57.20",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07750885019606",
+        "canonical_product_id": "prod_gtin_07750885019606",
+        "highest_price": "61.95",
+        "savings_vs_highest": "4.75",
+        "savings_vs_highest_pct": "7.67",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "242.05",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07804320706009",
+        "canonical_product_id": "prod_gtin_07804320706009",
+        "highest_price": "285.00",
+        "savings_vs_highest": "42.95",
+        "savings_vs_highest_pct": "15.07",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "275.35",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "07804320985633",
+        "canonical_product_id": "prod_gtin_07804320985633",
+        "highest_price": "297.00",
+        "savings_vs_highest": "21.65",
+        "savings_vs_highest_pct": "7.29",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "173.10",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "07891024030806",
+        "canonical_product_id": "prod_gtin_07891024030806",
+        "highest_price": "174.95",
+        "savings_vs_highest": "1.85",
+        "savings_vs_highest_pct": "1.06",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "walmart_sps",
+        "best_price": "271.40",
+        "best_supermarket_id": "walmart",
+        "canonical_gtin": "08410352910254",
+        "canonical_product_id": "prod_gtin_08410352910254",
+        "highest_price": "285.60",
+        "savings_vs_highest": "14.20",
+        "savings_vs_highest_pct": "4.97",
+        "supermarket_count": 2
+      },
+      {
+        "best_location_id": "la_colonia_sps",
+        "best_price": "255.95",
+        "best_supermarket_id": "la_colonia",
+        "canonical_gtin": "08410352910384",
+        "canonical_product_id": "prod_gtin_08410352910384",
+        "highest_price": "256.30",
+        "savings_vs_highest": "0.35",
+        "savings_vs_highest_pct": "0.14",
+        "supermarket_count": 2
+      }
+    ],
+    "schema": "precios-sps-publication/v1",
+    "scope": [
+      {
+        "location_id": "la_colonia_sps",
+        "supermarket_id": "la_colonia"
+      },
+      {
+        "location_id": "walmart_sps",
+        "supermarket_id": "walmart"
+      }
+    ]
+  },
+  "published_at_utc": "2026-09-08T16:21:51Z",
+  "schema": "precios-sps-static-bi-dataset/v1",
+  "scope": [
+    {
+      "location_id": "la_colonia_sps",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "location_id": "walmart_sps",
+      "supermarket_id": "walmart"
+    }
+  ],
+  "source_descriptors": [
+    {
+      "canonical_gtin": "00000075001629",
+      "canonical_product_id": "prod_gtin_00000075001629",
+      "source_brand": "Sol",
+      "source_category": "Supermercado > Cervezas Licores y Vinos > Cervezas",
+      "source_name": "Cerveza Sol Botella 355 Ml",
+      "source_presentation": "355 Ml",
+      "source_record_id": "la_colonia:9408",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00000075001629",
+      "canonical_product_id": "prod_gtin_00000075001629",
+      "source_brand": "SOL",
+      "source_category": "/Cervezas, Vinos y Licores/Cervezas/Artesanales e Importadas/",
+      "source_name": "Cerveza Sol Botella - 355 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:20727",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00000075076719",
+      "canonical_product_id": "prod_gtin_00000075076719",
+      "source_brand": "Dove",
+      "source_category": "Supermercado > Belleza y Cuidado Personal > Cuidado del Cabello",
+      "source_name": "Desodorante En Barra Dove Men+Care Invisible Dry 45 Gr",
+      "source_presentation": "45 Gr",
+      "source_record_id": "la_colonia:510",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00000075076719",
+      "canonical_product_id": "prod_gtin_00000075076719",
+      "source_brand": "DOVE",
+      "source_category": "/Higiene y Belleza/Cuidado Corporal/Desodorantes/",
+      "source_name": "Desodorante Dove Men Care Invisible Dry en Barra - 45 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:23550",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00041331011051",
+      "canonical_product_id": "prod_gtin_00041331011051",
+      "source_brand": "Goya",
+      "source_category": "Supermercado > Abarrotes > Aceites y Mantecas",
+      "source_name": "Aceite Goya Oliva Extra Virgen 250 ml",
+      "source_presentation": "250 ml",
+      "source_record_id": "la_colonia:2868",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00041331011051",
+      "canonical_product_id": "prod_gtin_00041331011051",
+      "source_brand": "GOYA",
+      "source_category": "/Abarrotes/Aceites de cocina/Aceite de Oliva/",
+      "source_name": "Goya Aceite Oliva Extra Virgen 250 Ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:20760",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00041331038041",
+      "canonical_product_id": "prod_gtin_00041331038041",
+      "source_brand": "Goya",
+      "source_category": "Supermercado > Abarrotes > Salsas, Aderezos y Toppings",
+      "source_name": "Vino Blanco Goya Seco Para Cocinar 750 Ml",
+      "source_presentation": "750 Ml",
+      "source_record_id": "la_colonia:3281",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00041331038041",
+      "canonical_product_id": "prod_gtin_00041331038041",
+      "source_brand": "GOYA",
+      "source_category": "/Abarrotes/Salsa, Aderezos y Vinagre/Vinagre/",
+      "source_name": "Vino seco blanco Goya para cocinar - 750 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:20781",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00085000019894",
+      "canonical_product_id": "prod_gtin_00085000019894",
+      "source_brand": "Barefoot",
+      "source_category": "Supermercado > Cervezas Licores y Vinos > Vinos",
+      "source_name": "Vino Barefoot Red Moscato de 750 ML Vino Barefoot Red Moscato 750 ML",
+      "source_presentation": "750 ML",
+      "source_record_id": "la_colonia:7169",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00085000019894",
+      "canonical_product_id": "prod_gtin_00085000019894",
+      "source_brand": "BAREFOOT",
+      "source_category": "/Cervezas, Vinos y Licores/Vinos/Vino Tinto/",
+      "source_name": "Vino Barefoot Red Moscato - 750 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:24132",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00099176132608",
+      "canonical_product_id": "prod_gtin_00099176132608",
+      "source_brand": "Fabuloso",
+      "source_category": "Supermercado > Cuidado del Hogar > Limpieza del Hogar",
+      "source_name": "Desinfectante Multiusos Fabuloso Frescura Activa Antibacterial Lavanda 900 ml",
+      "source_presentation": "900 ml",
+      "source_record_id": "la_colonia:4541",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00099176132608",
+      "canonical_product_id": "prod_gtin_00099176132608",
+      "source_brand": "FABULOSO",
+      "source_category": "/Limpieza/Limpieza del hogar/Desinfectantes/",
+      "source_name": "Desinfectante Fabuloso Multiusos Frescura Activa Antibacterial Lavanda - 900 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:23007",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00099176132905",
+      "canonical_product_id": "prod_gtin_00099176132905",
+      "source_brand": "Fabuloso",
+      "source_category": "Supermercado > Cuidado del Hogar > Limpieza del Hogar",
+      "source_name": "Desinfectante Multiusos Fabuloso Frescura Activa Antibacterial Manzana 900 ml",
+      "source_presentation": "900 ml",
+      "source_record_id": "la_colonia:4543",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00099176132905",
+      "canonical_product_id": "prod_gtin_00099176132905",
+      "source_brand": "FABULOSO",
+      "source_category": "/Limpieza/Limpieza del hogar/Desinfectantes/",
+      "source_name": "Desinfectante Fabuloso Multiusos Frescura Activa Antibacterial Manzana - 900 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:23036",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00099176231813",
+      "canonical_product_id": "prod_gtin_00099176231813",
+      "source_brand": "Suavitel",
+      "source_category": "Supermercado > Cuidado del Hogar > Lavandería y Calzado",
+      "source_name": "Suavizante de Telas Suavitel Complete Fresca Primavera 1.9 L",
+      "source_presentation": "1.9 L",
+      "source_record_id": "la_colonia:3868",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00099176231813",
+      "canonical_product_id": "prod_gtin_00099176231813",
+      "source_brand": "SUAVITEL",
+      "source_category": "/Limpieza/Suavizante/Suavizante Regular/",
+      "source_name": "Suavizante de Telas Suavitel Complete Fresca Primavera -1.9 L",
+      "source_presentation": null,
+      "source_record_id": "walmart:23045",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00099176231837",
+      "canonical_product_id": "prod_gtin_00099176231837",
+      "source_brand": "Suavitel",
+      "source_category": "Supermercado > Cuidado del Hogar > Lavandería y Calzado",
+      "source_name": "Suavizante de Telas Suavitel Complete Fresca Primavera 5 L",
+      "source_presentation": "5 L",
+      "source_record_id": "la_colonia:3869",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00099176231837",
+      "canonical_product_id": "prod_gtin_00099176231837",
+      "source_brand": "SUAVITEL",
+      "source_category": "/Limpieza/Suavizante/Suavizante Regular/",
+      "source_name": "Suavizante de Telas Suavitel Complete Fresca Primavera - 5 L",
+      "source_presentation": null,
+      "source_record_id": "walmart:23047",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00099176232223",
+      "canonical_product_id": "prod_gtin_00099176232223",
+      "source_brand": "Suavitel",
+      "source_category": "Supermercado > Cuidado del Hogar > Lavandería y Calzado",
+      "source_name": "Suavizante de Telas Suavitel Cuidado Superior Fresca Primavera 850 ml",
+      "source_presentation": "850 ml",
+      "source_record_id": "la_colonia:3872",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00099176232223",
+      "canonical_product_id": "prod_gtin_00099176232223",
+      "source_brand": "SUAVITEL",
+      "source_category": "/Limpieza/Suavizante/Suavizante Regular/",
+      "source_name": "Suavizante de Telas Suavitel Cuidado Superior Fresca Primavera - 850 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:23050",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00099176264163",
+      "canonical_product_id": "prod_gtin_00099176264163",
+      "source_brand": "Axion",
+      "source_category": "Supermercado > Cuidado del Hogar > Limpieza del Hogar",
+      "source_name": "Lavaplatos Axion Aloe y Vitamina E Pasta 425 g",
+      "source_presentation": "425 g",
+      "source_record_id": "la_colonia:3768",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00099176264163",
+      "canonical_product_id": "prod_gtin_00099176264163",
+      "source_brand": "AXION",
+      "source_category": "/Limpieza/Lavaplatos/Lavaplatos en polvo y en pasta/",
+      "source_name": "Lavaplatos Axion Aloe y Vitamina E Pasta - 425 g",
+      "source_presentation": "Pasta",
+      "source_record_id": "walmart:23074",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00707517002182",
+      "canonical_product_id": "prod_gtin_00707517002182",
+      "source_brand": "Original Rice",
+      "source_category": "Supermercado > Abarrotes > Arroz",
+      "source_name": "Arroz Escaldado Original Rice 1.75 Kg",
+      "source_presentation": "1.75 Kg",
+      "source_record_id": "la_colonia:8382",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00707517002182",
+      "canonical_product_id": "prod_gtin_00707517002182",
+      "source_brand": "ORIGINAL RICE",
+      "source_category": "/Abarrotes/Arroz, Frijol y Semillas/Arroz/",
+      "source_name": "Arroz escaldado Original Rice - 1750 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:24285",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00721282410102",
+      "canonical_product_id": "prod_gtin_00721282410102",
+      "source_brand": "Gamesa",
+      "source_category": "Supermercado > Abarrotes > Galletas",
+      "source_name": "Galleta Gamesa Chokis Chocobase 73.5 Gr",
+      "source_presentation": "73.5 Gr",
+      "source_record_id": "la_colonia:4874",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00721282410102",
+      "canonical_product_id": "prod_gtin_00721282410102",
+      "source_brand": "GAMESA",
+      "source_category": "/Abarrotes/Galletas/Galletas Dulces/",
+      "source_name": "Galleta Chokis Chocobase 73.5 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:27280",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00748757007506",
+      "canonical_product_id": "prod_gtin_00748757007506",
+      "source_brand": "Diana",
+      "source_category": "Supermercado > Abarrotes > Snacks",
+      "source_name": "Yuca Con Sal Diana Orígenes 175 Gr",
+      "source_presentation": "175 Gr",
+      "source_record_id": "la_colonia:2648",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00748757007506",
+      "canonical_product_id": "prod_gtin_00748757007506",
+      "source_brand": "DIANA",
+      "source_category": "/Abarrotes/Snacks y Fruta Seca/Papas y frituras/",
+      "source_name": "Origenes Diana Yuca Con Sal - 175 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:24335",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00750894621217",
+      "canonical_product_id": "prod_gtin_00750894621217",
+      "source_brand": "Mazola",
+      "source_category": "Supermercado > Abarrotes > Aceites y Mantecas",
+      "source_name": "Aceite De Canola Mazola 946 Ml",
+      "source_presentation": "946 Ml",
+      "source_record_id": "la_colonia:4441",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00750894621217",
+      "canonical_product_id": "prod_gtin_00750894621217",
+      "source_brand": "MAZOLA",
+      "source_category": "/Abarrotes/Aceites de cocina/Aceite de Semillas y Vegetal/",
+      "source_name": "Aceite Mazola canola - 946 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:28321",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00750894621491",
+      "canonical_product_id": "prod_gtin_00750894621491",
+      "source_brand": "Mazola",
+      "source_category": "Supermercado > Lácteos, no Lácteos, Derivados y Huevos > Mantequillas y Margarinas",
+      "source_name": "Margarina Mazola Con Hierbas Y Ajo 400 Gr",
+      "source_presentation": "400 Gr",
+      "source_record_id": "la_colonia:4633",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00750894621491",
+      "canonical_product_id": "prod_gtin_00750894621491",
+      "source_brand": "MAZOLA",
+      "source_category": "/Lácteos/Mantequillas y margarinas/Margarinas/",
+      "source_name": "Margarina Mazola Con Ajo Y Hierbas - 400 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:24975",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00752290060058",
+      "canonical_product_id": "prod_gtin_00752290060058",
+      "source_brand": "Selecta",
+      "source_category": "Supermercado > Abarrotes > Harinas",
+      "source_name": "Harina De Maiz Selecta 454 Gr",
+      "source_presentation": "454 Gr",
+      "source_record_id": "la_colonia:8924",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00752290060058",
+      "canonical_product_id": "prod_gtin_00752290060058",
+      "source_brand": "SELECTA",
+      "source_category": "/Anthistaminicos/Harinas y Repostería/Harina de Trigo y Maíz/",
+      "source_name": "Harina Selecta De Maíz - 454 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:25087",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00753081008914",
+      "canonical_product_id": "prod_gtin_00753081008914",
+      "source_brand": "Gama",
+      "source_category": "Supermercado > Abarrotes > Galletas",
+      "source_name": "Galleta Gama Salada Club Max 306 Gr",
+      "source_presentation": "306 Gr",
+      "source_record_id": "la_colonia:6037",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00753081008914",
+      "canonical_product_id": "prod_gtin_00753081008914",
+      "source_brand": "GAMA",
+      "source_category": "/Abarrotes/Galletas/Galletas Saladas/",
+      "source_name": "Galleta Gama Salada Club Max 9 Uds - 306 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:21604",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00753081010801",
+      "canonical_product_id": "prod_gtin_00753081010801",
+      "source_brand": "Bruni",
+      "source_category": "Supermercado > Abarrotes > Pastas, Tamales y Puré de Papas",
+      "source_name": "Pasta Bruni Codito Mediano 200 Gr",
+      "source_presentation": "200 Gr",
+      "source_record_id": "la_colonia:8066",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00753081010801",
+      "canonical_product_id": "prod_gtin_00753081010801",
+      "source_brand": "BRUNI",
+      "source_category": "/Abarrotes/Pastas/Fusilli/",
+      "source_name": "Pasta Bruni Codito Mediano - 200 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:27048",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00787003000649",
+      "canonical_product_id": "prod_gtin_00787003000649",
+      "source_brand": "Yes",
+      "source_category": "Supermercado > Lácteos, no Lácteos, Derivados y Huevos > Yogurt",
+      "source_name": "Yogurt Yes Sabor Fresa 1 Kg",
+      "source_presentation": "1 Kg",
+      "source_record_id": "la_colonia:2626",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00787003000649",
+      "canonical_product_id": "prod_gtin_00787003000649",
+      "source_brand": "YES",
+      "source_category": "/Lácteos/Yogurt/Yogurt Batido/",
+      "source_name": "Yogurt Yes sabor fresa - 1 kg",
+      "source_presentation": null,
+      "source_record_id": "walmart:26085",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00795893303221",
+      "canonical_product_id": "prod_gtin_00795893303221",
+      "source_brand": "Leyde",
+      "source_category": "Supermercado > Lácteos, no Lácteos, Derivados y Huevos > Mantequillas y Margarinas",
+      "source_name": "Mantequilla Amarilla Leyde 454 Gr",
+      "source_presentation": "454 Gr",
+      "source_record_id": "la_colonia:863",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00795893303221",
+      "canonical_product_id": "prod_gtin_00795893303221",
+      "source_brand": "LEYDE",
+      "source_category": "/Lácteos/Mantequillas y margarinas/Mantequillas/",
+      "source_name": "Mantequilla Leyde Amarilla - 454 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:26149",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00803275305593",
+      "canonical_product_id": "prod_gtin_00803275305593",
+      "source_brand": "Quaker",
+      "source_category": "Supermercado > Abarrotes > Cereales, Avenas, Granolas y Barras",
+      "source_name": "Avena Quaker Corazon Con Linaza Molida 300 Gr",
+      "source_presentation": "300 Gr",
+      "source_record_id": "la_colonia:1988",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00803275305593",
+      "canonical_product_id": "prod_gtin_00803275305593",
+      "source_brand": "QUAKER",
+      "source_category": "/Abarrotes/Cereales y Barras/Avena y Granola/",
+      "source_name": "Avena Quaker corazón con linaza molida - 300 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:26172",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00884394002495",
+      "canonical_product_id": "prod_gtin_00884394002495",
+      "source_brand": "Okf",
+      "source_category": "Supermercado > Bebidas y Jugos > Bebidas Refrescantes",
+      "source_name": "Bebida Okf Aloe Vera Sin Azúcar 1.5 Lt",
+      "source_presentation": "1.5 Lt",
+      "source_record_id": "la_colonia:5455",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00884394002495",
+      "canonical_product_id": "prod_gtin_00884394002495",
+      "source_brand": "OKF",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Jugo de Frutas/",
+      "source_name": "Bebida Okf Aloe Vera Sin Azucar - 1500 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:26824",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "00884394002518",
+      "canonical_product_id": "prod_gtin_00884394002518",
+      "source_brand": "Okf",
+      "source_category": "Supermercado > Bebidas y Jugos > Bebidas Refrescantes",
+      "source_name": "Bebida Okf Aloe Vera Sin Azúcar 500 Ml",
+      "source_presentation": "500 Ml",
+      "source_record_id": "la_colonia:5456",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "00884394002518",
+      "canonical_product_id": "prod_gtin_00884394002518",
+      "source_brand": "OKF",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Jugo de Frutas/",
+      "source_name": "Bebida OKF Aloe Vera Sin Azúcar - 500 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:26825",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "04022025811030",
+      "canonical_product_id": "prod_gtin_04022025811030",
+      "source_brand": "Blue Nun",
+      "source_category": "Supermercado > Cervezas Licores y Vinos > Vinos",
+      "source_name": "Vino Tinto Blue Nun Merlot 750 Ml",
+      "source_presentation": "750 Ml",
+      "source_record_id": "la_colonia:6857",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "04022025811030",
+      "canonical_product_id": "prod_gtin_04022025811030",
+      "source_brand": "BLUE NUN",
+      "source_category": "/Cervezas, Vinos y Licores/Vinos/Vino Tinto/",
+      "source_name": "Vino Blue Nun Tinto Merlot - 750 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:28213",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "06111239100042",
+      "canonical_product_id": "prod_gtin_06111239100042",
+      "source_brand": "Madrigal",
+      "source_category": "Supermercado > Abarrotes > Enlatados y Empacados",
+      "source_name": "Sardina Madrigal Picante En Aceite 125 Gr",
+      "source_presentation": "125 Gr",
+      "source_record_id": "la_colonia:8343",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "06111239100042",
+      "canonical_product_id": "prod_gtin_06111239100042",
+      "source_brand": "MADRIGAL",
+      "source_category": "/Abarrotes/Enlatados y Conservas/Atún y Pescado/",
+      "source_name": "Sardina Madrigal En Aceite Picante - 125 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:29139",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07401001500644",
+      "canonical_product_id": "prod_gtin_07401001500644",
+      "source_brand": "Ideal",
+      "source_category": "Supermercado > Abarrotes > Aceites y Mantecas",
+      "source_name": "Aceite Ideal De Girasol 800 Ml",
+      "source_presentation": "800 Ml",
+      "source_record_id": "la_colonia:7174",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07401001500644",
+      "canonical_product_id": "prod_gtin_07401001500644",
+      "source_brand": "IDEAL",
+      "source_category": "/Abarrotes/Aceites de cocina/Aceite de Semillas y Vegetal/",
+      "source_name": "Aceite Ideal Girasol 800 Ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:31457",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07401004202163",
+      "canonical_product_id": "prod_gtin_07401004202163",
+      "source_brand": "Regia",
+      "source_category": "Supermercado > Abarrotes > Salsas, Aderezos y Toppings",
+      "source_name": "Mostaza Regia Doy Pack 400 Gr",
+      "source_presentation": "400 Gr",
+      "source_record_id": "la_colonia:5527",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07401004202163",
+      "canonical_product_id": "prod_gtin_07401004202163",
+      "source_brand": "REGIA",
+      "source_category": "/Abarrotes/Salsa, Aderezos y Vinagre/Cátsup y Mostaza/",
+      "source_name": "Mostaza Regia Doy Pack - 400 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:31477",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07401006106032",
+      "canonical_product_id": "prod_gtin_07401006106032",
+      "source_brand": "Unox",
+      "source_category": "Supermercado > Cuidado del Hogar > Lavandería y Calzado",
+      "source_name": "Detergente En Barra Unox Multiusos 340 Gr",
+      "source_presentation": "340 Gr",
+      "source_record_id": "la_colonia:8966",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07401006106032",
+      "canonical_product_id": "prod_gtin_07401006106032",
+      "source_brand": "UNOX",
+      "source_category": "/Limpieza/Jabón de lavandería/Jabón de Barra/",
+      "source_name": "Detergente Unox Multiusos En Barra - 340 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:31516",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07401063400029",
+      "canonical_product_id": "prod_gtin_07401063400029",
+      "source_brand": "Fido",
+      "source_category": "Supermercado > Mascotas > Cuidado y Limpieza para Mascotas",
+      "source_name": "Shampoo Para Perro Fido 480 Ml",
+      "source_presentation": "480 Ml",
+      "source_record_id": "la_colonia:8210",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07401063400029",
+      "canonical_product_id": "prod_gtin_07401063400029",
+      "source_brand": "FIDO",
+      "source_category": "/Mascota/Limpieza y cuidado/Higiene y Grooming/",
+      "source_name": "Shampoo Fido Para Perro - 480 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:31532",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07401090800649",
+      "canonical_product_id": "prod_gtin_07401090800649",
+      "source_brand": "Sarita",
+      "source_category": "Supermercado > Congelados y Refrigerados > Postres",
+      "source_name": "Helado Sarita Napolitano Light 1 Lt",
+      "source_presentation": "1 Lt",
+      "source_record_id": "la_colonia:3048",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07401090800649",
+      "canonical_product_id": "prod_gtin_07401090800649",
+      "source_brand": "SARITA",
+      "source_category": "/Alimentos Congelados/Postres Congelados/Helados/",
+      "source_name": "Helado Sarita Napolitano light - 1 L",
+      "source_presentation": null,
+      "source_record_id": "walmart:22462",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07404003390015",
+      "canonical_product_id": "prod_gtin_07404003390015",
+      "source_brand": "El Panal",
+      "source_category": "Supermercado > Abarrotes > Panqueques, Jaleas, Cremas para Untar y Miel",
+      "source_name": "Miel De Abeja El Panal 500 Gr",
+      "source_presentation": "500 Gr",
+      "source_record_id": "la_colonia:7688",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07404003390015",
+      "canonical_product_id": "prod_gtin_07404003390015",
+      "source_brand": "EL PANAL",
+      "source_category": "/Abarrotes/Mermeladas y Miel/Miel/",
+      "source_name": "Miel El Panal De Abeja - 500 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:26854",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07404003390039",
+      "canonical_product_id": "prod_gtin_07404003390039",
+      "source_brand": "El Panal",
+      "source_category": "Supermercado > Abarrotes > Panqueques, Jaleas, Cremas para Untar y Miel",
+      "source_name": "Miel De Abeja El Panal 750 Gr",
+      "source_presentation": "750 Gr",
+      "source_record_id": "la_colonia:7689",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07404003390039",
+      "canonical_product_id": "prod_gtin_07404003390039",
+      "source_brand": "EL PANAL",
+      "source_category": "/Abarrotes/Mermeladas y Miel/Miel/",
+      "source_name": "Miel El Panal De Abeja - 750 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:26853",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07406189002959",
+      "canonical_product_id": "prod_gtin_07406189002959",
+      "source_brand": "De La Granja",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Jugo De La Granja De Naranja Con Pulpa 500 Ml",
+      "source_presentation": "500 Ml",
+      "source_record_id": "la_colonia:6642",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07406189002959",
+      "canonical_product_id": "prod_gtin_07406189002959",
+      "source_brand": "DE LA GRANJA",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Jugo de Frutas/",
+      "source_name": "Jugo De La Granja Naranja Pulpa - 500 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:31663",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07411000204238",
+      "canonical_product_id": "prod_gtin_07411000204238",
+      "source_brand": "McCormick",
+      "source_category": "Supermercado > Abarrotes > Salsas, Aderezos y Toppings",
+      "source_name": "Mostaza Mccormick 180 Gr",
+      "source_presentation": "180 Gr",
+      "source_record_id": "la_colonia:2310",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07411000204238",
+      "canonical_product_id": "prod_gtin_07411000204238",
+      "source_brand": "MCCORMICK",
+      "source_category": "/Abarrotes/Salsa, Aderezos y Vinagre/Cátsup y Mostaza/",
+      "source_name": "Mostaza McCormick - 180 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:26837",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07411000204818",
+      "canonical_product_id": "prod_gtin_07411000204818",
+      "source_brand": "McCormick",
+      "source_category": "Supermercado > Abarrotes > Salsas, Aderezos y Toppings",
+      "source_name": "Mayonesa Mccormick 800 Gr",
+      "source_presentation": "800 Gr",
+      "source_record_id": "la_colonia:2299",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07411000204818",
+      "canonical_product_id": "prod_gtin_07411000204818",
+      "source_brand": "MCCORMICK",
+      "source_category": "/Abarrotes/Salsa, Aderezos y Vinagre/Mayonesa/",
+      "source_name": "Mayonesa McCormick  - 800 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:23499",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07411002505616",
+      "canonical_product_id": "prod_gtin_07411002505616",
+      "source_brand": "De La Familia",
+      "source_category": "Supermercado > Abarrotes > Postres y Frutas en Conserva",
+      "source_name": "Gelatina De La Familia Frambuesa 80 Gr",
+      "source_presentation": "80 Gr",
+      "source_record_id": "la_colonia:7218",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07411002505616",
+      "canonical_product_id": "prod_gtin_07411002505616",
+      "source_brand": "DE LA FAMILIA",
+      "source_category": "/Abarrotes/Azúcar y Postres/Gelatinas y Flan/",
+      "source_name": "Gelatina De La Familia Frambuesa -  80 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:26022",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421000811633",
+      "canonical_product_id": "prod_gtin_07421000811633",
+      "source_brand": "Sula",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Jugo Sula Premium De Naranja Sin Pulpa 1.89 Lt",
+      "source_presentation": "1.89 Lt",
+      "source_record_id": "la_colonia:744",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421000811633",
+      "canonical_product_id": "prod_gtin_07421000811633",
+      "source_brand": "SULA",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Jugo de Frutas/",
+      "source_name": "Jugo Sula De Naranja Premium Sin Pulpa- 1.89 L",
+      "source_presentation": null,
+      "source_record_id": "walmart:31797",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421000811640",
+      "canonical_product_id": "prod_gtin_07421000811640",
+      "source_brand": "Sula",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Jugo Sula Ponche De Frutas 1.89 Lt",
+      "source_presentation": "1.89 Lt",
+      "source_record_id": "la_colonia:740",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421000811640",
+      "canonical_product_id": "prod_gtin_07421000811640",
+      "source_brand": "SULA",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Jugo de Frutas/",
+      "source_name": "Jugo de Frutas Sula Ponche De Frutas - 1.89 L",
+      "source_presentation": null,
+      "source_record_id": "walmart:31798",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421000823254",
+      "canonical_product_id": "prod_gtin_07421000823254",
+      "source_brand": "Sula",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Jugo Sula De Manzana 946 Ml",
+      "source_presentation": "946 Ml",
+      "source_record_id": "la_colonia:735",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421000823254",
+      "canonical_product_id": "prod_gtin_07421000823254",
+      "source_brand": "SULA",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Jugo de Frutas/",
+      "source_name": "Jugo Sula De Manzana- 946 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:31802",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421000826217",
+      "canonical_product_id": "prod_gtin_07421000826217",
+      "source_brand": "Sula",
+      "source_category": "Supermercado > Lácteos, no Lácteos, Derivados y Huevos > Quesos",
+      "source_name": "Queso Tipo Parmesano Sula 100 Gr",
+      "source_presentation": "100 Gr",
+      "source_record_id": "la_colonia:1221",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421000826217",
+      "canonical_product_id": "prod_gtin_07421000826217",
+      "source_brand": "SULA",
+      "source_category": "/Lácteos/Queso/Queso Mozzarella/",
+      "source_name": "Queso Sula Tipo Parmesano - 100 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:31803",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421000830900",
+      "canonical_product_id": "prod_gtin_07421000830900",
+      "source_brand": "Sula",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Jugo Sula Premium De Naranja Con Pulpa 1.89 Lt",
+      "source_presentation": "1.89 Lt",
+      "source_record_id": "la_colonia:742",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421000830900",
+      "canonical_product_id": "prod_gtin_07421000830900",
+      "source_brand": "SULA",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Jugo de Frutas/",
+      "source_name": "Jugo Sula Naranja Premium Con Pulpa - 1.89 L",
+      "source_presentation": null,
+      "source_record_id": "walmart:31807",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421000843030",
+      "canonical_product_id": "prod_gtin_07421000843030",
+      "source_brand": "Sula",
+      "source_category": "Supermercado > Lácteos, no Lácteos, Derivados y Huevos > Quesos",
+      "source_name": "Queso Procesado Sula Tipo Americano 180 Gr",
+      "source_presentation": "180 Gr",
+      "source_record_id": "la_colonia:1212",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421000843030",
+      "canonical_product_id": "prod_gtin_07421000843030",
+      "source_brand": "SULA",
+      "source_category": "/Lácteos/Queso/Queso Americano/",
+      "source_name": "Queso Sula Procesado Tipo Americano - 180 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:31821",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421001641338",
+      "canonical_product_id": "prod_gtin_07421001641338",
+      "source_brand": "Limpiox",
+      "source_category": "Supermercado > Cuidado del Hogar > Limpieza del Hogar",
+      "source_name": "Desinfectante Limpiox Lavanda 5 Lt",
+      "source_presentation": "5 Lt",
+      "source_record_id": "la_colonia:4848",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421001641338",
+      "canonical_product_id": "prod_gtin_07421001641338",
+      "source_brand": "LIMPIOX",
+      "source_category": "/Limpieza/Limpieza del hogar/Desinfectantes/",
+      "source_name": "Desinfectante Limpiox Lavanda - 5000 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:31901",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421600302821",
+      "canonical_product_id": "prod_gtin_07421600302821",
+      "source_brand": "Enjoy",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Jugo Enjoy Guayaba-Piña 500 Ml",
+      "source_presentation": "500 Ml",
+      "source_record_id": "la_colonia:7678",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421600302821",
+      "canonical_product_id": "prod_gtin_07421600302821",
+      "source_brand": "ENJOY",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Jugo de Frutas/",
+      "source_name": "Jugo Enjoy De Guayaba Pina- 500 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:32011",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421600304672",
+      "canonical_product_id": "prod_gtin_07421600304672",
+      "source_brand": "Enjoy",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Néctar Enjoy De Manzana 330 Ml",
+      "source_presentation": "330 Ml",
+      "source_record_id": "la_colonia:7691",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421600304672",
+      "canonical_product_id": "prod_gtin_07421600304672",
+      "source_brand": "ENJOY",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Néctar/",
+      "source_name": "Jugo Enjoy Nectar De Manzana- 330 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:32021",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421600304702",
+      "canonical_product_id": "prod_gtin_07421600304702",
+      "source_brand": "Enjoy",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Néctar Enjoy De Piña 330 Ml",
+      "source_presentation": "330 Ml",
+      "source_record_id": "la_colonia:7693",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421600304702",
+      "canonical_product_id": "prod_gtin_07421600304702",
+      "source_brand": "ENJOY",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Néctar/",
+      "source_name": "Jugo  Enjoy Nectar De Pina -330 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:32023",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421800110172",
+      "canonical_product_id": "prod_gtin_07421800110172",
+      "source_brand": "Oro",
+      "source_category": "Supermercado > Abarrotes > Café, Tés e Infusiones",
+      "source_name": "Café Oro Soluble Liofilizado 170 Gr",
+      "source_presentation": "170 Gr",
+      "source_record_id": "la_colonia:7842",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421800110172",
+      "canonical_product_id": "prod_gtin_07421800110172",
+      "source_brand": "ORO",
+      "source_category": "/Jugos y Bebidas/Café y Te preparado/Café listo para beber/",
+      "source_name": "Cafe Oro Soluble  Liofilizado - 170 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:27920",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07421830790115",
+      "canonical_product_id": "prod_gtin_07421830790115",
+      "source_brand": "Maya",
+      "source_category": "Supermercado > Abarrotes > Café, Tés e Infusiones",
+      "source_name": "Café Maya De Palo 340 Gr",
+      "source_presentation": "340 Gr",
+      "source_record_id": "la_colonia:5985",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07421830790115",
+      "canonical_product_id": "prod_gtin_07421830790115",
+      "source_brand": "MAYA",
+      "source_category": "/Abarrotes/Café, Té y Sustitutos/Café Molido/",
+      "source_name": "Cafe De Palo Maya 340 Gr",
+      "source_presentation": null,
+      "source_record_id": "walmart:27586",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07422540000136",
+      "canonical_product_id": "prod_gtin_07422540000136",
+      "source_brand": "Leyde",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Jugo Leyde De Naranja Con Pulpa 946 Ml",
+      "source_presentation": "946 Ml",
+      "source_record_id": "la_colonia:729",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07422540000136",
+      "canonical_product_id": "prod_gtin_07422540000136",
+      "source_brand": "LEYDE",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Jugo de Frutas/",
+      "source_name": "Jugo Leyde De Naranja Con Pulpa 946 Ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:32194",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07422540015123",
+      "canonical_product_id": "prod_gtin_07422540015123",
+      "source_brand": "Leyde",
+      "source_category": "Supermercado > Lácteos, no Lácteos, Derivados y Huevos > Leches Líquidas",
+      "source_name": "Leche Entera Leyde 946 Ml",
+      "source_presentation": "946 Ml",
+      "source_record_id": "la_colonia:791",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07422540015123",
+      "canonical_product_id": "prod_gtin_07422540015123",
+      "source_brand": "LEYDE",
+      "source_category": "/Lácteos/Leche/Leche Entera/",
+      "source_name": "Leche Entera Leyde - 946 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:32198",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07422540015161",
+      "canonical_product_id": "prod_gtin_07422540015161",
+      "source_brand": "Leyde",
+      "source_category": "Supermercado > Lácteos, no Lácteos, Derivados y Huevos > Leches Líquidas",
+      "source_name": "Leche Uht Leyde Entera 900 Ml",
+      "source_presentation": "900 Ml",
+      "source_record_id": "la_colonia:811",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07422540015161",
+      "canonical_product_id": "prod_gtin_07422540015161",
+      "source_brand": "LEYDE",
+      "source_category": "/Lácteos/Leche/Leche Entera/",
+      "source_name": "Leche Entera Leyde Uht- 900 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:32201",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07422540030515",
+      "canonical_product_id": "prod_gtin_07422540030515",
+      "source_brand": "Leyde",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Jugo De Naranja Agria Leyde 500 Ml",
+      "source_presentation": "500 Ml",
+      "source_record_id": "la_colonia:721",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07422540030515",
+      "canonical_product_id": "prod_gtin_07422540030515",
+      "source_brand": "LEYDE",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Jugo de Frutas/",
+      "source_name": "Jugo Leyde De Naranja Agria 500 Ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:26391",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07423407509106",
+      "canonical_product_id": "prod_gtin_07423407509106",
+      "source_brand": "Breadco",
+      "source_category": "Supermercado > Panadería y Tortillas > Panadería",
+      "source_name": "Pan Molde Breadco Mega Pullman 860 G",
+      "source_presentation": "860 G",
+      "source_record_id": "la_colonia:1042",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07423407509106",
+      "canonical_product_id": "prod_gtin_07423407509106",
+      "source_brand": "BREADCO",
+      "source_category": "/Panadería y tortillería/Pan Salado/Pan Europeo y Rústico/",
+      "source_name": "Pan Breadco molde Mega Pullman  - 860 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:21699",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07429905700878",
+      "canonical_product_id": "prod_gtin_07429905700878",
+      "source_brand": "El Canal",
+      "source_category": "Supermercado > Abarrotes > Endulzante",
+      "source_name": "Azúcar El Cañal Premium 1500 Gr",
+      "source_presentation": "1500 Gr",
+      "source_record_id": "la_colonia:8089",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07429905700878",
+      "canonical_product_id": "prod_gtin_07429905700878",
+      "source_brand": "EL CAÑAL",
+      "source_category": "/Anthistaminicos/Azúcar y Postres/Azúcar/",
+      "source_name": "Azúcar El Cañal Premium - 1500 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:18769",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07441001607363",
+      "canonical_product_id": "prod_gtin_07441001607363",
+      "source_brand": "Dos Pinos",
+      "source_category": "Supermercado > Lácteos, no Lácteos, Derivados y Huevos > Quesos",
+      "source_name": "Queso Crema Dos Pinos Original 210 Gr",
+      "source_presentation": "210 Gr",
+      "source_record_id": "la_colonia:1192",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07441001607363",
+      "canonical_product_id": "prod_gtin_07441001607363",
+      "source_brand": "DOS PINOS",
+      "source_category": "/Lácteos/Queso/Queso Crema/",
+      "source_name": "Queso Crema Dos Pinos Original - 210 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:18790",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07441001607400",
+      "canonical_product_id": "prod_gtin_07441001607400",
+      "source_brand": "Dos Pinos",
+      "source_category": "Supermercado > Lácteos, no Lácteos, Derivados y Huevos > Quesos",
+      "source_name": "Queso Crema Dos Pinos Light 210 Gr",
+      "source_presentation": "210 Gr",
+      "source_record_id": "la_colonia:1190",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07441001607400",
+      "canonical_product_id": "prod_gtin_07441001607400",
+      "source_brand": "DOS PINOS",
+      "source_category": "/Lácteos/Queso/Queso Crema/",
+      "source_name": "Queso crema Dos Pinos light - 210 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:18793",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07441001609541",
+      "canonical_product_id": "prod_gtin_07441001609541",
+      "source_brand": "Dos Pinos",
+      "source_category": "Supermercado > Congelados y Refrigerados > Postres",
+      "source_name": "Helado Dos Pinos Sabor Vainilla Y Caramelo 1028 Gr",
+      "source_presentation": "1028 Gr",
+      "source_record_id": "la_colonia:664",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07441001609541",
+      "canonical_product_id": "prod_gtin_07441001609541",
+      "source_brand": "DOS PINOS",
+      "source_category": "/Alimentos Congelados/Postres Congelados/Helados/",
+      "source_name": "Helado Dos Pinos Sabor Vainilla Caramelo - 1028 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:18799",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07441001637032",
+      "canonical_product_id": "prod_gtin_07441001637032",
+      "source_brand": "Dos Pinos",
+      "source_category": "Supermercado > Bebidas y Jugos > Bebidas Refrescantes",
+      "source_name": "Té Blanco Dos Pinos 500 Ml",
+      "source_presentation": "500 Ml",
+      "source_record_id": "la_colonia:1442",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07441001637032",
+      "canonical_product_id": "prod_gtin_07441001637032",
+      "source_brand": "DOS PINOS",
+      "source_category": "/Jugos y Bebidas/Café y Te preparado/Te listo para beber/",
+      "source_name": "Te Dos Pinos Blanco 500 Ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:23264",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07441014704257",
+      "canonical_product_id": "prod_gtin_07441014704257",
+      "source_brand": "Yoplait",
+      "source_category": "Supermercado > Lácteos, no Lácteos, Derivados y Huevos > Yogurt",
+      "source_name": "Yogurt Yoplait Light Frutas Tropicales 230 Gr",
+      "source_presentation": "230 Gr",
+      "source_record_id": "la_colonia:2639",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07441014704257",
+      "canonical_product_id": "prod_gtin_07441014704257",
+      "source_brand": "YOPLAIT",
+      "source_category": "/Lácteos/Yogurt/Yogurt Bebible/",
+      "source_name": "Yogurt Yoplait Light Frutas Tropicales - 230 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:21481",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07441029500301",
+      "canonical_product_id": "prod_gtin_07441029500301",
+      "source_brand": "Bimbo",
+      "source_category": "Supermercado > Panadería y Tortillas > Panadería",
+      "source_name": "Pan Para Hot Dog Bimbo Sin Ajonjolí 8 Un 325 Gr",
+      "source_presentation": "325 Gr",
+      "source_record_id": "la_colonia:2336",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07441029500301",
+      "canonical_product_id": "prod_gtin_07441029500301",
+      "source_brand": "BIMBO",
+      "source_category": "/Panadería y tortillería/Pan Salado/Bollos y Hot Dog/",
+      "source_name": "Pan para hot dog Bimbo sin ajonjolí - 325 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:18917",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07441029556025",
+      "canonical_product_id": "prod_gtin_07441029556025",
+      "source_brand": "Bimbo",
+      "source_category": "Supermercado > Panadería y Tortillas > Panadería",
+      "source_name": "Pan Tostado Bimbo Doble Fibra 250 Gr",
+      "source_presentation": "250 Gr",
+      "source_record_id": "la_colonia:2338",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07441029556025",
+      "canonical_product_id": "prod_gtin_07441029556025",
+      "source_brand": "BIMBO",
+      "source_category": "/Panadería y tortillería/Pan Salado/Pan Tostado/",
+      "source_name": "Pan Tostado Bimbo Doble Fibra - 250 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:18947",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07441042510004",
+      "canonical_product_id": "prod_gtin_07441042510004",
+      "source_brand": "Gallo",
+      "source_category": "Supermercado > Cuidado del Hogar > Lavandería y Calzado",
+      "source_name": "Tinte Gallo Para Ropa Color Negro 15 Gr",
+      "source_presentation": "15 Gr",
+      "source_record_id": "la_colonia:4718",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07441042510004",
+      "canonical_product_id": "prod_gtin_07441042510004",
+      "source_brand": "GALLO",
+      "source_category": "/Limpieza/Colorantes y Almidones/Colorantes/",
+      "source_name": "Tinte Gallo para ropa color negro - 15 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:18988",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07452017663434",
+      "canonical_product_id": "prod_gtin_07452017663434",
+      "source_brand": "Del Monte",
+      "source_category": "Supermercado > Bebidas y Jugos > Jugos",
+      "source_name": "Jugo Del Monte Néctar De Manzana 330 Ml",
+      "source_presentation": "330 Ml",
+      "source_record_id": "la_colonia:4605",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07452017663434",
+      "canonical_product_id": "prod_gtin_07452017663434",
+      "source_brand": "DEL MONTE",
+      "source_category": "/Jugos y Bebidas/Jugos y Néctares/Néctar/",
+      "source_name": "Jugo Del Monte Nectar Manzana- 330 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:19162",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07500435155847",
+      "canonical_product_id": "prod_gtin_07500435155847",
+      "source_brand": "Pantene",
+      "source_category": "Supermercado > Belleza y Cuidado Personal > Cuidado del Cabello",
+      "source_name": "Shampoo Pantene Pro-V Bambu Nutre Y Crece 400 Ml",
+      "source_presentation": "400 Ml",
+      "source_record_id": "la_colonia:2543",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07500435155847",
+      "canonical_product_id": "prod_gtin_07500435155847",
+      "source_brand": "PANTENE",
+      "source_category": "/Higiene y Belleza/Cuidado del cabello/Shampoo/",
+      "source_name": "Shampoo Pantene Pro-V Bambú Nutre Crece - 400 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:19217",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07500435155922",
+      "canonical_product_id": "prod_gtin_07500435155922",
+      "source_brand": "Pantene",
+      "source_category": "Supermercado > Belleza y Cuidado Personal > Cuidado del Cabello",
+      "source_name": "Acondicionador Pantene Pro-V Bambu Nutre Y Crece 400 Ml",
+      "source_presentation": "400 Ml",
+      "source_record_id": "la_colonia:1962",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07500435155922",
+      "canonical_product_id": "prod_gtin_07500435155922",
+      "source_brand": "PANTENE",
+      "source_category": "/Higiene y Belleza/Cuidado del cabello/Shampoo/",
+      "source_name": "Acondicionador Pantene Pro-V Bambú Nutre & Crece -400 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:19221",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07500435182225",
+      "canonical_product_id": "prod_gtin_07500435182225",
+      "source_brand": "Ariel",
+      "source_category": "Supermercado > Cuidado del Hogar > Lavandería y Calzado",
+      "source_name": "Detergente Líquido Ariel Con Un Toque De Downy 1.8 L",
+      "source_presentation": "1.8 L",
+      "source_record_id": "la_colonia:5781",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07500435182225",
+      "canonical_product_id": "prod_gtin_07500435182225",
+      "source_brand": "ARIEL",
+      "source_category": "/Limpieza/Detergente/Detergente líquido/",
+      "source_name": "Detergente Líquido Ariel Toque De Downy - 1.8 L",
+      "source_presentation": null,
+      "source_record_id": "walmart:23340",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07500435183697",
+      "canonical_product_id": "prod_gtin_07500435183697",
+      "source_brand": "Old Spice",
+      "source_category": "Supermercado > Belleza y Cuidado Personal > Desodorantes Hombres",
+      "source_name": "Desodorante Barra Old Spice Mar Profundo 85 Gr",
+      "source_presentation": "85 Gr",
+      "source_record_id": "la_colonia:2122",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07500435183697",
+      "canonical_product_id": "prod_gtin_07500435183697",
+      "source_brand": "OLD SPICE",
+      "source_category": "/Higiene y Belleza/Cuidado Corporal/Desodorantes/",
+      "source_name": "Barra Desodorante Old Spice Mar Profundo - 85 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:21717",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07500435252089",
+      "canonical_product_id": "prod_gtin_07500435252089",
+      "source_brand": "Downy",
+      "source_category": "Supermercado > Cuidado del Hogar > Lavandería y Calzado",
+      "source_name": "Suavizante Downy Intense Exótico 2.8 Lt",
+      "source_presentation": "2.8 Lt",
+      "source_record_id": "la_colonia:6313",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07500435252089",
+      "canonical_product_id": "prod_gtin_07500435252089",
+      "source_brand": "DOWNY",
+      "source_category": "/Limpieza/Suavizante/Suavizante Regular/",
+      "source_name": "Suavizante Downy Intense Exotico 2800 Ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:26923",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07500435252133",
+      "canonical_product_id": "prod_gtin_07500435252133",
+      "source_brand": "Downy",
+      "source_category": "Supermercado > Cuidado del Hogar > Lavandería y Calzado",
+      "source_name": "Suavizante Downy Intense Exótico 1.4 Lt",
+      "source_presentation": "1.4 Lt",
+      "source_record_id": "la_colonia:6312",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07500435252133",
+      "canonical_product_id": "prod_gtin_07500435252133",
+      "source_brand": "DOWNY",
+      "source_category": "/Limpieza/Suavizante/Suavizante Regular/",
+      "source_name": "Suavizante Downy Intense Exotico 1400 Ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:26924",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07500435254137",
+      "canonical_product_id": "prod_gtin_07500435254137",
+      "source_brand": "Downy",
+      "source_category": "Supermercado > Cuidado del Hogar > Lavandería y Calzado",
+      "source_name": "Suavizante Downy Intense Floral 730 Ml",
+      "source_presentation": "730 Ml",
+      "source_record_id": "la_colonia:6314",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07500435254137",
+      "canonical_product_id": "prod_gtin_07500435254137",
+      "source_brand": "DOWNY",
+      "source_category": "/Limpieza/Suavizante/Suavizante Regular/",
+      "source_name": "Suavizante Downy Intense Floral 730 Ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:28340",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07500443005950",
+      "canonical_product_id": "prod_gtin_07500443005950",
+      "source_brand": "Arcor",
+      "source_category": "Supermercado > Abarrotes > Snacks",
+      "source_name": "Chocolate Arcor Bon O Bon Blanco 75 Gr",
+      "source_presentation": "75 Gr",
+      "source_record_id": "la_colonia:2945",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07500443005950",
+      "canonical_product_id": "prod_gtin_07500443005950",
+      "source_brand": "ARCOR",
+      "source_category": "/Anthistaminicos/Dulces y Chocolates/Chocolates/",
+      "source_name": "Chocolate Arcor Bon O Bon Blanco - 75 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:23850",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07501008041703",
+      "canonical_product_id": "prod_gtin_07501008041703",
+      "source_brand": "Kelloggs",
+      "source_category": "Supermercado > Abarrotes > Cereales, Avenas, Granolas y Barras",
+      "source_name": "Cereal Kelloggs Komplete Pasas 420 Gr",
+      "source_presentation": "420 Gr",
+      "source_record_id": "la_colonia:2935",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07501008041703",
+      "canonical_product_id": "prod_gtin_07501008041703",
+      "source_brand": "KELLOGGS",
+      "source_category": "/Abarrotes/Cereales y Barras/Cereal Dulce/",
+      "source_name": "Cereal Komplete con pasas kelloggs - 420 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:22678",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07501018310103",
+      "canonical_product_id": "prod_gtin_07501018310103",
+      "source_brand": "La Moderna",
+      "source_category": "Supermercado > Abarrotes > Pastas, Tamales y Puré de Papas",
+      "source_name": "Spaghetti La Moderna 200 Gr",
+      "source_presentation": "200 Gr",
+      "source_record_id": "la_colonia:5025",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07501018310103",
+      "canonical_product_id": "prod_gtin_07501018310103",
+      "source_brand": "LA MODERNA",
+      "source_category": "/Abarrotes/Pastas/Spaghetti/",
+      "source_name": "Spaghetti La Moderna 200 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:28909",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07501018311353",
+      "canonical_product_id": "prod_gtin_07501018311353",
+      "source_brand": "La Moderna",
+      "source_category": "Supermercado > Abarrotes > Pastas, Tamales y Puré de Papas",
+      "source_name": "Spaghetti La Moderna 500 Gr",
+      "source_presentation": "500 Gr",
+      "source_record_id": "la_colonia:5026",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07501018311353",
+      "canonical_product_id": "prod_gtin_07501018311353",
+      "source_brand": "LA MODERNA",
+      "source_category": "/Abarrotes/Pastas/Spaghetti/",
+      "source_name": "Spaghetti La Moderna 500 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:28903",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07501035911017",
+      "canonical_product_id": "prod_gtin_07501035911017",
+      "source_brand": "Colgate",
+      "source_category": "Supermercado > Belleza y Cuidado Personal > Cuidado Oral",
+      "source_name": "Pasta Dental Colgate Máxima Protección Anticaries 150 ml",
+      "source_presentation": "150 ml",
+      "source_record_id": "la_colonia:1078",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07501035911017",
+      "canonical_product_id": "prod_gtin_07501035911017",
+      "source_brand": "COLGATE",
+      "source_category": "/Higiene y Belleza/Cuidado Bucal/Pasta dental/",
+      "source_name": "Pasta Dental Colgate Máxima Protección Anticaries - 150 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:19437",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07501199413242",
+      "canonical_product_id": "prod_gtin_07501199413242",
+      "source_brand": "Mas Color",
+      "source_category": "Supermercado > Cuidado del Hogar > Lavandería y Calzado",
+      "source_name": "Detergente Líquido Mas Color Cuidado&Renovación 4.65 Lt",
+      "source_presentation": "4.65 Lt",
+      "source_record_id": "la_colonia:7329",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07501199413242",
+      "canonical_product_id": "prod_gtin_07501199413242",
+      "source_brand": "MAS COLOR",
+      "source_category": "/Limpieza/Detergente/Detergente líquido/",
+      "source_name": "Detergente líquido Más Color cuidado y renovación - 4.65 L",
+      "source_presentation": null,
+      "source_record_id": "walmart:23281",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07503037746437",
+      "canonical_product_id": "prod_gtin_07503037746437",
+      "source_brand": "Zuko",
+      "source_category": "Supermercado > Bebidas y Jugos > Bebidas Refrescantes",
+      "source_name": "Bebida En Polvo Zuko Té Frío Frambuesa 13 Gr",
+      "source_presentation": "13 Gr",
+      "source_record_id": "la_colonia:3559",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07503037746437",
+      "canonical_product_id": "prod_gtin_07503037746437",
+      "source_brand": "ZUKO",
+      "source_category": "/Jugos y Bebidas/Polvo y Líquidos Concentrados/Bebidas en Polvo/",
+      "source_name": "Bebida En Polvo Zuko Te Frio Frambuesa - 13 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:28232",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07509546015842",
+      "canonical_product_id": "prod_gtin_07509546015842",
+      "source_brand": "Speed Stick",
+      "source_category": "Supermercado > Belleza y Cuidado Personal > Desodorantes Hombres",
+      "source_name": "Desodorante Barra Speed Stick Fresh 92.1 Gr",
+      "source_presentation": "92.1 Gr",
+      "source_record_id": "la_colonia:6023",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07509546015842",
+      "canonical_product_id": "prod_gtin_07509546015842",
+      "source_brand": "SPEED STICK",
+      "source_category": "/Higiene y Belleza/Cuidado Corporal/Desodorantes/",
+      "source_name": "Desodorante Speed Stick Fresh Barra - 92.1 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:19809",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07509546056111",
+      "canonical_product_id": "prod_gtin_07509546056111",
+      "source_brand": "Colgate",
+      "source_category": "Supermercado > Belleza y Cuidado Personal > Cuidado Oral",
+      "source_name": "Pasta Dental Colgate Triple Acción Xtra Blancura 125 ml",
+      "source_presentation": "125 ml",
+      "source_record_id": "la_colonia:1087",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07509546056111",
+      "canonical_product_id": "prod_gtin_07509546056111",
+      "source_brand": "COLGATE",
+      "source_category": "/Higiene y Belleza/Cuidado Bucal/Pasta dental/",
+      "source_name": "Pasta Dental Colgate Triple Acción Xtra Blancura - 125 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:19821",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07509546076195",
+      "canonical_product_id": "prod_gtin_07509546076195",
+      "source_brand": "Axion",
+      "source_category": "Supermercado > Cuidado del Hogar > Limpieza del Hogar",
+      "source_name": "Lavaplatos Líquido Axion Aloe y Vitamina E 640 ml",
+      "source_presentation": "640 ml",
+      "source_record_id": "la_colonia:3776",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07509546076195",
+      "canonical_product_id": "prod_gtin_07509546076195",
+      "source_brand": "AXION",
+      "source_category": "/Limpieza/Lavaplatos/Lavaplatos líquido/",
+      "source_name": "Lavaplatos Axion Aloe y Vitamina E Líquido - 640 ml",
+      "source_presentation": "Líquido",
+      "source_record_id": "walmart:19846",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07610113025239",
+      "canonical_product_id": "prod_gtin_07610113025239",
+      "source_brand": "Bacardi",
+      "source_category": "Supermercado > Cervezas Licores y Vinos > Licores",
+      "source_name": "Ron Bacardí Spiced 700 Ml",
+      "source_presentation": "700 Ml",
+      "source_record_id": "la_colonia:6301",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07610113025239",
+      "canonical_product_id": "prod_gtin_07610113025239",
+      "source_brand": "BACARDI",
+      "source_category": "/Lácteos/Leche/Leche Entera/",
+      "source_name": "Ron Bacardi Spiced 700 Ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:27279",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07622202008450",
+      "canonical_product_id": "prod_gtin_07622202008450",
+      "source_brand": "Tang",
+      "source_category": "Supermercado > Bebidas y Jugos > Bebidas Refrescantes",
+      "source_name": "Bebida En Polvo Tang Té Durazno 13 Gr",
+      "source_presentation": "13 Gr",
+      "source_record_id": "la_colonia:5980",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07622202008450",
+      "canonical_product_id": "prod_gtin_07622202008450",
+      "source_brand": "TANG",
+      "source_category": "/Jugos y Bebidas/Polvo y Líquidos Concentrados/Bebidas en Polvo/",
+      "source_name": "Bebida en Polvo Tang de Te Durazno - 13 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:26370",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07622202338656",
+      "canonical_product_id": "prod_gtin_07622202338656",
+      "source_brand": "Nabisco",
+      "source_category": "Supermercado > Abarrotes > Galletas",
+      "source_name": "Galleta Club Social Mantequilla 9 Un 216 Gr",
+      "source_presentation": "216 Gr",
+      "source_record_id": "la_colonia:3014",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07622202338656",
+      "canonical_product_id": "prod_gtin_07622202338656",
+      "source_brand": "NABISCO",
+      "source_category": "/Abarrotes/Galletas/Galletas Saladas/",
+      "source_name": "Galleta Club Social Mantequilla - 216 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:29153",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07702425632189",
+      "canonical_product_id": "prod_gtin_07702425632189",
+      "source_brand": "Huggies",
+      "source_category": "Supermercado > Bebé y Niños > Cuidado y Aseo: Bebé y Niños",
+      "source_name": "Toallitas Húmedas Huggies Limpieza Diaria 112 Un",
+      "source_presentation": "112 Un",
+      "source_record_id": "la_colonia:2810",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07702425632189",
+      "canonical_product_id": "prod_gtin_07702425632189",
+      "source_brand": "HUGGIES",
+      "source_category": "/Bebes y Niños/Toallitas Húmedas/",
+      "source_name": "Toallitas Húmedas Huggies Limpieza Diaria - 112 Unidades",
+      "source_presentation": null,
+      "source_record_id": "walmart:26274",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07702425934108",
+      "canonical_product_id": "prod_gtin_07702425934108",
+      "source_brand": "Kleenex",
+      "source_category": "Supermercado > Belleza y Cuidado Personal > Desechables Higiene y Belleza Personal",
+      "source_name": "Toallas Húmedas Kleenex Gentle Clean 16 Un",
+      "source_presentation": "16 Un",
+      "source_record_id": "la_colonia:6318",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07702425934108",
+      "canonical_product_id": "prod_gtin_07702425934108",
+      "source_brand": "KLEENEX",
+      "source_category": "/Higiene y Belleza/Accesorios y básicos/Pañuelos desechables/",
+      "source_name": "Toallas Húmedas Kleenex Gentle Clean - 16 Unidades",
+      "source_presentation": null,
+      "source_record_id": "walmart:25424",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07750885019606",
+      "canonical_product_id": "prod_gtin_07750885019606",
+      "source_brand": "Costa",
+      "source_category": "Supermercado > Abarrotes > Galletas",
+      "source_name": "Galleta De Soda Costa Soda Line 240 Gr",
+      "source_presentation": "240 Gr",
+      "source_record_id": "la_colonia:8636",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07750885019606",
+      "canonical_product_id": "prod_gtin_07750885019606",
+      "source_brand": "COSTA",
+      "source_category": "/Abarrotes/Galletas/Galletas Saladas/",
+      "source_name": "Galleta Costa Soda Line - 240 g",
+      "source_presentation": null,
+      "source_record_id": "walmart:22300",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07804320706009",
+      "canonical_product_id": "prod_gtin_07804320706009",
+      "source_brand": "Frontera",
+      "source_category": "Supermercado > Cervezas Licores y Vinos > Vinos",
+      "source_name": "Vino Tinto Frontera Merlot 750 Ml",
+      "source_presentation": "750 Ml",
+      "source_record_id": "la_colonia:6992",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07804320706009",
+      "canonical_product_id": "prod_gtin_07804320706009",
+      "source_brand": "FRONTERA",
+      "source_category": "/Cervezas, Vinos y Licores/Vinos/Vino Tinto/",
+      "source_name": "Vino Tinto Frontera Merlot- 750 Ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:20170",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07804320985633",
+      "canonical_product_id": "prod_gtin_07804320985633",
+      "source_brand": "Casillero Del Diablo",
+      "source_category": "Supermercado > Cervezas Licores y Vinos > Vinos",
+      "source_name": "Vino Casillero Del Diablo Merlot 750 Ml",
+      "source_presentation": "750 Ml",
+      "source_record_id": "la_colonia:6692",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07804320985633",
+      "canonical_product_id": "prod_gtin_07804320985633",
+      "source_brand": "CASILLERO DEL DIABLO",
+      "source_category": "/Cervezas, Vinos y Licores/Vinos/Vino Tinto/",
+      "source_name": "Vino Casillero Del Diablo Merlot- 750 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:20171",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "07891024030806",
+      "canonical_product_id": "prod_gtin_07891024030806",
+      "source_brand": "Colgate",
+      "source_category": "Supermercado > Belleza y Cuidado Personal > Cuidado Oral",
+      "source_name": "Enjuague Bucal Colgate Plax Kids 250 ml",
+      "source_presentation": "250 ml",
+      "source_record_id": "la_colonia:564",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "07891024030806",
+      "canonical_product_id": "prod_gtin_07891024030806",
+      "source_brand": "COLGATE",
+      "source_category": "/Higiene y Belleza/Cuidado Bucal/Higiene bucal para niños/",
+      "source_name": "Enjuague Bucal Colgate Plax Kids - 250 ml",
+      "source_presentation": null,
+      "source_record_id": "walmart:20190",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "08410352910254",
+      "canonical_product_id": "prod_gtin_08410352910254",
+      "source_brand": "Elmigo",
+      "source_category": "Supermercado > Abarrotes > Aceites y Mantecas",
+      "source_name": "Aceite De Girasol Elmigo 3 Lt",
+      "source_presentation": "3 Lt",
+      "source_record_id": "la_colonia:3310",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "08410352910254",
+      "canonical_product_id": "prod_gtin_08410352910254",
+      "source_brand": "ELMIGO",
+      "source_category": "/Abarrotes/Aceites de cocina/Aceite de Semillas y Vegetal/",
+      "source_name": "Aceite Elmigo de girasol - 3 L",
+      "source_presentation": null,
+      "source_record_id": "walmart:25623",
+      "supermarket_id": "walmart"
+    },
+    {
+      "canonical_gtin": "08410352910384",
+      "canonical_product_id": "prod_gtin_08410352910384",
+      "source_brand": "Elmigo",
+      "source_category": "Supermercado > Abarrotes > Aceites y Mantecas",
+      "source_name": "Aceite De Canola Elmigo 3 Lt",
+      "source_presentation": "3 Lt",
+      "source_record_id": "la_colonia:2861",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "canonical_gtin": "08410352910384",
+      "canonical_product_id": "prod_gtin_08410352910384",
+      "source_brand": "ELMIGO",
+      "source_category": "/Abarrotes/Aceites de cocina/Aceite de Semillas y Vegetal/",
+      "source_name": "Aceite Elmigo Canola 3 Lt",
+      "source_presentation": null,
+      "source_record_id": "walmart:25626",
+      "supermarket_id": "walmart"
+    }
+  ],
+  "source_head_sha": "7ae45f1dc39032180c82df10a1bb77e58451995a",
+  "source_publication_generated_at_utc": "2026-09-08T16:21:47.304430Z",
+  "source_workflow_run_id": 34250535657
+}
