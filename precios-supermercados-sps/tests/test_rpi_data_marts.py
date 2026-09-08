@@ -17,6 +17,7 @@ from precios_supermercados.price_analytics import ComparisonScope, CurrentPriceO
 from precios_supermercados.product_homologation import SourceProductRecord, homologate_products
 from precios_supermercados.rpi_data_marts import (
     MartCommercialState,
+    MartHistoricalState,
     MartOfferDescriptor,
     RpiDataMartError,
     build_rpi_data_marts,
@@ -24,6 +25,8 @@ from precios_supermercados.rpi_data_marts import (
 
 
 AS_OF = datetime(2026, 9, 8, 12, tzinfo=timezone.utc)
+A_CURRENT_AT = datetime(2026, 9, 1, 12, tzinfo=timezone.utc)
+B_CURRENT_AT = datetime(2026, 9, 2, 12, tzinfo=timezone.utc)
 
 
 def inputs(*, stale: bool = False):
@@ -76,25 +79,26 @@ def inputs(*, stale: bool = False):
         )
         for record in records
     )
-    states = tuple(
-        MartCommercialState(
-            record.source_record_id,
-            prices[record.source_record_id],
-            2500 if record.supermarket_id == "a" else None,
-            record.supermarket_id == "a",
-            "in_stock",
-            AS_OF - timedelta(hours=2),
-        )
-        for record in records
+    states = (
+        MartCommercialState("a:1", 2000, 2500, True, "in_stock", A_CURRENT_AT),
+        MartCommercialState("b:2", 2200, None, False, "in_stock", B_CURRENT_AT),
     )
-    return analytics, competition, descriptors, states, freshness
+    history = (
+        MartHistoricalState("a:1", 2400, None, False, datetime(2026, 5, 1, 12, tzinfo=timezone.utc)),
+        MartHistoricalState("a:1", 2200, None, False, datetime(2026, 8, 20, 12, tzinfo=timezone.utc)),
+        MartHistoricalState("a:1", 2000, 2500, True, A_CURRENT_AT),
+        MartHistoricalState("b:2", 2100, None, False, datetime(2026, 5, 1, 12, tzinfo=timezone.utc)),
+        MartHistoricalState("b:2", 2150, None, False, datetime(2026, 8, 20, 12, tzinfo=timezone.utc)),
+        MartHistoricalState("b:2", 2200, None, False, B_CURRENT_AT),
+    )
+    return analytics, competition, descriptors, states, freshness, history
 
 
 def test_business_and_consumer_marts_share_safe_inputs_and_metric_truth() -> None:
     marts = build_rpi_data_marts(*inputs())
 
     assert marts.business["schema"] == "rpi-business-mart/v1"
-    assert marts.consumer["schema"] == "rpi-consumer-mart/v1"
+    assert marts.consumer["schema"] == "rpi-consumer-mart/v2"
     assert marts.business["comparison_status"] == "COMPARABLE"
     assert marts.consumer["comparison_status"] == "COMPARABLE"
     assert marts.consumer["product_count"] == 1
@@ -104,7 +108,7 @@ def test_business_and_consumer_marts_share_safe_inputs_and_metric_truth() -> Non
     assert {row["pci"] for row in marts.business["facts"]["fact_current_comparison"]} == {"95.24", "104.76"}
 
 
-def test_consumer_mart_preserves_price_and_shopping_descriptors_without_secrets() -> None:
+def test_consumer_mart_preserves_price_history_and_shopping_descriptors_without_secrets() -> None:
     consumer = build_rpi_data_marts(*inputs()).consumer
     offer = consumer["products"][0]["offers"][0]
 
@@ -118,10 +122,46 @@ def test_consumer_mart_preserves_price_and_shopping_descriptors_without_secrets(
     assert offer["presentation"] == "1 L"
     assert offer["rank"] == 1
     assert offer["is_best_price"] is True
+    history = offer["historical_summary"]
+    assert history["observation_count"] == 3
+    assert history["previous_price"] == "22.00"
+    assert history["current_vs_previous_pct"] == "-9.09"
+    assert history["historical_position"] == "near_recent_minimum"
+    assert history["source_discount_depth_pct"] == "20.00"
+    assert history["windows"]["30d"] == {
+        "status": "available",
+        "observation_count": 3,
+        "average": "22.00",
+        "median": "22.00",
+        "minimum": "20.00",
+        "maximum": "24.00",
+        "current_vs_average_pct": "-9.09",
+        "current_vs_minimum_pct": "0.00",
+    }
+    assert history["windows"]["90d"]["status"] == "available"
     assert consumer["products"][0]["recommended_source_product_ids"] == ["a:1"]
     serialized = json.dumps(consumer).casefold()
     for forbidden in ("turso", "database_url", "auth_token", "libsql://"):
         assert forbidden not in serialized
+
+
+def test_consumer_history_keeps_explicit_insufficient_history_windows() -> None:
+    analytics, competition, descriptors, states, freshness, history = inputs()
+    current_only = tuple(row for row in history if row.observed_at_utc in {A_CURRENT_AT, B_CURRENT_AT})
+    consumer = build_rpi_data_marts(
+        analytics,
+        competition,
+        descriptors,
+        states,
+        freshness,
+        current_only,
+    ).consumer
+
+    for offer in consumer["products"][0]["offers"]:
+        assert offer["historical_summary"]["windows"]["30d"]["status"] == "insufficient_history"
+        assert offer["historical_summary"]["windows"]["30d"]["average"] is None
+        assert offer["historical_summary"]["windows"]["90d"]["status"] == "insufficient_history"
+        assert offer["historical_summary"]["windows"]["90d"]["minimum"] is None
 
 
 def test_stale_market_keeps_lkg_offers_visible_but_removes_rank_and_pci() -> None:
@@ -141,14 +181,28 @@ def test_stale_market_keeps_lkg_offers_visible_but_removes_rank_and_pci() -> Non
     assert any(row["freshness_status"] == "STALE" for row in facts)
 
 
-def test_mart_rejects_descriptor_or_price_drift_from_safe_universe() -> None:
-    analytics, competition, descriptors, states, freshness = inputs()
+def test_mart_rejects_descriptor_price_or_history_drift_from_safe_universe() -> None:
+    analytics, competition, descriptors, states, freshness, history = inputs()
     with pytest.raises(RpiDataMartError, match="mart_offer_inputs_not_exact_safe_universe"):
-        build_rpi_data_marts(analytics, competition, descriptors[:-1], states, freshness)
+        build_rpi_data_marts(analytics, competition, descriptors[:-1], states, freshness, history)
 
     bad_states = (
-        MartCommercialState("a:1", 9999, 2500, True, "in_stock", AS_OF),
+        MartCommercialState("a:1", 9999, 2500, True, "in_stock", A_CURRENT_AT),
         states[1],
     )
     with pytest.raises(RpiDataMartError, match="mart_current_price_mismatch"):
-        build_rpi_data_marts(analytics, competition, descriptors, bad_states, freshness)
+        build_rpi_data_marts(analytics, competition, descriptors, bad_states, freshness, history)
+
+    bad_history = (*history[:-1], MartHistoricalState("b:2", 2199, None, False, B_CURRENT_AT))
+    with pytest.raises(RpiDataMartError, match="mart_history_current_state_mismatch"):
+        build_rpi_data_marts(analytics, competition, descriptors, states, freshness, bad_history)
+
+    with pytest.raises(RpiDataMartError, match="mart_history_not_safe_universe"):
+        build_rpi_data_marts(
+            analytics,
+            competition,
+            descriptors,
+            states,
+            freshness,
+            (*history, MartHistoricalState("x:9", 1000, None, False, AS_OF)),
+        )
