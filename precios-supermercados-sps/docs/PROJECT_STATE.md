@@ -24,8 +24,11 @@ Inteligente B2C (web responsive). La primera frontera compartida ya está
 versionada en `analytics_quality.py`: mantiene completeness separado de health,
 clasifica `ACCEPTED/DEGRADED/REJECTED`, selecciona last-known-good y bloquea
 comparaciones con fuentes stale, unavailable o temporalmente incompatibles. Su
-integración a los marts/publicación sigue siendo el siguiente incremento; el
-dataset público vigente aún conserva el contrato v1 descrito abajo.
+integración a los marts/publicación sigue siendo incremental. La capa Python
+`competitive_analytics.py` ya calcula PCI configurable (mean, median o mínimo),
+rank, spread y cobertura sólo cuando la ventana de mercado es comparable. El
+dataset público vigente aún conserva el contrato v1 descrito abajo y por eso no
+expone todavía esas nuevas métricas.
 
 No se inventan ubicaciones cuando la fuente no las demuestra. Paiz no tiene un contexto selector SPS aceptado; sus dos contextos demostrados siguen siendo Multiplaza y Próceres en Tegucigalpa. PriceSmart El Sauce 6604 permanece excluido. Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
 
