@@ -107,6 +107,12 @@ def test_business_and_consumer_marts_share_safe_inputs_and_metric_truth() -> Non
     assert marts.business["source_freshness"] == marts.consumer["source_freshness"]
     assert {row["pci"] for row in marts.business["facts"]["fact_current_comparison"]} == {"95.24", "104.76"}
 
+    offers = {offer["source_product_id"]: offer for offer in marts.consumer["products"][0]["offers"]}
+    assert offers["a:1"]["difference_vs_best_abs"] == "0.00"
+    assert offers["a:1"]["difference_vs_best_pct"] == "0.00"
+    assert offers["b:2"]["difference_vs_best_abs"] == "2.00"
+    assert offers["b:2"]["difference_vs_best_pct"] == "10.00"
+
 
 def test_consumer_mart_preserves_price_history_and_shopping_descriptors_without_secrets() -> None:
     consumer = build_rpi_data_marts(*inputs()).consumer
@@ -122,6 +128,8 @@ def test_consumer_mart_preserves_price_history_and_shopping_descriptors_without_
     assert offer["presentation"] == "1 L"
     assert offer["rank"] == 1
     assert offer["is_best_price"] is True
+    assert offer["difference_vs_best_abs"] == "0.00"
+    assert offer["difference_vs_best_pct"] == "0.00"
     history = offer["historical_summary"]
     assert history["observation_count"] == 3
     assert history["previous_price"] == "22.00"
@@ -173,7 +181,10 @@ def test_stale_market_keeps_lkg_offers_visible_but_removes_rank_and_pci() -> Non
     assert "source_data_stale" in marts.consumer["blocked_reasons"]
     assert all(row["rank"] is None and row["pci"] is None for row in facts)
     assert all(
-        offer["rank"] is None and offer["is_best_price"] is False
+        offer["rank"] is None
+        and offer["is_best_price"] is False
+        and offer["difference_vs_best_abs"] is None
+        and offer["difference_vs_best_pct"] is None
         for product in marts.consumer["products"]
         for offer in product["offers"]
     )

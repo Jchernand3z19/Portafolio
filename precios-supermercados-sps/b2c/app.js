@@ -44,6 +44,24 @@ export function exactMartOffer(mart, canonicalProductId, sourceProductId) {
   return offers.length === 1 ? {product: products[0], offer: offers[0]} : null;
 }
 
+export function consumerMartContractIsCompatible(mart) {
+  if (mart?.schema !== "rpi-consumer-mart/v2" || !Array.isArray(mart.products)) return false;
+  const comparable = mart.comparison_status === "COMPARABLE";
+  for (const product of mart.products) {
+    if (!Array.isArray(product?.offers)) return false;
+    for (const offer of product.offers) {
+      const abs = offer?.difference_vs_best_abs;
+      const pct = offer?.difference_vs_best_pct;
+      if (comparable) {
+        if (moneyToMinor(abs) === null || typeof pct !== "string" || !/^\d+(?:\.\d{1,2})?$/.test(pct.trim())) return false;
+      } else if (abs !== null || pct !== null) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function offerIsUsable(offer) {
   const price = moneyToMinor(offer?.current_price);
   return price !== null && price > 0 && offer.availability !== "out_of_stock" && offer.freshness_status !== "UNAVAILABLE";
@@ -288,6 +306,11 @@ function createApp() {
         if (offer.is_promotion) offerCard.append(el("span", "promo-badge", "Promoción reportada"));
         offerCard.append(metric("Freshness", offer.freshness_status), metric("Observado", offer.observed_at ?? "—"));
         if (offer.rank !== null && offer.rank !== undefined) offerCard.append(metric("Ranking", `#${offer.rank}`));
+        if (offer.difference_vs_best_abs !== null && offer.difference_vs_best_pct !== null) {
+          const deltaMinor = moneyToMinor(offer.difference_vs_best_abs);
+          const prefix = offer.is_best_price ? "" : "+";
+          offerCard.append(metric("Vs mejor precio", `${prefix}${formatHnl(deltaMinor)} · ${prefix}${offer.difference_vs_best_pct}%`));
+        }
         const history = offer.historical_summary;
         if (history) {
           const w30 = history.windows?.["30d"], w90 = history.windows?.["90d"];
@@ -324,7 +347,7 @@ function createApp() {
       const response = await fetch(url, {cache: "no-store"});
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const mart = await response.json();
-      if (mart.schema !== "rpi-consumer-mart/v2" || !Array.isArray(mart.products)) throw new Error("Contrato no compatible");
+      if (!consumerMartContractIsCompatible(mart)) throw new Error("Contrato no compatible");
       state.mart = mart;
       status.textContent = `${mart.product_count} productos seguros · corte ${mart.as_of} · ${mart.comparison_status}`;
       renderResults();
