@@ -17,6 +17,16 @@ El proyecto mantiene seis cadenas productivas y once ubicaciones demostradas:
 
 El ciclo productivo completo más reciente dejó **6 supermercados, 11 ubicaciones, 58,114 productos, 127,980 periodos de `price_history` y 463 `scrape_runs`**. La verificación posterior confirmó cero periodos actuales duplicados, cero violaciones de claves foráneas y `PRAGMA integrity_check = ok`.
 
+La evolución de producto vigente está definida en
+[`RPI-PRODUCT-SPEC.md`](RPI-PRODUCT-SPEC.md): una sola adquisición y estado
+comercial confiable alimentan Retail Price Intelligence B2B (Power BI) y Compra
+Inteligente B2C (web responsive). La primera frontera compartida ya está
+versionada en `analytics_quality.py`: mantiene completeness separado de health,
+clasifica `ACCEPTED/DEGRADED/REJECTED`, selecciona last-known-good y bloquea
+comparaciones con fuentes stale, unavailable o temporalmente incompatibles. Su
+integración a los marts/publicación sigue siendo el siguiente incremento; el
+dataset público vigente aún conserva el contrato v1 descrito abajo.
+
 No se inventan ubicaciones cuando la fuente no las demuestra. Paiz no tiene un contexto selector SPS aceptado; sus dos contextos demostrados siguen siendo Multiplaza y Próceres en Tegucigalpa. PriceSmart El Sauce 6604 permanece excluido. Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
 
 ## Operación recurrente vigente
