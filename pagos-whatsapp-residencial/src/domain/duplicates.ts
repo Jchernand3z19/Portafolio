@@ -1,3 +1,4 @@
+import { samePhone } from './phone';
 import type { HomeRef, PaymentRecord } from './types';
 
 export type DuplicateDecision =
@@ -36,7 +37,7 @@ export function decideDuplicate(probe: DuplicateProbe, existing: readonly Paymen
       (record) => record.bank.toUpperCase() === probe.bank.toUpperCase() && record.reference?.trim().toUpperCase() === normalizedReference,
     );
     if (byReference) {
-      if (!sameHome(byReference, probe.home) || byReference.phone !== probe.phone) {
+      if (!sameHome(byReference, probe.home) || !samePhone(byReference.phone, probe.phone)) {
         return { kind: 'conflict', original: byReference, reason: 'bank_reference_home_conflict' };
       }
       return { kind: 'duplicate', original: byReference, reason: 'bank_reference' };
@@ -47,7 +48,7 @@ export function decideDuplicate(probe: DuplicateProbe, existing: readonly Paymen
     const weak = existing.find(
       (record) =>
         record.bank.toUpperCase() === probe.bank.toUpperCase() &&
-        record.phone === probe.phone &&
+        samePhone(record.phone, probe.phone) &&
         record.amount === probe.amount &&
         record.transactionDate === probe.transactionDate,
     );
