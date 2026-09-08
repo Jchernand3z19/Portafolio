@@ -174,6 +174,18 @@ function metric(label, value) {
   return row;
 }
 
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = el("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 function createApp() {
   const state = {mart: null, cart: loadCart(localStorage)};
   const search = document.querySelector("#product-search");
@@ -186,6 +198,9 @@ function createApp() {
   const refreshBox = document.querySelector("#price-refresh");
   const refreshMessage = document.querySelector("#price-refresh-message");
   const refreshButton = document.querySelector("#price-refresh-button");
+  const exportCsvButton = document.querySelector("#export-csv");
+  const exportPdfButton = document.querySelector("#export-pdf");
+  const exportStatus = document.querySelector("#export-status");
 
   function renderRefresh() {
     if (!state.mart || !state.cart.length) {
@@ -220,7 +235,10 @@ function createApp() {
     cartCount.textContent = String(summary.products);
     cartStats.textContent = `${summary.products} productos · ${summary.units} unidades · ${summary.retailer_count} supermercados · ${summary.incomplete} incompletos · ${summary.stale} stale`;
     cartTotal.textContent = summary.grand_total_minor === null ? "Total incompleto" : `TOTAL ESTIMADO ${formatHnl(summary.grand_total_minor)}`;
+    exportCsvButton.disabled = summary.products === 0;
+    exportPdfButton.disabled = summary.products === 0;
     if (!summary.products) {
+      exportStatus.textContent = "";
       cart.append(el("p", "empty-state", "Tu lista está vacía. Busca un producto y elige dónde comprarlo."));
       return;
     }
@@ -335,6 +353,29 @@ function createApp() {
     }
   }
 
+  async function exportCart(kind) {
+    if (!state.cart.length) return;
+    exportStatus.textContent = `Preparando ${kind.toUpperCase()}…`;
+    try {
+      const exportsModule = await import("./exports.js");
+      const summary = cartSummary(state.cart);
+      const generatedAt = new Date();
+      const date = generatedAt.toISOString().slice(0, 10);
+      if (kind === "csv") {
+        const csv = exportsModule.buildCartCsv(summary);
+        downloadBlob(new Blob([csv], {type: "text/csv;charset=utf-8"}), `mi-compra-${date}.csv`);
+      } else {
+        const pdf = exportsModule.buildCartPdf(summary, generatedAt);
+        downloadBlob(new Blob([pdf], {type: "application/pdf"}), `mi-compra-${date}.pdf`);
+      }
+      exportStatus.textContent = `${kind.toUpperCase()} generado desde tu lista local.`;
+    } catch {
+      exportStatus.textContent = `No fue posible generar ${kind.toUpperCase()}.`;
+    }
+  }
+
+  exportCsvButton.addEventListener("click", () => { void exportCart("csv"); });
+  exportPdfButton.addEventListener("click", () => { void exportCart("pdf"); });
   refreshButton.addEventListener("click", () => {
     if (!state.mart) return;
     state.cart = refreshCartPrices(state.cart, state.mart);
