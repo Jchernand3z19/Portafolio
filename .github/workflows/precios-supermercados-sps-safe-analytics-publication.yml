@@ -54,6 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf run-artifacts/analytics/la-colonia-walmart-sps
+          mkdir -p run-artifacts/analytics
           python scripts/exportar_modelo_analitico.py \
             --turso \
             --scope la_colonia=la_colonia_sps \
