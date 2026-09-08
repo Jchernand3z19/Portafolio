@@ -216,7 +216,7 @@ assert.ok(csv.includes('"Leche Sula"'));
 assert.ok(csv.includes('"35.50"'));
 assert.ok(csv.includes('"71.00"'));
 assert.ok(csv.includes('"NO_DISPONIBLE"'));
-assert.ok(csv.includes('"\'=2+2"')); // neutraliza fórmulas al abrir el CSV en una hoja de cálculo.
+assert.ok(csv.includes("\"'=2+2\"")); // neutraliza fórmulas al abrir el CSV en una hoja de cálculo.
 assert.ok(!csv.includes("1.15"));
 
 const pdf = exports.buildCartPdf(summary, new Date("2026-09-08T22:30:00Z"));
