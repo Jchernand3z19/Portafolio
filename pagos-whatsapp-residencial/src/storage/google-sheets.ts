@@ -8,6 +8,7 @@ import {
   PENDING_HEADERS,
   SHEETS,
   homeFromRow,
+  homeToRow,
   messageFromRow,
   messageToRow,
   paymentFromRow,
@@ -138,6 +139,24 @@ export class GoogleSheetsPaymentStore implements PaymentStore {
 
   async findHomesByPhone(phone: string): Promise<HomeRecord[]> {
     return (await this.listHomes()).filter((home) => home.active && home.phone === phone);
+  }
+
+  async saveHome(home: HomeRecord): Promise<void> {
+    const homes = await this.listHomes();
+    if (homes.some((item) => item.id === home.id)) throw new Error('home_already_exists');
+    if (homes.some((item) => item.block === home.block && item.house === home.house)) throw new Error('home_address_already_exists');
+    await this.append(SHEETS.homes, homeToRow(home));
+  }
+
+  async updateHome(home: HomeRecord): Promise<void> {
+    const rows = await this.read(SHEETS.homes, `A2:${columnName(HOME_HEADERS.length)}`);
+    const parsed = rows.map(homeFromRow);
+    const index = parsed.findIndex((item) => item?.id === home.id);
+    if (index < 0) throw new Error('home_not_found');
+    if (parsed.some((item) => item && item.id !== home.id && item.block === home.block && item.house === home.house)) {
+      throw new Error('home_address_already_exists');
+    }
+    await this.replaceRow(SHEETS.homes, index + 2, homeToRow(home));
   }
 
   async getPendingByPhone(phone: string): Promise<PendingConversation | undefined> {
