@@ -1,0 +1,63 @@
+import type { HomeRecord, PaymentRecord } from '@/src/domain/types';
+
+export const DEMO_PERIOD = '2026-09';
+
+export const DEMO_HOMES: HomeRecord[] = [
+  { id: 'home-b1-c1', block: 1, house: 1, responsible: 'Persona Demo A', phone: '+50400000001', monthlyFee: 150, active: true },
+  { id: 'home-b1-c2', block: 1, house: 2, responsible: 'Persona Demo B', phone: '+50400000002', monthlyFee: 150, active: true },
+  { id: 'home-b1-c3', block: 1, house: 3, responsible: 'Persona Demo C', phone: '+50400000003', monthlyFee: 150, active: true },
+  { id: 'home-b1-c4', block: 1, house: 4, responsible: 'Persona Demo D', phone: '+50400000004', monthlyFee: 150, active: true },
+  { id: 'home-b2-c1', block: 2, house: 1, responsible: 'Persona Demo E', phone: '+50400000005', monthlyFee: 150, active: true },
+  { id: 'home-b2-c2', block: 2, house: 2, responsible: 'Persona Demo F', phone: '+50400000006', monthlyFee: 150, active: true },
+  { id: 'home-b2-c3', block: 2, house: 3, responsible: 'Persona Demo G', phone: '+50400000007', monthlyFee: 150, active: true },
+  { id: 'home-b2-c4', block: 2, house: 4, responsible: 'Persona Demo H', phone: '+50400000008', monthlyFee: 150, active: true },
+  { id: 'home-b4-c17', block: 4, house: 17, responsible: 'Persona Demo I', phone: '+50400000009', monthlyFee: 150, active: true },
+  { id: 'home-b4-c18', block: 4, house: 18, responsible: 'Persona Demo J', phone: '+50400000010', monthlyFee: 150, active: true },
+  { id: 'home-b4-c19', block: 4, house: 19, responsible: 'Persona Demo K', phone: '+50400000011', monthlyFee: 150, active: true },
+  { id: 'home-b4-c20', block: 4, house: 20, responsible: 'Persona Demo L', phone: '+50400000012', monthlyFee: 150, active: true },
+];
+
+const base = {
+  period: DEMO_PERIOD,
+  bank: 'BAC Honduras',
+  amount: 150,
+} as const;
+
+export const DEMO_PAYMENTS: PaymentRecord[] = [
+  {
+    ...base, id: 'pay-demo-001', createdAt: '2026-09-07T14:12:00.000Z', updatedAt: '2026-09-07T14:14:00.000Z', sourceMessageId: 'wamid.demo.001', phone: '+50400000010',
+    depositor: 'JUAN PÉREZ DEMO', transactionDate: '2026-09-07', transactionTime: '08:12', detail: 'B4 C18', reference: 'DEMO-REF-0001', beneficiary: 'RESIDENCIAL DEMO',
+    destinationAccountMasked: '••••0001', block: 4, house: 18, status: 'VERIFICADO', fileHash: 'demo-hash-001', verificationSource: 'demo-bank-movement', verifiedAt: '2026-09-07T14:14:00.000Z',
+  },
+  {
+    ...base, id: 'pay-demo-002', createdAt: '2026-09-06T16:30:00.000Z', updatedAt: '2026-09-06T16:30:00.000Z', sourceMessageId: 'wamid.demo.002', phone: '+50400000001',
+    depositor: 'MARÍA DEMO', transactionDate: '2026-09-06', transactionTime: '10:30', detail: 'Bloque 1 Casa 1', reference: 'DEMO-REF-0002', beneficiary: 'RESIDENCIAL DEMO',
+    destinationAccountMasked: '••••0001', block: 1, house: 1, status: 'PENDIENTE_VERIFICACION', fileHash: 'demo-hash-002',
+  },
+  {
+    ...base, id: 'pay-demo-003', createdAt: '2026-09-05T18:20:00.000Z', updatedAt: '2026-09-05T18:20:00.000Z', sourceMessageId: 'wamid.demo.003', phone: '+50400000005',
+    depositor: 'CARLOS DEMO', transactionDate: '2026-09-05', transactionTime: '12:20', detail: 'B2-C1', reference: 'DEMO-REF-0003', beneficiary: 'RESIDENCIAL DEMO',
+    destinationAccountMasked: '••••0001', block: 2, house: 1, status: 'VERIFICADO', fileHash: 'demo-hash-003', verificationSource: 'demo-bank-movement', verifiedAt: '2026-09-05T18:25:00.000Z',
+  },
+  {
+    ...base, id: 'pay-demo-004', createdAt: '2026-09-04T20:05:00.000Z', updatedAt: '2026-09-04T20:05:00.000Z', sourceMessageId: 'wamid.demo.004', phone: '+50400000999',
+    depositor: 'TERCERO DEMO', transactionDate: '2026-09-04', transactionTime: '14:05', detail: 'Cuota septiembre', reference: 'DEMO-REF-0004', beneficiary: 'RESIDENCIAL DEMO',
+    destinationAccountMasked: '••••0001', status: 'ESPERANDO_RESPUESTA', fileHash: 'demo-hash-004',
+  },
+  {
+    ...base, id: 'pay-demo-005', createdAt: '2026-09-03T15:40:00.000Z', updatedAt: '2026-09-03T15:40:00.000Z', sourceMessageId: 'wamid.demo.005', phone: '+50400000006',
+    depositor: 'PERSONA DEMO', transactionDate: '2026-09-03', transactionTime: '09:40', detail: 'B2 C2', reference: 'DEMO-REF-0005', beneficiary: 'BENEFICIARIO INESPERADO',
+    destinationAccountMasked: '••••9999', block: 2, house: 2, status: 'EN_REVISION', fileHash: 'demo-hash-005', reviewReason: 'destination_account_unexpected',
+  },
+  {
+    ...base, id: 'pay-demo-006', createdAt: '2026-09-03T15:45:00.000Z', updatedAt: '2026-09-03T15:45:00.000Z', sourceMessageId: 'wamid.demo.006', phone: '+50400000001',
+    depositor: 'MARÍA DEMO', transactionDate: '2026-09-06', transactionTime: '10:30', detail: 'Bloque 1 Casa 1', reference: 'DEMO-REF-0002', beneficiary: 'RESIDENCIAL DEMO',
+    destinationAccountMasked: '••••0001', block: 1, house: 1, status: 'DUPLICADO', fileHash: 'demo-hash-006', duplicateOf: 'pay-demo-002',
+  },
+];
+
+export const SYNTHETIC_BAC_RECEIPTS = {
+  valid: `BAC\nTransferencia realizada\nRemitente: JUAN PÉREZ DEMO\nFecha: 07/09/2026\nHora: 08:12 AM\nMonto: L150.00\nDetalle: B4 C18\nReferencia: DEMOREF000001\nBeneficiario: RESIDENCIAL DEMO\nCuenta destino: 000000000001`,
+  missingHome: `BAC\nTransferencia realizada\nRemitente: ANA DEMO\nFecha: 08/09/2026\nHora: 09:05 AM\nMonto: L150.00\nDetalle: Cuota mensual\nReferencia: DEMOREF000002\nBeneficiario: RESIDENCIAL DEMO\nCuenta destino: 000000000001`,
+  editedConflict: `BAC\nTransferencia realizada\nRemitente: PERSONA DEMO\nFecha: 07/09/2026\nHora: 08:12 AM\nMonto: L900.00\nDetalle: B2 C2\nReferencia: DEMOREF000001\nBeneficiario: RESIDENCIAL DEMO\nCuenta destino: 000000000001`,
+} as const;
