@@ -36,6 +36,12 @@ mediana, duración observada, frecuencia de cambios, volatilidad y días desde e
 anterior al inicio solicitado; cuando no existe, devuelven
 `insufficient_history` en vez de acortar silenciosamente el periodo.
 
+`promotion_analytics.py` mantiene separadas la promoción declarada por la fuente
+y la reducción contra el precio efectivo observado anteriormente. Calcula
+profundidad declarada, duración, frecuencia, share, comparación contra promedios
+30/90 días y mínimo 90 días, y devuelve estados auditables; nunca eleva
+`reported_regular_price` a evidencia histórica.
+
 No se inventan ubicaciones cuando la fuente no las demuestra. Paiz no tiene un contexto selector SPS aceptado; sus dos contextos demostrados siguen siendo Multiplaza y Próceres en Tegucigalpa. PriceSmart El Sauce 6604 permanece excluido. Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
 
 ## Operación recurrente vigente
