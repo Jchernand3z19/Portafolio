@@ -25,6 +25,7 @@ La hoja de cálculo es **privada**. El backend valida/crea las pestañas necesar
 | `status` | estado de la máquina de pagos |
 | `file_hash` | SHA-256 del archivo |
 | `duplicate_of` | pago original relacionado |
+| `duplicate_reason` | señal exacta que originó duplicado/conflicto |
 | `review_reason` | motivo interno de revisión |
 | `verification_source` | fuente bancaria usada para verificar |
 | `verified_at` | fecha/hora de verificación |
@@ -41,7 +42,7 @@ La hoja de cálculo es **privada**. El backend valida/crea las pestañas necesar
 | `active` | vivienda activa/inactiva |
 | `start_date` / `end_date` | vigencia para períodos históricos |
 
-El nombre del depositante **no** se utiliza como dueño de la vivienda.
+El nombre del depositante **no** se utiliza como dueño de la vivienda. El panel administrativo puede crear y actualizar viviendas sin editar la Sheet manualmente. Bloque + casa se mantienen como identidad operativa estable y el teléfono se normaliza por dígitos para comparar formatos equivalentes.
 
 ## `Conversaciones`
 
@@ -53,7 +54,7 @@ El nombre del depositante **no** se utiliza como dueño de la vivienda.
 | `created_at` | creación |
 | `expires_at` | expiración |
 
-Sólo debe existir un contexto vigente por teléfono.
+Sólo debe existir un contexto vigente por teléfono. La comparación normaliza el formato del teléfono para evitar contextos separados por diferencias como `+504...` frente a `504...`.
 
 ## `Mensajes`
 
@@ -80,3 +81,4 @@ Reservada para parámetros operativos no secretos. **Nunca** guardar tokens, con
 - Cuenta destino: conservar sólo versión enmascarada.
 - Comprobantes: Drive privado, no celdas con URLs públicas.
 - Secretos: únicamente variables de entorno de Vercel.
+- Si una hoja existente tiene encabezados inesperados, el backend falla de forma cerrada en lugar de sobrescribir datos.
