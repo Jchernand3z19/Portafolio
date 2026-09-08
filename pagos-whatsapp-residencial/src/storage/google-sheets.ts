@@ -1,5 +1,6 @@
 import { google, type sheets_v4 } from 'googleapis';
 import { requireProductionEnv } from '@/src/config/env';
+import { samePhone } from '@/src/domain/phone';
 import type { HomeRecord, PaymentRecord, PendingConversation, ProcessedMessage } from '@/src/domain/types';
 import {
   HOME_HEADERS,
@@ -138,7 +139,7 @@ export class GoogleSheetsPaymentStore implements PaymentStore {
   }
 
   async findHomesByPhone(phone: string): Promise<HomeRecord[]> {
-    return (await this.listHomes()).filter((home) => home.active && home.phone === phone);
+    return (await this.listHomes()).filter((home) => home.active && samePhone(home.phone, phone));
   }
 
   async saveHome(home: HomeRecord): Promise<void> {
@@ -164,7 +165,7 @@ export class GoogleSheetsPaymentStore implements PaymentStore {
     const matches = rows
       .map((row, index) => ({ row: pendingFromRow(row), rowNumber: index + 2 }))
       .filter((item): item is { row: PendingConversation; rowNumber: number } => Boolean(item.row))
-      .filter((item) => item.row.phone === phone)
+      .filter((item) => samePhone(item.row.phone, phone))
       .sort((a, b) => Date.parse(b.row.createdAt) - Date.parse(a.row.createdAt));
     const current = matches[0];
     if (!current) return undefined;
@@ -177,7 +178,7 @@ export class GoogleSheetsPaymentStore implements PaymentStore {
 
   async savePending(pending: PendingConversation): Promise<void> {
     const rows = await this.read(SHEETS.pending, `A2:${columnName(PENDING_HEADERS.length)}`);
-    const index = rows.findIndex((row) => String(row[1] ?? '') === pending.phone);
+    const index = rows.findIndex((row) => samePhone(String(row[1] ?? ''), pending.phone));
     if (index >= 0) {
       const current = pendingFromRow(rows[index]);
       if (current && Date.parse(current.expiresAt) > Date.now() && current.paymentId !== pending.paymentId) {
@@ -192,7 +193,7 @@ export class GoogleSheetsPaymentStore implements PaymentStore {
   async clearPending(phone: string): Promise<void> {
     const rows = await this.read(SHEETS.pending, `A2:${columnName(PENDING_HEADERS.length)}`);
     await Promise.all(
-      rows.flatMap((row, index) => String(row[1] ?? '') === phone ? [this.clearRow(SHEETS.pending, index + 2, PENDING_HEADERS.length)] : []),
+      rows.flatMap((row, index) => samePhone(String(row[1] ?? ''), phone) ? [this.clearRow(SHEETS.pending, index + 2, PENDING_HEADERS.length)] : []),
     );
   }
 
