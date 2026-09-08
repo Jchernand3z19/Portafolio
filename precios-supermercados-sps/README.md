@@ -74,6 +74,7 @@ La procedencia completa y los límites de interpretación se documentan en [`doc
 - **Presentación pública y evidencia de cifras del portafolio:** [`docs/portfolio-showcase.md`](docs/portfolio-showcase.md)
 - **Metodología del comparador:** [`docs/COMPARATOR-METHODOLOGY.md`](docs/COMPARATOR-METHODOLOGY.md)
 - **Contrato del dataset analítico/publicable:** [`docs/PUBLICATION-DATA-DICTIONARY.md`](docs/PUBLICATION-DATA-DICTIONARY.md)
+- **Contratos Business/Consumer Mart:** [`docs/RPI-DATA-MART-DICTIONARY.md`](docs/RPI-DATA-MART-DICTIONARY.md)
 - **Guía de implementación en Power BI:** [`docs/BI-IMPLEMENTATION-GUIDE.md`](docs/BI-IMPLEMENTATION-GUIDE.md)
 - **Arquitectura estable:** [`docs/arquitectura.md`](docs/arquitectura.md)
 - **Modelo de datos:** [`docs/modelo-datos.md`](docs/modelo-datos.md)

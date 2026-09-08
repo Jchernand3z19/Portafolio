@@ -56,6 +56,12 @@ descriptores/ofertas necesarios. Si la ventana está bloqueada, el último preci
 válido sigue visible con su staleness, mientras `rank`, PCI y métricas de mercado
 quedan nulos.
 
+El exportador offline/read-only `scripts/exportar_rpi_marts.py` materializa ambos
+contratos en JSON y el Business Mart en CSV, escribe de forma atómica y registra
+SHA-256 por archivo. Consulta el último `scrape_runs.run_status='success'` por
+scope y excluye runs rechazados de last-known-good. La publicación automática de
+estos nuevos artifacts aún no sustituye la publicación v1 vigente.
+
 No se inventan ubicaciones cuando la fuente no las demuestra. Paiz no tiene un contexto selector SPS aceptado; sus dos contextos demostrados siguen siendo Multiplaza y Próceres en Tegucigalpa. PriceSmart El Sauce 6604 permanece excluido. Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
 
 ## Operación recurrente vigente
