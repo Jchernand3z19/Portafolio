@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Iterable
 
-from .analytics_quality import FreshnessAssessment, FreshnessStatus, MarketWindowStatus
+from .analytics_quality import FreshnessAssessment, MarketWindowStatus
 from .competitive_analytics import CompetitiveAnalyticsResult
 from .price_analytics import AnalyticsResult
+from .price_history_analytics import HistoricalPriceObservation, summarize_price_series, summarize_price_windows
+from .promotion_analytics import PromotionPriceObservation, analyze_promotions
 
 
 class RpiDataMartError(ValueError):
@@ -59,6 +61,31 @@ class MartCommercialState:
 
 
 @dataclass(frozen=True, slots=True)
+class MartHistoricalState:
+    source_record_id: str
+    current_price_minor: int
+    reported_regular_price_minor: int | None
+    is_promotion: bool
+    observed_at_utc: datetime
+
+    def __post_init__(self) -> None:
+        if not self.source_record_id.strip():
+            raise RpiDataMartError("mart_history_identity_missing")
+        if type(self.current_price_minor) is not int or self.current_price_minor <= 0:
+            raise RpiDataMartError("mart_history_price_invalid")
+        if self.reported_regular_price_minor is not None and (
+            type(self.reported_regular_price_minor) is not int
+            or self.reported_regular_price_minor <= 0
+        ):
+            raise RpiDataMartError("mart_history_regular_price_invalid")
+        if not isinstance(self.is_promotion, bool):
+            raise RpiDataMartError("mart_history_promotion_invalid")
+        if self.observed_at_utc.tzinfo is None or self.observed_at_utc.utcoffset() is None:
+            raise RpiDataMartError("mart_history_observed_at_not_timezone_aware")
+        object.__setattr__(self, "observed_at_utc", self.observed_at_utc.astimezone(timezone.utc))
+
+
+@dataclass(frozen=True, slots=True)
 class RpiDataMarts:
     business: dict[str, Any]
     consumer: dict[str, Any]
@@ -70,8 +97,14 @@ def _money(minor: int | None) -> str | None:
     return format((Decimal(minor) / Decimal(100)).quantize(Decimal("0.01")), "f")
 
 
-def _money_decimal_minor(minor: Decimal) -> str:
+def _money_decimal_minor(minor: Decimal | None) -> str | None:
+    if minor is None:
+        return None
     return format((minor / Decimal(100)).quantize(Decimal("0.01")), "f")
+
+
+def _decimal(value: Decimal | None) -> str | None:
+    return None if value is None else format(value, "f")
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -88,12 +121,126 @@ def _unique_by_id(values: Iterable[Any], field: str, error: str) -> dict[str, An
     return result
 
 
+def _history_by_source(
+    historical_states: Iterable[MartHistoricalState],
+    safe_ids: set[str],
+) -> dict[str, tuple[MartHistoricalState, ...]]:
+    grouped: dict[str, list[MartHistoricalState]] = {}
+    for state in historical_states:
+        if state.source_record_id not in safe_ids:
+            raise RpiDataMartError("mart_history_not_safe_universe")
+        grouped.setdefault(state.source_record_id, []).append(state)
+    result: dict[str, tuple[MartHistoricalState, ...]] = {}
+    for source_record_id, rows in grouped.items():
+        ordered = tuple(sorted(rows, key=lambda item: item.observed_at_utc))
+        if len({item.observed_at_utc for item in ordered}) != len(ordered):
+            raise RpiDataMartError("mart_history_duplicate_timestamp")
+        result[source_record_id] = ordered
+    return result
+
+
+def _historical_summary(
+    *,
+    canonical_product_id: str,
+    supermarket_id: str,
+    location_id: str,
+    current_state: MartCommercialState,
+    history: tuple[MartHistoricalState, ...],
+    as_of_utc: datetime,
+) -> dict[str, Any]:
+    if not history:
+        history = (
+            MartHistoricalState(
+                current_state.source_record_id,
+                current_state.current_price_minor,
+                current_state.reported_regular_price_minor,
+                current_state.is_promotion,
+                current_state.observed_at_utc,
+            ),
+        )
+    latest = history[-1]
+    if (
+        latest.current_price_minor != current_state.current_price_minor
+        or latest.reported_regular_price_minor != current_state.reported_regular_price_minor
+        or latest.is_promotion != current_state.is_promotion
+        or latest.observed_at_utc != current_state.observed_at_utc
+    ):
+        raise RpiDataMartError("mart_history_current_state_mismatch")
+    if latest.observed_at_utc > as_of_utc:
+        raise RpiDataMartError("mart_history_after_as_of")
+
+    historical_rows = tuple(
+        HistoricalPriceObservation(
+            canonical_product_id,
+            supermarket_id,
+            location_id,
+            item.observed_at_utc,
+            item.current_price_minor,
+        )
+        for item in history
+    )
+    promotion_rows = tuple(
+        PromotionPriceObservation(
+            canonical_product_id,
+            supermarket_id,
+            location_id,
+            item.observed_at_utc,
+            item.current_price_minor,
+            item.is_promotion,
+            item.reported_regular_price_minor,
+        )
+        for item in history
+    )
+    series = summarize_price_series(historical_rows)
+    windows = {
+        item.window_days: item
+        for item in summarize_price_windows(
+            historical_rows,
+            as_of_utc=as_of_utc,
+            windows=(30, 90),
+        )
+    }
+    promotion = analyze_promotions(promotion_rows, as_of_utc=as_of_utc)
+
+    def window_payload(days: int) -> dict[str, Any]:
+        window = windows[days]
+        return {
+            "status": "available" if window.sufficient_history else "insufficient_history",
+            "observation_count": window.observation_count,
+            "average": _money(window.mean_price_minor),
+            "median": _money_decimal_minor(window.median_price_minor),
+            "minimum": _money(window.minimum_price_minor),
+            "maximum": _money(window.maximum_price_minor),
+            "current_vs_average_pct": _decimal(window.current_vs_average_pct),
+            "current_vs_minimum_pct": _decimal(window.current_vs_minimum_pct),
+        }
+
+    return {
+        "observation_count": series.observation_count,
+        "first_observed_at": _iso(series.first_observed_at_utc),
+        "last_observed_at": _iso(series.last_observed_at_utc),
+        "observed_minimum": _money(series.minimum_price_minor),
+        "observed_maximum": _money(series.maximum_price_minor),
+        "previous_price": _money(promotion.previous_price_minor),
+        "current_vs_previous_pct": _decimal(promotion.current_vs_previous_pct),
+        "days_since_last_change": _decimal(series.days_since_last_change),
+        "historical_position": promotion.historical_position.value,
+        "historical_price_reduction": promotion.historical_price_reduction,
+        "source_discount_depth_pct": _decimal(promotion.source_discount_depth_pct),
+        "windows": {
+            "30d": window_payload(30),
+            "90d": window_payload(90),
+        },
+    }
+
+
 def build_rpi_data_marts(
     analytics: AnalyticsResult,
     competition: CompetitiveAnalyticsResult,
     descriptors: Iterable[MartOfferDescriptor],
     commercial_states: Iterable[MartCommercialState],
     source_freshness: Iterable[FreshnessAssessment],
+    historical_states: Iterable[MartHistoricalState] = (),
 ) -> RpiDataMarts:
     """Project the same trusted inputs to private business and public consumer marts."""
 
@@ -122,6 +269,7 @@ def build_rpi_data_marts(
     safe_ids = {offer.source_record_id for offer in safe_offers}
     if set(descriptor_by_id) != safe_ids or set(state_by_id) != safe_ids:
         raise RpiDataMartError("mart_offer_inputs_not_exact_safe_universe")
+    history_by_id = _history_by_source(historical_states, safe_ids)
 
     competitive_by_id = {
         item.canonical_product_id: item for item in competition.products
@@ -137,6 +285,7 @@ def build_rpi_data_marts(
     consumer_products: list[dict[str, Any]] = []
     category_names: set[str] = set()
     brand_names: set[str] = set()
+    as_of_utc = freshness_values[0].as_of_utc if freshness_values else datetime.now(timezone.utc)
     for product in analytics.products:
         product_dimensions.append(
             {
@@ -202,6 +351,14 @@ def build_rpi_data_marts(
                     **common,
                     "rank": None if metric is None else metric.rank,
                     "is_best_price": metric is not None and metric.rank == 1,
+                    "historical_summary": _historical_summary(
+                        canonical_product_id=product.canonical_product_id,
+                        supermarket_id=offer.supermarket_id,
+                        location_id=offer.location_id,
+                        current_state=state,
+                        history=history_by_id.get(offer.source_record_id, ()),
+                        as_of_utc=as_of_utc,
+                    ),
                 }
             )
         consumer_products.append(
@@ -275,7 +432,7 @@ def build_rpi_data_marts(
         },
     }
     consumer = {
-        "schema": "rpi-consumer-mart/v1",
+        "schema": "rpi-consumer-mart/v2",
         "comparison_policy": business["comparison_policy"],
         "comparison_status": business["comparison_status"],
         "blocked_reasons": business["blocked_reasons"],
