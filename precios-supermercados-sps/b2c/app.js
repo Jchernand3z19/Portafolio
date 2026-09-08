@@ -37,9 +37,21 @@ export function recommendedIds(product, comparisonStatus) {
   return new Set((product.recommended_source_product_ids ?? []).filter((value) => typeof value === "string"));
 }
 
+export function exactMartOffer(mart, canonicalProductId, sourceProductId) {
+  const products = (mart?.products ?? []).filter((product) => product.canonical_product_id === canonicalProductId);
+  if (products.length !== 1) return null;
+  const offers = (products[0].offers ?? []).filter((offer) => offer.source_product_id === sourceProductId);
+  return offers.length === 1 ? {product: products[0], offer: offers[0]} : null;
+}
+
+function offerIsUsable(offer) {
+  const price = moneyToMinor(offer?.current_price);
+  return price !== null && price > 0 && offer.availability !== "out_of_stock" && offer.freshness_status !== "UNAVAILABLE";
+}
+
 export function lineFromOffer(product, offer, quantity = 1) {
   const unitPriceMinor = moneyToMinor(offer.current_price);
-  if (!Number.isInteger(quantity) || quantity < 1 || unitPriceMinor === null) return null;
+  if (!Number.isInteger(quantity) || quantity < 1 || unitPriceMinor === null || unitPriceMinor <= 0) return null;
   return {
     canonical_product_id: product.canonical_product_id,
     source_product_id: offer.source_product_id,
@@ -59,7 +71,7 @@ export function lineFromOffer(product, offer, quantity = 1) {
     observed_at: offer.observed_at,
     freshness_status: offer.freshness_status,
     checked: false,
-    invalid: false,
+    invalid: !offerIsUsable(offer),
   };
 }
 
@@ -67,6 +79,36 @@ export function selectOffer(lines, incoming) {
   const existing = lines.find((line) => line.canonical_product_id === incoming.canonical_product_id);
   const replacement = existing ? {...incoming, quantity: existing.quantity, checked: existing.checked} : incoming;
   return [...lines.filter((line) => line.canonical_product_id !== incoming.canonical_product_id), replacement];
+}
+
+export function detectCartUpdates(lines, mart) {
+  const updates = [];
+  for (const line of lines) {
+    const exact = exactMartOffer(mart, line.canonical_product_id, line.source_product_id);
+    if (!exact || exact.offer.supermarket_id !== line.supermarket_id || exact.offer.location_id !== line.location_id || !offerIsUsable(exact.offer)) {
+      if (!line.invalid) updates.push({source_product_id: line.source_product_id, status: "unavailable", previous_price_minor: line.unit_price_minor, current_price_minor: null});
+      continue;
+    }
+    const currentPriceMinor = moneyToMinor(exact.offer.current_price);
+    if (line.invalid) {
+      updates.push({source_product_id: line.source_product_id, status: "restored", previous_price_minor: line.unit_price_minor, current_price_minor: currentPriceMinor});
+    } else if (currentPriceMinor !== line.unit_price_minor) {
+      updates.push({source_product_id: line.source_product_id, status: "price_changed", previous_price_minor: line.unit_price_minor, current_price_minor: currentPriceMinor});
+    }
+  }
+  return updates;
+}
+
+export function refreshCartPrices(lines, mart) {
+  return lines.map((line) => {
+    const exact = exactMartOffer(mart, line.canonical_product_id, line.source_product_id);
+    if (!exact || exact.offer.supermarket_id !== line.supermarket_id || exact.offer.location_id !== line.location_id || !offerIsUsable(exact.offer)) {
+      return {...line, invalid: true, availability: "unavailable", freshness_status: exact?.offer?.freshness_status ?? "UNAVAILABLE"};
+    }
+    const refreshed = lineFromOffer(exact.product, exact.offer, line.quantity);
+    if (!refreshed) return {...line, invalid: true};
+    return {...refreshed, quantity: line.quantity, checked: line.checked, invalid: false};
+  });
 }
 
 export function cartSummary(lines) {
@@ -123,8 +165,36 @@ function createApp() {
   const cartStats = document.querySelector("#cart-stats");
   const cartTotal = document.querySelector("#cart-total");
   const cartCount = document.querySelector("#cart-count");
+  const refreshBox = document.querySelector("#price-refresh");
+  const refreshMessage = document.querySelector("#price-refresh-message");
+  const refreshButton = document.querySelector("#price-refresh-button");
 
-  function persist() { saveCart(localStorage, state.cart); renderCart(); }
+  function renderRefresh() {
+    if (!state.mart || !state.cart.length) {
+      refreshBox.hidden = true;
+      return;
+    }
+    const updates = detectCartUpdates(state.cart, state.mart);
+    if (!updates.length) {
+      refreshBox.hidden = true;
+      return;
+    }
+    const changed = updates.filter((item) => item.status === "price_changed").length;
+    const unavailable = updates.filter((item) => item.status === "unavailable").length;
+    const restored = updates.filter((item) => item.status === "restored").length;
+    const parts = [];
+    if (changed) parts.push(`${changed} ${changed === 1 ? "precio cambió" : "precios cambiaron"} desde que guardaste esta lista.`);
+    if (unavailable) parts.push(`${unavailable} ${unavailable === 1 ? "oferta ya no está disponible" : "ofertas ya no están disponibles"}.`);
+    if (restored) parts.push(`${restored} ${restored === 1 ? "oferta volvió a estar disponible" : "ofertas volvieron a estar disponibles"}.`);
+    refreshMessage.textContent = parts.join(" ");
+    refreshBox.hidden = false;
+  }
+
+  function persist() {
+    saveCart(localStorage, state.cart);
+    renderCart();
+    renderRefresh();
+  }
 
   function renderCart() {
     cart.replaceChildren();
@@ -142,24 +212,42 @@ function createApp() {
       for (const line of group.lines) {
         const stateLine = state.cart.find((item) => item.source_product_id === line.source_product_id);
         if (!stateLine) continue;
-        const item = el("article", `cart-line${line.checked ? " is-checked" : ""}`);
+        const item = el("article", `cart-line${line.checked ? " is-checked" : ""}${line.invalid ? " is-invalid" : ""}`);
         const check = el("button", "check-button", line.checked ? "☑" : "☐");
-        check.type = "button"; check.setAttribute("aria-label", line.checked ? "Marcar pendiente" : "Marcar comprado");
+        check.type = "button";
+        check.setAttribute("aria-label", line.checked ? "Marcar pendiente" : "Marcar comprado");
         check.addEventListener("click", () => { stateLine.checked = !stateLine.checked; persist(); });
         const info = el("div", "cart-line-info");
         info.append(el("strong", null, line.product_name), el("span", "muted", [line.brand, line.presentation].filter(Boolean).join(" · ")));
-        const price = line.line_total_minor === null ? "Precio no disponible" : `${line.quantity} × ${formatHnl(line.unit_price_minor)} = ${formatHnl(line.line_total_minor)}`;
+        const price = line.line_total_minor === null ? `Último precio guardado ${formatHnl(line.unit_price_minor)} · total incompleto` : `${line.quantity} × ${formatHnl(line.unit_price_minor)} = ${formatHnl(line.line_total_minor)}`;
         info.append(el("span", "line-price", price));
-        if (line.freshness_status === "STALE") info.append(el("span", "warning", "Precio stale"));
+        if (line.invalid) info.append(el("span", "danger-text", "Oferta no disponible. No se sustituyó por otro supermercado."));
+        else if (line.freshness_status === "STALE") info.append(el("span", "warning", "Precio stale"));
         const controls = el("div", "quantity-controls");
-        const minus = el("button", null, "−"), plus = el("button", null, "+"), remove = el("button", "danger-link", "Eliminar");
+        const minus = el("button", null, "−");
+        const quantity = el("input", "quantity-input");
+        const plus = el("button", null, "+");
+        const remove = el("button", "danger-link", "Eliminar");
         minus.type = plus.type = remove.type = "button";
+        quantity.type = "number";
+        quantity.min = "1";
+        quantity.max = "999";
+        quantity.inputMode = "numeric";
+        quantity.value = String(line.quantity);
+        quantity.setAttribute("aria-label", `Cantidad de ${line.product_name}`);
         minus.disabled = line.quantity <= 1;
         minus.addEventListener("click", () => { stateLine.quantity -= 1; persist(); });
+        quantity.addEventListener("change", () => {
+          const value = Number(quantity.value);
+          if (Number.isInteger(value) && value >= 1 && value <= 999) stateLine.quantity = value;
+          else quantity.value = String(stateLine.quantity);
+          persist();
+        });
         plus.addEventListener("click", () => { if (stateLine.quantity < 999) stateLine.quantity += 1; persist(); });
         remove.addEventListener("click", () => { state.cart = state.cart.filter((x) => x.source_product_id !== line.source_product_id); persist(); });
-        controls.append(minus, el("span", "quantity", line.quantity), plus, remove);
-        item.append(check, info, controls); section.append(item);
+        controls.append(minus, quantity, plus, remove);
+        item.append(check, info, controls);
+        section.append(item);
       }
       section.append(el("div", "retailer-subtotal", group.incomplete ? "Subtotal incompleto" : `Subtotal ${formatHnl(group.subtotal_minor)}`));
       cart.append(section);
@@ -170,8 +258,14 @@ function createApp() {
     results.replaceChildren();
     if (!state.mart) return;
     const products = searchProducts(state.mart.products, search.value);
-    if (!search.value.trim()) { results.append(el("p", "empty-state", "Escribe un producto, marca o presentación para comenzar.")); return; }
-    if (!products.length) { results.append(el("p", "empty-state", "No encontré productos seguros con esa búsqueda.")); return; }
+    if (!search.value.trim()) {
+      results.append(el("p", "empty-state", "Escribe un producto, marca o presentación para comenzar."));
+      return;
+    }
+    if (!products.length) {
+      results.append(el("p", "empty-state", "No encontré productos seguros con esa búsqueda."));
+      return;
+    }
     for (const product of products) {
       const offers = product.offers ?? [];
       if (!offers.length) continue;
@@ -201,18 +295,28 @@ function createApp() {
           offerCard.append(metric("Promedio 90d", w90?.status === "available" ? formatHnl(moneyToMinor(w90.average)) : "Historial insuficiente"));
           offerCard.append(metric("Posición histórica", history.historical_position ?? "insufficient_history"));
         }
-        const add = el("button", "primary-button", "Agregar aquí"); add.type = "button";
+        const add = el("button", "primary-button", "Agregar aquí");
+        add.type = "button";
         add.addEventListener("click", () => {
           const line = lineFromOffer(product, offer);
           if (!line) return;
-          state.cart = selectOffer(state.cart, line); persist();
+          state.cart = selectOffer(state.cart, line);
+          persist();
           document.querySelector("#cart-panel").scrollIntoView({behavior: "smooth", block: "start"});
         });
-        offerCard.append(add); offerGrid.append(offerCard);
+        offerCard.append(add);
+        offerGrid.append(offerCard);
       }
-      card.append(offerGrid); results.append(card);
+      card.append(offerGrid);
+      results.append(card);
     }
   }
+
+  refreshButton.addEventListener("click", () => {
+    if (!state.mart) return;
+    state.cart = refreshCartPrices(state.cart, state.mart);
+    persist();
+  });
 
   async function loadMart() {
     const url = globalThis.RPI_CONSUMER_MART_URL || document.body.dataset.martUrl;
@@ -224,14 +328,17 @@ function createApp() {
       state.mart = mart;
       status.textContent = `${mart.product_count} productos seguros · corte ${mart.as_of} · ${mart.comparison_status}`;
       renderResults();
+      renderRefresh();
     } catch (error) {
       status.textContent = "Datos no disponibles. Se conserva tu lista local.";
       results.replaceChildren(el("p", "safety-note", `No fue posible cargar precios públicos: ${error.message}`));
+      refreshBox.hidden = true;
     }
   }
 
   search.addEventListener("input", renderResults);
-  renderCart(); loadMart();
+  renderCart();
+  loadMart();
 }
 
 if (typeof document !== "undefined") createApp();
