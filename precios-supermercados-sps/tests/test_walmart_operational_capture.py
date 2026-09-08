@@ -81,6 +81,22 @@ def category2_drift_responses() -> dict[str, dict]:
     }
 
 
+def membership_shift_responses() -> dict[str, dict]:
+    parent = "seller/category-1/electronica"
+    recovery = "/recovery-membership-overlap"
+    facet_prefix = "seller/electronica/category2-facets"
+    return {
+        f"{parent}/page-001": page(4, "1", "2"),
+        f"{parent}/page-002": page(4, "2", "3"),
+        f"{facet_prefix}{recovery}": facets("category-2", audio=2, video=2),
+        f"{parent}/category-2/audio{recovery}/page-001": page(2, "1", "2"),
+        f"{parent}/category-2/video{recovery}/page-001": page(2, "3", "4"),
+        f"{facet_prefix}/recovery-membership-confirmation": facets(
+            "category-2", audio=2, video=2
+        ),
+    }
+
+
 def test_category_total_drift_restarts_category_and_requires_exact_membership(monkeypatch):
     monkeypatch.setattr(operational, "PAGE_SIZE", 2)
     capture = FakeCapture(total_drift_responses())
@@ -203,6 +219,136 @@ def test_category2_total_recovery_fails_closed_if_facets_change_again(monkeypatc
             seller="seller",
             category="electronica",
             expected_total=6,
+            common={},
+            facets_root="/facets/seller",
+        )
+
+
+def test_membership_shift_repartitions_category2_and_confirms_facets(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    capture = FakeCapture(membership_shift_responses())
+
+    products, evidence, final_total, recovery = operational._capture_category(
+        capture,
+        seller="seller",
+        category="electronica",
+        expected_total=4,
+        common={},
+        facets_root="/facets/seller",
+    )
+
+    assert set(products) == {"1", "2", "3", "4"}
+    assert len(evidence) == 2
+    assert final_total == 4
+    assert recovery is not None
+    assert recovery["strategy"] == "category2_exact_membership_restart"
+    assert recovery["trigger_tag"].endswith("page-002")
+    assert recovery["duplicate_product_count"] == 1
+    assert recovery["previous_total"] == recovery["recovered_total"] == 4
+    assert capture.calls[-1].endswith("recovery-membership-confirmation")
+
+
+def test_store_reports_membership_recovery_separately_from_total_recovery(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    monkeypatch.setattr(operational, "parse_products", _parsed_products)
+    responses = membership_shift_responses()
+    responses.update(
+        {
+            "seller/facets-before": facets("category-1", electronica=4),
+            "seller/root-before": page(4, "root"),
+            "seller/facets-after": facets("category-1", electronica=4),
+            "seller/root-after": page(4, "root"),
+        }
+    )
+
+    snapshot = operational.capture_store(
+        FakeCapture(responses),
+        seller="seller",
+        location_id="location",
+        city="city",
+        store_name="store",
+        home_sha="h" * 64,
+    )
+
+    assert snapshot["category_total_recoveries"] == []
+    assert [item["strategy"] for item in snapshot["membership_recoveries"]] == [
+        "category2_exact_membership_restart"
+    ]
+
+
+def test_membership_recovery_requires_exact_child_total(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    responses = membership_shift_responses()
+    responses[
+        "seller/electronica/category2-facets/recovery-membership-overlap"
+    ] = facets("category-2", audio=2, video=1)
+
+    with pytest.raises(RuntimeError, match="category2_membership_total_mismatch"):
+        operational._capture_category(
+            FakeCapture(responses),
+            seller="seller",
+            category="electronica",
+            expected_total=4,
+            common={},
+            facets_root="/facets/seller",
+        )
+
+
+def test_membership_recovery_rejects_another_overlap(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    responses = membership_shift_responses()
+    responses[
+        "seller/category-1/electronica/category-2/video/recovery-membership-overlap/page-001"
+    ] = page(2, "2", "3")
+
+    with pytest.raises(RuntimeError, match="category_membership_changed_again"):
+        operational._capture_category(
+            FakeCapture(responses),
+            seller="seller",
+            category="electronica",
+            expected_total=4,
+            common={},
+            facets_root="/facets/seller",
+        )
+
+
+def test_membership_recovery_rejects_partition_total_change(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    responses = membership_shift_responses()
+    responses[
+        "seller/category-1/electronica/category-2/video/recovery-membership-overlap/page-001"
+    ] = page(3, "3", "4")
+
+    with pytest.raises(RuntimeError, match="category_changed_during_membership_recovery"):
+        operational._capture_category(
+            FakeCapture(responses),
+            seller="seller",
+            category="electronica",
+            expected_total=4,
+            common={},
+            facets_root="/facets/seller",
+        )
+
+
+def test_membership_recovery_rejects_changed_confirmation(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    responses = membership_shift_responses()
+    responses[
+        "seller/electronica/category2-facets/recovery-membership-confirmation"
+    ] = facets("category-2", audio=1, video=3)
+
+    with pytest.raises(RuntimeError, match="category2_changed_during_membership_recovery"):
+        operational._capture_category(
+            FakeCapture(responses),
+            seller="seller",
+            category="electronica",
+            expected_total=4,
             common={},
             facets_root="/facets/seller",
         )
