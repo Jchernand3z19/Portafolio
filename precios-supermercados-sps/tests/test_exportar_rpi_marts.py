@@ -103,6 +103,8 @@ def test_exporter_builds_hashed_business_and_consumer_marts_read_only(tmp_path: 
         "business/fact_basket_cost.csv",
         "business/fact_current_comparison.csv",
         "business/fact_metric_coverage.csv",
+        "business/fact_price_history.csv",
+        "business/fact_promotion_analysis.csv",
         "consumer-mart.json",
     }
     consumer = json.loads((output / "consumer-mart.json").read_text())
@@ -114,6 +116,19 @@ def test_exporter_builds_hashed_business_and_consumer_marts_read_only(tmp_path: 
     assert first_offer["historical_summary"]["historical_position"] == "near_recent_minimum"
     assert consumer["source_freshness"][0]["last_successful_run"] == "a-good"
     assert "a-rejected" not in json.dumps(consumer)
+
+    business = json.loads((output / "business-mart.json").read_text())
+    history = business["facts"]["fact_price_history"]
+    promotions = business["facts"]["fact_promotion_analysis"]
+    assert len(history) == 6
+    assert len(promotions) == 2
+    assert next(row for row in history if row["source_product_id"] == "a:1" and row["is_current"])["change_pct"] == "-9.09"
+    promoted = next(row for row in promotions if row["source_product_id"] == "a:1")
+    assert promoted["source_reports_promotion"] is True
+    assert promoted["historical_price_reduction"] is True
+    assert promoted["source_discount_depth_pct"] == "20.00"
+    assert "fact_price_history" in (output / "business" / "fact_price_history.csv").name
+    assert (output / "business" / "fact_promotion_analysis.csv").is_file()
 
 
 def test_exporter_labels_stale_source_and_suppresses_competitive_metrics(tmp_path: Path) -> None:
@@ -136,6 +151,7 @@ def test_exporter_labels_stale_source_and_suppresses_competitive_metrics(tmp_pat
     business = json.loads((output / "business-mart.json").read_text())
     assert all(row["pci"] is None for row in business["facts"]["fact_current_comparison"])
     assert any(row["freshness_status"] == "STALE" for row in business["source_freshness"])
+    assert any(row["freshness_status"] == "STALE" for row in business["facts"]["fact_price_history"])
     consumer = json.loads((output / "consumer-mart.json").read_text())
     assert all(
         offer["rank"] is None and offer["is_best_price"] is False
@@ -165,5 +181,9 @@ def test_empty_safe_universe_still_writes_stable_csv_headers(tmp_path: Path) -> 
 
     assert manifest["safe_products"] == 0
     assert json.loads((output / "consumer-mart.json").read_text())["products"] == []
-    header = (output / "business" / "fact_current_comparison.csv").read_text().splitlines()[0]
-    assert header.startswith("canonical_product_id,canonical_gtin,source_product_id")
+    current_header = (output / "business" / "fact_current_comparison.csv").read_text().splitlines()[0]
+    history_header = (output / "business" / "fact_price_history.csv").read_text().splitlines()[0]
+    promotion_header = (output / "business" / "fact_promotion_analysis.csv").read_text().splitlines()[0]
+    assert current_header.startswith("canonical_product_id,canonical_gtin,source_product_id")
+    assert history_header.startswith("canonical_product_id,canonical_gtin,source_product_id")
+    assert promotion_header.startswith("canonical_product_id,canonical_gtin,source_product_id")

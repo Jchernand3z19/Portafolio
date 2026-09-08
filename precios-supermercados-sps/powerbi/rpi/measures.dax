@@ -32,6 +32,44 @@ CALCULATE(COUNTROWS(FactCurrentComparison), FactCurrentComparison[is_promotion] 
 Promotion share % =
 DIVIDE([Promociones declaradas activas], COUNTROWS(FactCurrentComparison))
 
+Movimientos de precio observados =
+CALCULATE(
+    COUNTROWS(FactPriceHistory),
+    FactPriceHistory[direction] = "up" || FactPriceHistory[direction] = "down"
+)
+
+Bajas de precio observadas =
+CALCULATE(COUNTROWS(FactPriceHistory), FactPriceHistory[direction] = "down")
+
+Subidas de precio observadas =
+CALCULATE(COUNTROWS(FactPriceHistory), FactPriceHistory[direction] = "up")
+
+Cambio % promedio observado =
+DIVIDE(
+    AVERAGEX(
+        FILTER(FactPriceHistory, NOT ISBLANK(FactPriceHistory[change_pct])),
+        FactPriceHistory[change_pct]
+    ),
+    100
+)
+
+Promociones con reducción histórica =
+CALCULATE(
+    COUNTROWS(FactPromotionAnalysis),
+    FactPromotionAnalysis[source_reports_promotion] = TRUE(),
+    FactPromotionAnalysis[historical_price_reduction] = TRUE()
+)
+
+Promociones fuente sin reducción histórica =
+CALCULATE(
+    COUNTROWS(FactPromotionAnalysis),
+    FactPromotionAnalysis[source_reports_promotion] = TRUE(),
+    FactPromotionAnalysis[historical_price_reduction] <> TRUE()
+)
+
+Descuento declarado promedio % =
+DIVIDE(AVERAGE(FactPromotionAnalysis[source_discount_depth_pct]), 100)
+
 Fuentes fresh = CALCULATE(COUNTROWS(SourceFreshness), SourceFreshness[freshness_status] = "FRESH")
 
 Fuentes stale = CALCULATE(COUNTROWS(SourceFreshness), SourceFreshness[freshness_status] = "STALE")
