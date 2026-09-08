@@ -36,6 +36,7 @@ from precios_supermercados.price_analytics import ComparisonScope, analyze_curre
 from precios_supermercados.product_homologation import homologate_products  # noqa: E402
 from precios_supermercados.rpi_data_marts import (  # noqa: E402
     MartCommercialState,
+    MartHistoricalState,
     MartOfferDescriptor,
     build_rpi_data_marts,
 )
@@ -98,11 +99,7 @@ def fetch_freshness(
     return tuple(assessments)
 
 
-def fetch_commercial_states(
-    backend: QueryBackend,
-    source_record_ids: Sequence[str],
-    scope: ComparisonScope,
-) -> tuple[MartCommercialState, ...]:
+def _source_product_ids(source_record_ids: Sequence[str]) -> dict[int, str]:
     product_ids: dict[int, str] = {}
     for source_record_id in source_record_ids:
         _, separator, product_text = source_record_id.partition(":")
@@ -111,7 +108,15 @@ def fetch_commercial_states(
         if int(product_text) in product_ids:
             raise ExportError("rpi_product_id_duplicate")
         product_ids[int(product_text)] = source_record_id
+    return product_ids
 
+
+def fetch_commercial_states(
+    backend: QueryBackend,
+    source_record_ids: Sequence[str],
+    scope: ComparisonScope,
+) -> tuple[MartCommercialState, ...]:
+    product_ids = _source_product_ids(source_record_ids)
     scope_set = set(scope.locations)
     found: dict[str, MartCommercialState] = {}
     ids = sorted(product_ids)
@@ -165,6 +170,77 @@ def fetch_commercial_states(
     if set(found) != set(source_record_ids):
         raise ExportError("rpi_commercial_states_missing")
     return tuple(found[key] for key in sorted(found))
+
+
+def fetch_historical_states(
+    backend: QueryBackend,
+    source_record_ids: Sequence[str],
+    scope: ComparisonScope,
+    *,
+    as_of_utc: datetime,
+) -> tuple[MartHistoricalState, ...]:
+    """Read accepted compact price periods for only the already-safe offer universe."""
+
+    product_ids = _source_product_ids(source_record_ids)
+    scope_set = set(scope.locations)
+    found: dict[str, list[MartHistoricalState]] = {source_id: [] for source_id in source_record_ids}
+    ids = sorted(product_ids)
+    as_of_text = as_of_utc.isoformat().replace("+00:00", "Z")
+    for start in range(0, len(ids), 400):
+        chunk = ids[start : start + 400]
+        placeholders = ",".join("?" for _ in chunk)
+        rows = backend.query(
+            f"""
+            SELECT product_id,supermarket_id,location_id,current_price_minor,
+                   reported_regular_price_minor,is_promotion,valid_from_utc
+            FROM price_history
+            WHERE product_id IN ({placeholders})
+              AND current_price_minor IS NOT NULL
+              AND current_price_minor > 0
+              AND julianday(valid_from_utc)<=julianday(?)
+            ORDER BY product_id,location_id,valid_from_utc
+            """,
+            (*chunk, as_of_text),
+        )
+        for row in rows:
+            (
+                product_id,
+                supermarket_id,
+                location_id,
+                current_price,
+                regular_price,
+                is_promotion,
+                observed_at,
+            ) = row
+            if type(product_id) is not int or product_id not in product_ids:
+                raise ExportError("rpi_history_product_invalid")
+            if (supermarket_id, location_id) not in scope_set:
+                continue
+            if (
+                type(current_price) is not int
+                or current_price <= 0
+                or (regular_price is not None and type(regular_price) is not int)
+                or type(is_promotion) is not int
+                or is_promotion not in {0, 1}
+            ):
+                raise ExportError("rpi_history_state_invalid")
+            source_record_id = product_ids[product_id]
+            found[source_record_id].append(
+                MartHistoricalState(
+                    source_record_id=source_record_id,
+                    current_price_minor=current_price,
+                    reported_regular_price_minor=regular_price,
+                    is_promotion=bool(is_promotion),
+                    observed_at_utc=_parse_utc(observed_at, "rpi_history_timestamp_invalid"),
+                )
+            )
+    if any(not rows for rows in found.values()):
+        raise ExportError("rpi_history_states_missing")
+    return tuple(
+        row
+        for source_record_id in sorted(found)
+        for row in sorted(found[source_record_id], key=lambda item: item.observed_at_utc)
+    )
 
 
 def _atomic_json(path: Path, value: object) -> None:
@@ -233,7 +309,20 @@ def export_rpi_marts(
         for source_id in source_ids
     )
     states = fetch_commercial_states(backend, source_ids, scope)
-    marts = build_rpi_data_marts(analytics, competition, descriptors, states, freshness)
+    history = fetch_historical_states(
+        backend,
+        source_ids,
+        scope,
+        as_of_utc=as_of_utc,
+    )
+    marts = build_rpi_data_marts(
+        analytics,
+        competition,
+        descriptors,
+        states,
+        freshness,
+        historical_states=history,
+    )
 
     output_directory.mkdir(parents=True, exist_ok=True)
     files: dict[str, object] = {
@@ -287,6 +376,8 @@ def export_rpi_marts(
             for supermarket, location in scope.locations
         ],
         "comparison_status": competition.comparison_status.value,
+        "business_schema": marts.business["schema"],
+        "consumer_schema": marts.consumer["schema"],
         "safe_products": len(analytics.products),
         "safe_offers": len(source_ids),
         "files_sha256": hashes,

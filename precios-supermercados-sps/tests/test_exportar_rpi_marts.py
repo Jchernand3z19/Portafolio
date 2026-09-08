@@ -45,10 +45,14 @@ def build_db(path: Path, *, stale_b: bool = False) -> None:
             ),
         )
         con.executemany(
-            "INSERT INTO price_history VALUES(?,?,?,?,?,?,?,?,NULL)",
+            "INSERT INTO price_history VALUES(?,?,?,?,?,?,?,?,?)",
             (
-                (1, "a", "a_sps", 2000, 2500, 1, "in_stock", "2026-09-01T12:00:00Z"),
-                (2, "b", "b_sps", 2200, None, 0, "in_stock", "2026-09-02T12:00:00Z"),
+                (1, "a", "a_sps", 2400, None, 0, "in_stock", "2026-05-01T12:00:00Z", "2026-08-20T12:00:00Z"),
+                (1, "a", "a_sps", 2200, None, 0, "in_stock", "2026-08-20T12:00:00Z", "2026-09-01T12:00:00Z"),
+                (1, "a", "a_sps", 2000, 2500, 1, "in_stock", "2026-09-01T12:00:00Z", None),
+                (2, "b", "b_sps", 2100, None, 0, "in_stock", "2026-05-01T12:00:00Z", "2026-08-20T12:00:00Z"),
+                (2, "b", "b_sps", 2150, None, 0, "in_stock", "2026-08-20T12:00:00Z", "2026-09-02T12:00:00Z"),
+                (2, "b", "b_sps", 2200, None, 0, "in_stock", "2026-09-02T12:00:00Z", None),
             ),
         )
         con.executemany(
@@ -85,6 +89,8 @@ def test_exporter_builds_hashed_business_and_consumer_marts_read_only(tmp_path: 
 
     assert database.read_bytes() == before
     assert manifest["comparison_status"] == "COMPARABLE"
+    assert manifest["business_schema"] == "rpi-business-mart/v1"
+    assert manifest["consumer_schema"] == "rpi-consumer-mart/v2"
     assert manifest["safe_products"] == 1
     assert manifest["safe_offers"] == 2
     assert set(manifest["files_sha256"]) == {
@@ -100,8 +106,12 @@ def test_exporter_builds_hashed_business_and_consumer_marts_read_only(tmp_path: 
         "consumer-mart.json",
     }
     consumer = json.loads((output / "consumer-mart.json").read_text())
-    assert consumer["products"][0]["offers"][0]["current_price"] == "20.00"
-    assert consumer["products"][0]["offers"][0]["reported_regular_price"] == "25.00"
+    assert consumer["schema"] == "rpi-consumer-mart/v2"
+    first_offer = consumer["products"][0]["offers"][0]
+    assert first_offer["current_price"] == "20.00"
+    assert first_offer["reported_regular_price"] == "25.00"
+    assert first_offer["historical_summary"]["windows"]["30d"]["average"] == "22.00"
+    assert first_offer["historical_summary"]["historical_position"] == "near_recent_minimum"
     assert consumer["source_freshness"][0]["last_successful_run"] == "a-good"
     assert "a-rejected" not in json.dumps(consumer)
 
@@ -126,6 +136,13 @@ def test_exporter_labels_stale_source_and_suppresses_competitive_metrics(tmp_pat
     business = json.loads((output / "business-mart.json").read_text())
     assert all(row["pci"] is None for row in business["facts"]["fact_current_comparison"])
     assert any(row["freshness_status"] == "STALE" for row in business["source_freshness"])
+    consumer = json.loads((output / "consumer-mart.json").read_text())
+    assert all(
+        offer["rank"] is None and offer["is_best_price"] is False
+        for product in consumer["products"]
+        for offer in product["offers"]
+    )
+    assert consumer["products"][0]["offers"][0]["historical_summary"]["windows"]["90d"]["status"] == "available"
 
 
 def test_empty_safe_universe_still_writes_stable_csv_headers(tmp_path: Path) -> None:
