@@ -21,6 +21,11 @@ describe('duplicate policy', () => {
     expect(result.kind).toBe('conflict');
   });
 
+  it('treats equivalent phone formatting as the same sender', () => {
+    const result = decideDuplicate({ sourceMessageId: 'msg-3b', fileHash: 'new', bank: 'BAC Honduras', reference: 'REF000001', phone: '50400000001', home: { block: 4, house: 18 } }, [existing]);
+    expect(result.kind).toBe('duplicate');
+  });
+
   it('does not auto-deduplicate a weak amount/date match', () => {
     const result = decideDuplicate({ sourceMessageId: 'msg-4', fileHash: 'new', bank: 'BAC Honduras', amount: 150, transactionDate: '2026-09-01', phone: '+50400000001' }, [existing]);
     expect(result.kind).toBe('review');
