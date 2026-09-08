@@ -68,6 +68,7 @@ export interface PaymentRecord {
   status: PaymentStatus;
   fileHash: string;
   duplicateOf?: string;
+  duplicateReason?: string;
   reviewReason?: string;
   verificationSource?: string;
   verifiedAt?: string;
