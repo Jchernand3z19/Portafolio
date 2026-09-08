@@ -15,19 +15,24 @@ El MVP inicia con **BAC Honduras**, pero los parsers están desacoplados para in
 ## Capacidades implementadas
 
 - Webhook de WhatsApp Cloud API con verificación y firma `X-Hub-Signature-256`.
-- Descarga server-side de media; JPG/JPEG y PNG con validación de MIME, magic bytes y tamaño.
+- Retry técnico de Meta detectado antes de volver a descargar media o ejecutar OCR cuando el `message_id` ya fue procesado.
+- Descarga server-side de media; JPG/JPEG y PNG con validación de MIME, magic bytes y tamaño antes de OCR.
 - OCR local/server-side con Tesseract.js + modelo español y preprocesamiento Sharp.
 - Parser BAC para banco, depositante, fecha, hora, monto, detalle, referencia, beneficiario y cuenta destino enmascarada.
 - Normalización de vivienda: `B4 C18`, `Bloque 4 Casa 18`, `B4-C18`, `B 4 C 18` y variantes.
+- Normalización de identidad telefónica para comparar formatos equivalentes como `+504...` y `504...`.
 - Resolución por comprobante → teléfono de vivienda → pregunta automática por WhatsApp.
 - Contexto pendiente único por teléfono para evitar asignaciones ambiguas.
 - Idempotencia por `message_id` y detección de duplicados por hash, referencia bancaria y señales débiles.
+- Motivo de duplicado/conflicto persistido para trazabilidad administrativa.
 - Conflictos entre usuarios/viviendas enviados a revisión sin revelar datos de terceros.
 - Estados separados para recibido, pendiente de verificación, verificado, duplicado, no encontrado, revisión y rechazo.
 - Google Sheets privado como tabla operativa (`Pagos`, `Viviendas`, `Conversaciones`, `Mensajes`, `Conciliacion`, `Configuracion`).
+- Base maestra de viviendas editable desde el panel: bloque, casa, responsable opcional, teléfono, cuota, alta/baja y estado activo.
 - Google Drive privado para conservar comprobantes de producción; el identificador del archivo se guarda en Sheets y nunca se publica directamente.
 - Dashboard mensual: viviendas, pagadas, pendientes, cobranza, esperado, recibido, verificado, pendiente y sin identificar.
-- Vistas por bloque, pagos, depósitos sin identificar, duplicados y revisión.
+- Vistas por bloque y por casa, incluyendo historial de cuatro períodos y detalle completo de una vivienda.
+- Bandejas de pagos, depósitos sin identificar, duplicados y casos en revisión.
 - Corrección administrativa de vivienda y período sin repetir OCR.
 - Conciliación determinística contra movimientos bancarios por banco + referencia + monto.
 - Panel administrativo protegido con sesión HttpOnly firmada y clave por ambiente.
@@ -67,7 +72,7 @@ pagos-whatsapp-residencial/
 │   ├── parsers/            # parsers desacoplados por banco
 │   │   └── bac/
 │   ├── security/           # archivos, firmas y logging seguro
-│   ├── services/           # procesamiento, dashboard, conciliación
+│   ├── services/           # procesamiento, dashboard, historial, conciliación
 │   ├── storage/            # Google Sheets, Drive y memoria demo
 │   └── whatsapp/           # payload y cliente Cloud API
 ├── tests/
@@ -140,13 +145,13 @@ En producción:
 2. `POST` lee el cuerpo crudo y valida HMAC-SHA256 antes de parsear JSON.
 3. sólo procesa mensajes soportados;
 4. los textos normales se ignoran salvo que exista un comprobante pendiente de vivienda;
-5. un retry técnico con el mismo `message_id` no vuelve a procesarse ni genera una respuesta intencional.
+5. un retry técnico con el mismo `message_id` no vuelve a descargar el archivo, no repite OCR y no genera una respuesta intencional.
 
 ## Google Sheets
 
 El backend crea/valida las hojas requeridas y usa `valueInputOption=RAW` para evitar que texto extraído por OCR se convierta en fórmulas de Sheets.
 
-La Sheet no debe publicarse. La cuenta de servicio sólo necesita acceso al documento operativo y al folder privado de comprobantes.
+La Sheet no debe publicarse. La cuenta de servicio sólo necesita acceso al documento operativo y al folder privado de comprobantes. La base `Viviendas` puede administrarse desde el panel, por lo que la operación normal no requiere editar filas manualmente.
 
 Ver [`docs/SHEETS_SCHEMA.md`](docs/SHEETS_SCHEMA.md).
 
@@ -197,6 +202,9 @@ La suite cubre, entre otros:
 - cuenta destino inesperada;
 - estado sin identificar y asignación posterior;
 - contexto pendiente único;
+- normalización de teléfonos;
+- creación/actualización y unicidad de viviendas;
+- historial mensual por casa;
 - conciliación;
 - exclusión de duplicados en totales.
 
