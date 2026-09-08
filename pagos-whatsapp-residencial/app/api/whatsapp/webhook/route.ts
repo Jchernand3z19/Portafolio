@@ -73,6 +73,12 @@ async function handleMessage(
   store: Awaited<ReturnType<typeof getPaymentStore>>,
   archive: ReturnType<typeof getReceiptArchive>,
 ) {
+  // Meta can retry the exact same webhook delivery. Short-circuit before media
+  // download/OCR so a technical retry is silent and cannot create a second payment.
+  if (await store.hasProcessedMessage(message.messageId)) {
+    return { action: 'silent' as const };
+  }
+
   if (message.kind === 'text') {
     return processHomeReply(message.messageId, message.phone, message.body, { store });
   }
