@@ -107,6 +107,18 @@ def _decimal(value: Decimal | None) -> str | None:
     return None if value is None else format(value, "f")
 
 
+def _comparison_delta(current_minor: int, best_minor: int) -> tuple[str, str]:
+    if best_minor <= 0:
+        raise RpiDataMartError("mart_best_price_invalid")
+    delta_minor = current_minor - best_minor
+    if delta_minor < 0:
+        raise RpiDataMartError("mart_offer_below_market_minimum")
+    delta_pct = (
+        Decimal(delta_minor) * Decimal(100) / Decimal(best_minor)
+    ).quantize(Decimal("0.01"))
+    return _money(delta_minor) or "0.00", format(delta_pct, "f")
+
+
 def _iso(value: datetime | None) -> str | None:
     return None if value is None else value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -346,11 +358,18 @@ def build_rpi_data_marts(
                     "spread_pct": None if competitive is None else format(competitive.spread_pct, "f"),
                 }
             )
+            delta_abs, delta_pct = (
+                (None, None)
+                if metric is None or competitive is None
+                else _comparison_delta(state.current_price_minor, competitive.market_min_minor)
+            )
             consumer_offers.append(
                 {
                     **common,
                     "rank": None if metric is None else metric.rank,
                     "is_best_price": metric is not None and metric.rank == 1,
+                    "difference_vs_best_abs": delta_abs,
+                    "difference_vs_best_pct": delta_pct,
                     "historical_summary": _historical_summary(
                         canonical_product_id=product.canonical_product_id,
                         supermarket_id=offer.supermarket_id,
