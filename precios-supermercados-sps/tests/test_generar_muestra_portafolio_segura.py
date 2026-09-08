@@ -54,6 +54,69 @@ def descriptors():
     }
 
 
+def consumer_mart():
+    return {
+        "schema": "rpi-consumer-mart/v2",
+        "comparison_policy": POLICY,
+        "comparison_status": "COMPARABLE",
+        "currency": "HNL",
+        "as_of": "2026-09-08T12:00:00Z",
+        "scope": [
+            {"supermarket_id": "la_colonia", "location_id": "la_colonia_sps"},
+            {"supermarket_id": "walmart", "location_id": "walmart_sps"},
+        ],
+        "product_count": 2,
+        "products": [
+            {
+                "canonical_product_id": "prod_a",
+                "canonical_gtin": "7590002040003",
+                "recommended_source_product_ids": ["la_colonia:1"],
+                "offers": [
+                    {
+                        "canonical_product_id": "prod_a", "canonical_gtin": "7590002040003",
+                        "source_product_id": "la_colonia:1", "supermarket_id": "la_colonia",
+                        "location_id": "la_colonia_sps", "product_name": "Suavizante Downy Pureza 800 ml",
+                        "brand": "Downy", "presentation": "800 ml", "category": "Limpieza",
+                        "current_price": "100.00", "is_best_price": True,
+                        "difference_vs_best_abs": "0.00", "difference_vs_best_pct": "0.00",
+                    },
+                    {
+                        "canonical_product_id": "prod_a", "canonical_gtin": "7590002040003",
+                        "source_product_id": "walmart:2", "supermarket_id": "walmart",
+                        "location_id": "walmart_sps", "product_name": "Downy Suavizante Pureza 800 ML",
+                        "brand": "Downy", "presentation": "800 ml", "category": "Limpieza",
+                        "current_price": "120.00", "is_best_price": False,
+                        "difference_vs_best_abs": "20.00", "difference_vs_best_pct": "20.00",
+                    },
+                ],
+            },
+            {
+                "canonical_product_id": "prod_b",
+                "canonical_gtin": "4006381333931",
+                "recommended_source_product_ids": ["la_colonia:3", "walmart:4"],
+                "offers": [
+                    {
+                        "canonical_product_id": "prod_b", "canonical_gtin": "4006381333931",
+                        "source_product_id": "la_colonia:3", "supermarket_id": "la_colonia",
+                        "location_id": "la_colonia_sps", "product_name": "Producto B",
+                        "brand": "Marca B", "presentation": "1 und", "category": "Otro",
+                        "current_price": "50.00", "is_best_price": True,
+                        "difference_vs_best_abs": "0.00", "difference_vs_best_pct": "0.00",
+                    },
+                    {
+                        "canonical_product_id": "prod_b", "canonical_gtin": "4006381333931",
+                        "source_product_id": "walmart:4", "supermarket_id": "walmart",
+                        "location_id": "walmart_sps", "product_name": "Producto B Walmart",
+                        "brand": "Marca B", "presentation": "1 und", "category": "Otro",
+                        "current_price": "50.00", "is_best_price": True,
+                        "difference_vs_best_abs": "0.00", "difference_vs_best_pct": "0.00",
+                    },
+                ],
+            },
+        ],
+    }
+
+
 def test_sample_keeps_source_names_and_ranks_only_safe_products() -> None:
     result = module.build_sample(publication(), descriptors(), limit=1)
     assert result["schema"] == "precios-sps-safe-portfolio-sample/v1"
@@ -68,6 +131,48 @@ def test_sample_keeps_source_names_and_ranks_only_safe_products() -> None:
     ]
     assert [offer["source_category"] for offer in row["offers"]] == ["Limpieza", "Limpieza"]
     assert row["savings_vs_highest"] == "20.00"
+
+
+def test_sample_from_consumer_reuses_safe_descriptors_and_python_best_set() -> None:
+    result = module.build_sample_from_consumer(consumer_mart(), limit=10)
+    assert result["schema"] == "precios-sps-safe-portfolio-sample/v1"
+    assert result["source_schema"] == "rpi-consumer-mart/v2"
+    assert result["source_as_of"] == "2026-09-08T12:00:00Z"
+    assert result["row_count"] == 2
+    assert result["rows"][0]["canonical_product_id"] == "prod_a"
+    assert result["rows"][0]["best_price"] == "100.00"
+    assert result["rows"][0]["highest_price"] == "120.00"
+    assert result["rows"][0]["savings_vs_highest"] == "20.00"
+    assert result["rows"][0]["savings_vs_highest_pct"] == "16.67"
+    assert [offer["source_name"] for offer in result["rows"][0]["offers"]] == [
+        "Suavizante Downy Pureza 800 ml",
+        "Downy Suavizante Pureza 800 ML",
+    ]
+    tied = next(row for row in result["rows"] if row["canonical_product_id"] == "prod_b")
+    assert tied["savings_vs_highest"] == "0.00"
+    assert all(offer["is_best_price"] for offer in tied["offers"])
+
+
+def test_sample_from_consumer_fails_closed_when_comparison_is_blocked() -> None:
+    broken = consumer_mart()
+    broken["comparison_status"] = "INSUFFICIENT_FRESH_COMPARISON"
+    broken["products"][0]["recommended_source_product_ids"] = []
+    with pytest.raises(module.SampleError, match="consumer_comparison_not_available"):
+        module.build_sample_from_consumer(broken, limit=10)
+
+
+def test_sample_from_consumer_rejects_recommendation_drift() -> None:
+    broken = consumer_mart()
+    broken["products"][0]["recommended_source_product_ids"] = ["walmart:2"]
+    with pytest.raises(module.SampleError, match="consumer_recommendation_best_set_mismatch"):
+        module.build_sample_from_consumer(broken, limit=10)
+
+
+def test_sample_from_consumer_rejects_best_delta_drift() -> None:
+    broken = consumer_mart()
+    broken["products"][0]["offers"][0]["difference_vs_best_abs"] = "1.00"
+    with pytest.raises(module.SampleError, match="consumer_best_delta_invalid"):
+        module.build_sample_from_consumer(broken, limit=10)
 
 
 def test_sample_fails_if_any_safe_offer_lacks_matching_descriptor() -> None:

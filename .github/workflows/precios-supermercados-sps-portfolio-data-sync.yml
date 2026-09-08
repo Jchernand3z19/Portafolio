@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Descargar exactamente el dataset BI ya generado
+      - name: Descargar exactamente el artifact RPI ya generado
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v5.0.0
         with:
           name: safe-analytics-la-colonia-walmart-sps-${{ github.event.workflow_run.id }}
@@ -33,7 +33,7 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ github.event.workflow_run.id }}
 
-      - name: Validar y materializar publicación estática sin consultar Turso
+      - name: Validar y materializar publicación RPI sin consultar Turso
         env:
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
           SOURCE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -41,21 +41,18 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
+          import hashlib
           import json
           import os
+          import shutil
           from pathlib import Path
 
           artifact_root = Path('/tmp/precios-sps-safe-analytics')
           expected_scope = [
-              {'location_id': 'la_colonia_sps', 'supermarket_id': 'la_colonia'},
-              {'location_id': 'walmart_sps', 'supermarket_id': 'walmart'},
+              {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_sps'},
+              {'supermarket_id': 'walmart', 'location_id': 'walmart_sps'},
           ]
           policy = 'fail_closed_strong_identity_and_commercial_consistency'
-
-          candidates = sorted(artifact_root.rglob('portfolio-sample.json'))
-          if len(candidates) != 1:
-              raise SystemExit(f'portfolio_sync_sample_cardinality_invalid:{len(candidates)}')
-          sample_path = candidates[0]
 
           def only(filename: str, error_prefix: str) -> Path:
               matches = sorted(artifact_root.rglob(filename))
@@ -63,63 +60,86 @@ jobs:
                   raise SystemExit(f'{error_prefix}_cardinality_invalid:{len(matches)}')
               return matches[0]
 
-          publication_path = only('publication.json', 'portfolio_sync_publication')
+          consumer_path = only('consumer-mart.json', 'portfolio_sync_consumer')
+          business_path = only('business-mart.json', 'portfolio_sync_business')
           manifest_path = only('manifest.json', 'portfolio_sync_manifest')
-          descriptors_path = only('source-descriptors.json', 'portfolio_sync_descriptors')
+          sample_path = only('portfolio-sample.json', 'portfolio_sync_sample')
 
-          sample = json.loads(sample_path.read_text(encoding='utf-8'))
-          publication = json.loads(publication_path.read_text(encoding='utf-8'))
+          consumer = json.loads(consumer_path.read_text(encoding='utf-8'))
+          business = json.loads(business_path.read_text(encoding='utf-8'))
           manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-          descriptors = json.loads(descriptors_path.read_text(encoding='utf-8'))
+          sample = json.loads(sample_path.read_text(encoding='utf-8'))
 
-          if sample.get('schema') != 'precios-sps-safe-portfolio-sample/v1':
-              raise SystemExit('portfolio_sync_schema_invalid')
-          if publication.get('schema') != 'precios-sps-publication/v1':
-              raise SystemExit('portfolio_sync_publication_schema_invalid')
-          if manifest.get('schema') != 'precios-sps-publication-manifest/v1':
+          if consumer.get('schema') != 'rpi-consumer-mart/v2':
+              raise SystemExit('portfolio_sync_consumer_schema_invalid')
+          if business.get('schema') != 'rpi-business-mart/v1':
+              raise SystemExit('portfolio_sync_business_schema_invalid')
+          if manifest.get('schema') != 'rpi-marts-manifest/v1':
               raise SystemExit('portfolio_sync_manifest_schema_invalid')
-          if descriptors.get('schema') != 'precios-sps-safe-source-descriptors/v1':
-              raise SystemExit('portfolio_sync_descriptors_schema_invalid')
+          if sample.get('schema') != 'precios-sps-safe-portfolio-sample/v1':
+              raise SystemExit('portfolio_sync_sample_schema_invalid')
+          if manifest.get('source_backend') != 'turso':
+              raise SystemExit('portfolio_sync_backend_invalid')
+          if manifest.get('business_schema') != business['schema'] or manifest.get('consumer_schema') != consumer['schema']:
+              raise SystemExit('portfolio_sync_schema_crosscheck_invalid')
 
           for document, error in (
-              (sample, 'portfolio_sync_policy_invalid'),
-              (publication, 'portfolio_sync_publication_policy_invalid'),
-              (manifest, 'portfolio_sync_manifest_policy_invalid'),
-              (descriptors, 'portfolio_sync_descriptors_policy_invalid'),
+              (consumer, 'portfolio_sync_consumer_policy_invalid'),
+              (business, 'portfolio_sync_business_policy_invalid'),
+              (sample, 'portfolio_sync_sample_policy_invalid'),
           ):
               if document.get('comparison_policy') != policy:
                   raise SystemExit(error)
-
-          if sample.get('scope') != expected_scope or publication.get('scope') != expected_scope or manifest.get('scope') != expected_scope:
+          if (
+              consumer.get('comparison_status') != 'COMPARABLE'
+              or business.get('comparison_status') != 'COMPARABLE'
+              or manifest.get('comparison_status') != 'COMPARABLE'
+          ):
+              raise SystemExit('portfolio_sync_comparison_not_available')
+          if (
+              consumer.get('scope') != expected_scope
+              or business.get('scope') != expected_scope
+              or manifest.get('scope') != expected_scope
+              or sample.get('scope') != expected_scope
+          ):
               raise SystemExit('portfolio_sync_scope_invalid')
 
+          products = consumer.get('products')
           rows = sample.get('rows')
-          if not isinstance(rows, list) or sample.get('row_count') != len(rows) or len(rows) > 10:
-              raise SystemExit('portfolio_sync_rows_invalid')
-
-          offers = publication.get('offers')
-          products = publication.get('products')
-          common_basket = publication.get('common_basket')
-          descriptor_rows = descriptors.get('rows')
-          if not isinstance(offers, list) or not isinstance(products, list) or not isinstance(common_basket, list):
-              raise SystemExit('portfolio_sync_publication_rows_invalid')
-          if not isinstance(descriptor_rows, list):
-              raise SystemExit('portfolio_sync_descriptor_rows_invalid')
-          if manifest.get('safe_offers_published') != len(offers):
-              raise SystemExit('portfolio_sync_offer_count_mismatch')
-          if manifest.get('safe_products_published') != len(products):
+          if not isinstance(products, list) or consumer.get('product_count') != len(products):
+              raise SystemExit('portfolio_sync_product_count_invalid')
+          if len(products) != manifest.get('safe_products') or not products:
               raise SystemExit('portfolio_sync_product_count_mismatch')
-          if descriptors.get('row_count') != len(descriptor_rows) or descriptors.get('row_count') != len(offers):
-              raise SystemExit('portfolio_sync_descriptor_count_mismatch')
-          if descriptors.get('canonical_product_count') != len(products):
-              raise SystemExit('portfolio_sync_descriptor_product_count_mismatch')
-          if sample.get('row_count', 0) > len(products):
-              raise SystemExit('portfolio_sync_sample_exceeds_publication')
+          offer_count = sum(
+              len(product.get('offers', []))
+              for product in products
+              if isinstance(product, dict) and isinstance(product.get('offers'), list)
+          )
+          if offer_count != manifest.get('safe_offers'):
+              raise SystemExit('portfolio_sync_offer_count_mismatch')
+          if not isinstance(rows, list) or sample.get('row_count') != len(rows) or not (0 < len(rows) <= 10):
+              raise SystemExit('portfolio_sync_sample_cardinality_invalid')
+          if sample.get('source_schema') != consumer['schema'] or sample.get('source_as_of') != consumer.get('as_of'):
+              raise SystemExit('portfolio_sync_sample_source_mismatch')
 
-          descriptor_ids = {row.get('source_record_id') for row in descriptor_rows if isinstance(row, dict)}
-          offer_ids = {row.get('source_record_id') for row in offers if isinstance(row, dict)}
-          if descriptor_ids != offer_ids or None in descriptor_ids:
-              raise SystemExit('portfolio_sync_descriptor_offer_identity_mismatch')
+          hashes = manifest.get('files_sha256')
+          if not isinstance(hashes, dict) or not hashes:
+              raise SystemExit('portfolio_sync_hash_manifest_invalid')
+          mart_root = manifest_path.parent
+          for relative, expected_hash in hashes.items():
+              relative_path = Path(relative)
+              if relative_path.is_absolute() or '..' in relative_path.parts:
+                  raise SystemExit('portfolio_sync_hash_path_invalid')
+              path = mart_root / relative_path
+              if not path.is_file():
+                  raise SystemExit(f'portfolio_sync_hash_file_missing:{relative}')
+              actual = hashlib.sha256(path.read_bytes()).hexdigest()
+              if actual != expected_hash:
+                  raise SystemExit(f'portfolio_sync_hash_mismatch:{relative}')
+          if hashes.get('consumer-mart.json') != hashlib.sha256(consumer_path.read_bytes()).hexdigest():
+              raise SystemExit('portfolio_sync_consumer_hash_mismatch')
+          if hashes.get('business-mart.json') != hashlib.sha256(business_path.read_bytes()).hexdigest():
+              raise SystemExit('portfolio_sync_business_hash_mismatch')
 
           provenance = {
               'published_at_utc': os.environ['SOURCE_COMPLETED_AT'],
@@ -127,61 +147,56 @@ jobs:
               'source_head_sha': os.environ['SOURCE_HEAD_SHA'],
           }
           sample.update(provenance)
-          bi_dataset = {
-              'schema': 'precios-sps-static-bi-dataset/v1',
-              'comparison_policy': policy,
-              'scope': expected_scope,
-              **provenance,
-              'source_publication_generated_at_utc': manifest.get('generated_at_utc'),
-              'manifest': manifest,
-              'publication': publication,
-              'source_descriptors': descriptor_rows,
-          }
 
-          serialized = json.dumps({'sample': sample, 'bi_dataset': bi_dataset}, ensure_ascii=False).casefold()
-          for forbidden in ('turso_database_url', 'turso_auth_token', 'libsql://'):
+          serialized = json.dumps({
+              'consumer': consumer,
+              'manifest': manifest,
+              'sample': sample,
+          }, ensure_ascii=False).casefold()
+          for forbidden in ('turso_database_url', 'turso_auth_token', 'database_url', 'auth_token', 'libsql://'):
               if forbidden in serialized:
                   raise SystemExit(f'portfolio_sync_secret_material_detected:{forbidden}')
 
+          consumer_target = Path('/tmp/precios-sps-rpi-consumer-mart.json')
+          manifest_target = Path('/tmp/precios-sps-rpi-manifest.json')
           sample_target = Path('/tmp/precios-sps-portfolio-sample.json')
-          bi_target = Path('/tmp/precios-sps-static-bi-dataset.json')
+          shutil.copyfile(consumer_path, consumer_target)
+          shutil.copyfile(manifest_path, manifest_target)
           sample_target.write_text(
               json.dumps(sample, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
               encoding='utf-8',
           )
-          bi_target.write_text(
-              json.dumps(bi_dataset, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
-              encoding='utf-8',
-          )
           print(json.dumps({
-              'sample_schema': sample['schema'],
+              'consumer_schema': consumer['schema'],
+              'safe_products': len(products),
+              'safe_offers': offer_count,
               'sample_rows': sample['row_count'],
-              'bi_schema': bi_dataset['schema'],
-              'bi_products': len(products),
-              'bi_offers': len(offers),
               'source_workflow_run_id': provenance['source_workflow_run_id'],
           }, sort_keys=True))
           PY
 
-      - name: Actualizar muestra web y dataset BI estático
+      - name: Actualizar Consumer Mart y muestra en un solo commit
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
         env:
+          CONSUMER_MART_PATH: /tmp/precios-sps-rpi-consumer-mart.json
+          RPI_MANIFEST_PATH: /tmp/precios-sps-rpi-manifest.json
           PUBLIC_SAMPLE_PATH: /tmp/precios-sps-portfolio-sample.json
-          STATIC_BI_PATH: /tmp/precios-sps-static-bi-dataset.json
         with:
           script: |
             const fs = require('fs');
             const dataBranch = 'portfolio-data';
             const targets = [
               {
-                sourcePath: process.env.STATIC_BI_PATH,
-                targetPath: 'precios-supermercados-sps/published/bi/la-colonia-walmart-sps/dataset.json',
-                label: 'static BI dataset',
+                sourcePath: process.env.CONSUMER_MART_PATH,
+                targetPath: 'precios-supermercados-sps/published/rpi/consumer-mart.json',
+              },
+              {
+                sourcePath: process.env.RPI_MANIFEST_PATH,
+                targetPath: 'precios-supermercados-sps/published/rpi/manifest.json',
               },
               {
                 sourcePath: process.env.PUBLIC_SAMPLE_PATH,
                 targetPath: 'precios-supermercados-sps/portfolio/sample-data.json',
-                label: 'portfolio sample',
               },
             ];
 
@@ -190,38 +205,47 @@ jobs:
               repo: context.repo.repo,
               ref: `heads/${dataBranch}`,
             });
-            const commit = await github.rest.git.getCommit({
+            const parentSha = ref.data.object.sha;
+            const parentCommit = await github.rest.git.getCommit({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              commit_sha: ref.data.object.sha,
+              commit_sha: parentSha,
             });
-            const tree = await github.rest.git.getTree({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tree_sha: commit.data.tree.sha,
-              recursive: 'true',
-            });
-            if (tree.data.truncated) {
-              core.setFailed('portfolio_sync_data_tree_truncated');
-              return;
-            }
-            const currentShaByPath = new Map(
-              tree.data.tree
-                .filter(item => item.type === 'blob' && item.path && item.sha)
-                .map(item => [item.path, item.sha])
-            );
 
+            const tree = [];
             for (const target of targets) {
               const bytes = fs.readFileSync(target.sourcePath);
-              const currentSha = currentShaByPath.get(target.targetPath);
-              const request = {
+              const blob = await github.rest.git.createBlob({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                path: target.targetPath,
-                message: `data: refresh ${target.label} from run ${context.payload.workflow_run.id}`,
                 content: bytes.toString('base64'),
-                branch: dataBranch,
-              };
-              if (currentSha) request.sha = currentSha;
-              await github.rest.repos.createOrUpdateFileContents(request);
+                encoding: 'base64',
+              });
+              tree.push({
+                path: target.targetPath,
+                mode: '100644',
+                type: 'blob',
+                sha: blob.data.sha,
+              });
             }
+
+            const newTree = await github.rest.git.createTree({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              base_tree: parentCommit.data.tree.sha,
+              tree,
+            });
+            const newCommit = await github.rest.git.createCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              message: `data: publish RPI consumer mart from run ${context.payload.workflow_run.id}`,
+              tree: newTree.data.sha,
+              parents: [parentSha],
+            });
+            await github.rest.git.updateRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `heads/${dataBranch}`,
+              sha: newCommit.data.sha,
+              force: false,
+            });

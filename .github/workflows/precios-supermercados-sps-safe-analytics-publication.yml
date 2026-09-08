@@ -49,97 +49,114 @@ jobs:
           python -m pip install -r precios-supermercados-sps/requirements.txt
           python -m pip check
 
-      - name: Exportar comparación segura La Colonia vs Walmart SPS
+      - name: Exportar RPI seguro La Colonia vs Walmart SPS
         working-directory: precios-supermercados-sps
         run: |
           set -euo pipefail
-          rm -rf run-artifacts/analytics/la-colonia-walmart-sps
+          rm -rf run-artifacts/analytics/rpi-la-colonia-walmart-sps
           mkdir -p run-artifacts/analytics
-          python scripts/exportar_modelo_analitico.py \
+          python scripts/exportar_rpi_marts.py \
             --turso \
             --scope la_colonia=la_colonia_sps \
             --scope walmart=walmart_sps \
-            --output-directory run-artifacts/analytics/la-colonia-walmart-sps \
-            | tee run-artifacts/analytics/la-colonia-walmart-sps-run.json
+            --output-directory run-artifacts/analytics/rpi-la-colonia-walmart-sps \
+            --require-products \
+            | tee run-artifacts/analytics/rpi-la-colonia-walmart-sps-run.json
 
-      - name: Generar descriptores fuente de filas seguras
-        working-directory: precios-supermercados-sps
-        run: |
-          set -euo pipefail
-          python scripts/generar_descriptores_publicacion_segura.py \
-            --turso \
-            --publication run-artifacts/analytics/la-colonia-walmart-sps/publication.json \
-            --output run-artifacts/analytics/la-colonia-walmart-sps/source-descriptors.json \
-            | tee run-artifacts/analytics/la-colonia-walmart-sps-descriptors-run.json
-
-      - name: Generar muestra segura para portafolio
+      - name: Generar muestra segura para portafolio desde Consumer Mart
         working-directory: precios-supermercados-sps
         run: |
           set -euo pipefail
           python scripts/generar_muestra_portafolio_segura.py \
-            --publication run-artifacts/analytics/la-colonia-walmart-sps/publication.json \
-            --descriptors run-artifacts/analytics/la-colonia-walmart-sps/source-descriptors.json \
-            --output run-artifacts/analytics/la-colonia-walmart-sps/portfolio-sample.json \
+            --consumer-mart run-artifacts/analytics/rpi-la-colonia-walmart-sps/consumer-mart.json \
+            --output run-artifacts/analytics/rpi-la-colonia-walmart-sps/portfolio-sample.json \
             --limit 10 \
-            | tee run-artifacts/analytics/la-colonia-walmart-sps-portfolio-run.json
+            | tee run-artifacts/analytics/rpi-la-colonia-walmart-sps-portfolio-run.json
 
-      - name: Validar contrato publicado
+      - name: Validar contrato RPI publicado
         working-directory: precios-supermercados-sps
         run: |
           set -euo pipefail
           python - <<'PY'
+          import hashlib
           import json
           from pathlib import Path
 
-          root = Path('run-artifacts/analytics/la-colonia-walmart-sps')
-          publication = json.loads((root / 'publication.json').read_text(encoding='utf-8'))
+          root = Path('run-artifacts/analytics/rpi-la-colonia-walmart-sps')
+          business = json.loads((root / 'business-mart.json').read_text(encoding='utf-8'))
+          consumer = json.loads((root / 'consumer-mart.json').read_text(encoding='utf-8'))
           manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
-          descriptors = json.loads((root / 'source-descriptors.json').read_text(encoding='utf-8'))
           sample = json.loads((root / 'portfolio-sample.json').read_text(encoding='utf-8'))
-          assert publication['schema'] == 'precios-sps-publication/v1'
-          assert manifest['schema'] == 'precios-sps-publication-manifest/v1'
-          assert descriptors['schema'] == 'precios-sps-safe-source-descriptors/v1'
+          policy = 'fail_closed_strong_identity_and_commercial_consistency'
+          expected_scope = [
+              {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_sps'},
+              {'supermarket_id': 'walmart', 'location_id': 'walmart_sps'},
+          ]
+
+          assert business['schema'] == 'rpi-business-mart/v1'
+          assert consumer['schema'] == 'rpi-consumer-mart/v2'
+          assert manifest['schema'] == 'rpi-marts-manifest/v1'
           assert sample['schema'] == 'precios-sps-safe-portfolio-sample/v1'
           assert manifest['source_backend'] == 'turso'
-          assert descriptors['source_backend'] == 'turso'
-          policy = 'fail_closed_strong_identity_and_commercial_consistency'
-          assert manifest['comparison_policy'] == policy
-          assert descriptors['comparison_policy'] == policy
-          assert sample['comparison_policy'] == policy
-          assert descriptors['row_count'] == manifest['safe_offers_published']
-          assert descriptors['canonical_product_count'] == manifest['safe_products_published']
-          assert sample['row_count'] <= min(10, manifest['safe_products_published'])
-          assert manifest['scope'] == [
-              {'location_id': 'la_colonia_sps', 'supermarket_id': 'la_colonia'},
-              {'location_id': 'walmart_sps', 'supermarket_id': 'walmart'},
-          ]
-          assert sample['scope'] == manifest['scope']
-          serialized = json.dumps({
-              'publication': publication,
-              'manifest': manifest,
-              'descriptors': descriptors,
-              'sample': sample,
-          }).casefold()
-          for forbidden in ('turso_database_url', 'turso_auth_token', 'libsql://'):
+          assert manifest['business_schema'] == business['schema']
+          assert manifest['consumer_schema'] == consumer['schema']
+          for document in (business, consumer, sample):
+              assert document['comparison_policy'] == policy
+          assert business['comparison_status'] == 'COMPARABLE'
+          assert consumer['comparison_status'] == 'COMPARABLE'
+          assert manifest['comparison_status'] == 'COMPARABLE'
+          assert business['scope'] == expected_scope
+          assert consumer['scope'] == expected_scope
+          assert manifest['scope'] == expected_scope
+          assert sample['scope'] == expected_scope
+          assert consumer['product_count'] == manifest['safe_products'] > 0
+          offer_count = sum(len(product['offers']) for product in consumer['products'])
+          assert offer_count == manifest['safe_offers']
+          assert sample['row_count'] == len(sample['rows'])
+          assert 0 < sample['row_count'] <= min(10, manifest['safe_products'])
+          assert sample.get('source_schema') == consumer['schema']
+          assert sample.get('source_as_of') == consumer['as_of']
+
+          hashes = manifest.get('files_sha256')
+          assert isinstance(hashes, dict) and hashes
+          for relative, expected_hash in hashes.items():
+              relative_path = Path(relative)
+              assert not relative_path.is_absolute() and '..' not in relative_path.parts
+              path = root / relative_path
+              assert path.is_file(), relative
+              actual = hashlib.sha256(path.read_bytes()).hexdigest()
+              assert actual == expected_hash, relative
+          assert 'consumer-mart.json' in hashes
+          assert 'business-mart.json' in hashes
+          assert 'business/fact_price_history.csv' in hashes
+          assert 'business/fact_promotion_analysis.csv' in hashes
+
+          serialized = '\n'.join(
+              path.read_text(encoding='utf-8', errors='strict')
+              for path in root.rglob('*')
+              if path.is_file()
+          ).casefold()
+          for forbidden in ('turso_database_url', 'turso_auth_token', 'database_url', 'auth_token', 'libsql://'):
               assert forbidden not in serialized
+
           print(json.dumps({
-              'safe_products_published': manifest['safe_products_published'],
-              'safe_offers_published': manifest['safe_offers_published'],
-              'common_basket_product_count': manifest['common_basket_product_count'],
+              'safe_products': manifest['safe_products'],
+              'safe_offers': manifest['safe_offers'],
+              'comparison_status': manifest['comparison_status'],
               'portfolio_sample_rows': sample['row_count'],
-              'excluded_group_counts': manifest['excluded_group_counts'],
+              'business_fact_price_history_rows': len(business['facts']['fact_price_history']),
+              'business_fact_promotion_rows': len(business['facts']['fact_promotion_analysis']),
           }, sort_keys=True))
           PY
 
-      - name: Publicar dataset BI seguro
+      - name: Publicar artifact RPI seguro
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: safe-analytics-la-colonia-walmart-sps-${{ github.run_id }}
           path: |
-            precios-supermercados-sps/run-artifacts/analytics/la-colonia-walmart-sps/
-            precios-supermercados-sps/run-artifacts/analytics/la-colonia-walmart-sps-run.json
-            precios-supermercados-sps/run-artifacts/analytics/la-colonia-walmart-sps-descriptors-run.json
-            precios-supermercados-sps/run-artifacts/analytics/la-colonia-walmart-sps-portfolio-run.json
+            precios-supermercados-sps/run-artifacts/analytics/rpi-la-colonia-walmart-sps/
+            precios-supermercados-sps/run-artifacts/analytics/rpi-la-colonia-walmart-sps-run.json
+            precios-supermercados-sps/run-artifacts/analytics/rpi-la-colonia-walmart-sps-portfolio-run.json
           if-no-files-found: warn
           retention-days: 30

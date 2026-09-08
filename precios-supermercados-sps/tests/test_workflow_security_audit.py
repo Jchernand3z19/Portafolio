@@ -222,16 +222,22 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     assert " ".join(str(publish["if"]).split()) == " ".join(expected_if.split())
 
     raw = path.read_text(encoding="utf-8")
-    assert "scripts/exportar_modelo_analitico.py" in raw
-    assert "scripts/generar_descriptores_publicacion_segura.py" in raw
+    assert "scripts/exportar_rpi_marts.py" in raw
+    assert "scripts/exportar_modelo_analitico.py" not in raw
+    assert "scripts/generar_descriptores_publicacion_segura.py" not in raw
     assert "scripts/generar_muestra_portafolio_segura.py" in raw
+    assert "--consumer-mart" in raw
     assert "portfolio-sample.json" in raw
     assert "--scope la_colonia=la_colonia_sps" in raw
     assert "--scope walmart=walmart_sps" in raw
     assert "--scope colonial=colonial_sps" not in raw
-    assert "precios-sps-publication/v1" in raw
-    assert "precios-sps-safe-source-descriptors/v1" in raw
+    assert "rpi-business-mart/v1" in raw
+    assert "rpi-consumer-mart/v2" in raw
+    assert "rpi-marts-manifest/v1" in raw
     assert "precios-sps-safe-portfolio-sample/v1" in raw
+    assert "business/fact_price_history.csv" in raw
+    assert "business/fact_promotion_analysis.csv" in raw
+    assert "files_sha256" in raw
     assert "fail_closed_strong_identity_and_commercial_consistency" in raw
     assert "TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}" in raw
     assert "TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}" in raw
@@ -381,17 +387,28 @@ def test_portfolio_data_sync_reuses_safe_artifact_without_turso_reads() -> None:
     assert "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" in raw
     assert "run-id: ${{ github.event.workflow_run.id }}" in raw
     assert "safe-analytics-la-colonia-walmart-sps-${{ github.event.workflow_run.id }}" in raw
+    assert "only('portfolio-sample.json', 'portfolio_sync_sample')" in raw
+    assert "rpi-consumer-mart/v2" in raw
+    assert "rpi-business-mart/v1" in raw
+    assert "rpi-marts-manifest/v1" in raw
+    assert "portfolio_sync_hash_mismatch" in raw
+    assert "precios-supermercados-sps/published/rpi/consumer-mart.json" in raw
+    assert "precios-supermercados-sps/published/rpi/manifest.json" in raw
+    assert "precios-supermercados-sps/published/rpi/business-mart.json" not in raw
     assert "precios-supermercados-sps/portfolio/sample-data.json" in raw
-    assert "candidates = sorted(artifact_root.rglob('portfolio-sample.json'))" in raw
-    assert "portfolio_sync_sample_cardinality_invalid" in raw
     assert "const dataBranch = 'portfolio-data';" in raw
-    assert "branch: dataBranch" in raw
-    assert "createOrUpdateFileContents" in raw
+    assert "createBlob" in raw
+    assert "createTree" in raw
+    assert "createCommit" in raw
+    assert "updateRef" in raw
+    assert "force: false" in raw
+    assert "createOrUpdateFileContents" not in raw
     assert "portfolio_sync_secret_material_detected" in raw
     assert "TURSO_DATABASE_URL: ${{ secrets." not in raw
     assert "TURSO_AUTH_TOKEN: ${{ secrets." not in raw
     assert "scripts/exportar_modelo_analitico.py" not in raw
     assert "scripts/generar_descriptores_publicacion_segura.py" not in raw
+    assert "scripts/exportar_rpi_marts.py" not in raw
     assert "actions/checkout@" not in raw
     assert "pull_request:" not in raw
     assert "pull_request_target:" not in raw
