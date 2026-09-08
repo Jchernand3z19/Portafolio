@@ -120,10 +120,21 @@ tbody tr:last-child td { border-bottom: 0; }
 .status-chip--rechazado { color: var(--danger); }
 .status-amount { display: block; margin-top: 6px; color: var(--muted); white-space: nowrap; }
 
+.home-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
+.home-form label { display: grid; gap: 6px; color: var(--muted); font-size: .8rem; }
+.home-form input, .home-row-form input { min-width: 0; border: 1px solid var(--line); background: #07110f; color: var(--text); border-radius: 10px; padding: 10px; }
+.home-form .primary-button { align-self: end; min-height: 42px; }
+.homes-table table { min-width: 1120px; }
+.home-row-form { display: grid; grid-template-columns: 1.5fr 1.15fr .7fr .95fr .95fr .65fr .65fr; gap: 8px; align-items: center; padding: 8px; }
+.home-row-form button { border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; background: rgba(255,255,255,.04); color: var(--text); }
+.checkbox-cell { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .78rem; }
+.checkbox-cell input { width: auto; }
+
 @media (max-width: 900px) {
   .hero, .workbench { grid-template-columns: 1fr; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .blocks, .queues { grid-template-columns: 1fr; }
+  .home-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {
@@ -133,5 +144,6 @@ tbody tr:last-child td { border-bottom: 0; }
   .kpis { grid-template-columns: 1fr; }
   .extraction { grid-template-columns: 1fr; }
   .admin-head { align-items: flex-start; flex-direction: column; }
+  .home-form { grid-template-columns: 1fr; }
   h1 { font-size: 2.35rem; }
 }
