@@ -15,7 +15,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!archive) return new Response('Receipt archive unavailable in demo mode', { status: 404 });
   const file = await archive.read(payment.receiptFileId);
   const extension = file.mimeType === 'image/png' ? 'png' : 'jpg';
-  return new Response(file.bytes, {
+  const body = Uint8Array.from(file.bytes).buffer;
+  return new Response(body, {
     headers: {
       'Content-Type': file.mimeType,
       'Cache-Control': 'private, no-store, max-age=0',
