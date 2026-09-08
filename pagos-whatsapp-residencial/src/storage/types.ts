@@ -8,6 +8,8 @@ export interface PaymentStore {
 
   listHomes(): Promise<HomeRecord[]>;
   findHomesByPhone(phone: string): Promise<HomeRecord[]>;
+  saveHome(home: HomeRecord): Promise<void>;
+  updateHome(home: HomeRecord): Promise<void>;
 
   getPendingByPhone(phone: string): Promise<PendingConversation | undefined>;
   savePending(pending: PendingConversation): Promise<void>;
