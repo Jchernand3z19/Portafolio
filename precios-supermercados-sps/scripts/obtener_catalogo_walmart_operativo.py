@@ -22,6 +22,7 @@ COUNTRY = "HND"
 SALES_CHANNEL = "1"
 PAGE_SIZE = 100
 RECOVERY_PAGE_SIZE = 50
+MAX_SEARCH_PAGES = 50
 DEFAULT_DELAY = 1.0
 DEFAULT_MAX_RETRIES = 2
 MAX_RETRIES_HARD = 2
@@ -350,7 +351,7 @@ def _capture_category(
     children: dict[str, int] | None = None
     if category in CATEGORY2_PARTITIONS:
         facet_path = f"{facets_root}/category-1/{category}"
-        child_doc, _ = capture.get(
+        child_doc, child_record = capture.get(
             seller,
             f"{seller}/{category}/category2-facets{tag_suffix}",
             facet_path,
@@ -395,9 +396,72 @@ def _capture_category(
             )
             rechecked_children = facet_counts(rechecked_doc, "category-2")
             if rechecked_children.get(drift_child) != drift.observed_total:
-                raise RuntimeError(
-                    f"category2_drift_not_confirmed:{seller}:{category}:{drift_child}"
-                ) from drift
+                if rechecked_children != children:
+                    raise RuntimeError(
+                        f"category2_drift_not_confirmed:{seller}:{category}:{drift_child}"
+                    ) from drift
+                if math.ceil(expected_total / PAGE_SIZE) > MAX_SEARCH_PAGES:
+                    raise RuntimeError(
+                        f"category2_parent_recovery_too_large:{seller}:{category}"
+                    ) from drift
+                parent_partition = [(f"category-1/{category}", expected_total)]
+                try:
+                    first_products, first_evidence = _capture_partitions(
+                        capture,
+                        seller=seller,
+                        common=common,
+                        partitions=parent_partition,
+                        tag_suffix=(
+                            f"{tag_suffix}/recovery-parent-facet-disagreement"
+                        ),
+                    )
+                    confirmed_products, confirmed_evidence = _capture_partitions(
+                        capture,
+                        seller=seller,
+                        common=common,
+                        partitions=parent_partition,
+                        tag_suffix=(
+                            f"{tag_suffix}/recovery-parent-facet-disagreement-confirmation"
+                        ),
+                    )
+                except (PartitionTotalChanged, PartitionMembershipOverlap) as repeated:
+                    raise RuntimeError(
+                        f"category2_parent_recovery_changed:{seller}:{category}:"
+                        f"{repeated.tag}"
+                    ) from repeated
+                if set(first_products) != set(confirmed_products):
+                    raise RuntimeError(
+                        f"category2_parent_membership_not_confirmed:{seller}:{category}"
+                    ) from drift
+                membership = hashlib.sha256(
+                    "\n".join(sorted(confirmed_products)).encode()
+                ).hexdigest()
+                recovery = {
+                    "category": category,
+                    "strategy": "category2_stale_facet_parent_restart",
+                    "trigger_tag": drift.tag,
+                    "trigger_sha256": drift.record["sha256"],
+                    "trigger_observed_at": drift.record["observed_at"],
+                    "previous_total": expected_total,
+                    "recovered_total": expected_total,
+                    "previous_partition_total": drift.expected_total,
+                    "observed_partition_total": drift.observed_total,
+                    "category2_facet_sha256": child_record["sha256"],
+                    "facet_recheck_sha256": rechecked_record["sha256"],
+                    "first_parent_evidence_sha256": hashlib.sha256(
+                        "\n".join(item["sha256"] for item in first_evidence).encode()
+                    ).hexdigest(),
+                    "confirmed_parent_evidence_sha256": hashlib.sha256(
+                        "\n".join(item["sha256"] for item in confirmed_evidence).encode()
+                    ).hexdigest(),
+                    "confirmed_membership_sha256": membership,
+                }
+                return (
+                    confirmed_products,
+                    confirmed_evidence,
+                    expected_total,
+                    recovery,
+                )
             recovered_total = sum(rechecked_children.values())
             recovered_partitions = [
                 (f"category-1/{category}/category-2/{child}", count)
