@@ -7,6 +7,11 @@ on:
     types:
       - completed
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "precios-supermercados-sps/.automation/rpi-publication-request.json"
 
 permissions:
   contents: read
@@ -20,6 +25,7 @@ jobs:
     if: >-
       ${{ github.repository == 'Jchernand3z19/Portafolio' &&
           (github.event_name == 'workflow_dispatch' ||
+           (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
            (github.event_name == 'workflow_run' &&
             github.event.workflow_run.conclusion == 'success' &&
             github.event.workflow_run.head_branch == 'main')) }}
@@ -35,6 +41,49 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
+
+      - name: Validar solicitud controlada de publicación
+        if: ${{ github.event_name == 'push' }}
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('.automation/rpi-publication-request.json')
+          document = json.loads(path.read_text(encoding='utf-8'))
+          expected_scope = [
+              {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_sps'},
+              {'supermarket_id': 'walmart', 'location_id': 'walmart_sps'},
+          ]
+          expected_keys = {
+              'schema', 'action', 'scope', 'read_only', 'reason', 'sequence'
+          }
+          if set(document) != expected_keys:
+              raise SystemExit('rpi_publication_request_schema_closed_set_mismatch')
+          if document.get('schema') != 'precios-sps-rpi-publication-request/v1':
+              raise SystemExit('rpi_publication_request_schema_invalid')
+          if document.get('action') != 'publish_safe_rpi':
+              raise SystemExit('rpi_publication_request_action_invalid')
+          if document.get('scope') != expected_scope:
+              raise SystemExit('rpi_publication_request_scope_invalid')
+          if document.get('read_only') is not True:
+              raise SystemExit('rpi_publication_request_read_only_required')
+          if document.get('reason') not in {
+              'bootstrap_rpi_consumer_publication',
+              'operator_requested_republication',
+          }:
+              raise SystemExit('rpi_publication_request_reason_invalid')
+          if type(document.get('sequence')) is not int or document['sequence'] < 1:
+              raise SystemExit('rpi_publication_request_sequence_invalid')
+          print(json.dumps({
+              'request_schema': document['schema'],
+              'action': document['action'],
+              'sequence': document['sequence'],
+              'read_only': document['read_only'],
+          }, sort_keys=True))
+          PY
 
       - name: Configurar Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
