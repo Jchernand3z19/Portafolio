@@ -1,0 +1,48 @@
+Estado comparación = SELECTEDVALUE(BusinessMetadata[comparison_status])
+
+Comparación habilitada = IF([Estado comparación] = "COMPARABLE", 1, 0)
+
+Productos comparables = MAX(FactMetricCoverage[comparable_count])
+
+Productos con precio válido = MAX(FactMetricCoverage[valid_price_count])
+
+Productos excluidos = MAX(FactMetricCoverage[excluded_count])
+
+Cobertura % = DIVIDE(MAX(FactMetricCoverage[coverage_pct]), 100)
+
+PCI promedio =
+IF([Comparación habilitada] = 1, AVERAGE(FactCurrentComparison[pci]), BLANK())
+
+Precio promedio comparable =
+IF([Comparación habilitada] = 1, AVERAGE(FactCurrentComparison[current_price]), BLANK())
+
+Spread promedio =
+IF([Comparación habilitada] = 1, AVERAGE(FactCurrentComparison[spread_abs]), BLANK())
+
+Productos rank 1 =
+IF(
+    [Comparación habilitada] = 1,
+    CALCULATE(DISTINCTCOUNT(FactCurrentComparison[canonical_product_id]), FactCurrentComparison[rank] = 1),
+    BLANK()
+)
+
+Promociones declaradas activas =
+CALCULATE(COUNTROWS(FactCurrentComparison), FactCurrentComparison[is_promotion] = TRUE())
+
+Promotion share % =
+DIVIDE([Promociones declaradas activas], COUNTROWS(FactCurrentComparison))
+
+Fuentes fresh = CALCULATE(COUNTROWS(SourceFreshness), SourceFreshness[freshness_status] = "FRESH")
+
+Fuentes stale = CALCULATE(COUNTROWS(SourceFreshness), SourceFreshness[freshness_status] = "STALE")
+
+Canasta comparable =
+VAR ProductCount = MAX(FactBasketCost[product_count])
+RETURN IF([Comparación habilitada] = 1 && ProductCount > 0, MIN(FactBasketCost[total]), BLANK())
+
+Estado visible =
+IF(
+    [Comparación habilitada] = 1,
+    "Comparación fresca disponible",
+    "Comparación insuficiente por freshness"
+)

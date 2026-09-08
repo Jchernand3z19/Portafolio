@@ -2,6 +2,11 @@
 
 Esta carpeta contiene activos versionables para construir el dashboard sobre la capa analítica segura.
 
+La evolución RPI B2B basada en `rpi-business-mart/v1` vive en [`rpi/`](rpi/).
+Mantiene un origen local privado, freshness/PCI upstream y la especificación de
+las nueve páginas objetivo. Los queries de esta carpeta raíz conservan el modelo
+estático v1 vigente mientras la publicación RPI automática sigue pendiente.
+
 ## Fuente de verdad
 
 La lógica de identidad, comparabilidad, ahorro, canasta común e histórico vive en Python y sus tests. Power BI consume el dataset de publicación; no vuelve a homologar productos por nombre, marca o presentación.
