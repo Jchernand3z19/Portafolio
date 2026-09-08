@@ -103,6 +103,7 @@ function duplicateRecord(original: PaymentRecord, input: ReceiptMessageInput, fi
     status,
     fileHash,
     duplicateOf: original.id,
+    duplicateReason: reason,
     reviewReason: status === 'EN_REVISION' ? reason : undefined,
     verifiedAt: undefined,
     verificationSource: undefined,
@@ -160,7 +161,7 @@ export async function processReceiptMessage(input: ReceiptMessageInput, deps: Pr
         reply: crossSender ? reviewReply() : duplicateReply(),
         paymentId: record.id,
         status: record.status,
-        reason: record.reviewReason ?? 'file_hash',
+        reason: record.reviewReason ?? record.duplicateReason,
       };
     }
 
@@ -261,6 +262,7 @@ export async function processReceiptMessage(input: ReceiptMessageInput, deps: Pr
       status,
       fileHash: validated.sha256,
       duplicateOf: duplicate.kind === 'conflict' || duplicate.kind === 'review' ? duplicate.original.id : undefined,
+      duplicateReason: duplicate.kind === 'conflict' || duplicate.kind === 'review' ? duplicate.reason : undefined,
       reviewReason,
     };
 
