@@ -56,6 +56,16 @@
         <small>Se conserva exactamente el producto, supermercado y cantidad que elegiste. Una oferta faltante se marca; nunca se sustituye en silencio.</small>
       </aside>
       <div id="cart-groups"></div>
+      <section id="basket-analysis" class="basket-analysis" aria-labelledby="basket-analysis-title" hidden>
+        <div class="basket-analysis-head">
+          <div>
+            <p class="eyebrow">COMPARAR MI COMPRA</p>
+            <h3 id="basket-analysis-title">Escenarios de compra</h3>
+          </div>
+          <p>Compara tu selección con comprar todo en un supermercado o usar los mejores precios publicados por Python. Ningún escenario modifica tu lista.</p>
+        </div>
+        <div id="basket-analysis-content" class="scenario-grid" aria-live="polite"></div>
+      </section>
       <div class="cart-actions" aria-label="Exportar Mi Compra">
         <button id="export-csv" class="secondary-button" type="button" disabled>Descargar CSV</button>
         <button id="export-pdf" class="secondary-button" type="button" disabled>Descargar PDF</button>
