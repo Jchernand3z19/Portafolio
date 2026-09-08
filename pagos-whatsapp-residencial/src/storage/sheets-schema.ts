@@ -12,7 +12,7 @@ export const SHEETS = {
 export const PAYMENT_HEADERS = [
   'id', 'created_at', 'updated_at', 'source_message_id', 'phone', 'media_id', 'receipt_file_id', 'bank', 'depositor',
   'transaction_date', 'transaction_time', 'amount', 'detail', 'reference', 'beneficiary', 'destination_account_masked',
-  'block', 'house', 'period', 'status', 'file_hash', 'duplicate_of', 'review_reason', 'verification_source', 'verified_at',
+  'block', 'house', 'period', 'status', 'file_hash', 'duplicate_of', 'duplicate_reason', 'review_reason', 'verification_source', 'verified_at',
 ] as const;
 export const HOME_HEADERS = ['id', 'block', 'house', 'responsible', 'phone', 'monthly_fee', 'active', 'start_date', 'end_date'] as const;
 export const PENDING_HEADERS = ['id', 'phone', 'payment_id', 'created_at', 'expires_at'] as const;
@@ -29,8 +29,8 @@ export function paymentToRow(payment: PaymentRecord): Array<string | number | bo
     payment.id, payment.createdAt, payment.updatedAt, payment.sourceMessageId, payment.phone, cell(payment.mediaId), cell(payment.receiptFileId),
     payment.bank, cell(payment.depositor), cell(payment.transactionDate), cell(payment.transactionTime), payment.amount, cell(payment.detail),
     cell(payment.reference), cell(payment.beneficiary), cell(payment.destinationAccountMasked), cell(payment.block), cell(payment.house),
-    payment.period, payment.status, payment.fileHash, cell(payment.duplicateOf), cell(payment.reviewReason), cell(payment.verificationSource),
-    cell(payment.verifiedAt),
+    payment.period, payment.status, payment.fileHash, cell(payment.duplicateOf), cell(payment.duplicateReason), cell(payment.reviewReason),
+    cell(payment.verificationSource), cell(payment.verifiedAt),
   ];
 }
 
@@ -43,8 +43,8 @@ export function paymentFromRow(row: unknown[]): PaymentRecord | undefined {
     phone: String(row[4] ?? ''), mediaId: text(row[5]), receiptFileId: text(row[6]), bank: String(row[7]), depositor: text(row[8]),
     transactionDate: text(row[9]), transactionTime: text(row[10]), amount: num(row[11]), detail: text(row[12]), reference: text(row[13]),
     beneficiary: text(row[14]), destinationAccountMasked: text(row[15]), block: int(row[16]), house: int(row[17]), period: String(row[18] ?? ''),
-    status: status as PaymentRecord['status'], fileHash: String(row[20]), duplicateOf: text(row[21]), reviewReason: text(row[22]),
-    verificationSource: text(row[23]), verifiedAt: text(row[24]),
+    status: status as PaymentRecord['status'], fileHash: String(row[20]), duplicateOf: text(row[21]), duplicateReason: text(row[22]),
+    reviewReason: text(row[23]), verificationSource: text(row[24]), verifiedAt: text(row[25]),
   };
 }
 
