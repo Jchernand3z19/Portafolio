@@ -325,6 +325,8 @@ def _capture_category(
     expected_total: int,
     common: dict[str, str],
     facets_root: str,
+    tag_suffix: str = "",
+    allow_total_recovery: bool = True,
 ) -> tuple[dict[str, dict], list[dict], int, dict | None]:
     partitions: list[tuple[str, int]] = [(f"category-1/{category}", expected_total)]
     facet_path: str | None = None
@@ -332,7 +334,10 @@ def _capture_category(
     if category in CATEGORY2_PARTITIONS:
         facet_path = f"{facets_root}/category-1/{category}"
         child_doc, _ = capture.get(
-            seller, f"{seller}/{category}/category2-facets", facet_path, common
+            seller,
+            f"{seller}/{category}/category2-facets{tag_suffix}",
+            facet_path,
+            common,
         )
         children = facet_counts(child_doc, "category-2")
         if sum(children.values()) != expected_total:
@@ -348,11 +353,16 @@ def _capture_category(
             seller=seller,
             common=common,
             partitions=partitions,
+            tag_suffix=tag_suffix,
         )
         if len(products) != expected_total:
             raise RuntimeError(f"category_membership_incomplete:{seller}:{category}")
         return products, evidence, expected_total, None
     except PartitionTotalChanged as drift:
+        if not allow_total_recovery:
+            raise RuntimeError(
+                f"category_changed_during_final_recovery:{seller}:{category}:{drift.tag}"
+            ) from drift
         if category in CATEGORY2_PARTITIONS:
             if facet_path is None or children is None:
                 raise AssertionError("category2_partition_state_missing")
@@ -362,7 +372,7 @@ def _capture_category(
             drift_child = drift.tag[len(prefix):].split("/", 1)[0]
             rechecked_doc, rechecked_record = capture.get(
                 seller,
-                f"{seller}/{category}/category2-facets/recovery-total-drift",
+                f"{seller}/{category}/category2-facets{tag_suffix}/recovery-total-drift",
                 facet_path,
                 common,
             )
@@ -382,7 +392,7 @@ def _capture_category(
                     seller=seller,
                     common=common,
                     partitions=recovered_partitions,
-                    tag_suffix="/recovery-total-drift",
+                    tag_suffix=f"{tag_suffix}/recovery-total-drift",
                 )
             except PartitionTotalChanged as repeated:
                 raise RuntimeError(
@@ -392,7 +402,7 @@ def _capture_category(
                 raise RuntimeError(f"category2_recovery_incomplete:{seller}:{category}")
             confirmation_doc, confirmation_record = capture.get(
                 seller,
-                f"{seller}/{category}/category2-facets/recovery-confirmation",
+                f"{seller}/{category}/category2-facets{tag_suffix}/recovery-confirmation",
                 facet_path,
                 common,
             )
@@ -418,7 +428,7 @@ def _capture_category(
                 seller=seller,
                 common=common,
                 partitions=[(f"category-1/{category}", drift.observed_total)],
-                tag_suffix="/recovery-total-drift",
+                tag_suffix=f"{tag_suffix}/recovery-total-drift",
             )
         except PartitionTotalChanged as repeated:
             raise RuntimeError(
@@ -451,8 +461,8 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
     if root_before.get("recordsFiltered") != root_total or len(root_before.get("products", [])) != 1:
         raise RuntimeError(f"root_total_disagrees_with_facets:{seller}")
 
-    products_by_id: dict[str, dict] = {}
-    page_evidence: list[dict] = []
+    products_by_category: dict[str, dict[str, dict]] = {}
+    evidence_by_category: dict[str, list[dict]] = {}
     category_total_recoveries: list[dict] = []
     final_category1 = dict(category1)
 
@@ -465,18 +475,78 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
             common=common,
             facets_root=facets_root,
         )
-        overlap = set(products_by_id).intersection(category_products)
-        if overlap:
-            raise RuntimeError(f"product_membership_overlap:{seller}:category-1/{category}")
-        products_by_id.update(category_products)
-        page_evidence.extend(category_evidence)
+        products_by_category[category] = category_products
+        evidence_by_category[category] = category_evidence
         final_category1[category] = final_total
         if recovery is not None:
             category_total_recoveries.append(recovery)
 
     after, after_record = capture.get(seller, f"{seller}/facets-after", facets_root, common)
-    if facet_counts(after, "category-1") != final_category1:
-        raise RuntimeError(f"catalog_changed_during_capture:{seller}")
+    after_category1 = facet_counts(after, "category-1")
+    recovery_confirmation_record: dict | None = None
+    if after_category1 != final_category1:
+        if set(after_category1) != set(final_category1):
+            raise RuntimeError(f"catalog_category_shape_changed:{seller}")
+        changed_categories = [
+            category
+            for category in final_category1
+            if final_category1[category] != after_category1[category]
+        ]
+        pending_recoveries: list[dict] = []
+        for category in changed_categories:
+            previous_total = final_category1[category]
+            expected_total = after_category1[category]
+            category_products, category_evidence, recovered_total, nested_recovery = (
+                _capture_category(
+                    capture,
+                    seller=seller,
+                    category=category,
+                    expected_total=expected_total,
+                    common=common,
+                    facets_root=facets_root,
+                    tag_suffix="/recovery-final-facet",
+                    allow_total_recovery=False,
+                )
+            )
+            if nested_recovery is not None or recovered_total != expected_total:
+                raise RuntimeError(
+                    f"final_facet_category_recovery_incomplete:{seller}:{category}"
+                )
+            products_by_category[category] = category_products
+            evidence_by_category[category] = category_evidence
+            final_category1[category] = recovered_total
+            pending_recoveries.append(
+                {
+                    "category": category,
+                    "strategy": "final_facet_exact_category_restart",
+                    "trigger_tag": after_record["tag"],
+                    "trigger_sha256": after_record["sha256"],
+                    "trigger_observed_at": after_record["observed_at"],
+                    "previous_total": previous_total,
+                    "recovered_total": recovered_total,
+                }
+            )
+        confirmation, recovery_confirmation_record = capture.get(
+            seller,
+            f"{seller}/facets-after/recovery-confirmation",
+            facets_root,
+            common,
+        )
+        if facet_counts(confirmation, "category-1") != final_category1:
+            raise RuntimeError(f"catalog_changed_during_final_recovery:{seller}")
+        for recovery in pending_recoveries:
+            recovery["facet_confirmation_sha256"] = recovery_confirmation_record["sha256"]
+        category_total_recoveries.extend(pending_recoveries)
+
+    products_by_id: dict[str, dict] = {}
+    page_evidence: list[dict] = []
+    for category in final_category1:
+        category_products = products_by_category[category]
+        overlap = set(products_by_id).intersection(category_products)
+        if overlap:
+            raise RuntimeError(f"product_membership_overlap:{seller}:category-1/{category}")
+        products_by_id.update(category_products)
+        page_evidence.extend(evidence_by_category[category])
     final_root_total = sum(final_category1.values())
     root_after, root_after_record = capture.get(
         seller, f"{seller}/root-after", search_root, {**common, "count": "1", "page": "1"}
@@ -534,6 +604,11 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
             "home_configuration_sha256": home_sha,
             "facet_before_sha256": before_record["sha256"],
             "facet_after_sha256": after_record["sha256"],
+            "facet_recovery_confirmation_sha256": (
+                recovery_confirmation_record["sha256"]
+                if recovery_confirmation_record is not None
+                else None
+            ),
             "root_before_sha256": root_before_record["sha256"],
             "root_after_sha256": root_after_record["sha256"],
         },

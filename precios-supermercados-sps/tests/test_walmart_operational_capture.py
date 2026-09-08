@@ -206,3 +206,113 @@ def test_category2_total_recovery_fails_closed_if_facets_change_again(monkeypatc
             common={},
             facets_root="/facets/seller",
         )
+
+
+def _parsed_products(products: list[dict]) -> tuple[list[dict], dict[str, dict]]:
+    rows = [
+        {
+            "source_key": item["productId"],
+            "current_price": 1,
+            "availability": "available",
+            "is_promotion": False,
+        }
+        for item in products
+    ]
+    return rows, {row["source_key"]: {} for row in rows}
+
+
+def final_facet_drift_responses(*, confirmation_electronica: int = 1) -> dict[str, dict]:
+    return {
+        "seller/facets-before": facets("category-1", electronica=2, abarrotes=2),
+        "seller/root-before": page(4, "root"),
+        "seller/category-1/electronica/page-001": page(2, "1", "2"),
+        "seller/category-1/abarrotes/page-001": page(2, "3", "4"),
+        "seller/facets-after": facets("category-1", electronica=1, abarrotes=2),
+        "seller/category-1/electronica/recovery-final-facet/page-001": page(1, "1"),
+        "seller/facets-after/recovery-confirmation": facets(
+            "category-1", electronica=confirmation_electronica, abarrotes=2
+        ),
+        "seller/root-after": page(3, "root"),
+    }
+
+
+def test_final_facet_drift_recaptures_only_changed_category_and_confirms(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    monkeypatch.setattr(operational, "parse_products", _parsed_products)
+    capture = FakeCapture(final_facet_drift_responses())
+
+    snapshot = operational.capture_store(
+        capture,
+        seller="seller",
+        location_id="location",
+        city="city",
+        store_name="store",
+        home_sha="h" * 64,
+    )
+
+    assert snapshot["catalog_products_reported"] == 3
+    assert snapshot["unique_products_extracted"] == 3
+    assert {row["source_key"] for row in snapshot["products"]} == {"1", "3", "4"}
+    assert [item["strategy"] for item in snapshot["category_total_recoveries"]] == [
+        "final_facet_exact_category_restart"
+    ]
+    assert snapshot["category_total_recoveries"][0]["previous_total"] == 2
+    assert snapshot["category_total_recoveries"][0]["recovered_total"] == 1
+    evidence_tags = {item["tag"] for item in snapshot["page_evidence"]}
+    assert "seller/category-1/electronica/page-001" not in evidence_tags
+    assert "seller/category-1/electronica/recovery-final-facet/page-001" in evidence_tags
+    assert "seller/category-1/abarrotes/page-001" in evidence_tags
+    assert snapshot["binding_evidence"]["facet_recovery_confirmation_sha256"]
+
+
+def test_final_facet_recovery_fails_if_catalog_changes_again(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    responses = final_facet_drift_responses(confirmation_electronica=2)
+
+    with pytest.raises(RuntimeError, match="catalog_changed_during_final_recovery"):
+        operational.capture_store(
+            FakeCapture(responses),
+            seller="seller",
+            location_id="location",
+            city="city",
+            store_name="store",
+            home_sha="h" * 64,
+        )
+
+
+def test_final_facet_recovery_fails_on_category_shape_change(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    responses = final_facet_drift_responses()
+    responses["seller/facets-after"] = facets("category-1", electronica=1, nuevo=2)
+
+    with pytest.raises(RuntimeError, match="catalog_category_shape_changed"):
+        operational.capture_store(
+            FakeCapture(responses),
+            seller="seller",
+            location_id="location",
+            city="city",
+            store_name="store",
+            home_sha="h" * 64,
+        )
+
+
+def test_final_facet_category_restart_rejects_another_total_change(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    responses = final_facet_drift_responses()
+    responses["seller/category-1/electronica/recovery-final-facet/page-001"] = page(
+        2, "1"
+    )
+
+    with pytest.raises(RuntimeError, match="category_changed_during_final_recovery"):
+        operational.capture_store(
+            FakeCapture(responses),
+            seller="seller",
+            location_id="location",
+            city="city",
+            store_name="store",
+            home_sha="h" * 64,
+        )
