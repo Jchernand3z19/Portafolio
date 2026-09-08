@@ -56,6 +56,11 @@
         <small>Se conserva exactamente el producto, supermercado y cantidad que elegiste. Una oferta faltante se marca; nunca se sustituye en silencio.</small>
       </aside>
       <div id="cart-groups"></div>
+      <div class="cart-actions" aria-label="Exportar Mi Compra">
+        <button id="export-csv" class="secondary-button" type="button" disabled>Descargar CSV</button>
+        <button id="export-pdf" class="secondary-button" type="button" disabled>Descargar PDF</button>
+        <span id="export-status" class="export-status" role="status" aria-live="polite"></span>
+      </div>
       <div class="cart-total-card">
         <strong id="cart-total">TOTAL ESTIMADO L 0.00</strong>
         <p>Total estimado calculado con los precios públicos observados en cada supermercado. Los precios pueden cambiar en tienda.</p>
