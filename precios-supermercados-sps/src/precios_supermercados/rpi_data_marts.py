@@ -103,10 +103,20 @@ def build_rpi_data_marts(
     freshness_by_scope = {
         (item.source_id, item.location_id): item for item in freshness_values
     }
+    if len(freshness_by_scope) != len(freshness_values):
+        raise RpiDataMartError("mart_freshness_scope_duplicate")
     if len(freshness_by_scope) != len(analytics.scope.locations):
         raise RpiDataMartError("mart_freshness_scope_cardinality_mismatch")
     if set(freshness_by_scope) != set(analytics.scope.locations):
         raise RpiDataMartError("mart_freshness_scope_mismatch")
+    if {
+        _iso(item.as_of_utc) for item in freshness_values
+    } != {competition.coverage.as_of}:
+        raise RpiDataMartError("mart_freshness_as_of_mismatch")
+    if {
+        item.freshness_window_hours for item in freshness_values
+    } != {competition.coverage.freshness_window_hours}:
+        raise RpiDataMartError("mart_freshness_window_mismatch")
 
     safe_offers = [offer for product in analytics.products for offer in product.offers]
     safe_ids = {offer.source_record_id for offer in safe_offers}
