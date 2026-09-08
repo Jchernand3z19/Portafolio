@@ -216,6 +216,16 @@ class PartitionTotalChanged(RuntimeError):
         super().__init__(f"page_total_changed:{tag}:{expected_total}:{observed_total}")
 
 
+class PartitionMembershipOverlap(RuntimeError):
+    """Stable product identities moved across pages while a partition was paged."""
+
+    def __init__(self, tag: str, product_ids: set[str], record: dict) -> None:
+        self.tag = tag
+        self.product_ids = frozenset(product_ids)
+        self.record = record
+        super().__init__(f"product_membership_overlap:{tag}")
+
+
 def _page_products(
     capture: Capture,
     seller: str,
@@ -293,14 +303,21 @@ def _capture_partitions(
             products, records = _page_products(
                 capture, seller, tag, path, common, partition_total, page
             )
+            incoming_ids: set[str] = set()
             for product in products:
                 if not isinstance(product, dict):
                     raise RuntimeError(f"product_id_invalid:{tag}")
                 product_id = product.get("productId")
                 if not isinstance(product_id, str) or not product_id:
                     raise RuntimeError(f"product_id_invalid:{tag}")
-                if product_id in partition_products or product_id in category_products:
-                    raise RuntimeError(f"product_membership_overlap:{tag}")
+                incoming_ids.add(product_id)
+            overlap = incoming_ids.intersection(
+                set(partition_products).union(category_products)
+            )
+            if overlap:
+                raise PartitionMembershipOverlap(tag, overlap, records[-1])
+            for product in products:
+                product_id = product["productId"]
                 partition_products[product_id] = product
             page_evidence.extend(
                 {
@@ -446,6 +463,71 @@ def _capture_category(
             "recovered_total": drift.observed_total,
         }
         return products, evidence, drift.observed_total, recovery
+    except PartitionMembershipOverlap as overlap:
+        membership_facet_path = f"{facets_root}/category-1/{category}"
+        rechecked_doc, rechecked_record = capture.get(
+            seller,
+            f"{seller}/{category}/category2-facets{tag_suffix}/recovery-membership-overlap",
+            membership_facet_path,
+            common,
+        )
+        rechecked_children = facet_counts(rechecked_doc, "category-2")
+        if sum(rechecked_children.values()) != expected_total:
+            raise RuntimeError(
+                f"category2_membership_total_mismatch:{seller}:{category}"
+            ) from overlap
+        recovered_partitions = [
+            (f"category-1/{category}/category-2/{child}", count)
+            for child, count in rechecked_children.items()
+        ]
+        try:
+            products, evidence = _capture_partitions(
+                capture,
+                seller=seller,
+                common=common,
+                partitions=recovered_partitions,
+                tag_suffix=f"{tag_suffix}/recovery-membership-overlap",
+            )
+        except PartitionTotalChanged as repeated_total:
+            raise RuntimeError(
+                f"category_changed_during_membership_recovery:{seller}:{category}:"
+                f"{repeated_total.tag}"
+            ) from repeated_total
+        except PartitionMembershipOverlap as repeated_overlap:
+            raise RuntimeError(
+                f"category_membership_changed_again:{seller}:{category}:"
+                f"{repeated_overlap.tag}"
+            ) from repeated_overlap
+        if len(products) != expected_total:
+            raise RuntimeError(f"category_membership_recovery_incomplete:{seller}:{category}")
+        confirmation_doc, confirmation_record = capture.get(
+            seller,
+            f"{seller}/{category}/category2-facets{tag_suffix}/recovery-membership-confirmation",
+            membership_facet_path,
+            common,
+        )
+        if facet_counts(confirmation_doc, "category-2") != rechecked_children:
+            raise RuntimeError(
+                f"category2_changed_during_membership_recovery:{seller}:{category}"
+            )
+        duplicate_ids = sorted(overlap.product_ids)
+        recovery = {
+            "category": category,
+            "strategy": "category2_exact_membership_restart",
+            "trigger_tag": overlap.tag,
+            "trigger_sha256": overlap.record["sha256"],
+            "trigger_observed_at": overlap.record["observed_at"],
+            "previous_total": expected_total,
+            "recovered_total": expected_total,
+            "duplicate_product_count": len(duplicate_ids),
+            "duplicate_product_ids_sha256": hashlib.sha256(
+                "\n".join(duplicate_ids).encode()
+            ).hexdigest(),
+            "category2_partitions": len(rechecked_children),
+            "facet_recheck_sha256": rechecked_record["sha256"],
+            "facet_confirmation_sha256": confirmation_record["sha256"],
+        }
+        return products, evidence, expected_total, recovery
 
 
 def capture_store(capture: Capture, seller: str, location_id: str, city: str, store_name: str, home_sha: str) -> dict:
@@ -464,6 +546,7 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
     products_by_category: dict[str, dict[str, dict]] = {}
     evidence_by_category: dict[str, list[dict]] = {}
     category_total_recoveries: list[dict] = []
+    membership_recoveries: list[dict] = []
     final_category1 = dict(category1)
 
     for category, expected_total in category1.items():
@@ -479,7 +562,10 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
         evidence_by_category[category] = category_evidence
         final_category1[category] = final_total
         if recovery is not None:
-            category_total_recoveries.append(recovery)
+            if recovery["strategy"] == "category2_exact_membership_restart":
+                membership_recoveries.append(recovery)
+            else:
+                category_total_recoveries.append(recovery)
 
     after, after_record = capture.get(seller, f"{seller}/facets-after", facets_root, common)
     after_category1 = facet_counts(after, "category-1")
@@ -596,6 +682,7 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
         "source_details": source_details,
         "page_evidence": page_evidence,
         "category_total_recoveries": category_total_recoveries,
+        "membership_recoveries": membership_recoveries,
         "binding_evidence": {
             "selector": seller,
             "region_id": region_id(seller),
@@ -678,6 +765,7 @@ def main() -> None:
                 "skus_extracted": snapshot["skus_extracted"],
                 "skus_with_price": snapshot["skus_with_price"],
                 "category_total_recovery_count": len(snapshot["category_total_recoveries"]),
+                "membership_recovery_count": len(snapshot["membership_recoveries"]),
             }
             for snapshot in snapshots
         ],
