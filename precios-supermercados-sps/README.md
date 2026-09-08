@@ -1,6 +1,10 @@
-# Precios de Supermercados de San Pedro Sula
+# Retail Price Intelligence Platform — Honduras
 
-Proyecto de **web scraping, automatización y datos** para recolectar, normalizar, validar, historizar y comparar precios de supermercados con alcance inicial en San Pedro Sula y cobertura adicional ya verificada en Tegucigalpa.
+Plataforma de **data engineering y price intelligence** que recolecta,
+normaliza, valida, historiza y compara precios públicos de supermercados. Una
+adquisición común alimenta Python analytics, un producto B2B preparado para
+Power BI y el producto web B2C **Compra Inteligente**. El alcance demostrado
+incluye San Pedro Sula y Tegucigalpa.
 
 ## Presentación pública en el portafolio
 
@@ -66,6 +70,7 @@ La procedencia completa y los límites de interpretación se documentan en [`doc
 ## Fuentes de verdad
 
 - **Estado operativo mutable, autorizaciones, blockers y último CI:** [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)
+- **Especificación integral RPI, productos B2B/B2C y roadmap:** [`docs/RPI-PRODUCT-SPEC.md`](docs/RPI-PRODUCT-SPEC.md)
 - **Presentación pública y evidencia de cifras del portafolio:** [`docs/portfolio-showcase.md`](docs/portfolio-showcase.md)
 - **Metodología del comparador:** [`docs/COMPARATOR-METHODOLOGY.md`](docs/COMPARATOR-METHODOLOGY.md)
 - **Contrato del dataset analítico/publicable:** [`docs/PUBLICATION-DATA-DICTIONARY.md`](docs/PUBLICATION-DATA-DICTIONARY.md)
@@ -104,9 +109,9 @@ NormalizedOffer
   ↓
 ValidatedOffer                    # CLEAN / validated
   ↓
-completitud + provenance + ACCEPT/REJECT
+completitud + health + provenance + ACCEPTED/DEGRADED/REJECTED
   ↓
-current/history                   # CURATED
+last-known-good + current/history # CURATED
   ↓
 Turso / SQLite
   ↓
@@ -114,11 +119,11 @@ homologación descriptiva
   ↓
 safe_comparator                   # gate fail-closed
   ↓
-price_analytics
+freshness + price_analytics       # Python analytics compartido
   ↓
-publication_dataset               # SERVE
-  ↓
-Power BI / portafolio
+Business Mart / Consumer Mart     # SERVE
+  ↓                         ↓
+Power BI B2B          Compra Inteligente B2C
 ```
 
 La cobertura productiva completa de seis cadenas no implica que todos los artículos sean comparables entre cadenas. La capa analítica publica únicamente la intersección cuya identidad y precio están demostrados para el alcance solicitado.
