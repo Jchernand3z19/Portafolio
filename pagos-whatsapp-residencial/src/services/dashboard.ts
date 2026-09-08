@@ -26,12 +26,12 @@ function canonicalPayments(payments: readonly PaymentRecord[]): PaymentRecord[] 
 }
 
 function activeInPeriod(home: HomeRecord, period: string): boolean {
-  if (!home.active) return false;
   const monthEnd = `${period}-31`;
   const monthStart = `${period}-01`;
   if (home.startDate && home.startDate > monthEnd) return false;
   if (home.endDate && home.endDate < monthStart) return false;
-  return true;
+  if (home.active) return true;
+  return Boolean(home.endDate && home.endDate >= monthStart);
 }
 
 export async function buildDashboardSnapshot(store: PaymentStore, period: string): Promise<DashboardSnapshot> {
