@@ -186,14 +186,75 @@ def test_category2_total_drift_rechecks_facets_and_restarts_all_child_partitions
     assert capture.calls[-1] == "seller/electronica/category2-facets/recovery-confirmation"
 
 
-def test_category2_total_drift_requires_facet_confirmation_of_observed_total(monkeypatch):
-    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
-    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", {"electronica"})
+def _stale_child_facet_parent_responses() -> dict[str, dict]:
     responses = category2_drift_responses()
     responses["seller/electronica/category2-facets/recovery-total-drift"] = facets(
         "category-2", audio=4, video=2
     )
+    parent = "seller/category-1/electronica"
+    first = f"{parent}/recovery-parent-facet-disagreement"
+    confirmation = f"{parent}/recovery-parent-facet-disagreement-confirmation"
+    for prefix in (first, confirmation):
+        responses[f"{prefix}/page-001"] = page(6, "1", "2")
+        responses[f"{prefix}/page-002"] = page(6, "3", "4")
+        responses[f"{prefix}/page-003"] = page(6, "5", "6")
+    return responses
 
+
+def test_category2_stale_facet_uses_two_exact_parent_membership_passes(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", {"electronica"})
+    capture = FakeCapture(_stale_child_facet_parent_responses())
+
+    products, evidence, final_total, recovery = operational._capture_category(
+        capture,
+        seller="seller",
+        category="electronica",
+        expected_total=6,
+        common={},
+        facets_root="/facets/seller",
+    )
+
+    assert set(products) == {"1", "2", "3", "4", "5", "6"}
+    assert len(evidence) == 3
+    assert final_total == 6
+    assert recovery is not None
+    assert recovery["strategy"] == "category2_stale_facet_parent_restart"
+    assert recovery["previous_partition_total"] == 4
+    assert recovery["observed_partition_total"] == 5
+    assert recovery["confirmed_membership_sha256"]
+    assert capture.calls[-1].endswith(
+        "recovery-parent-facet-disagreement-confirmation/page-003"
+    )
+
+
+def test_category2_stale_facet_rejects_unconfirmed_parent_membership(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", {"electronica"})
+    responses = _stale_child_facet_parent_responses()
+    responses[
+        "seller/category-1/electronica/"
+        "recovery-parent-facet-disagreement-confirmation/page-003"
+    ] = page(6, "5", "7")
+
+    with pytest.raises(RuntimeError, match="category2_parent_membership_not_confirmed"):
+        operational._capture_category(
+            FakeCapture(responses),
+            seller="seller",
+            category="electronica",
+            expected_total=6,
+            common={},
+            facets_root="/facets/seller",
+        )
+
+
+def test_category2_changed_facet_still_requires_observed_total_confirmation(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", {"electronica"})
+    responses = category2_drift_responses()
+    responses["seller/electronica/category2-facets/recovery-total-drift"] = facets(
+        "category-2", audio=4, video=3
+    )
     with pytest.raises(RuntimeError, match="category2_drift_not_confirmed"):
         operational._capture_category(
             FakeCapture(responses),
