@@ -98,7 +98,7 @@ export const bacParser: ReceiptParser = {
     if (!amount) warnings.push('amount_missing');
     if (!reference) warnings.push('reference_missing');
     if (!home) warnings.push('home_missing');
-    let confidence = bacParser.detect(text) + (amount ? 0.1 : 0) + (reference ? 0.1 : 0) + (home ? 0.05 : 0);
+    const confidence = bacParser.detect(text) + (amount ? 0.1 : 0) + (reference ? 0.1 : 0) + (home ? 0.05 : 0);
 
     return {
       bank: 'BAC Honduras',
