@@ -17,12 +17,12 @@ La versión pública muestra:
 - evidencia analítica intra-cadena reproducible cuando la identidad del artículo está demostrada;
 - la política fail-closed que impide publicar comparaciones cross-source basadas sólo en marca y presentación.
 
-Cifras públicas verificadas al **4 de septiembre de 2026**:
+Cifras públicas verificadas al **8 de septiembre de 2026**:
 
 - 6 supermercados / cadenas productivas integradas.
 - 11 ubicaciones monitoreadas.
-- 56,769 productos registrados.
-- 108,315 periodos históricos de precio.
+- 58,114 productos registrados.
+- 127,980 periodos históricos de precio.
 - Cobertura en San Pedro Sula y Tegucigalpa.
 
 Cadenas con datos productivos aceptados:
@@ -59,7 +59,7 @@ La muestra histórica de 10 filas entre Comisariato Los Andes y Supermercados Co
 
 Una fila cross-source sólo puede publicarse cuando supera el gate conservador que exige identidad fuerte y coherencia comercial. La metodología completa está en [`docs/COMPARATOR-METHODOLOGY.md`](docs/COMPARATOR-METHODOLOGY.md) y el contrato de publicación en [`docs/PUBLICATION-DATA-DICTIONARY.md`](docs/PUBLICATION-DATA-DICTIONARY.md).
 
-Mientras no exista una fila autorizada por ese gate, [`portfolio/sample-data.json`](portfolio/sample-data.json) publica un estado vacío y explícito en lugar de una comparación dudosa.
+La publicación derivada vigente contiene 92 productos comparables y 184 ofertas para La Colonia SPS + Walmart SPS. El portafolio consume una muestra de 10 filas desde la rama `portfolio-data`; [`portfolio/sample-data.json`](portfolio/sample-data.json) permanece como fallback local vacío y explícito, de modo que una falla de red no habilita comparaciones dudosas.
 
 La procedencia completa y los límites de interpretación se documentan en [`docs/portfolio-showcase.md`](docs/portfolio-showcase.md).
 

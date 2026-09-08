@@ -313,7 +313,7 @@ El portafolio presenta:
 - hallazgos analíticos respaldados;
 - sólo comparaciones cross-source que superen el gate.
 
-La antigua muestra basada en “misma marca + misma presentación” está retirada. `portfolio/sample-data.json` permanece explícitamente vacío hasta que existan filas publicadas por el contrato seguro.
+La antigua muestra basada en “misma marca + misma presentación” está retirada. Producción consume desde `portfolio-data` una muestra generada por el contrato seguro; `portfolio/sample-data.json` permanece explícitamente vacío como fallback local fail-closed.
 
 ## Backends
 

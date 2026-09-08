@@ -1,10 +1,10 @@
 (() => {
   const STATE = Object.freeze({
-    asOf: '2026-09-04',
+    asOf: '2026-09-08',
     supermarkets: 6,
     locations: 11,
-    products: 56769,
-    history: 108315,
+    products: 58114,
+    history: 127980,
     chains: Object.freeze([
       Object.freeze({ name: 'La Colonia', locations: 'SPS · Tegucigalpa' }),
       Object.freeze({ name: 'Supermercados Colonial', locations: 'SPS' }),
@@ -32,9 +32,9 @@
   const copy = {
     es: {
       cardLabels: ['supermercados', 'ubicaciones', 'productos registrados', 'registros históricos'],
-      stage: '6 supermercados integrados, 11 ubicaciones, 56K+ productos registrados y 108K+ periodos históricos de precio.',
+      stage: '6 supermercados integrados, 11 ubicaciones, 58K+ productos registrados y 127K+ periodos históricos de precio.',
       scaleTitle: 'Cobertura productiva actual',
-      scaleBody: 'Estado verificado al 4 de septiembre de 2026. La cobertura productiva incluye las seis cadenas que ya tienen datos aceptados en la base.',
+      scaleBody: 'Estado verificado al 8 de septiembre de 2026. La cobertura productiva incluye las seis cadenas que ya tienen datos aceptados en la base.',
       scaleLabels: ['supermercados', 'ubicaciones monitoreadas', 'productos registrados', 'registros históricos de precio'],
       coverageTitle: 'Supermercados con datos disponibles',
       coverageBody: 'Cada fila corresponde a una cadena con datos productivos aceptados. La cobertura de scraping y la cobertura de comparación cross-source se muestran como conceptos separados.',
@@ -60,9 +60,9 @@
     },
     en: {
       cardLabels: ['retail chains', 'locations', 'products recorded', 'historical records'],
-      stage: '6 integrated retail chains, 11 locations, 56K+ products recorded, and 108K+ historical price periods.',
+      stage: '6 integrated retail chains, 11 locations, 58K+ products recorded, and 127K+ historical price periods.',
       scaleTitle: 'Current production coverage',
-      scaleBody: 'Verified state as of September 4, 2026. Production coverage includes all six chains with accepted data in the database.',
+      scaleBody: 'Verified state as of September 8, 2026. Production coverage includes all six chains with accepted data in the database.',
       scaleLabels: ['retail chains', 'monitored locations', 'products recorded', 'historical price records'],
       coverageTitle: 'Retail chains with available data',
       coverageBody: 'Each row is a chain with accepted production data. Scraping coverage and cross-source comparison coverage are shown as separate concepts.',
@@ -147,7 +147,7 @@
   function patchCard() {
     const card = document.querySelector('#proyectos .price-card');
     if (!card) return;
-    const values = ['6', '11', '56K+', '108K+'];
+    const values = ['6', '11', '58K+', '127K+'];
     card.querySelectorAll('.price-card__signal > span').forEach((item, index) => {
       setText(item.querySelector('strong'), values[index]);
       setText(item.querySelector('small'), text().cardLabels[index]);
@@ -322,7 +322,7 @@
     const scaleHead = scaleTitle?.closest('.price-section__head');
     setText(scaleHead?.querySelector('p:not(.price-eyebrow)'), c.scaleBody);
 
-    const values = ['6', '11', '56K+', '108K+'];
+    const values = ['6', '11', '58K+', '127K+'];
     detail.querySelectorAll('.price-kpis .price-kpi').forEach((item, index) => {
       setText(item.querySelector('strong'), values[index]);
       setText(item.querySelector('span'), c.scaleLabels[index]);

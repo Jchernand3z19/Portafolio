@@ -95,7 +95,7 @@ def main() -> int:
             )
 
             signal_values = page.locator("#proyectos .price-card .price-card__signal strong").all_inner_texts()
-            assert signal_values == ["6", "11", "56K+", "108K+"], signal_values
+            assert signal_values == ["6", "11", "58K+", "127K+"], signal_values
 
             # Price detail uses the same full-screen secondary-page shell.
             page.locator("#proyectos .price-card [data-price-open]").first.click()

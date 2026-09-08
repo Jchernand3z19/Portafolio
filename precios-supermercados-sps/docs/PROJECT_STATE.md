@@ -2,7 +2,7 @@
 
 GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad técnica. Este archivo resume el estado **vigente** del proyecto. El snapshot histórico anterior al cierre de Los Andes y Paiz se conserva en [`PROJECT_STATE_HISTORY_2026-09-02.md`](PROJECT_STATE_HISTORY_2026-09-02.md).
 
-## Estado vigente — 2026-09-07
+## Estado vigente — 2026-09-08
 
 El proyecto mantiene seis cadenas productivas y once ubicaciones demostradas:
 
@@ -15,7 +15,7 @@ El proyecto mantiene seis cadenas productivas y once ubicaciones demostradas:
 | Comisariato Los Andes | SPS |
 | Paiz | TGU Multiplaza, TGU Próceres |
 
-La última lectura productiva independiente previa a la corrida #13 confirmó esquema listo e integridad correcta en Turso, con **6 supermercados, 11 ubicaciones, 56,815 productos, 114,017 periodos de `price_history` y 437 `scrape_runs`**. `PRAGMA integrity_check` devolvió `ok`.
+El ciclo productivo completo más reciente dejó **6 supermercados, 11 ubicaciones, 58,114 productos, 127,980 periodos de `price_history` y 463 `scrape_runs`**. La verificación posterior confirmó cero periodos actuales duplicados, cero violaciones de claves foráneas y `PRAGMA integrity_check = ok`.
 
 No se inventan ubicaciones cuando la fuente no las demuestra. Paiz no tiene un contexto selector SPS aceptado; sus dos contextos demostrados siguen siendo Multiplaza y Próceres en Tegucigalpa. PriceSmart El Sauce 6604 permanece excluido. Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
 
@@ -33,87 +33,63 @@ El workflow `.github/workflows/precios-supermercados-sps-la-colonia-mvp-update.y
 
 El workflow es **fail-closed**: todas las descargas pueden terminar y publicar evidencia, pero ninguna persistencia ocurre si una sola fuente no supera sus validaciones de completitud, identidad y cobertura.
 
-## Última corrida productiva completa intentada — run #13
+## Última corrida productiva completa — PASS
 
-Workflow: `La Colonia - Actualización MVP`  
-Run ID: `34148356089`  
-Job ID: `101825767064`  
-Evento: `workflow_dispatch`  
-Commit ejecutado: `177853625b4383a63c98ade74e47b02e9960427c`  
-Resultado final: **failure controlado en la compuerta de aceptación**.
+Workflow: [`La Colonia - Actualización MVP`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34242670410)
 
-Todos los colectores llegaron a ejecutarse. Resultado por fuente:
+Run ID: `34242670410`
 
-| Fuente | Resultado live |
-| --- | --- |
-| La Colonia SPS | **FAIL** — `unique_product_coverage_mismatch` |
-| La Colonia TGU | **FAIL** — `unique_product_coverage_mismatch` |
-| Comisariato Los Andes SPS | **PASS** — 6,688 productos únicos, cobertura completa |
-| Paiz | **FAIL** — `product_membership_overlap:walmarthnsp4010/category-1/abarrotes/page-017` |
-| Colonial SPS | **PASS** — 9,232 productos fuente, cobertura completa |
-| Walmart SPS | **PASS** — 14,163 productos fuente |
-| Walmart TGU FFAA | **PASS** — 14,773 productos fuente |
-| Walmart TGU El Sauce | **PASS** — 14,643 productos fuente |
-| PriceSmart SPS 6603 | **PASS** — 2,776 productos reportados por catálogo |
-| PriceSmart TGU Florencia 6602 | **PASS** — 2,776 productos reportados por catálogo |
+Evento: `workflow_dispatch`
 
-La compuerta `Aceptar sólo snapshots completos` falló porque los códigos de salida fueron:
+Commit ejecutado: `22a9bd6df01f98442ba50bfe8e539f0f331bb43c`
 
-```text
-SPS_EXIT=3
-TGU_EXIT=3
-LOS_ANDES_EXIT=0
-PAIZ_EXIT=1
-COLONIAL_EXIT=0
-WALMART_EXIT=0
-PRICESMART_EXIT=0
-```
+Resultado final: **success**.
 
-Como consecuencia correcta del diseño fail-closed, quedaron **skipped** todas las etapas de persistencia y postflight:
+Las seis cadenas terminaron con código de salida `0` y la compuerta global aceptó los once snapshots antes de cualquier escritura:
 
-- persistencia de La Colonia, Los Andes, Colonial, Walmart y PriceSmart;
-- migración/persistencia de Paiz;
-- verificación exacta de commits en Turso;
-- verificación de retailers, duplicados, FKs e integridad posterior.
+| Ubicación | Productos fuente | SKU procesados | SKU con precio |
+| --- | ---: | ---: | ---: |
+| La Colonia SPS | 9,473 | 9,475 | 9,475 |
+| La Colonia TGU | 9,504 | 9,506 | 9,506 |
+| Comisariato Los Andes SPS | 6,688 | 6,688 | 6,688 |
+| Colonial SPS | 9,232 | 9,238 | 9,238 |
+| Walmart SPS | 14,114 | 14,119 | 13,733 |
+| Walmart TGU FFAA | 14,655 | 14,660 | 14,119 |
+| Walmart TGU El Sauce | 14,511 | 14,516 | 13,965 |
+| PriceSmart SPS 6603 | 2,785 | 6,103 | 5,430 |
+| PriceSmart TGU Florencia 6602 | 2,785 | 6,103 | 5,273 |
+| Paiz TGU Multiplaza | 8,856 | 8,860 | 8,605 |
+| Paiz TGU Próceres | 8,595 | 8,599 | 8,356 |
 
-Por lo tanto, la corrida #13 **no escribió un snapshot parcial en Turso**. La evidencia se conservó en el artifact `supermercados-mvp-34148356089`, artifact ID `10029869985`.
+El preflight Turso clasificó los once `run_id` como `new`. Cada transacción persistió el snapshot completo y el postflight encontró los once runs con estado `success`, SHA fuente exacto y alcance correcto. El estado actual quedó en:
 
-## Bloqueo técnico actual
+| Ubicación | Periodos actuales abiertos |
+| --- | ---: |
+| La Colonia SPS | 9,521 |
+| La Colonia TGU | 9,550 |
+| Comisariato Los Andes SPS | 6,724 |
+| Colonial SPS | 9,239 |
+| Walmart SPS | 14,772 |
+| Walmart TGU FFAA | 15,267 |
+| Walmart TGU El Sauce | 15,137 |
+| PriceSmart SPS 6603 | 6,261 |
+| PriceSmart TGU Florencia 6602 | 6,261 |
+| Paiz TGU Multiplaza | 9,007 |
+| Paiz TGU Próceres | 8,782 |
 
-La prioridad inmediata es cerrar dos problemas live sin relajar contratos de seguridad:
+Los Andes conserva observaciones previas con disponibilidad `unknown`; por eso su estado actual puede ser un superset del snapshot sin interpretar ausencias como `out_of_stock`. El postflight exige alcance exacto, run/SHA exactos, cero duplicados y un conteo abierto no menor que el snapshot.
 
-### 1. La Colonia SPS/TGU
+La evidencia durable está en el artifact `supermercados-mvp-34242670410`, ID `10065247638`, tamaño `74,492,002` bytes y digest `sha256:6d3b1ea69c13bbf6e6f66cc9ef71a144be473d00bb7b4d8774a5afba07c33894`. Expira el `2026-09-22T16:07:37Z`.
 
-Los recorridos terminaron con `unique_product_coverage_mismatch`. La corrección debe distinguir cambios reales del catálogo durante el crawl frente a páginas faltantes/repetidas, recuperar únicamente lo necesario cuando exista evidencia suficiente y seguir rechazando cualquier snapshot cuya cobertura única no pueda demostrarse.
-
-No se debe sustituir la validación estricta por tolerancias numéricas arbitrarias ni aceptar `catalog_complete=true` si el conjunto único no concuerda con la evidencia fuente.
-
-### 2. Paiz
-
-El recorrido falló por `product_membership_overlap` en `walmarthnsp4010/category-1/abarrotes/page-017`. La solución debe reconciliar de forma determinista membresía repetida entre páginas/categorías sin perder productos ni aceptar identidad ambigua. Walmart ya demuestra un patrón útil de recuperación estricta que puede reutilizarse como referencia, pero Paiz debe conservar sus propios invariantes y bindings de tienda.
-
-## Criterio para declarar la adquisición nuevamente verde
-
-No se considera cerrado el incidente hasta observar una nueva corrida donde:
-
-1. las seis cadenas terminen con código de salida `0`;
-2. todos los snapshots pasen la compuerta de completitud;
-3. la persistencia se ejecute únicamente después de esa aceptación global;
-4. los commits/run IDs persistidos correspondan exactamente a la corrida fuente;
-5. no existan periodos actuales duplicados;
-6. no existan violaciones de claves foráneas;
-7. `PRAGMA integrity_check` sea `ok`;
-8. la homologación derivada posterior complete correctamente;
-9. la publicación analítica segura posterior complete correctamente;
-10. la sincronización estática de portafolio/Power BI consuma exactamente el artifact de esa publicación segura.
-
-No iniciar una segunda corrida productiva mientras exista otra activa. Si una corrida falla, revisar primero logs y artifact del run exacto antes de modificar código.
+Una ejecución programada que GitHub había dejado en espera comenzó al liberarse la concurrencia. Se canceló como duplicada en el run `34242996370` durante la primera captura SPS; la compuerta, Turso y todos los pasos de persistencia quedaron `skipped`.
 
 ## Homologación productiva
 
 La capa `product_homologation_profiles` continúa siendo derivada y separada del histórico comercial. El backfill y el refresh diferencial son fail-closed, comparan `profile_hash` + `normalization_version`, escriben sólo deltas reales y convierten una recalculación sin cambios en un no-op verificable.
 
-El último cierre productivo previamente demostrado cubrió todos los productos existentes en ese checkpoint, sin modificar `products`, `price_history` ni `scrape_runs`, con cero periodos actuales duplicados, cero FKs inválidas e integridad correcta.
+El run [`34249578797`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34249578797) procesó los 58,114 productos posteriores al ciclo: insertó 1,335 perfiles, actualizó 1,011 y dejó 55,768 sin cambio. No modificó `products`, `price_history` ni `scrape_runs`; confirmó cero periodos actuales duplicados, cero FKs inválidas e integridad correcta.
+
+Después del ajuste operativo de publicación, el run [`34250440140`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34250440140) repitió el refresh sobre el SHA final `7ae45f1dc39032180c82df10a1bb77e58451995a` y demostró un no-op real: 58,114 perfiles sin cambio, cero inserts, cero updates y sin staging escrito.
 
 Después de una ejecución exitosa de `La Colonia - Actualización MVP` sobre `main`, `.github/workflows/precios-supermercados-sps-homologation-refresh.yml` debe procesar el commit exacto de la corrida fuente antes de permitir la publicación analítica segura.
 
@@ -130,6 +106,10 @@ El alcance público comparativo vigente está limitado a **La Colonia SPS + Walm
 PR #399 incorporó la muestra web estática en la rama dedicada `portfolio-data`.
 
 PR [#401](https://github.com/Jchernand3z19/Portafolio/pull/401), merge commit `21c3471bf8ad4ebfd1c290a3ae5dbe9b15b50ad7`, extendió esa sincronización para que portafolio y Power BI reutilicen **el mismo artifact de analítica segura**, sin nuevas consultas a Turso. El flujo valida schemas, policy, scope, conteos, identidades y ausencia de secretos antes de publicar.
+
+La publicación final [`34250535657`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34250535657) produjo 92 productos comparables, 184 ofertas, una canasta común de 92 productos y una muestra pública de 10 filas. Conservó la política `fail_closed_strong_identity_and_commercial_consistency` y el alcance exacto La Colonia SPS + Walmart SPS. Su artifact `10065801433` tiene digest `sha256:b894e7bd28cb0291549ed51f6d54e5a3eb11926ad306e0687629e45cbb12b6ff`.
+
+La sincronización [`34250590641`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34250590641) terminó `success` y publicó ambos consumidores desde ese mismo artifact. `sample-data.json` y `dataset.json` declaran `source_workflow_run_id=34250535657` y `source_head_sha=7ae45f1dc39032180c82df10a1bb77e58451995a`; sus SHA-256 descargados son, respectivamente, `2fd11c6c94c6e08b75367ac54ecb70ab049b1eb5ee787ad83a07d70a7a5dffc0` y `d076531f2769192d57b4e99b1c3d6b291d0ae2b9626adf80f94b8e259e261f99`.
 
 El dataset BI estable se publica en:
 
@@ -170,6 +150,9 @@ Los cambios de publicación y modelo BI se integraron mediante PRs separados y s
 - PR #401: publicación estática BI sin nuevas lecturas Turso;
 - PR #402: activos Power Query/DAX reproducibles y tests de seguridad;
 - PR #403: contrato semántico del modelo Power BI.
+- PR #418: postflight estricto compatible con el superset observado de Los Andes.
+- PR #419: solicitud productiva one-shot dentro de la ventana autorizada; suite completa verde.
+- PR #420: creación explícita del directorio de salida de analítica antes de `tee`; 35 pruebas locales de seguridad/guard y suite completa verde.
 
 Se mantienen acciones fijadas por SHA, checkout inmutable donde corresponde, permisos mínimos y ausencia de secretos Turso en los workflows de publicación estática y consumo BI.
 
@@ -188,25 +171,14 @@ Las autorizaciones one-shot se consideran válidas únicamente dentro de su vent
 
 ## Siguiente trabajo obligatorio
 
-Orden recomendado, sin saltos:
+El incidente de adquisición y la cadena downstream están cerrados. El siguiente ciclo programado debe conservar las mismas invariantes: una sola corrida activa, adquisición global antes de persistir, once preflights `new`, postflight exacto, homologación idempotente y publicación estática desde un único artifact seguro.
 
-1. auditar el código actual de La Colonia y Paiz antes de editar;
-2. reproducir offline con la evidencia/artifact de run `34148356089` cuando sea suficiente;
-3. implementar una corrección mínima y generalizable para La Colonia `unique_product_coverage_mismatch`;
-4. implementar una reconciliación estricta para Paiz `product_membership_overlap`;
-5. añadir/ajustar tests que reproduzcan ambos fallos y preserven fail-closed;
-6. ejecutar suite completa y auditoría de workflows;
-7. fusionar sólo con CI verde;
-8. lanzar una nueva corrida productiva de las seis cadenas usando el mecanismo autorizado vigente;
-9. verificar persistencia, exactitud de run/commit, duplicados, FKs e integridad;
-10. verificar la cadena downstream: homologación → analítica segura → sincronización `portfolio-data`;
-11. comprobar `sample-data.json` y `dataset.json` finales con provenance exacta;
-12. actualizar este documento y el README únicamente con métricas productivas observadas en esa corrida exitosa.
+No hay un blocker técnico activo que justifique otro crawl manual. Ante una falla futura, revisar primero el log y artifact del run exacto y reproducir offline antes de modificar el colector.
 
 ## Fronteras actuales
 
-- Seis cadenas y once ubicaciones ya tienen contratos productivos demostrados, pero la **última corrida conjunta no está verde**.
-- No debe afirmarse que el ciclo diario completo de las seis cadenas quedó validado hasta cerrar La Colonia y Paiz y observar una corrida exitosa end-to-end.
+- Seis cadenas y once ubicaciones tienen contratos productivos demostrados y la última corrida conjunta está verde.
+- El ciclo end-to-end quedó validado hasta `portfolio-data`; el alcance comparativo público sigue limitado a La Colonia SPS + Walmart SPS.
 - La homologación es derivada; nunca debe contaminar o reescribir el histórico comercial.
 - Un estado `review_required` no equivale a match confirmado.
 - Disponibilidad no se convierte en inventario exacto.
