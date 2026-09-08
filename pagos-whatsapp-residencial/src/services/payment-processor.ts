@@ -3,6 +3,7 @@ import { env } from '@/src/config/env';
 import { decideDuplicate } from '@/src/domain/duplicates';
 import { parseHomeReference } from '@/src/domain/housing';
 import { periodFromDate } from '@/src/domain/periods';
+import { samePhone } from '@/src/domain/phone';
 import type { HomeRef, PaymentRecord, PendingConversation, ProcessedMessage } from '@/src/domain/types';
 import { recognizeReceipt } from '@/src/ocr/tesseract';
 import { detectAndParseReceipt } from '@/src/parsers';
@@ -118,7 +119,7 @@ async function resolveHome(store: PaymentStore, parsedHome: HomeRef | undefined,
     return { warning: 'receipt_home_not_in_master' };
   }
 
-  const phoneHomes = homes.filter((home) => home.active && home.phone === phone);
+  const phoneHomes = homes.filter((home) => home.active && samePhone(home.phone, phone));
   if (phoneHomes.length === 1) return { home: { block: phoneHomes[0].block, house: phoneHomes[0].house } };
   if (phoneHomes.length > 1) return { warning: 'phone_has_multiple_homes' };
   return {};
@@ -145,7 +146,7 @@ export async function processReceiptMessage(input: ReceiptMessageInput, deps: Pr
 
     const byHash = existing.find((payment) => payment.fileHash === validated.sha256 && payment.status !== 'DUPLICADO');
     if (byHash) {
-      const crossSender = byHash.phone !== input.phone;
+      const crossSender = !samePhone(byHash.phone, input.phone);
       const record = duplicateRecord(
         byHash,
         input,
