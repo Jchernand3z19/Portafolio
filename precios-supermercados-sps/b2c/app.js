@@ -140,10 +140,12 @@ function createApp() {
       const section = el("section", "retailer-group");
       section.append(el("h3", null, retailer.replaceAll("_", " ").toLocaleUpperCase("es")));
       for (const line of group.lines) {
+        const stateLine = state.cart.find((item) => item.source_product_id === line.source_product_id);
+        if (!stateLine) continue;
         const item = el("article", `cart-line${line.checked ? " is-checked" : ""}`);
         const check = el("button", "check-button", line.checked ? "☑" : "☐");
         check.type = "button"; check.setAttribute("aria-label", line.checked ? "Marcar pendiente" : "Marcar comprado");
-        check.addEventListener("click", () => { line.checked = !line.checked; persist(); });
+        check.addEventListener("click", () => { stateLine.checked = !stateLine.checked; persist(); });
         const info = el("div", "cart-line-info");
         info.append(el("strong", null, line.product_name), el("span", "muted", [line.brand, line.presentation].filter(Boolean).join(" · ")));
         const price = line.line_total_minor === null ? "Precio no disponible" : `${line.quantity} × ${formatHnl(line.unit_price_minor)} = ${formatHnl(line.line_total_minor)}`;
@@ -153,8 +155,8 @@ function createApp() {
         const minus = el("button", null, "−"), plus = el("button", null, "+"), remove = el("button", "danger-link", "Eliminar");
         minus.type = plus.type = remove.type = "button";
         minus.disabled = line.quantity <= 1;
-        minus.addEventListener("click", () => { line.quantity -= 1; persist(); });
-        plus.addEventListener("click", () => { if (line.quantity < 999) line.quantity += 1; persist(); });
+        minus.addEventListener("click", () => { stateLine.quantity -= 1; persist(); });
+        plus.addEventListener("click", () => { if (stateLine.quantity < 999) stateLine.quantity += 1; persist(); });
         remove.addEventListener("click", () => { state.cart = state.cart.filter((x) => x.source_product_id !== line.source_product_id); persist(); });
         controls.append(minus, el("span", "quantity", line.quantity), plus, remove);
         item.append(check, info, controls); section.append(item);
