@@ -1,3 +1,4 @@
+import { samePhone } from '@/src/domain/phone';
 import type { HomeRecord, PaymentRecord, PendingConversation, ProcessedMessage } from '@/src/domain/types';
 import type { PaymentStore } from './types';
 
@@ -47,7 +48,7 @@ export class MemoryPaymentStore implements PaymentStore {
   }
 
   async findHomesByPhone(phone: string): Promise<HomeRecord[]> {
-    return (await this.listHomes()).filter((home) => home.active && home.phone === phone);
+    return (await this.listHomes()).filter((home) => home.active && samePhone(home.phone, phone));
   }
 
   async saveHome(home: HomeRecord): Promise<void> {
