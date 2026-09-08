@@ -42,6 +42,13 @@ profundidad declarada, duración, frecuencia, share, comparación contra promedi
 30/90 días y mínimo 90 días, y devuelve estados auditables; nunca eleva
 `reported_regular_price` a evidencia histórica.
 
+`shopping_analytics.py` fija el contrato monetario B2C antes de la UI:
+`unit_price=current_price`, cantidades enteras positivas, líneas y subtotales en
+minor units, selección manual inmutable y optimización separada. Una canasta con
+un ítem no disponible queda `INCOMPLETE` y su total es `null`; no imputa cero,
+no usa el precio regular y no admite impuestos o cargos de checkout dentro de
+la oferta.
+
 No se inventan ubicaciones cuando la fuente no las demuestra. Paiz no tiene un contexto selector SPS aceptado; sus dos contextos demostrados siguen siendo Multiplaza y Próceres en Tegucigalpa. PriceSmart El Sauce 6604 permanece excluido. Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
 
 ## Operación recurrente vigente
