@@ -10,8 +10,13 @@ export class MemoryPaymentStore implements PaymentStore {
   private homes = new Map<string, HomeRecord>();
   private pending = new Map<string, PendingConversation>();
   private messages = new Map<string, ProcessedMessage>();
+  private readonly now: () => Date;
 
-  constructor(seed?: { payments?: PaymentRecord[]; homes?: HomeRecord[]; pending?: PendingConversation[]; messages?: ProcessedMessage[] }) {
+  constructor(
+    seed?: { payments?: PaymentRecord[]; homes?: HomeRecord[]; pending?: PendingConversation[]; messages?: ProcessedMessage[] },
+    now: () => Date = () => new Date(),
+  ) {
+    this.now = now;
     seed?.payments?.forEach((record) => this.payments.set(record.id, clone(record)));
     seed?.homes?.forEach((record) => this.homes.set(record.id, clone(record)));
     seed?.pending?.forEach((record) => this.pending.set(record.phone, clone(record)));
@@ -48,7 +53,7 @@ export class MemoryPaymentStore implements PaymentStore {
   async getPendingByPhone(phone: string): Promise<PendingConversation | undefined> {
     const record = this.pending.get(phone);
     if (!record) return undefined;
-    if (Date.parse(record.expiresAt) <= Date.now()) {
+    if (Date.parse(record.expiresAt) <= this.now().getTime()) {
       this.pending.delete(phone);
       return undefined;
     }
