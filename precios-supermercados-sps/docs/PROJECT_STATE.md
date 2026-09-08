@@ -62,6 +62,12 @@ SHA-256 por archivo. Consulta el último `scrape_runs.run_status='success'` por
 scope y excluye runs rechazados de last-known-good. La publicación automática de
 estos nuevos artifacts aún no sustituye la publicación v1 vigente.
 
+`powerbi/rpi/` contiene el modelo B2B reproducible sobre
+`rpi-business-mart/v1`: una sola consulta local, dimensiones/hechos, relaciones,
+medidas freshness-aware, tema reutilizado y especificación de las nueve páginas.
+No incluye un PBIX simulado. Price Movements y la reducción histórica promocional
+mantienen estados vacíos explícitos hasta que el mart publique esos facts.
+
 No se inventan ubicaciones cuando la fuente no las demuestra. Paiz no tiene un contexto selector SPS aceptado; sus dos contextos demostrados siguen siendo Multiplaza y Próceres en Tegucigalpa. PriceSmart El Sauce 6604 permanece excluido. Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
 
 ## Operación recurrente vigente
