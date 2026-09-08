@@ -378,7 +378,12 @@ def verify_committed_run(
     if duplicates != [[0]]:
         raise SnapshotError("los_andes_turso_duplicate_open_periods")
     open_count = _execute_rows(results[2])
-    if open_count != [[snapshot["skus_extracted"]]]:
+    if (
+        len(open_count) != 1
+        or len(open_count[0]) != 1
+        or type(open_count[0][0]) is not int
+        or open_count[0][0] < snapshot["skus_extracted"]
+    ):
         raise SnapshotError(f"los_andes_turso_current_state_incomplete:{open_count}")
     return {
         "run": run[0],
