@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0d3b2e">
+  <meta name="description" content="Compara precios públicos observados y arma Mi Compra por supermercado.">
+  <title>Compra Inteligente · Precios SPS</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-mart-url="https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/rpi/consumer-mart.json">
+  <header class="app-header">
+    <a class="brand" href="../../index.html" aria-label="Volver al portafolio">RPI</a>
+    <nav aria-label="Secciones">
+      <a href="#analyze">Analizar precios</a>
+      <a class="cart-link" href="#cart-panel">Mi Compra <span id="cart-count" aria-label="productos en Mi Compra">0</span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" id="analyze">
+      <p class="eyebrow">Retail Price Intelligence · San Pedro Sula</p>
+      <h1>Compra Inteligente</h1>
+      <p>Busca un producto, compara ofertas seguras y elige tú mismo en qué supermercado comprarlo.</p>
+      <label class="search-box" for="product-search">
+        <span>Buscar producto</span>
+        <input id="product-search" type="search" inputmode="search" autocomplete="off" placeholder="Ej. leche Sula 1 L" aria-describedby="data-status">
+      </label>
+      <p id="data-status" class="data-status" role="status" aria-live="polite">Cargando precios públicos…</p>
+    </section>
+
+    <section class="content-section" aria-labelledby="results-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">ANALIZAR PRECIOS</p>
+          <h2 id="results-title">Ofertas disponibles</h2>
+        </div>
+        <p>El ranking y el mejor precio vienen calculados desde Python. La web no rehace homologación ni matching.</p>
+      </div>
+      <div id="results" class="results" aria-live="polite">
+        <p class="empty-state">Escribe un producto, marca o presentación para comenzar.</p>
+      </div>
+    </section>
+
+    <section class="content-section cart-panel" id="cart-panel" aria-labelledby="cart-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">MI COMPRA</p>
+          <h2 id="cart-title">Tu selección</h2>
+        </div>
+        <p id="cart-stats">0 productos · 0 unidades · 0 supermercados · 0 incompletos · 0 stale</p>
+      </div>
+      <div id="cart-groups"></div>
+      <div class="cart-total-card">
+        <strong id="cart-total">TOTAL ESTIMADO L 0.00</strong>
+        <p>Total estimado con precios públicos observados. Los precios pueden cambiar en tienda.</p>
+      </div>
+    </section>
+  </main>
+
+  <a class="mobile-cart" href="#cart-panel" aria-label="Abrir Mi Compra">Mi Compra ↑</a>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
