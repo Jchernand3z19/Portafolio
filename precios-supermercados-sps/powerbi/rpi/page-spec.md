@@ -28,6 +28,10 @@ y producto cuando apliquen.
    promociones sin reducción histórica y freshness; toda alerta declara cobertura
    y no implica causalidad ni recomendación automática.
 
+Si el universo seguro no produce filas para un fact, la página muestra un
+**estado vacío** explícito con el estado de comparación/freshness disponible; no
+convierte ausencia en cero, ni fabrica una serie o una promoción.
+
 En mobile layout de Power BI se priorizan tarjetas, filtros, alertas y tablas
 cortas. Ninguna página construye matching, PCI, freshness, cambios de precio ni
 clasificación promocional en DAX/Power Query; sólo agrega campos ya publicados
