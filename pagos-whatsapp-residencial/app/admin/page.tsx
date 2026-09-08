@@ -17,6 +17,13 @@ const HOUSE_STATE_LABEL: Record<HousePeriodState, string> = {
   NO_ENCONTRADO: '✕ No encontrado',
   PENDIENTE: '— Pendiente',
 };
+const DUPLICATE_REASON_LABEL: Record<string, string> = {
+  file_hash: 'Archivo idéntico',
+  bank_reference: 'Referencia bancaria repetida',
+  exact_file_other_sender: 'Archivo idéntico desde otro remitente',
+  bank_reference_home_conflict: 'Referencia asociada a datos incompatibles',
+  weak_signature: 'Coincidencia débil enviada a revisión',
+};
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   if (!(await isAdminAuthenticated())) redirect('/login');
@@ -32,7 +39,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     <main className="shell">
       <header className="admin-head">
         <div><p className="eyebrow">Panel administrativo</p><h1 style={{ fontSize: 'clamp(2rem,5vw,3.6rem)' }}>Cobranza residencial</h1></div>
-        <form method="post" action="/api/admin/logout"><button className="scenario-button" type="submit">Cerrar sesión</button></form>
+        <div className="admin-head-actions">
+          <Link className="primary-button" href="/admin/homes">Gestionar viviendas</Link>
+          <form method="post" action="/api/admin/logout"><button className="scenario-button" type="submit">Cerrar sesión</button></form>
+        </div>
       </header>
 
       <div className="section-head">
@@ -151,7 +161,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             {snapshot.duplicates.map((payment) => (
               <tr key={payment.id}>
                 <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td>
-                <td>{payment.reviewReason ?? 'hash/referencia coincidente'}</td><td>{payment.duplicateOf ?? '—'}</td>
+                <td>{DUPLICATE_REASON_LABEL[payment.duplicateReason ?? ''] ?? payment.duplicateReason ?? 'Coincidencia detectada'}</td><td>{payment.duplicateOf ?? '—'}</td>
               </tr>
             ))}
           </tbody>
