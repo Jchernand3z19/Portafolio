@@ -32,7 +32,7 @@ afterEach(() => {
 
 describe('payment processor', () => {
   it('registers a valid BAC receipt as pending verification', async () => {
-    const store = new MemoryPaymentStore({ homes });
+    const store = new MemoryPaymentStore({ homes }, now);
     const result = await processReceiptMessage({
       messageId: 'msg-valid', phone: '+50400000999', bytes: png(1), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.valid,
     }, { store, now });
@@ -47,7 +47,7 @@ describe('payment processor', () => {
   });
 
   it('asks for home, preserves context, and assigns it without rerunning OCR', async () => {
-    const store = new MemoryPaymentStore({ homes });
+    const store = new MemoryPaymentStore({ homes }, now);
     const received = await processReceiptMessage({
       messageId: 'msg-missing-home', phone: '+50400000999', bytes: png(2), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.missingHome,
     }, { store, now });
@@ -65,7 +65,7 @@ describe('payment processor', () => {
   });
 
   it('ignores a Meta retry silently and detects a user resend as duplicate', async () => {
-    const store = new MemoryPaymentStore({ homes });
+    const store = new MemoryPaymentStore({ homes }, now);
     const input = { messageId: 'msg-original', phone: '+50400000010', bytes: png(3), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.valid } as const;
     await processReceiptMessage(input, { store, now });
 
@@ -81,7 +81,7 @@ describe('payment processor', () => {
   it('sends a suspicious destination account to review instead of verifying it', async () => {
     process.env.EXPECTED_ACCOUNT_LAST4 = '9999';
     resetEnvForTests();
-    const store = new MemoryPaymentStore({ homes });
+    const store = new MemoryPaymentStore({ homes }, now);
     const result = await processReceiptMessage({
       messageId: 'msg-review', phone: '+50400000010', bytes: png(4), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.valid,
     }, { store, now });
@@ -90,7 +90,7 @@ describe('payment processor', () => {
   });
 
   it('does not create a second ambiguous pending context for the same phone', async () => {
-    const store = new MemoryPaymentStore({ homes });
+    const store = new MemoryPaymentStore({ homes }, now);
     await processReceiptMessage({
       messageId: 'msg-pending-1', phone: '+50400000999', bytes: png(5), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.missingHome,
     }, { store, now });
