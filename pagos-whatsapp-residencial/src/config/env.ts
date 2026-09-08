@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-const optionalString = z.string().trim().min(1).optional();
+const optionalString = z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().trim().min(1).optional(),
+);
+const optionalLast4 = z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().trim().regex(/^\d{4}$/).optional(),
+);
 
 const envSchema = z.object({
   APP_MODE: z.enum(['demo', 'production']).default('demo'),
@@ -12,13 +19,17 @@ const envSchema = z.object({
   GOOGLE_SHEET_ID: optionalString,
   GOOGLE_CLIENT_EMAIL: optionalString,
   GOOGLE_PRIVATE_KEY: optionalString,
+  GOOGLE_RECEIPT_FOLDER_ID: optionalString,
   WHATSAPP_VERIFY_TOKEN: optionalString,
   WHATSAPP_ACCESS_TOKEN: optionalString,
   WHATSAPP_PHONE_NUMBER_ID: optionalString,
   META_APP_SECRET: optionalString,
-  WHATSAPP_GRAPH_VERSION: z.string().trim().regex(/^v\d+\.\d+$/).default('v26.0'),
+  WHATSAPP_GRAPH_VERSION: z.preprocess(
+    (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+    z.string().trim().regex(/^v\d+\.\d+$/).default('v26.0'),
+  ),
   EXPECTED_BENEFICIARY: optionalString,
-  EXPECTED_ACCOUNT_LAST4: z.string().trim().regex(/^\d{4}$/).optional(),
+  EXPECTED_ACCOUNT_LAST4: optionalLast4,
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
