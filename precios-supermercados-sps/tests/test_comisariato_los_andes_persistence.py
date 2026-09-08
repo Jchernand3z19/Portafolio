@@ -181,3 +181,47 @@ def test_persist_snapshot_uses_los_andes_scope_and_is_idempotent(monkeypatch) ->
     )
     assert replay["replayed"] is True
     assert replay["products_processed"] == 0
+
+
+def test_verify_accepts_extra_last_observed_products(monkeypatch) -> None:
+    raw = snapshot_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    results = [
+        [[persistence.LOCATION_ID, "success", 2, 2, digest]],
+        [[0]],
+        [[3]],
+    ]
+    monkeypatch.setattr(persistence, "_pipeline", lambda *args, **kwargs: {"results": results})
+    monkeypatch.setattr(persistence, "_execute_rows", lambda result: result)
+
+    verified = persistence.verify_committed_run(
+        database_url="https://db.example",
+        auth_token="token",
+        run_id="run-1",
+        raw=raw,
+    )
+
+    assert verified["open_price_history"] == 3
+
+
+def test_verify_rejects_fewer_open_products_than_snapshot(monkeypatch) -> None:
+    raw = snapshot_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    results = [
+        [[persistence.LOCATION_ID, "success", 2, 2, digest]],
+        [[0]],
+        [[1]],
+    ]
+    monkeypatch.setattr(persistence, "_pipeline", lambda *args, **kwargs: {"results": results})
+    monkeypatch.setattr(persistence, "_execute_rows", lambda result: result)
+
+    with pytest.raises(
+        persistence.SnapshotError,
+        match="los_andes_turso_current_state_incomplete",
+    ):
+        persistence.verify_committed_run(
+            database_url="https://db.example",
+            auth_token="token",
+            run_id="run-1",
+            raw=raw,
+        )
