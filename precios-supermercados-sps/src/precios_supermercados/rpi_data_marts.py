@@ -197,11 +197,22 @@ def build_rpi_data_marts(
                     "spread_pct": None if competitive is None else format(competitive.spread_pct, "f"),
                 }
             )
-            consumer_offers.append(common)
+            consumer_offers.append(
+                {
+                    **common,
+                    "rank": None if metric is None else metric.rank,
+                    "is_best_price": metric is not None and metric.rank == 1,
+                }
+            )
         consumer_products.append(
             {
                 "canonical_product_id": product.canonical_product_id,
                 "canonical_gtin": product.canonical_gtin,
+                "recommended_source_product_ids": sorted(
+                    row["source_product_id"]
+                    for row in consumer_offers
+                    if row["is_best_price"]
+                ),
                 "offers": sorted(consumer_offers, key=lambda row: (row["supermarket_id"], row["location_id"])),
             }
         )

@@ -88,6 +88,7 @@ oferta conserva:
 | `current_price` | `unit_price` de Mi Compra |
 | `reported_regular_price` | referencia visual opcional |
 | `is_promotion` | declaración fuente |
+| `rank`, `is_best_price` | recomendación calculada en Python; queda nula/inactiva cuando comparar no es seguro |
 | `availability` | `in_stock` o `unknown` para ofertas publicadas |
 | `observed_at` | inicio observado del estado comercial persistido |
 | `last_successful_run`, `source_last_successful_at` | último corte fuente aceptado |
@@ -96,6 +97,10 @@ oferta conserva:
 El mart público no contiene credenciales, URL de base, queue de revisión,
 payload RAW ni grupos inseguros. Los nombres sólo se renderizan como texto y no
 autorizan nuevas equivalencias.
+
+Cada producto expone `recommended_source_product_ids`. Puede contener más de un
+ID cuando existe un empate real. Si la ventana no es comparable, la lista queda
+vacía y el frontend no debe inventar una recomendación.
 
 ## Contrato monetario B2C
 

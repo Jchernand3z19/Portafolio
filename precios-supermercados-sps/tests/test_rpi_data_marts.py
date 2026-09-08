@@ -116,6 +116,9 @@ def test_consumer_mart_preserves_price_and_shopping_descriptors_without_secrets(
     assert offer["brand"] == "Sula"
     assert offer["variant"] == "Entera"
     assert offer["presentation"] == "1 L"
+    assert offer["rank"] == 1
+    assert offer["is_best_price"] is True
+    assert consumer["products"][0]["recommended_source_product_ids"] == ["a:1"]
     serialized = json.dumps(consumer).casefold()
     for forbidden in ("turso", "database_url", "auth_token", "libsql://"):
         assert forbidden not in serialized
@@ -129,6 +132,12 @@ def test_stale_market_keeps_lkg_offers_visible_but_removes_rank_and_pci() -> Non
     assert marts.consumer["product_count"] == 1
     assert "source_data_stale" in marts.consumer["blocked_reasons"]
     assert all(row["rank"] is None and row["pci"] is None for row in facts)
+    assert all(
+        offer["rank"] is None and offer["is_best_price"] is False
+        for product in marts.consumer["products"]
+        for offer in product["offers"]
+    )
+    assert marts.consumer["products"][0]["recommended_source_product_ids"] == []
     assert any(row["freshness_status"] == "STALE" for row in facts)
 
 
