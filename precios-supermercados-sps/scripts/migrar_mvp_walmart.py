@@ -59,8 +59,27 @@ def schema_ready(rows):
         ]
     finally:
         con.close()
+    post_paiz = []
+    for name, sql in current:
+        if name == "price_history":
+            sql = sql.replace(
+                "supermarket_id IN ('walmart', 'pricesmart')",
+                "supermarket_id IN ('walmart', 'pricesmart', 'paiz')",
+                1,
+            )
+        elif name == "idx_locations_city_legacy":
+            sql = (
+                "CREATE UNIQUE INDEX idx_locations_city_legacy "
+                "ON locations(supermarket_id, city_name) "
+                "WHERE supermarket_id NOT IN ('walmart', 'paiz')"
+            )
+        post_paiz.append((name, sql))
     normalized = _normalized(rows)
-    return normalized == _normalized(walmart) or normalized == _normalized(current)
+    return normalized in (
+        _normalized(walmart),
+        _normalized(current),
+        _normalized(post_paiz),
+    )
 
 
 def migration_steps():

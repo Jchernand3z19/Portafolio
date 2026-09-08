@@ -25,7 +25,23 @@ def schema_ready(rows):
         (name, sql) for name, sql in target_schema()
         if name in {"locations", "price_history", "idx_locations_city_legacy"}
     ]
-    return _normalized(rows) == _normalized(expected)
+    post_paiz = []
+    for name, sql in expected:
+        if name == "price_history":
+            sql = sql.replace(
+                "supermarket_id IN ('walmart', 'pricesmart')",
+                "supermarket_id IN ('walmart', 'pricesmart', 'paiz')",
+                1,
+            )
+        elif name == "idx_locations_city_legacy":
+            sql = (
+                "CREATE UNIQUE INDEX idx_locations_city_legacy "
+                "ON locations(supermarket_id, city_name) "
+                "WHERE supermarket_id NOT IN ('walmart', 'paiz')"
+            )
+        post_paiz.append((name, sql))
+    normalized = _normalized(rows)
+    return normalized in (_normalized(expected), _normalized(post_paiz))
 def migration_steps():
     schema = dict(target_schema())
     new_table = "pricesmart_new_price_history"

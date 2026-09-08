@@ -218,6 +218,25 @@ jobs:
               assert snapshot['catalog_products_reported'] == snapshot['unique_products_extracted']
           PY
 
+      - name: Asegurar esquema Paiz en Turso
+        shell: bash
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: python scripts/migrar_mvp_paiz.py --turso
+
+      - name: Validar todos los destinos Turso antes de escribir
+        shell: bash
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/preflight_mvp_turso_daily.py \
+            --artifact-root run-artifacts \
+            --run-id "$GITHUB_RUN_ID" \
+            | tee run-artifacts/turso-daily-preflight.json
+
       - name: Persistir La Colonia, Los Andes, Colonial, Walmart y PriceSmart
         shell: bash
         env:
@@ -246,13 +265,6 @@ jobs:
           persist_generic run-artifacts/walmart/snapshot-walmart-tgu-el-sauce.json walmart walmart-tgu-el-sauce
           persist_generic run-artifacts/pricesmart/snapshot-pricesmart-sps.json pricesmart pricesmart-sps
           persist_generic run-artifacts/pricesmart/snapshot-pricesmart-tgu.json pricesmart pricesmart-tgu
-
-      - name: Asegurar esquema Paiz en Turso
-        shell: bash
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: python scripts/migrar_mvp_paiz.py --turso
 
       - name: Persistir Paiz
         shell: bash

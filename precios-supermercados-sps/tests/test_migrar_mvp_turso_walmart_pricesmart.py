@@ -24,12 +24,7 @@ def _state(rows, count=7):
     }
 
 
-def test_next_stage_recognizes_walmart_then_pricesmart_schema():
-    assert migration._next_stage(_rows(walmart.target_schema())) == "pricesmart"
-    assert migration._next_stage(_rows(pricesmart.target_schema())) is None
-
-
-def test_next_stage_recognizes_post_paiz_schema_as_already_ready():
+def _post_paiz_rows():
     rows = []
     for name, sql in pricesmart.target_schema():
         if name == "price_history":
@@ -37,7 +32,38 @@ def test_next_stage_recognizes_post_paiz_schema_as_already_ready():
         elif name == paiz.LOCATION_INDEX_NAME:
             sql = paiz.NEW_LOCATION_INDEX_SQL
         rows.append([name, sql])
-    assert migration._next_stage(rows) is None
+    return rows
+
+
+def test_next_stage_recognizes_walmart_then_pricesmart_schema():
+    assert migration._next_stage(_rows(walmart.target_schema())) == "pricesmart"
+    assert migration._next_stage(_rows(pricesmart.target_schema())) is None
+
+
+def test_next_stage_recognizes_post_paiz_schema_as_already_ready():
+    assert migration._next_stage(_post_paiz_rows()) is None
+
+
+def test_walmart_and_pricesmart_preflights_accept_exact_post_paiz_schema():
+    names = {"locations", "price_history", "idx_locations_city_legacy"}
+    rows = [row for row in _post_paiz_rows() if row[0] in names]
+
+    assert walmart.schema_ready(rows)
+    assert pricesmart.schema_ready(rows)
+
+
+def test_post_paiz_compatibility_does_not_accept_partial_schema():
+    names = {"locations", "price_history", "idx_locations_city_legacy"}
+    rows = [row for row in _post_paiz_rows() if row[0] in names]
+    rows = [
+        [name, sql.replace("'paiz'", "'unexpected'", 1)]
+        if name == "price_history"
+        else [name, sql]
+        for name, sql in rows
+    ]
+
+    assert not walmart.schema_ready(rows)
+    assert not pricesmart.schema_ready(rows)
 
 
 def test_next_stage_rejects_unknown_schema(monkeypatch):
