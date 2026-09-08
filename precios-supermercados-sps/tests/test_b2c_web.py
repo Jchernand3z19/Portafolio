@@ -9,6 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "b2c" / "app.js"
+EXPORTS = ROOT / "b2c" / "exports.js"
 HTML = ROOT / "b2c" / "index.html"
 CSS = ROOT / "b2c" / "styles.css"
 
@@ -17,23 +18,35 @@ def test_b2c_static_contract_is_mobile_first_and_safe() -> None:
     html = HTML.read_text(encoding="utf-8")
     css = CSS.read_text(encoding="utf-8")
     js = APP.read_text(encoding="utf-8")
+    exports = EXPORTS.read_text(encoding="utf-8")
 
     assert 'name="viewport"' in html
     assert 'id="product-search"' in html
     assert 'id="cart-panel"' in html
     assert 'id="price-refresh"' in html
     assert 'id="price-refresh-button"' in html
+    assert 'id="export-csv"' in html
+    assert 'id="export-pdf"' in html
+    assert 'id="export-status"' in html
     assert "Actualizar precios" in html
+    assert "Descargar CSV" in html
+    assert "Descargar PDF" in html
     assert 'type="module" src="app.js"' in html
     assert "rpi-consumer-mart/v2" in js
+    assert 'import("./exports.js")' in js
     assert "localStorage" in js
     assert 'quantity.type = "number"' in js
     assert ".textContent" in js
     assert ".innerHTML" not in js
+    assert ".innerHTML" not in exports
     assert "eval(" not in js
+    assert "eval(" not in exports
     assert "* 1.15" not in js and "*1.15" not in js
+    assert "* 1.15" not in exports and "*1.15" not in exports
     assert "min-height:44px" in css
     assert ".quantity-input" in css
+    assert ".cart-actions" in css
+    assert ".secondary-button" in css
     assert "@media(min-width:700px)" in css
     assert "@media(min-width:1020px)" in css
 
@@ -159,6 +172,65 @@ assert.equal(restored.find((line)=>line.source_product_id === "c:2").unit_price_
 const duplicateMart = structuredClone(restoredMart);
 duplicateMart.products[0].offers.push({...duplicateMart.products[0].offers[0]});
 assert.equal(app.exactMartOffer(duplicateMart, "milk", "w:1"), null); // ambiguity fails closed.
+'''
+    completed = subprocess.run(
+        [node, "--input-type=module", "-e", script, module.as_uri()],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_b2c_exports_preserve_money_contract_and_generate_valid_pdf_structure(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node_not_available_for_b2c_export_contract")
+
+    module = tmp_path / "exports.mjs"
+    module.write_text(EXPORTS.read_text(encoding="utf-8"), encoding="utf-8")
+    script = r'''
+import assert from "node:assert/strict";
+const exports = await import(process.argv[1]);
+
+const summary = {
+  products: 2,
+  units: 3,
+  retailer_count: 1,
+  incomplete: 1,
+  stale: 1,
+  grand_total_minor: null,
+  retailers: new Map([["walmart", {
+    subtotal_minor: 7100,
+    incomplete: 1,
+    lines: [
+      {product_name:"Leche Sula",brand:"Sula",presentation:"1 L",location_id:"walmart_sps",quantity:2,unit_price_minor:3550,line_total_minor:7100,invalid:false,freshness_status:"FRESH",observed_at:"2026-09-08T10:00:00Z",checked:true},
+      {product_name:"=2+2",brand:"Marca X",presentation:"5 lb",location_id:"walmart_sps",quantity:1,unit_price_minor:11800,line_total_minor:null,invalid:true,freshness_status:"STALE",observed_at:"2026-09-08T09:00:00Z",checked:false},
+    ],
+  }]]),
+};
+
+const csv = exports.buildCartCsv(summary);
+assert.ok(csv.startsWith("\uFEFF"));
+assert.ok(csv.includes('"Leche Sula"'));
+assert.ok(csv.includes('"35.50"'));
+assert.ok(csv.includes('"71.00"'));
+assert.ok(csv.includes('"NO_DISPONIBLE"'));
+assert.ok(csv.includes('"\'=2+2"')); // neutraliza fórmulas al abrir el CSV en una hoja de cálculo.
+assert.ok(!csv.includes("1.15"));
+
+const pdf = exports.buildCartPdf(summary, new Date("2026-09-08T22:30:00Z"));
+assert.ok(pdf instanceof Uint8Array);
+const text = new TextDecoder("latin1").decode(pdf);
+assert.ok(text.startsWith("%PDF-1.4"));
+assert.ok(text.includes("TOTAL ESTIMADO DE MI COMPRA: INCOMPLETO"));
+assert.ok(text.includes("precios públicos observados"));
+assert.ok(text.includes("Subtotal: INCOMPLETO"));
+const match = text.match(/startxref\n(\d+)\n%%EOF/);
+assert.ok(match);
+const xrefOffset = Number(match[1]);
+assert.equal(text.slice(xrefOffset, xrefOffset + 4), "xref");
+assert.ok(!text.includes("1.15"));
 '''
     completed = subprocess.run(
         [node, "--input-type=module", "-e", script, module.as_uri()],
