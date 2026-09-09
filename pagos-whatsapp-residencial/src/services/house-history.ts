@@ -26,7 +26,7 @@ function activeInPeriod(home: HomeRecord, period: string): boolean {
 
 function usablePayments(payments: readonly PaymentRecord[], home: HomeRecord, period: string): PaymentRecord[] {
   return payments
-    .filter((payment) => payment.period === period && payment.block === home.block && payment.house === home.house)
+    .filter((payment) => payment.period === period && payment.stage === home.stage && payment.block === home.block && payment.house === home.house)
     .filter((payment) => payment.status !== 'DUPLICADO' && payment.status !== 'RECHAZADO')
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.createdAt.localeCompare(a.createdAt));
 }
@@ -45,7 +45,7 @@ export async function buildHouseHistoryGrid(store: PaymentStore, anchorPeriod: s
   const [homes, payments] = await Promise.all([store.listHomes(), store.listPayments()]);
   const rows = homes
     .filter((home) => periods.some((period) => activeInPeriod(home, period)))
-    .sort((a, b) => a.block - b.block || a.house - b.house)
+    .sort((a, b) => a.stage - b.stage || a.block - b.block || a.house - b.house)
     .map((home) => ({
       home,
       periods: periods.map((period) => {
@@ -63,11 +63,11 @@ export async function buildHouseHistoryGrid(store: PaymentStore, anchorPeriod: s
   return { periods, rows };
 }
 
-export async function getHouseHistory(store: PaymentStore, block: number, house: number): Promise<{ home?: HomeRecord; payments: PaymentRecord[] }> {
+export async function getHouseHistory(store: PaymentStore, stage: number, block: number, house: number): Promise<{ home?: HomeRecord; payments: PaymentRecord[] }> {
   const [homes, payments] = await Promise.all([store.listHomes(), store.listPayments()]);
-  const home = homes.find((candidate) => candidate.block === block && candidate.house === house);
+  const home = homes.find((candidate) => candidate.stage === stage && candidate.block === block && candidate.house === house);
   const history = payments
-    .filter((payment) => payment.block === block && payment.house === house)
+    .filter((payment) => payment.stage === stage && payment.block === block && payment.house === house)
     .sort((a, b) => b.period.localeCompare(a.period) || b.createdAt.localeCompare(a.createdAt));
   return { home, payments: history };
 }
