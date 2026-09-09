@@ -1,3 +1,4 @@
+import { env } from '@/src/config/env';
 import type { PaymentRecord } from '@/src/domain/types';
 
 const NON_VERIFIABLE_REVIEW_REASONS = new Set([
@@ -8,15 +9,21 @@ const NON_VERIFIABLE_REVIEW_REASONS = new Set([
   'bank_movement_already_used',
 ]);
 
+function hasExpectedAmount(payment: PaymentRecord): boolean {
+  return Math.abs(payment.amount - env().EXPECTED_PAYMENT_AMOUNT) <= 0.005;
+}
+
 export function canManuallyVerify(payment: PaymentRecord, includeReview = false): boolean {
   const statusAllowed = payment.status === 'PENDIENTE_VERIFICACION' || (includeReview && payment.status === 'EN_REVISION');
   if (!statusAllowed) return false;
+  // Re-check the amount itself at the verification boundary. A different review reason
+  // must never accidentally hide an amount exception and make a non-L150 payment verifiable.
+  if (!hasExpectedAmount(payment)) return false;
   if (payment.reviewReason && NON_VERIFIABLE_REVIEW_REASONS.has(payment.reviewReason)) return false;
 
   return payment.stage != null
     && payment.block != null
-    && payment.house != null
-    && payment.amount > 0;
+    && payment.house != null;
 }
 
 export function buildManualVerificationUpdate(payment: PaymentRecord, now = new Date(), includeReview = false): PaymentRecord {
