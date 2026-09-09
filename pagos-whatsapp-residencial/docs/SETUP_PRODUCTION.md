@@ -76,6 +76,10 @@ Variables de autenticación:
 - `ADMIN_ACCESS_KEY` — clave larga y aleatoria;
 - `AUTH_SESSION_SECRET` — secreto aleatorio independiente.
 
+Regla de monto:
+
+- `EXPECTED_PAYMENT_AMOUNT=150`
+
 Variables opcionales de validación:
 
 - `EXPECTED_BENEFICIARY`;
@@ -98,13 +102,17 @@ Campos mínimos:
 
 `responsible` es opcional. No hay campo de teléfono para resolución de pagos.
 
+Para el MVP la cuota bancaria esperada es L150.00. El sistema conserva por separado la cuota de la vivienda y el monto extraído del comprobante; cualquier monto distinto de L150 queda en revisión humana.
+
 ## 7. Histórico inicial
 
 Agosto 2026 es la base del histórico de depósitos:
 
 - depósitos del 1 al 14 de agosto → julio 2026;
 - depósitos del 15 al 31 de agosto → agosto 2026;
-- desde septiembre, el sistema aplica el depósito al primer mes pendiente desde agosto;
+- desde septiembre, el sistema aplica el depósito al primer mes **no verificado como pagado** desde agosto;
+- un comprobante sólo recibido o en revisión no hace avanzar el histórico;
+- si llega otro comprobante mientras el primer mes sigue sin verificar, ambos quedan vinculados al mismo mes pendiente y el conflicto requiere revisión;
 - los pagos en efectivo se incorporarán posteriormente mediante un flujo manual separado.
 
 Antes de cargar datos reales, validar el histórico en una copia privada/controlada de la Sheet.
@@ -117,11 +125,13 @@ El encargado:
 
 1. revisa el movimiento por su cuenta en BAC;
 2. compara banco, monto, fecha y referencia disponibles;
-3. en el panel pulsa `Verificar` o `Verifiqué en banco` si el caso estaba en revisión.
+3. en el panel pulsa `Verificar` o `Verifiqué en banco` sólo si el caso es elegible.
+
+Un monto menor o mayor de L150, un conflicto de mes o evidencia de reutilización del mismo movimiento permanecen en revisión aunque el movimiento exista en BAC. Primero debe resolverse la excepción correcta; el botón de verificación no la debe borrar.
 
 No almacenar usuario, contraseña, PIN, token OTP ni códigos de BAC en Vercel, Google Sheets, GitHub o el navegador.
 
-Una integración futura puede usar un archivo/API bancaria autorizada. Un mismo movimiento bancario no debe poder verificar dos pagos distintos.
+Una integración futura puede usar un archivo/API bancaria autorizada. Para verificación automática la fuente debe proporcionar un identificador estable del movimiento. El sistema persiste `bank_movement_id` y no permite que ese movimiento verifique dos pagos distintos, ni en la misma corrida ni en una posterior.
 
 ## 9. Validación antes de operar
 
@@ -134,11 +144,16 @@ Una integración futura puede usar un archivo/API bancaria autorizada. Un mismo 
 - comprobante que omite cualquiera de Etapa/Bloque/Casa pide los tres datos;
 - respuesta `E1 B4 C18` asigna la vivienda sin repetir OCR;
 - el teléfono remitente no asigna vivienda;
-- depósito de septiembre con agosto pendiente se aplica a agosto;
-- depósito de septiembre con agosto ya pagado se aplica a septiembre;
+- monto exactamente L150 sigue a verificación bancaria;
+- monto menor o mayor de L150 pasa a revisión y no puede verificarse por el atajo manual;
+- depósito de septiembre con agosto no verificado se mantiene en agosto;
+- depósito de septiembre con agosto ya `VERIFICADO` se aplica a septiembre;
+- una vivienda sólo aparece pagada después de `VERIFICADO`;
 - referencia repetida pasa a revisión y no se descarta automáticamente;
 - archivo exacto reenviado no incrementa recaudación;
 - panel permite verificación bancaria manual sólo para pagos elegibles;
+- un conflicto de período no puede verificarse hasta corregirse;
+- un `bank_movement_id` ya usado no verifica otro pago;
 - panel requiere login;
 - comprobante privado no abre sin sesión;
 - Sheet y Drive no son públicos;
