@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetEnvForTests } from '@/src/config/env';
-import { buildManualVerificationUpdate, canManuallyVerify } from '@/src/services/manual-verification';
+import { buildManualVerificationUpdate, canManuallyVerify, hasVerifiedServicePeriodConflict } from '@/src/services/manual-verification';
 import type { PaymentRecord } from '@/src/domain/types';
 
 const payment: PaymentRecord = {
@@ -20,7 +20,7 @@ describe('manual verification', () => {
   });
 
   it('records a manual bank check with timestamp and source', () => {
-    const updated = buildManualVerificationUpdate(payment, new Date('2026-09-09T20:30:00.000Z'));
+    const updated = buildManualVerificationUpdate(payment, [payment], new Date('2026-09-09T20:30:00.000Z'));
     expect(updated.status).toBe('VERIFICADO');
     expect(updated.verificationSource).toBe('manual_admin_bank_check');
     expect(updated.verifiedAt).toBe('2026-09-09T20:30:00.000Z');
@@ -30,7 +30,7 @@ describe('manual verification', () => {
     const reviewed = { ...payment, status: 'EN_REVISION' as const, reviewReason: 'bank_reference_reused' };
     expect(canManuallyVerify(reviewed)).toBe(false);
     expect(canManuallyVerify(reviewed, true)).toBe(true);
-    expect(buildManualVerificationUpdate(reviewed, new Date('2026-09-09T20:30:00.000Z'), true).verificationSource)
+    expect(buildManualVerificationUpdate(reviewed, [reviewed], new Date('2026-09-09T20:30:00.000Z'), true).verificationSource)
       .toBe('manual_admin_bank_check_after_review');
   });
 
@@ -39,7 +39,7 @@ describe('manual verification', () => {
     const above = { ...payment, amount: 151, status: 'EN_REVISION' as const, reviewReason: 'amount_above_expected' };
     expect(canManuallyVerify(below, true)).toBe(false);
     expect(canManuallyVerify(above, true)).toBe(false);
-    expect(() => buildManualVerificationUpdate(above, new Date(), true)).toThrow('payment_not_manually_verifiable');
+    expect(() => buildManualVerificationUpdate(above, [above], new Date(), true)).toThrow('payment_not_manually_verifiable');
   });
 
   it('checks the actual amount even when another review reason replaced the amount warning', () => {
@@ -69,5 +69,33 @@ describe('manual verification', () => {
   it('does not allow incomplete EBC or duplicate payments to be verified', () => {
     expect(canManuallyVerify({ ...payment, stage: undefined, status: 'ESPERANDO_RESPUESTA' })).toBe(false);
     expect(canManuallyVerify({ ...payment, status: 'DUPLICADO' })).toBe(false);
+  });
+
+  it('blocks a second manual verification for the same home and service month', () => {
+    const alreadyVerified: PaymentRecord = {
+      ...payment,
+      id: 'pay-already-verified',
+      sourceMessageId: 'msg-already-verified',
+      fileHash: 'hash-already-verified',
+      status: 'VERIFICADO',
+      verificationSource: 'manual_admin_bank_check',
+      verifiedAt: '2026-09-09T18:00:00.000Z',
+    };
+    expect(hasVerifiedServicePeriodConflict(payment, [payment, alreadyVerified])).toBe(true);
+    expect(() => buildManualVerificationUpdate(payment, [payment, alreadyVerified], new Date('2026-09-09T20:30:00.000Z')))
+      .toThrow('service_period_already_verified');
+  });
+
+  it('allows verification when the other verified payment belongs to another service month', () => {
+    const otherMonth: PaymentRecord = {
+      ...payment,
+      id: 'pay-other-month',
+      sourceMessageId: 'msg-other-month',
+      fileHash: 'hash-other-month',
+      period: '2026-07',
+      status: 'VERIFICADO',
+    };
+    expect(hasVerifiedServicePeriodConflict(payment, [payment, otherMonth])).toBe(false);
+    expect(buildManualVerificationUpdate(payment, [payment, otherMonth]).status).toBe('VERIFICADO');
   });
 });
