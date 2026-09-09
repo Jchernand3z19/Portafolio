@@ -6,8 +6,7 @@ Este documento describe lo que debe existir fuera de GitHub. No contiene valores
 
 Crear o seleccionar un proyecto bajo la cuenta de la empresa y habilitar:
 
-- Google Sheets API;
-- Google Drive API.
+- Google Sheets API.
 
 Crear una cuenta de servicio dedicada. No subir el JSON al repositorio.
 
@@ -15,6 +14,8 @@ Variables requeridas:
 
 - `GOOGLE_CLIENT_EMAIL`
 - `GOOGLE_PRIVATE_KEY`
+
+Google Drive **no es necesario** en el MVP actual porque el cliente decidió no conservar las imágenes de los comprobantes.
 
 ## 2. Google Sheets
 
@@ -28,15 +29,22 @@ El backend crea/valida las pestañas operativas al iniciar el acceso de producci
 
 La base `Viviendas` debe usar **Etapa + Bloque + Casa** como identidad. No guardar teléfonos para resolver viviendas.
 
-## 3. Google Drive
+La pestaña `Pagos` tampoco guarda `media_id`, `receipt_file_id` ni una URL del comprobante. Sólo se conserva el hash SHA-256 y los datos estructurados extraídos.
 
-Crear un folder privado dedicado a comprobantes y compartirlo sólo con la cuenta de servicio.
+## 3. Retención de comprobantes
 
-Guardar su ID como:
+Las imágenes recibidas por WhatsApp se usan únicamente durante la solicitud:
 
-- `GOOGLE_RECEIPT_FOLDER_ID`
+1. descarga server-side;
+2. validación de tamaño, MIME y magic bytes;
+3. cálculo de SHA-256;
+4. OCR y parser;
+5. registro de datos estructurados;
+6. descarte de los bytes de la imagen.
 
-No activar "cualquiera con el enlace".
+No crear carpeta de Drive, Blob, S3 u otro archivo histórico mientras el cliente mantenga esta decisión.
+
+Si posteriormente el cliente autoriza retención, debe diseñarse como una función separada con política de acceso y retención explícita; no debe activarse silenciosamente.
 
 ## 4. Meta / WhatsApp Cloud API
 
@@ -139,6 +147,8 @@ Una integración futura puede usar un archivo/API bancaria autorizada. Para veri
 - firma inválida retorna 401;
 - archivo no imagen se rechaza;
 - comprobante BAC sintético/de prueba controlada se procesa;
+- la imagen no queda archivada después del procesamiento;
+- no existen columnas `media_id` ni `receipt_file_id` en `Pagos`;
 - retry del mismo `message_id` no duplica;
 - comprobante con E/B/C completos valida la vivienda;
 - comprobante que omite cualquiera de Etapa/Bloque/Casa pide los tres datos;
@@ -150,11 +160,10 @@ Una integración futura puede usar un archivo/API bancaria autorizada. Para veri
 - depósito de septiembre con agosto ya `VERIFICADO` se aplica a septiembre;
 - una vivienda sólo aparece pagada después de `VERIFICADO`;
 - referencia repetida pasa a revisión y no se descarta automáticamente;
-- archivo exacto reenviado no incrementa recaudación;
+- archivo exacto reenviado no incrementa recaudación gracias al hash persistido;
 - panel permite verificación bancaria manual sólo para pagos elegibles;
 - un conflicto de período no puede verificarse hasta corregirse;
 - un `bank_movement_id` ya usado no verifica otro pago;
 - panel requiere login;
-- comprobante privado no abre sin sesión;
-- Sheet y Drive no son públicos;
+- la Sheet no es pública;
 - `VERIFICADO` sólo aparece tras una confirmación bancaria explícita.
