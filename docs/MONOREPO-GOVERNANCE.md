@@ -31,6 +31,11 @@ El path filter de la suite RPI ya no observa `.github/workflows/**`: ahora sólo
 responde al root RPI o a su propio workflow. Un cambio PAGOS/MUNDIAL deja de lanzar
 esa suite.
 
+El ruleset de `main` exige el contexto `tests`. Ese nombre pertenece al gate
+universal de project scope; la suite funcional aparece como `rpi-tests`. Así todos
+los PR reciben el control de aislamiento y cada proyecto ejecuta su CI sólo cuando
+sus paths cambian.
+
 ## Publicación, hosting y secretos
 
 RPI publica sólo bajo `precios-supermercados-sps/**` en `portfolio-data`. Su

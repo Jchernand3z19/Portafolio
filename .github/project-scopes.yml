@@ -2,6 +2,7 @@
   "schema": "portfolio-project-scopes/v1",
   "policy": {
     "shared_project_id": "shared",
+    "required_scope_check": "tests",
     "shared_title_prefix": "[MONOREPO]",
     "shared_branch_prefix": "monorepo/",
     "grandfathered_branches": {

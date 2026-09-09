@@ -16,11 +16,12 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: monorepo-project-scope-${{ github.event.pull_request.number || github.ref }}
+  group: monorepo-project-scope-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   validator-unit-tests:
+    name: governance-validator-unit-tests
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -37,6 +38,7 @@ jobs:
             --audit-repository .
 
   validate-pr-scope:
+    name: tests
     if: ${{ github.event_name == 'pull_request_target' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -44,7 +46,7 @@ jobs:
       - name: Checkout trusted validator from base
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.ref }}
           path: .scope-validator
           persist-credentials: false
 
