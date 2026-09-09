@@ -10,19 +10,8 @@ function isReceived(payment: PaymentRecord): boolean {
   return RECEIVED_STATUSES.has(payment.status) && payment.status !== 'DUPLICADO' && payment.status !== 'RECHAZADO';
 }
 
-function canonicalPayments(payments: readonly PaymentRecord[]): PaymentRecord[] {
-  const seen = new Set<string>();
-  return [...payments]
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
-    .filter((payment) => {
-      if (payment.status === 'DUPLICADO' || payment.status === 'RECHAZADO') return false;
-      const key = payment.reference
-        ? `ref:${payment.bank.toUpperCase()}:${payment.reference.toUpperCase()}`
-        : `hash:${payment.fileHash}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+function accountingPayments(payments: readonly PaymentRecord[]): PaymentRecord[] {
+  return payments.filter((payment) => payment.status !== 'DUPLICADO' && payment.status !== 'RECHAZADO');
 }
 
 function activeInPeriod(home: HomeRecord, period: string): boolean {
@@ -38,32 +27,41 @@ export async function buildDashboardSnapshot(store: PaymentStore, period: string
   const homes = (await store.listHomes()).filter((home) => activeInPeriod(home, period));
   const activeHomeKeys = new Set(homes.map(homeKey));
   const allPayments = (await store.listPayments()).filter((payment) => payment.period === period);
-  const accountingPayments = canonicalPayments(allPayments).filter(isReceived);
-  const assigned = accountingPayments.filter((payment) => payment.block != null && payment.house != null);
-  const assignedToActiveHomes = assigned.filter((payment) => activeHomeKeys.has(homeKey({ block: payment.block!, house: payment.house! })));
-  const paidKeys = new Set(assignedToActiveHomes.map((payment) => homeKey({ block: payment.block!, house: payment.house! })));
+  const received = accountingPayments(allPayments).filter(isReceived);
+  const assigned = received.filter((payment) => payment.stage != null && payment.block != null && payment.house != null);
+  const assignedToActiveHomes = assigned.filter((payment) => activeHomeKeys.has(homeKey({ stage: payment.stage!, block: payment.block!, house: payment.house! })));
+  const paidKeys = new Set(assignedToActiveHomes.map((payment) => homeKey({ stage: payment.stage!, block: payment.block!, house: payment.house! })));
   const expectedAmount = homes.reduce((total, home) => total + home.monthlyFee, 0);
-  const receivedAmount = accountingPayments.reduce((total, payment) => total + payment.amount, 0);
-  const verifiedAmount = accountingPayments.filter((payment) => payment.status === 'VERIFICADO').reduce((total, payment) => total + payment.amount, 0);
-  const unidentifiedAmount = accountingPayments.filter((payment) => payment.block == null || payment.house == null).reduce((total, payment) => total + payment.amount, 0);
+  const receivedAmount = received.reduce((total, payment) => total + payment.amount, 0);
+  const verifiedAmount = received.filter((payment) => payment.status === 'VERIFICADO').reduce((total, payment) => total + payment.amount, 0);
+  const unidentifiedAmount = received.filter((payment) => payment.stage == null || payment.block == null || payment.house == null).reduce((total, payment) => total + payment.amount, 0);
 
-  const blocks = Array.from(new Set(homes.map((home) => home.block))).sort((a, b) => a - b).map((block) => {
-    const blockHomes = homes.filter((home) => home.block === block);
-    const paidHomes = blockHomes.filter((home) => paidKeys.has(homeKey(home))).length;
-    const collected = assignedToActiveHomes.filter((payment) => payment.block === block).reduce((total, payment) => total + payment.amount, 0);
-    return {
-      block,
-      totalHomes: blockHomes.length,
-      paidHomes,
-      pendingHomes: blockHomes.length - paidHomes,
-      collected,
-      collectionRate: blockHomes.length ? paidHomes / blockHomes.length : 0,
-    };
-  });
+  const groups = new Map<string, { stage: number; block: number }>();
+  homes.forEach((home) => groups.set(`${home.stage}:${home.block}`, { stage: home.stage, block: home.block }));
+  const blocks = Array.from(groups.values())
+    .sort((a, b) => a.stage - b.stage || a.block - b.block)
+    .map(({ stage, block }) => {
+      const blockHomes = homes.filter((home) => home.stage === stage && home.block === block);
+      const paidHomes = blockHomes.filter((home) => paidKeys.has(homeKey(home))).length;
+      const collected = assignedToActiveHomes
+        .filter((payment) => payment.stage === stage && payment.block === block)
+        .reduce((total, payment) => total + payment.amount, 0);
+      return {
+        stage,
+        block,
+        totalHomes: blockHomes.length,
+        paidHomes,
+        pendingHomes: blockHomes.length - paidHomes,
+        collected,
+        collectionRate: blockHomes.length ? paidHomes / blockHomes.length : 0,
+      };
+    });
 
   const toRow = (payment: PaymentRecord) => ({
     ...payment,
-    homeLabel: homeLabel(payment.block != null && payment.house != null ? { block: payment.block, house: payment.house } : undefined),
+    homeLabel: homeLabel(payment.stage != null && payment.block != null && payment.house != null
+      ? { stage: payment.stage, block: payment.block, house: payment.house }
+      : undefined),
   });
   const sortNewest = (a: PaymentRecord, b: PaymentRecord) => b.createdAt.localeCompare(a.createdAt);
 
