@@ -2,6 +2,8 @@
 
 La hoja de cálculo es **privada**. El backend valida/crea las pestañas necesarias y escribe con `valueInputOption=RAW` para evitar formula injection desde texto OCR.
 
+Las imágenes de comprobantes **no se almacenan**. Se descargan temporalmente desde WhatsApp, se validan, se calcula su SHA-256, se ejecuta OCR y después se descartan. La Sheet conserva únicamente datos estructurados y el hash necesario para detectar reenvíos exactos.
+
 ## Vista operativa esperada
 
 La información que necesita el encargado se presenta como:
@@ -16,12 +18,10 @@ La cuota esperada del MVP es **L150.00**. El monto del comprobante se conserva c
 
 | Columna | Uso |
 | --- | --- |
-| `id` | ID interno determinístico del comprobante |
+| `id` | ID interno determinístico del comprobante procesado |
 | `created_at` / `updated_at` | auditoría temporal |
 | `source_message_id` | idempotencia de WhatsApp |
 | `phone` | remitente de WhatsApp; dato privado, no identidad de vivienda |
-| `media_id` | identificador temporal de media de Meta |
-| `receipt_file_id` | ID privado de Google Drive |
 | `bank` | banco detectado |
 | `depositor` | depositante/remitente extraído |
 | `transaction_date` / `transaction_time` | fecha/hora del depósito según comprobante |
@@ -33,13 +33,15 @@ La cuota esperada del MVP es **L150.00**. El monto del comprobante se conserva c
 | `stage` / `block` / `house` | identidad operativa de la vivienda |
 | `period` | mes de servicio pagado `YYYY-MM` |
 | `status` | estado de la máquina de pagos |
-| `file_hash` | SHA-256 del archivo |
+| `file_hash` | SHA-256 calculado mientras la imagen está en memoria; la imagen no se conserva |
 | `duplicate_of` | pago original relacionado |
 | `duplicate_reason` | señal exacta que originó duplicado/conflicto |
 | `review_reason` | motivo interno de revisión, por ejemplo monto menor/mayor a L150 |
 | `verification_source` | fuente usada para verificar |
 | `verified_at` | fecha/hora de verificación |
 | `bank_movement_id` | identificador estable del movimiento bancario usado por una fuente de conciliación automática; no se reutiliza en otro pago |
+
+No existen columnas `media_id` ni `receipt_file_id`, porque el sistema no conserva una referencia reutilizable a la imagen recibida.
 
 ## `Viviendas`
 
@@ -109,8 +111,9 @@ Una vivienda se considera **pagada** para el período únicamente cuando existe 
 - No publicar la Sheet.
 - No usar fórmulas provenientes de OCR.
 - No almacenar el texto OCR completo salvo necesidad futura explícita.
+- No almacenar imágenes de comprobantes ni IDs de archivo/media una vez finalizado el procesamiento.
+- Conservar `file_hash` para idempotencia/detección de reenvío sin conservar la imagen.
 - Cuenta destino: conservar sólo versión enmascarada.
-- Comprobantes: Drive privado, no celdas con URLs públicas.
 - Secretos: únicamente variables de entorno de Vercel.
 - Una referencia bancaria repetida no se descarta automáticamente como duplicado.
 - Un monto distinto de L150 se conserva y se manda a revisión; no se corrige ni se descarta automáticamente.
