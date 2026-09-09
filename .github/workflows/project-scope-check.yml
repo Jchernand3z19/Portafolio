@@ -16,7 +16,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: monorepo-project-scope-${{ github.event.pull_request.number || github.ref }}
+  group: monorepo-project-scope-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
