@@ -18,6 +18,7 @@ const now = () => new Date('2026-09-08T18:00:00.000Z');
 
 beforeEach(() => {
   process.env.APP_MODE = 'demo';
+  delete process.env.EXPECTED_PAYMENT_AMOUNT;
   delete process.env.EXPECTED_BENEFICIARY;
   delete process.env.EXPECTED_ACCOUNT_LAST4;
   resetEnvForTests();
@@ -25,6 +26,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.APP_MODE;
+  delete process.env.EXPECTED_PAYMENT_AMOUNT;
   delete process.env.EXPECTED_BENEFICIARY;
   delete process.env.EXPECTED_ACCOUNT_LAST4;
   resetEnvForTests();
@@ -108,6 +110,29 @@ describe('payment processor', () => {
     }, { store, now });
     expect(result.status).toBe('EN_REVISION');
     expect((await store.listPayments())[0].reviewReason).toBe('destination_account_unexpected');
+  });
+
+  it('sends any amount below or above L150 to human review', async () => {
+    const store = new MemoryPaymentStore({ homes }, now);
+    const below = SYNTHETIC_BAC_RECEIPTS.valid
+      .replace('L150.00', 'L149.00')
+      .replace('DEMOREF000001', 'DEMOREF000149');
+    const above = SYNTHETIC_BAC_RECEIPTS.valid
+      .replace('L150.00', 'L151.00')
+      .replace('DEMOREF000001', 'DEMOREF000151');
+
+    const belowResult = await processReceiptMessage({
+      messageId: 'msg-amount-below', phone: '+50400000020', bytes: png(8), declaredMime: 'image/png', syntheticOcrText: below,
+    }, { store, now });
+    const aboveResult = await processReceiptMessage({
+      messageId: 'msg-amount-above', phone: '+50400000021', bytes: png(9), declaredMime: 'image/png', syntheticOcrText: above,
+    }, { store, now });
+
+    expect(belowResult.status).toBe('EN_REVISION');
+    expect(aboveResult.status).toBe('EN_REVISION');
+    const payments = await store.listPayments();
+    expect(payments.find((item) => item.sourceMessageId === 'msg-amount-below')?.reviewReason).toBe('amount_below_expected');
+    expect(payments.find((item) => item.sourceMessageId === 'msg-amount-above')?.reviewReason).toBe('amount_above_expected');
   });
 
   it('does not create a second ambiguous pending context for the same WhatsApp sender', async () => {
