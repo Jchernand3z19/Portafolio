@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isAdminAuthenticated, isSameOriginRequest } from '@/src/auth/guard';
 import { isPeriod } from '@/src/domain/periods';
+import { buildManualVerificationUpdate } from '@/src/services/manual-verification';
 import { getPaymentStore } from '@/src/storage';
 
 export const runtime = 'nodejs';
@@ -22,6 +23,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const newPeriod = String(form.get('newPeriod') ?? '');
     if (!isPeriod(newPeriod)) return new NextResponse('Invalid period', { status: 400 });
     await store.updatePayment({ ...payment, period: newPeriod, updatedAt: new Date().toISOString() });
+    return NextResponse.redirect(new URL(`/admin?period=${encodeURIComponent(returnPeriod)}`, request.url), 303);
+  }
+
+  if (action === 'verify-manually') {
+    try {
+      await store.updatePayment(buildManualVerificationUpdate(payment));
+    } catch {
+      return new NextResponse('Payment is not eligible for manual verification', { status: 409 });
+    }
     return NextResponse.redirect(new URL(`/admin?period=${encodeURIComponent(returnPeriod)}`, request.url), 303);
   }
 
