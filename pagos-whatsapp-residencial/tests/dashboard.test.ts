@@ -12,12 +12,13 @@ describe('dashboard snapshot', () => {
     expect(snapshot.paidHomes).toBe(2);
     expect(snapshot.pendingHomes).toBe(10);
     expect(snapshot.duplicates).toHaveLength(1);
-    expect(snapshot.receivedAmount).toBe(750);
+    expect(snapshot.receivedAmount).toBe(775);
     expect(snapshot.verifiedAmount).toBe(300);
     expect(snapshot.pendingAmount).toBe(1500);
     expect(snapshot.unidentifiedAmount).toBe(150);
     expect(snapshot.blocks.reduce((total, block) => total + block.collected, 0)).toBe(300);
     expect(snapshot.payments.find((payment) => payment.id === 'pay-demo-001')?.monthlyFee).toBe(150);
+    expect(snapshot.review.find((payment) => payment.id === 'pay-demo-005')?.reviewReason).toBe('amount_above_expected');
   });
 
   it('does not count a payment assigned outside the active EBC master as a paid home', async () => {
@@ -30,7 +31,7 @@ describe('dashboard snapshot', () => {
     const snapshot = await buildDashboardSnapshot(store, DEMO_PERIOD);
     expect(snapshot.totalHomes).toBe(12);
     expect(snapshot.paidHomes).toBe(2);
-    expect(snapshot.receivedAmount).toBe(900);
+    expect(snapshot.receivedAmount).toBe(925);
     expect(snapshot.pendingAmount).toBe(1500);
     expect(snapshot.blocks.reduce((total, block) => total + block.collected, 0)).toBe(300);
     expect(snapshot.payments.find((payment) => payment.id === 'pay-external')?.monthlyFee).toBeUndefined();
