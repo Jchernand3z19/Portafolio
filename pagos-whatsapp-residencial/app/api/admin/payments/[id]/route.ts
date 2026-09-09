@@ -44,7 +44,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (action === 'verify-manually' || action === 'verify-reviewed') {
     try {
-      await store.updatePayment(buildManualVerificationUpdate(payment, new Date(), action === 'verify-reviewed'));
+      const allPayments = await store.listPayments();
+      await store.updatePayment(buildManualVerificationUpdate(payment, allPayments, new Date(), action === 'verify-reviewed'));
     } catch {
       return new NextResponse('Payment is not eligible for manual verification', { status: 409 });
     }
