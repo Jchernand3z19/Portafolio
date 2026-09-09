@@ -4,6 +4,7 @@ import { isAdminAuthenticated } from '@/src/auth/guard';
 import { periodFromDate, isPeriod, periodLabel } from '@/src/domain/periods';
 import { buildDashboardSnapshot } from '@/src/services/dashboard';
 import { buildHouseHistoryGrid, type HousePeriodState } from '@/src/services/house-history';
+import { canManuallyVerify } from '@/src/services/manual-verification';
 import { getPaymentStore } from '@/src/storage';
 
 export const dynamic = 'force-dynamic';
@@ -129,14 +130,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </table>
       </div>
 
-      <div className="section-head"><div><p className="eyebrow">Pagos</p><h2>Historial del período</h2></div><p>El período se puede corregir manualmente para atrasos o anticipos.</p></div>
+      <div className="section-head"><div><p className="eyebrow">Pagos</p><h2>Historial del período</h2></div><p>El encargado verifica el depósito en el banco antes de confirmar el pago.</p></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Vivienda</th><th>Depositante</th><th>Monto</th><th>Referencia</th><th>Estado</th><th>Período</th><th>Comprobante</th></tr></thead>
+          <thead><tr><th>Fecha depósito</th><th>Vivienda</th><th>Depositante</th><th>Banco</th><th>Monto</th><th>Referencia</th><th>Estado</th><th>Mes pagado</th><th>Comprobante</th><th>Verificación</th></tr></thead>
           <tbody>
             {snapshot.payments.map((payment) => (
               <tr key={payment.id}>
-                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.depositor ?? '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td><td>{payment.status.replaceAll('_', ' ')}</td>
+                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.depositor ?? '—'}</td><td>{payment.bank || '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td><td>{payment.status.replaceAll('_', ' ')}</td>
                 <td>
                   <form method="post" action={`/api/admin/payments/${payment.id}`}>
                     <input type="hidden" name="action" value="set-period" />
@@ -146,6 +147,17 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                   </form>
                 </td>
                 <td>{payment.receiptFileId ? <a className="admin-link" href={`/api/admin/receipts/${payment.id}`} target="_blank" rel="noreferrer">Ver</a> : '—'}</td>
+                <td>
+                  {canManuallyVerify(payment) ? (
+                    <form method="post" action={`/api/admin/payments/${payment.id}`}>
+                      <input type="hidden" name="action" value="verify-manually" />
+                      <input type="hidden" name="period" value={period} />
+                      <button className="primary-button" type="submit">Verificar</button>
+                    </form>
+                  ) : payment.status === 'VERIFICADO' ? (
+                    <span>✅ Verificado{payment.verifiedAt ? ` · ${new Date(payment.verifiedAt).toLocaleDateString('es-HN')}` : ''}</span>
+                  ) : '—'}
+                </td>
               </tr>
             ))}
           </tbody>
