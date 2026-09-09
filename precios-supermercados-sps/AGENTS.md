@@ -1,5 +1,20 @@
 # Instrucciones para agentes — Precios de Supermercados SPS
 
+## PROJECT / PULL REQUEST SCOPE CONTRACT
+
+```text
+PROJECT_ID=RPI
+PROJECT_ROOT=precios-supermercados-sps/
+PR_TITLE_PREFIX=[RPI]
+FUTURE_BRANCH_PREFIX=rpi/
+```
+
+RPI es dueño de su project root y de los workflows enumerados en
+`/.github/project-scopes.yml`. Un cambio RPI puede tocar la integración compartida
+del portafolio sólo junto con un cambio RPI que la justifique. No puede tocar
+PAGOS, MUNDIAL ni usar paths shared como bypass. Cambiar gobernanza, el registry o
+este contrato requiere un PR `[MONOREPO]` separado.
+
 ## Fuente de verdad
 
 - Repositorio: `Jchernand3z19/Portafolio`.
