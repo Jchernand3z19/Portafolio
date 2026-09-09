@@ -9,6 +9,7 @@ El sistema procesa documentos bancarios y datos de contacto. Las amenazas priori
 - reenvío/retry que contabilice dos veces;
 - comprobante editado o reutilizado;
 - asignación incorrecta de vivienda;
+- monto distinto a la cuota tratado por error como pago normal;
 - filtración de PII o secretos en GitHub/logs;
 - acceso público al panel o comprobantes;
 - formula injection en Google Sheets;
@@ -43,6 +44,14 @@ Esto evita asignaciones incorrectas cuando una vivienda está alquilada o paga u
 - Sharp recibe el binario sólo después de las validaciones iniciales;
 - PDF no se procesa en esta fase.
 
+### Monto
+
+- cuota bancaria esperada: `EXPECTED_PAYMENT_AMOUNT=150`;
+- exactamente L150 puede continuar al estado pendiente de verificación;
+- monto menor o mayor se conserva pero pasa a `EN_REVISION`;
+- una excepción de monto no puede borrarse usando el botón simple de verificación bancaria;
+- no se infieren abonos parciales, pagos de varios meses, créditos o devoluciones hasta que exista una regla explícita.
+
 ### Duplicados e idempotencia
 
 - `message_id`: retry técnico, silencioso;
@@ -51,15 +60,25 @@ Esto evita asignaciones incorrectas cuando una vivienda está alquilada o paga u
 - banco + referencia: señal de correlación, **no** duplicado automático;
 - referencia repetida con vivienda/monto/fecha incompatibles: revisión/conflicto;
 - señal débil banco + vivienda + monto + fecha: sólo revisión;
-- el dashboard excluye únicamente filas explícitamente marcadas `DUPLICADO` o `RECHAZADO`; no canonicaliza por referencia.
+- un conflicto de período no puede verificarse sin resolver antes el mes correcto;
+- el dashboard excluye únicamente filas explícitamente marcadas `DUPLICADO` o `RECHAZADO` de lo recibido, y sólo considera pagada una vivienda después de `VERIFICADO`.
 
 ### Fraude y verificación
 
 OCR no autentica una imagen. Estados como `PENDIENTE_VERIFICACION`, `NO_ENCONTRADO` y `EN_REVISION` impiden convertir una captura legible en dinero confirmado.
 
-En el MVP, `VERIFICADO` sólo se obtiene cuando el encargado revisa el movimiento directamente en el banco y ejecuta la acción de verificación del panel. El sistema no almacena usuario, contraseña, PIN ni códigos de BAC.
+En el MVP, `VERIFICADO` sólo se obtiene cuando el encargado revisa el movimiento directamente en el banco y ejecuta una acción permitida de verificación del panel. El sistema no almacena usuario, contraseña, PIN ni códigos de BAC.
 
-Una futura conciliación puede usar una fuente bancaria autorizada. Su lógica impide que un mismo movimiento bancario verifique dos pagos distintos.
+Una futura conciliación puede usar una fuente bancaria autorizada. Para verificar automáticamente exige un identificador estable del movimiento. Ese `bank_movement_id` se persiste en el pago y se consulta en corridas posteriores: si ya está asociado a otro pago, el nuevo caso se bloquea para revisión en lugar de verificarse. La protección aplica tanto dentro de una misma corrida como entre corridas diferentes.
+
+### Histórico mensual
+
+- la fecha de depósito no equivale al mes de servicio;
+- agosto 2026 es la base histórica con el corte inicial acordado;
+- desde septiembre sólo un período `VERIFICADO` hace avanzar al siguiente mes pendiente;
+- un comprobante sólo recibido no cambia una deuda pendiente en deuda pagada.
+
+Esto evita que dos comprobantes pendientes hagan avanzar artificialmente el histórico antes de comprobar que el dinero existe.
 
 ### Google
 
@@ -78,7 +97,8 @@ Una futura conciliación puede usar una fuente bancaria autorizada. Su lógica i
 - cookie HttpOnly + SameSite Strict + Secure en producción;
 - comprobación de mismo origen en escrituras;
 - rutas de comprobantes con `Cache-Control: private, no-store`;
-- los casos de revisión requieren una acción explícita y separada para confirmar tras revisar el banco o marcar duplicado.
+- los casos de revisión requieren acciones explícitas;
+- excepciones que comprometen contabilidad (monto distinto de L150, conflicto de período o reutilización de movimiento bancario) no pueden saltarse con el botón de verificación.
 
 ### Logs
 
