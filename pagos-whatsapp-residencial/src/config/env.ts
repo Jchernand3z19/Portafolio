@@ -20,7 +20,6 @@ const envSchema = z.object({
   GOOGLE_SHEET_ID: optionalString,
   GOOGLE_CLIENT_EMAIL: optionalString,
   GOOGLE_PRIVATE_KEY: optionalString,
-  GOOGLE_RECEIPT_FOLDER_ID: optionalString,
   WHATSAPP_VERIFY_TOKEN: optionalString,
   WHATSAPP_ACCESS_TOKEN: optionalString,
   WHATSAPP_PHONE_NUMBER_ID: optionalString,
