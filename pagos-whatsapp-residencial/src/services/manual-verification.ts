@@ -1,9 +1,16 @@
 import type { PaymentRecord } from '@/src/domain/types';
 
+const NON_VERIFIABLE_REVIEW_REASONS = new Set([
+  'amount_below_expected',
+  'amount_above_expected',
+]);
+
 export function canManuallyVerify(payment: PaymentRecord, includeReview = false): boolean {
   const statusAllowed = payment.status === 'PENDIENTE_VERIFICACION' || (includeReview && payment.status === 'EN_REVISION');
-  return statusAllowed
-    && payment.stage != null
+  if (!statusAllowed) return false;
+  if (payment.reviewReason && NON_VERIFIABLE_REVIEW_REASONS.has(payment.reviewReason)) return false;
+
+  return payment.stage != null
     && payment.block != null
     && payment.house != null
     && payment.amount > 0;
