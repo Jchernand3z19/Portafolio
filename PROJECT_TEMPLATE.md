@@ -8,12 +8,36 @@ Usa un nombre en minúsculas, sin espacios y separado por guiones:
 nombre-del-proyecto/
 ```
 
+## Identidad y aislamiento obligatorios
+
+Antes del primer feature, registra el proyecto en `.github/project-scopes.yml`:
+
+```text
+PROJECT_ID                  identificador corto y estable
+PROJECT_ROOT                carpeta exclusiva en la raíz
+PR title prefix             [PROYECTO]
+future branch prefix        proyecto/
+project label               project:proyecto
+owned workflow namespace    workflows exactos del proyecto
+CI scope                    project root + workflows propios
+deployment root             raíz/build/output reales, si existen
+public output namespace     ruta que no colisiona con otro proyecto
+secret ownership            nombres o prefijos lógicos, nunca valores
+shared integration rules    paths concretos y motivo
+```
+
+Incluye un `AGENTS.md` dentro del project root con el mismo contrato. Un feature
+PR no puede tocar dos project roots. Las integraciones comunes del portafolio se
+permiten sólo por las reglas explícitas del registry; la gobernanza shared usa
+`[MONOREPO]` y `monorepo/`.
+
 ## Estructura base
 
 Crea únicamente las carpetas que tendrán contenido real.
 
 ```text
 nombre-del-proyecto/
+├── AGENTS.md
 ├── README.md
 ├── requirements.txt           # Cuando utilice Python
 ├── .env.example               # Cuando requiera variables de entorno
@@ -160,10 +184,14 @@ Usa un nombre que identifique el proyecto:
 ```
 
 El workflow debe apuntar a la carpeta correspondiente mediante `working-directory` y `PYTHONPATH` cuando aplique.
+Sus triggers por `push`/`pull_request`, concurrency, cache y artifacts deben usar
+el namespace del proyecto. Registra el archivo exacto como `owned_workflow`. No
+reutilices secretos de otro proyecto.
 
 ## Checklist
 
 - [ ] Carpeta principal en la raíz.
+- [ ] PROJECT_ID, root, prefijos, label y AGENTS registrados.
 - [ ] Nombre en minúsculas y guiones.
 - [ ] README completo.
 - [ ] Código y recursos exclusivos dentro del proyecto.
@@ -176,4 +204,6 @@ El workflow debe apuntar a la carpeta correspondiente mediante `working-director
 - [ ] Acciones estandarizadas: `Explorar proyecto`, `Ver resultado`, `Ver código`.
 - [ ] Tarjeta y detalle responsive.
 - [ ] Workflow identificado y limitado al proyecto.
+- [ ] Deployment, output público y ownership de secretos documentados cuando aplican.
+- [ ] Integraciones shared declaradas sin habilitar cross-project.
 - [ ] Sin carpetas vacías ni proyectos ficticios.

@@ -1,3 +1,19 @@
+# Router de ownership para workflows
+
+Cada workflow tiene un PROJECT OWNER declarado en
+`/.github/project-scopes.yml`. Antes de cambiar uno, resuelve ese owner por el
+archivo registrado, los paths, el `working-directory`, los scripts, artifacts,
+secrets, triggers y consumidores. Un nombre genérico no convierte un workflow en
+shared.
+
+- Un cambio de workflow RPI, PAGOS o MUNDIAL pertenece a ese mismo proyecto.
+- `portfolio-frontend-qa.yml` es una integración shared deliberada.
+- Un workflow shared debe demostrar que sirve a más de un project root.
+- No modifiques workflows ajenos durante una misión de otro proyecto.
+- Mantén path filters, concurrency, caches, artifacts, permisos, secretos y outputs
+  aislados. Preserva `schedule`, `workflow_run` y `workflow_dispatch` salvo que la
+  tarea cambie explícitamente su semántica.
+
 # Reglas adicionales para workflows de Precios Supermercados SPS
 
 Estas reglas adicionales aplican únicamente al trabajar con workflows identificables por nombres o rutas relacionados con `precios-supermercados-sps` o `la-colonia`. No añaden restricciones específicas de La Colonia a workflows ajenos al proyecto.

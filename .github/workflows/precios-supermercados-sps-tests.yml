@@ -5,13 +5,13 @@ on:
   pull_request:
     paths:
       - "precios-supermercados-sps/**"
-      - ".github/workflows/**"
+      - ".github/workflows/precios-supermercados-sps-tests.yml"
   push:
     branches:
       - main
     paths:
       - "precios-supermercados-sps/**"
-      - ".github/workflows/**"
+      - ".github/workflows/precios-supermercados-sps-tests.yml"
 
 permissions:
   contents: read

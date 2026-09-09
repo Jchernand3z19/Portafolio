@@ -27,6 +27,25 @@ Portafolio/
 
 La única excepción a la regla de encapsulación es `.github/workflows/`: GitHub solo reconoce workflows ejecutables desde esa ubicación. Cada archivo debe indicar claramente el proyecto al que pertenece y trabajar dentro de su carpeta.
 
+## Monorepo Project Registry
+
+El contrato operativo está en [`.github/project-scopes.yml`](.github/project-scopes.yml).
+El número o la antigüedad de un PR no determina su proyecto; el registry y sus
+changed paths sí.
+La auditoría de workflows, outputs y secretos se documenta en
+[`docs/MONOREPO-GOVERNANCE.md`](docs/MONOREPO-GOVERNANCE.md).
+
+| Project ID | Project root | PR prefix | Branch prefix |
+| --- | --- | --- | --- |
+| RPI | `precios-supermercados-sps/` | `[RPI]` | `rpi/` |
+| PAGOS | `pagos-whatsapp-residencial/` | `[PAGOS]` | `pagos/` |
+| MUNDIAL | `mundial-2026/` | `[MUNDIAL]` | `mundial/` |
+| SHARED | `/` (gobernanza e integraciones declaradas) | `[MONOREPO]` | `monorepo/` |
+
+El registry puede reservar un project root antes de su primera integración a
+`main`. La infraestructura shared no permite mezclar features de project roots
+distintos.
+
 ## Proyectos publicados
 
 ### 1. Monitoreo automatizado de precios — Web Scraping
