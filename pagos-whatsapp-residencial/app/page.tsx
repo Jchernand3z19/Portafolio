@@ -42,13 +42,13 @@ export default async function HomePage() {
       </section>
 
       <div className="notice">
-        Un comprobante leído por OCR no demuestra que el dinero exista. El sistema separa <strong>comprobante recibido</strong> de <strong>pago verificado</strong>; inicialmente un encargado confirma el movimiento directamente en el banco y pulsa Verificar.
+        Un comprobante leído por OCR no demuestra que el dinero exista. El sistema separa <strong>comprobante recibido</strong> de <strong>pago verificado</strong>; inicialmente un encargado confirma el movimiento directamente en el banco y pulsa Verificar. La cuota normal es <strong>L150.00</strong>; cualquier monto diferente queda en revisión.
       </div>
 
       <div className="section-head"><div><p className="eyebrow">Resumen mensual</p><h2>{periodLabel(snapshot.period)}</h2></div><p>Escenario demostrativo de 12 viviendas</p></div>
       <section className="kpis" aria-label="Indicadores mensuales">
-        <div className="kpi"><span>Viviendas activas</span><strong>{snapshot.totalHomes}</strong><small>{snapshot.paidHomes} con comprobante · {snapshot.pendingHomes} pendientes</small></div>
-        <div className="kpi"><span>Cobranza</span><strong>{percent(snapshot.collectionRate)}</strong><small>Por vivienda para el período</small></div>
+        <div className="kpi"><span>Viviendas activas</span><strong>{snapshot.totalHomes}</strong><small>{snapshot.paidHomes} verificadas · {snapshot.pendingHomes} pendientes</small></div>
+        <div className="kpi"><span>Cobranza</span><strong>{percent(snapshot.collectionRate)}</strong><small>Por vivienda verificada</small></div>
         <div className="kpi"><span>Monto esperado</span><strong>{currency(snapshot.expectedAmount)}</strong><small>Pendiente {currency(snapshot.pendingAmount)}</small></div>
         <div className="kpi"><span>Monto recibido</span><strong>{currency(snapshot.receivedAmount)}</strong><small>Verificado {currency(snapshot.verifiedAmount)}</small></div>
         <div className="kpi"><span>Sin identificar</span><strong>{currency(snapshot.unidentifiedAmount)}</strong><small>Falta E/B/C completo</small></div>
@@ -57,13 +57,13 @@ export default async function HomePage() {
         <div className="kpi"><span>Pago verificado</span><strong>{snapshot.payments.filter((payment) => payment.status === 'VERIFICADO').length}</strong><small>Separado del OCR</small></div>
       </section>
 
-      <div className="section-head"><div><p className="eyebrow">Por etapa y bloque</p><h2>Avance de cobranza</h2></div><p>Casas pagadas, pendientes y recaudación</p></div>
+      <div className="section-head"><div><p className="eyebrow">Por etapa y bloque</p><h2>Avance de cobranza</h2></div><p>Casas verificadas, pendientes y recaudación confirmada</p></div>
       <section className="blocks">
         {snapshot.blocks.map((group) => (
           <article className="block-card" key={`${group.stage}-${group.block}`}>
             <div className="block-card__top"><strong>Etapa {group.stage} · Bloque {group.block}</strong><span>{group.paidHomes}/{group.totalHomes} pagadas</span></div>
             <div className="progress"><span style={{ width: `${group.collectionRate * 100}%` }} /></div>
-            <p className="lead">{percent(group.collectionRate)} · {currency(group.collected)} recibido</p>
+            <p className="lead">{percent(group.collectionRate)} · {currency(group.collected)} verificado</p>
           </article>
         ))}
       </section>
@@ -74,7 +74,7 @@ export default async function HomePage() {
       <div className="section-head"><div><p className="eyebrow">Pagos</p><h2>Movimientos del período</h2></div><p>Fecha de depósito, mes pagado, vivienda, banco, referencia y estado</p></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Fecha depósito</th><th>Mes pagado</th><th>Vivienda</th><th>Depositante</th><th>Monto</th><th>Referencia</th><th>Banco</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Fecha depósito</th><th>Mes pagado</th><th>Vivienda</th><th>Depositante</th><th>Cuota</th><th>Monto depósito</th><th>Referencia</th><th>Banco</th><th>Estado</th></tr></thead>
           <tbody>
             {snapshot.payments.map((payment) => (
               <tr key={payment.id}>
@@ -82,6 +82,7 @@ export default async function HomePage() {
                 <td>{periodLabel(payment.period)}</td>
                 <td>{payment.homeLabel}</td>
                 <td>{payment.depositor ?? '—'}</td>
+                <td>{payment.monthlyFee != null ? currency(payment.monthlyFee) : '—'}</td>
                 <td>{currency(payment.amount)}</td>
                 <td>{payment.reference ?? '—'}</td>
                 <td>{payment.bank}</td>
@@ -96,7 +97,7 @@ export default async function HomePage() {
       <section className="queues">
         <article className="queue"><h3>Sin identificar</h3><p>Si falta etapa, bloque o casa, WhatsApp solicita E1 B4 C18 sin repetir OCR.</p><strong>{snapshot.unidentified.length}</strong></article>
         <article className="queue"><h3>Duplicados</h3><p>El mismo archivo exacto no vuelve a sumar. Una referencia repetida pasa a revisión, no se descarta automáticamente.</p><strong>{snapshot.duplicates.length}</strong></article>
-        <article className="queue"><h3>En revisión</h3><p>Referencias repetidas, datos incompatibles o validación insuficiente.</p><strong>{snapshot.review.length}</strong></article>
+        <article className="queue"><h3>En revisión</h3><p>Referencias repetidas, monto distinto de L150, datos incompatibles o validación insuficiente.</p><strong>{snapshot.review.length}</strong></article>
       </section>
 
       <footer className="footer">
