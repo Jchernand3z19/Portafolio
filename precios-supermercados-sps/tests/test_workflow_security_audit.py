@@ -241,6 +241,7 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     assert "bootstrap_rpi_consumer_publication" in raw
     assert "operator_requested_republication" in raw
     assert "scripts/exportar_rpi_marts.py" in raw
+    assert "scripts/exportar_consumer_catalog.py" in raw
     assert "scripts/exportar_modelo_analitico.py" not in raw
     assert "scripts/generar_descriptores_publicacion_segura.py" not in raw
     assert "scripts/generar_muestra_portafolio_segura.py" in raw
@@ -248,9 +249,13 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     assert "portfolio-sample.json" in raw
     assert "--scope la_colonia=la_colonia_sps" in raw
     assert "--scope walmart=walmart_sps" in raw
-    assert "--scope colonial=colonial_sps" not in raw
+    assert "--scope colonial=colonial_sps" in raw
+    assert "--scope pricesmart=pricesmart_sps" in raw
+    assert "--scope comisariato_los_andes=comisariato_los_andes_sps" in raw
     assert "rpi-business-mart/v1" in raw
     assert "rpi-consumer-mart/v2" in raw
+    assert "rpi-consumer-catalog-manifest/v3" in raw
+    assert "rpi-consumer-catalog/v3" in raw
     assert "rpi-marts-manifest/v1" in raw
     assert "precios-sps-safe-portfolio-sample/v1" in raw
     assert "business/fact_price_history.csv" in raw
@@ -286,11 +291,17 @@ def test_controlled_rpi_publication_request_is_closed_and_read_only() -> None:
         "action": "publish_safe_rpi",
         "scope": [
             {"supermarket_id": "la_colonia", "location_id": "la_colonia_sps"},
+            {"supermarket_id": "colonial", "location_id": "colonial_sps"},
             {"supermarket_id": "walmart", "location_id": "walmart_sps"},
+            {"supermarket_id": "pricesmart", "location_id": "pricesmart_sps"},
+            {
+                "supermarket_id": "comisariato_los_andes",
+                "location_id": "comisariato_los_andes_sps",
+            },
         ],
         "read_only": True,
-        "reason": "bootstrap_rpi_consumer_publication",
-        "sequence": 1,
+        "reason": "operator_requested_republication",
+        "sequence": 2,
     }
 
 
@@ -423,11 +434,14 @@ def test_portfolio_data_sync_reuses_safe_artifact_without_turso_reads() -> None:
     assert "safe-analytics-la-colonia-walmart-sps-${{ github.event.workflow_run.id }}" in raw
     assert "only('portfolio-sample.json', 'portfolio_sync_sample')" in raw
     assert "rpi-consumer-mart/v2" in raw
+    assert "rpi-consumer-catalog-manifest/v3" in raw
+    assert "rpi-consumer-catalog/v3" in raw
     assert "rpi-business-mart/v1" in raw
     assert "rpi-marts-manifest/v1" in raw
     assert "portfolio_sync_hash_mismatch" in raw
     assert "precios-supermercados-sps/published/rpi/consumer-mart.json" in raw
     assert "precios-supermercados-sps/published/rpi/manifest.json" in raw
+    assert "precios-supermercados-sps/published/rpi/v3/" in raw
     assert "precios-supermercados-sps/published/rpi/business-mart.json" not in raw
     assert "precios-supermercados-sps/portfolio/sample-data.json" in raw
     assert "const dataBranch = 'portfolio-data';" in raw
@@ -436,6 +450,7 @@ def test_portfolio_data_sync_reuses_safe_artifact_without_turso_reads() -> None:
     assert "createCommit" in raw
     assert "updateRef" in raw
     assert "force: false" in raw
+    assert "sha: null" in raw
     assert "createOrUpdateFileContents" not in raw
     assert "portfolio_sync_secret_material_detected" in raw
     assert "TURSO_DATABASE_URL: ${{ secrets." not in raw
