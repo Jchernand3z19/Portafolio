@@ -88,7 +88,8 @@
       "docs/**",
       "mundial-2026/AGENTS.md",
       "pagos-whatsapp-residencial/AGENTS.md",
-      "precios-supermercados-sps/AGENTS.md"
+      "precios-supermercados-sps/AGENTS.md",
+      "precios-supermercados-sps/tests/_workflow_security_audit_base.py"
     ],
     "integrations": {
       "portfolio_site": {
