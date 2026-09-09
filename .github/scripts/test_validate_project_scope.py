@@ -110,6 +110,14 @@ class ProjectScopeTests(unittest.TestCase):
     def test_repository_workflow_registry_is_complete(self) -> None:
         MODULE.audit_repository(REGISTRY, ROOT)
 
+    def test_scope_workflow_uses_current_trusted_base_without_pr_code(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "project-scope-check.yml").read_text()
+        self.assertIn("pull_request_target:", workflow)
+        self.assertIn("ref: ${{ github.event.pull_request.base.ref }}", workflow)
+        self.assertNotIn("ref: ${{ github.event.pull_request.base.sha }}", workflow)
+        self.assertIn("persist-credentials: false", workflow)
+        self.assertNotIn("secrets.", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
