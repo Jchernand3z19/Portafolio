@@ -1,0 +1,35 @@
+{
+  "as_of": "2026-09-09T16:14:35.927599Z",
+  "business_schema": "rpi-business-mart/v1",
+  "comparison_status": "COMPARABLE",
+  "consumer_schema": "rpi-consumer-mart/v2",
+  "files_sha256": {
+    "business-mart.json": "077253cbbff43cba587b3785b4d8219d3c7229c793ed0781e76a94b1873eee59",
+    "business/dim_brand.csv": "3178f3ecd6c9552169cfae3686a123087936d567cd249b456098c895e989c897",
+    "business/dim_category.csv": "0ceb5155345f2e789f2895ce1c156395a40352874d3d3f5d3fafa7a4ee9597f6",
+    "business/dim_location.csv": "6f175ad42c74963066a926b216128df0ee070ba0d5f3d13240c0121929312c8b",
+    "business/dim_product.csv": "b537c6e4957059763a955f4f18a66a96384793e0d22eefd90e762ed04d4e4023",
+    "business/dim_retailer.csv": "86dbe9a105aedeb14753388495fcecf66589219babbddd0394a2556f84553cbf",
+    "business/fact_basket_cost.csv": "00c5d9d93cb8a3021c1bb2de53cd5209555f7939342a5c2173b3119845d469a3",
+    "business/fact_current_comparison.csv": "c3299448333b8a31b47c892a33087a05fa193a2f2c273ef4378f8dddae906a2a",
+    "business/fact_metric_coverage.csv": "e999a29f12d6d8a7b88a090d85d569c64716653587f391f950ae0d0322f931d9",
+    "business/fact_price_history.csv": "d7d22005ef983849c909b82a7588de061fa7fd4eafec5d2ed6bf3e3fc2f7773b",
+    "business/fact_promotion_analysis.csv": "2eb98403b0434259212b5bbb2e53e74a5c114918c87e10c49fd032bc653ed307",
+    "consumer-mart.json": "ae1621c44bd321101196a796296e2f9d0e56e6703c1cd3b8ef88ec3f30885580"
+  },
+  "generated_at_utc": "2026-09-09T16:15:04.545686Z",
+  "safe_offers": 184,
+  "safe_products": 92,
+  "schema": "rpi-marts-manifest/v1",
+  "scope": [
+    {
+      "location_id": "la_colonia_sps",
+      "supermarket_id": "la_colonia"
+    },
+    {
+      "location_id": "walmart_sps",
+      "supermarket_id": "walmart"
+    }
+  ],
+  "source_backend": "turso"
+}
