@@ -26,14 +26,17 @@ function activeInPeriod(home: HomeRecord, period: string): boolean {
 export async function buildDashboardSnapshot(store: PaymentStore, period: string): Promise<DashboardSnapshot> {
   const homes = (await store.listHomes()).filter((home) => activeInPeriod(home, period));
   const activeHomeKeys = new Set(homes.map(homeKey));
+  const homesByKey = new Map(homes.map((home) => [homeKey(home), home]));
   const allPayments = (await store.listPayments()).filter((payment) => payment.period === period);
   const received = accountingPayments(allPayments).filter(isReceived);
   const assigned = received.filter((payment) => payment.stage != null && payment.block != null && payment.house != null);
   const assignedToActiveHomes = assigned.filter((payment) => activeHomeKeys.has(homeKey({ stage: payment.stage!, block: payment.block!, house: payment.house! })));
-  const paidKeys = new Set(assignedToActiveHomes.map((payment) => homeKey({ stage: payment.stage!, block: payment.block!, house: payment.house! })));
+  const verifiedAssigned = assignedToActiveHomes.filter((payment) => payment.status === 'VERIFICADO');
+  const paidKeys = new Set(verifiedAssigned.map((payment) => homeKey({ stage: payment.stage!, block: payment.block!, house: payment.house! })));
   const expectedAmount = homes.reduce((total, home) => total + home.monthlyFee, 0);
   const receivedAmount = received.reduce((total, payment) => total + payment.amount, 0);
-  const verifiedAmount = received.filter((payment) => payment.status === 'VERIFICADO').reduce((total, payment) => total + payment.amount, 0);
+  const verifiedAmount = verifiedAssigned.reduce((total, payment) => total + payment.amount, 0);
+  const verifiedExpectedAmount = Array.from(paidKeys).reduce((total, key) => total + (homesByKey.get(key)?.monthlyFee ?? 0), 0);
   const unidentifiedAmount = received.filter((payment) => payment.stage == null || payment.block == null || payment.house == null).reduce((total, payment) => total + payment.amount, 0);
 
   const groups = new Map<string, { stage: number; block: number }>();
@@ -74,7 +77,7 @@ export async function buildDashboardSnapshot(store: PaymentStore, period: string
     expectedAmount,
     receivedAmount,
     verifiedAmount,
-    pendingAmount: Math.max(0, expectedAmount - assignedToActiveHomes.reduce((total, payment) => total + payment.amount, 0)),
+    pendingAmount: Math.max(0, expectedAmount - verifiedExpectedAmount),
     unidentifiedAmount,
     blocks,
     payments: [...allPayments].sort(sortNewest).map(toRow),
