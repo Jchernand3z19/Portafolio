@@ -27,7 +27,7 @@ export const DEMO_PAYMENTS: PaymentRecord[] = [
   {
     ...base, id: 'pay-demo-001', createdAt: '2026-09-07T14:12:00.000Z', updatedAt: '2026-09-07T14:14:00.000Z', sourceMessageId: 'wamid.demo.001', phone: '+50400000010',
     depositor: 'JUAN PÉREZ DEMO', transactionDate: '2026-09-07', transactionTime: '08:12', detail: 'E1 B4 C18', reference: 'DEMO-REF-0001', beneficiary: 'RESIDENCIAL DEMO',
-    destinationAccountMasked: '••••0001', stage: 1, block: 4, house: 18, status: 'VERIFICADO', fileHash: 'demo-hash-001', verificationSource: 'demo-bank-movement', verifiedAt: '2026-09-07T14:14:00.000Z',
+    destinationAccountMasked: '••••0001', stage: 1, block: 4, house: 18, status: 'VERIFICADO', fileHash: 'demo-hash-001', verificationSource: 'demo-bank-movement', verifiedAt: '2026-09-07T14:14:00.000Z', bankMovementId: 'demo-movement-001',
   },
   {
     ...base, id: 'pay-demo-002', createdAt: '2026-09-06T16:30:00.000Z', updatedAt: '2026-09-06T16:30:00.000Z', sourceMessageId: 'wamid.demo.002', phone: '+50400000001',
@@ -37,7 +37,7 @@ export const DEMO_PAYMENTS: PaymentRecord[] = [
   {
     ...base, id: 'pay-demo-003', createdAt: '2026-09-05T18:20:00.000Z', updatedAt: '2026-09-05T18:20:00.000Z', sourceMessageId: 'wamid.demo.003', phone: '+50400000005',
     depositor: 'CARLOS DEMO', transactionDate: '2026-09-05', transactionTime: '12:20', detail: 'E1-B2-C1', reference: 'DEMO-REF-0003', beneficiary: 'RESIDENCIAL DEMO',
-    destinationAccountMasked: '••••0001', stage: 1, block: 2, house: 1, status: 'VERIFICADO', fileHash: 'demo-hash-003', verificationSource: 'demo-bank-movement', verifiedAt: '2026-09-05T18:25:00.000Z',
+    destinationAccountMasked: '••••0001', stage: 1, block: 2, house: 1, status: 'VERIFICADO', fileHash: 'demo-hash-003', verificationSource: 'demo-bank-movement', verifiedAt: '2026-09-05T18:25:00.000Z', bankMovementId: 'demo-movement-003',
   },
   {
     ...base, id: 'pay-demo-004', createdAt: '2026-09-04T20:05:00.000Z', updatedAt: '2026-09-04T20:05:00.000Z', sourceMessageId: 'wamid.demo.004', phone: '+50400000999',
@@ -45,9 +45,9 @@ export const DEMO_PAYMENTS: PaymentRecord[] = [
     destinationAccountMasked: '••••0001', status: 'ESPERANDO_RESPUESTA', fileHash: 'demo-hash-004',
   },
   {
-    ...base, id: 'pay-demo-005', createdAt: '2026-09-03T15:40:00.000Z', updatedAt: '2026-09-03T15:40:00.000Z', sourceMessageId: 'wamid.demo.005', phone: '+50400000006',
-    depositor: 'PERSONA DEMO', transactionDate: '2026-09-03', transactionTime: '09:40', detail: 'E1 B2 C2', reference: 'DEMO-REF-0005', beneficiary: 'BENEFICIARIO INESPERADO',
-    destinationAccountMasked: '••••9999', stage: 1, block: 2, house: 2, status: 'EN_REVISION', fileHash: 'demo-hash-005', reviewReason: 'destination_account_unexpected',
+    ...base, amount: 175, id: 'pay-demo-005', createdAt: '2026-09-03T15:40:00.000Z', updatedAt: '2026-09-03T15:40:00.000Z', sourceMessageId: 'wamid.demo.005', phone: '+50400000006',
+    depositor: 'PERSONA DEMO', transactionDate: '2026-09-03', transactionTime: '09:40', detail: 'E1 B2 C2', reference: 'DEMO-REF-0005', beneficiary: 'RESIDENCIAL DEMO',
+    destinationAccountMasked: '••••0001', stage: 1, block: 2, house: 2, status: 'EN_REVISION', fileHash: 'demo-hash-005', reviewReason: 'amount_above_expected',
   },
   {
     ...base, id: 'pay-demo-006', createdAt: '2026-09-03T15:45:00.000Z', updatedAt: '2026-09-03T15:45:00.000Z', sourceMessageId: 'wamid.demo.006', phone: '+50400000001',
