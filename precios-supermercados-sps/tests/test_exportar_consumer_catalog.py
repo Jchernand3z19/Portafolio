@@ -59,7 +59,7 @@ def build_db(path: Path) -> None:
             CREATE TABLE price_history (
                 product_id INTEGER NOT NULL, supermarket_id TEXT NOT NULL,
                 location_id TEXT NOT NULL, current_price_minor INTEGER,
-                reported_regular_price_minor INTEGER, is_promotion INTEGER NOT NULL,
+                reported_regular_price_minor INTEGER, is_promotion INTEGER,
                 availability TEXT NOT NULL, valid_from_utc TEXT NOT NULL,
                 valid_to_utc TEXT
             );
@@ -91,7 +91,7 @@ def build_db(path: Path) -> None:
                     locations[supermarket_id],
                     prices[product_id],
                     1300 if product_id == 1 else None,
-                    1 if product_id == 1 else 0,
+                    1 if product_id == 1 else None if product_id == 4 else 0,
                     "out_of_stock" if product_id == 6 else "in_stock",
                     "2026-09-09T10:00:00Z",
                     None,
@@ -167,6 +167,8 @@ def test_exports_partitioned_visible_catalog_with_safe_comparability(tmp_path: P
     assert milk["offers"][0]["current_price"] == "10.00"
     assert milk["offers"][0]["reported_regular_price"] == "13.00"
     assert milk["offers"][0]["is_promotion"] is True
+    coffee = next(row for row in rows if row["product_name"] == "Café clásico 500 g")
+    assert coffee["offers"][0]["is_promotion"] is None
 
     water = next(row for row in rows if row["canonical_product_id"] == "gtin:agua")
     assert {offer["relative_price_state"] for offer in water["offers"]} == {"equivalent"}
