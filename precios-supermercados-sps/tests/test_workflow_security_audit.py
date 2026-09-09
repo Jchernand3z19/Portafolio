@@ -19,6 +19,9 @@ base.PRODUCTION_UPDATE_REQUEST = (
     "precios-supermercados-sps/.automation/production-update-request.json"
 )
 base.SAFE_ANALYTICS_WORKFLOW = "precios-supermercados-sps-safe-analytics-publication.yml"
+base.RPI_PUBLICATION_REQUEST = (
+    "precios-supermercados-sps/.automation/rpi-publication-request.json"
+)
 base.TURSO_SCHEMA_MIGRATION_WORKFLOW = "precios-supermercados-sps-turso-schema-migration.yml"
 base.TURSO_SCHEMA_MIGRATION_OPERATOR_WORKFLOW = (
     "precios-supermercados-sps-turso-schema-migration-operator.yml"
@@ -33,7 +36,9 @@ base.EXPECTED_PERMISSIONS[base.PRODUCTION_OPERATOR_WORKFLOW] = {
 }
 base.EXPECTED_TRIGGERS[base.PRODUCTION_OPERATOR_WORKFLOW] = {"push"}
 base.EXPECTED_PERMISSIONS[base.SAFE_ANALYTICS_WORKFLOW] = {"contents": "read"}
-base.EXPECTED_TRIGGERS[base.SAFE_ANALYTICS_WORKFLOW] = {"workflow_run", "workflow_dispatch"}
+base.EXPECTED_TRIGGERS[base.SAFE_ANALYTICS_WORKFLOW] = {
+    "workflow_run", "workflow_dispatch", "push"
+}
 base.ALLOWED_SECRET_REFERENCES[base.SAFE_ANALYTICS_WORKFLOW] = {
     base.TURSO_DATABASE_URL_SECRET,
     base.TURSO_AUTH_TOKEN_SECRET,
@@ -205,6 +210,10 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
             "types": ["completed"],
         },
         "workflow_dispatch": "",
+        "push": {
+            "branches": ["main"],
+            "paths": [base.RPI_PUBLICATION_REQUEST],
+        },
     }
     workflow_jobs = base.jobs(workflow)
     assert set(workflow_jobs) == {"publish"}
@@ -215,6 +224,7 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     expected_if = (
         "${{ github.repository == 'Jchernand3z19/Portafolio' && "
         "(github.event_name == 'workflow_dispatch' || "
+        "(github.event_name == 'push' && github.ref == 'refs/heads/main') || "
         "(github.event_name == 'workflow_run' && "
         "github.event.workflow_run.conclusion == 'success' && "
         "github.event.workflow_run.head_branch == 'main')) }}"
@@ -222,6 +232,14 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     assert " ".join(str(publish["if"]).split()) == " ".join(expected_if.split())
 
     raw = path.read_text(encoding="utf-8")
+    assert base.RPI_PUBLICATION_REQUEST in raw
+    assert "precios-sps-rpi-publication-request/v1" in raw
+    assert "publish_safe_rpi" in raw
+    assert "rpi_publication_request_schema_closed_set_mismatch" in raw
+    assert "rpi_publication_request_scope_invalid" in raw
+    assert "rpi_publication_request_read_only_required" in raw
+    assert "bootstrap_rpi_consumer_publication" in raw
+    assert "operator_requested_republication" in raw
     assert "scripts/exportar_rpi_marts.py" in raw
     assert "scripts/exportar_modelo_analitico.py" not in raw
     assert "scripts/generar_descriptores_publicacion_segura.py" not in raw
@@ -257,6 +275,22 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     assert checkout["with"] == {
         "ref": "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}",
         "persist-credentials": "false",
+    }
+
+
+def test_controlled_rpi_publication_request_is_closed_and_read_only() -> None:
+    request_path = base.REPO_ROOT / base.RPI_PUBLICATION_REQUEST
+    request = yaml.safe_load(request_path.read_text(encoding="utf-8"))
+    assert request == {
+        "schema": "precios-sps-rpi-publication-request/v1",
+        "action": "publish_safe_rpi",
+        "scope": [
+            {"supermarket_id": "la_colonia", "location_id": "la_colonia_sps"},
+            {"supermarket_id": "walmart", "location_id": "walmart_sps"},
+        ],
+        "read_only": True,
+        "reason": "bootstrap_rpi_consumer_publication",
+        "sequence": 1,
     }
 
 

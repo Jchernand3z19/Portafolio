@@ -1,0 +1,17 @@
+{
+  "schema": "precios-sps-rpi-publication-request/v1",
+  "action": "publish_safe_rpi",
+  "scope": [
+    {
+      "supermarket_id": "la_colonia",
+      "location_id": "la_colonia_sps"
+    },
+    {
+      "supermarket_id": "walmart",
+      "location_id": "walmart_sps"
+    }
+  ],
+  "read_only": true,
+  "reason": "bootstrap_rpi_consumer_publication",
+  "sequence": 1
+}
