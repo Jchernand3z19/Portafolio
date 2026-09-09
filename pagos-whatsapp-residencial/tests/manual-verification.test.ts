@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { resetEnvForTests } from '@/src/config/env';
 import { buildManualVerificationUpdate, canManuallyVerify } from '@/src/services/manual-verification';
 import type { PaymentRecord } from '@/src/domain/types';
 
@@ -7,6 +8,11 @@ const payment: PaymentRecord = {
   phone: '+50400000000', bank: 'BAC Honduras', amount: 150, transactionDate: '2026-09-01', reference: 'DEMO-REF-001',
   stage: 1, block: 4, house: 18, period: '2026-08', status: 'PENDIENTE_VERIFICACION', fileHash: 'demo-hash',
 };
+
+beforeEach(() => {
+  delete process.env.EXPECTED_PAYMENT_AMOUNT;
+  resetEnvForTests();
+});
 
 describe('manual verification', () => {
   it('allows an identified payment pending bank verification', () => {
@@ -34,6 +40,18 @@ describe('manual verification', () => {
     expect(canManuallyVerify(below, true)).toBe(false);
     expect(canManuallyVerify(above, true)).toBe(false);
     expect(() => buildManualVerificationUpdate(above, new Date(), true)).toThrow('payment_not_manually_verifiable');
+  });
+
+  it('checks the actual amount even when another review reason replaced the amount warning', () => {
+    const maskedAmountException = { ...payment, amount: 175, status: 'EN_REVISION' as const, reviewReason: 'pending_context_conflict' };
+    expect(canManuallyVerify(maskedAmountException, true)).toBe(false);
+  });
+
+  it('respects a configured expected amount at the final verification boundary', () => {
+    process.env.EXPECTED_PAYMENT_AMOUNT = '200';
+    resetEnvForTests();
+    expect(canManuallyVerify({ ...payment, amount: 150 })).toBe(false);
+    expect(canManuallyVerify({ ...payment, amount: 200 })).toBe(true);
   });
 
   it('does not allow a conflicting service month to be verified until the period is corrected', () => {
