@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { isAdminAuthenticated, isSameOriginRequest } from '@/src/auth/guard';
-import { normalizeOptionalPhone } from '@/src/domain/phone';
 import { getPaymentStore } from '@/src/storage';
 
 export const runtime = 'nodejs';
@@ -28,7 +27,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return new NextResponse('Invalid monthly fee', { status: 400 });
     }
     const responsible = String(form.get('responsible') ?? '').trim().slice(0, 160) || undefined;
-    const phone = normalizeOptionalPhone(String(form.get('phone') ?? ''));
     const startDate = optionalDate(form.get('startDate'));
     const endDate = optionalDate(form.get('endDate'));
     if (startDate && endDate && startDate > endDate) return new NextResponse('Invalid date range', { status: 400 });
@@ -36,7 +34,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await store.updateHome({
       ...home,
       responsible,
-      phone,
       monthlyFee,
       active: form.get('active') === 'on',
       startDate,
