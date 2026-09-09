@@ -11,31 +11,28 @@ describe('BAC parser', () => {
     expect(result.transactionDate).toBe('2026-09-07');
     expect(result.transactionTime).toBe('08:12');
     expect(result.amount).toBe(150);
-    expect(result.detail).toBe('B4 C18');
+    expect(result.detail).toBe('E1 B4 C18');
     expect(result.reference).toBe('DEMOREF000001');
     expect(result.beneficiary).toBe('RESIDENCIAL DEMO');
     expect(result.destinationAccountMasked).toBe('••••0001');
-    expect(result.home).toEqual({ block: 4, house: 18 });
+    expect(result.home).toEqual({ stage: 1, block: 4, house: 18 });
   });
 
-  it('keeps a receipt without block and house as unidentified', () => {
-    const result = bacParser.parse(SYNTHETIC_BAC_RECEIPTS.missingHome);
-    expect(result.amount).toBe(150);
+  it.each([
+    'Detalle: B4 C18',
+    'Detalle: E1 C18',
+    'Detalle: E1 B4',
+  ])('keeps an incomplete EBC detail unidentified: %s', (detail) => {
+    const receipt = SYNTHETIC_BAC_RECEIPTS.valid.replace('Detalle: E1 B4 C18', detail);
+    const result = bacParser.parse(receipt);
     expect(result.home).toBeUndefined();
     expect(result.warnings).toContain('home_missing');
   });
 
   it('handles a BAC receipt with no detail field without inventing a home', () => {
     const receipt = [
-      'BAC CREDOMATIC',
-      'Transferencia realizada',
-      'Remitente: PERSONA DEMO',
-      'Fecha: 07/09/2026',
-      'Hora: 10:20 AM',
-      'Monto: L150.00',
-      'Referencia: DEMOREF000099',
-      'Beneficiario: RESIDENCIAL DEMO',
-      'Cuenta destino: 000000000099',
+      'BAC CREDOMATIC', 'Transferencia realizada', 'Remitente: PERSONA DEMO', 'Fecha: 07/09/2026', 'Hora: 10:20 AM',
+      'Monto: L150.00', 'Referencia: DEMOREF000099', 'Beneficiario: RESIDENCIAL DEMO', 'Cuenta destino: 000000000099',
     ].join('\n');
     const result = bacParser.parse(receipt);
     expect(result.detail).toBeUndefined();
