@@ -11,6 +11,12 @@ function transactionPeriod(transactionDate: string | undefined, now: Date): stri
   return candidate && isPeriod(candidate) ? candidate : periodFromDate(now);
 }
 
+export function baselinePeriodFromDepositDate(transactionDate: string | undefined, now = new Date()): string {
+  const depositPeriod = transactionPeriod(transactionDate, now);
+  if (depositPeriod === HISTORY_BASE_PERIOD && transactionDate && transactionDate < HISTORY_BASE_CUTOFF_DATE) return '2026-07';
+  return depositPeriod;
+}
+
 function sameHome(payment: PaymentRecord, home: HomeRef): boolean {
   return payment.stage === home.stage && payment.block === home.block && payment.house === home.house;
 }
@@ -47,10 +53,7 @@ export function assignServicePeriod(
 
   if (depositPeriod < HISTORY_BASE_PERIOD) return depositPeriod;
 
-  if (depositPeriod === HISTORY_BASE_PERIOD) {
-    if (transactionDate && transactionDate < HISTORY_BASE_CUTOFF_DATE) return '2026-07';
-    return HISTORY_BASE_PERIOD;
-  }
+  if (depositPeriod === HISTORY_BASE_PERIOD) return baselinePeriodFromDepositDate(transactionDate, now);
 
   const occupied = new Set(
     existingPayments
