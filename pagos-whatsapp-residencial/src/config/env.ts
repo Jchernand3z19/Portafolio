@@ -14,6 +14,7 @@ const envSchema = z.object({
   APP_BASE_URL: optionalString,
   MAX_RECEIPT_BYTES: z.coerce.number().int().positive().max(20 * 1024 * 1024).default(8 * 1024 * 1024),
   PENDING_CONTEXT_MINUTES: z.coerce.number().int().positive().max(24 * 60).default(30),
+  EXPECTED_PAYMENT_AMOUNT: z.coerce.number().positive().default(150),
   ADMIN_ACCESS_KEY: optionalString,
   AUTH_SESSION_SECRET: optionalString,
   GOOGLE_SHEET_ID: optionalString,
