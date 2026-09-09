@@ -26,6 +26,8 @@ const DUPLICATE_REASON_LABEL: Record<string, string> = {
   bank_reference_data_conflict: 'Referencia repetida con monto o fecha diferente',
   weak_signature: 'Banco, monto y fecha coinciden con otro pago',
   service_period_already_has_payment: 'La vivienda ya tiene un pago asignado a ese mes',
+  amount_below_expected: 'Monto menor a la cuota esperada de L150.00',
+  amount_above_expected: 'Monto mayor a la cuota esperada de L150.00',
 };
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
@@ -58,10 +60,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </div>
 
       <section className="kpis">
-        <div className="kpi"><span>Viviendas activas</span><strong>{snapshot.totalHomes}</strong><small>{snapshot.paidHomes} con comprobante · {snapshot.pendingHomes} pendientes</small></div>
-        <div className="kpi"><span>Cobranza</span><strong>{pct(snapshot.collectionRate)}</strong><small>Por vivienda con comprobante</small></div>
+        <div className="kpi"><span>Viviendas activas</span><strong>{snapshot.totalHomes}</strong><small>{snapshot.paidHomes} verificadas · {snapshot.pendingHomes} pendientes</small></div>
+        <div className="kpi"><span>Cobranza</span><strong>{pct(snapshot.collectionRate)}</strong><small>Por vivienda verificada</small></div>
         <div className="kpi"><span>Esperado</span><strong>{money(snapshot.expectedAmount)}</strong><small>Pendiente {money(snapshot.pendingAmount)}</small></div>
-        <div className="kpi"><span>Recibido</span><strong>{money(snapshot.receivedAmount)}</strong><small>Comprobantes aceptados</small></div>
+        <div className="kpi"><span>Recibido</span><strong>{money(snapshot.receivedAmount)}</strong><small>Comprobantes recibidos, aunque aún no estén verificados</small></div>
         <div className="kpi"><span>Sin identificar</span><strong>{money(snapshot.unidentifiedAmount)}</strong><small>{snapshot.unidentified.length} casos</small></div>
         <div className="kpi"><span>En revisión</span><strong>{snapshot.review.length}</strong><small>Requieren validación humana</small></div>
         <div className="kpi"><span>Duplicados</span><strong>{snapshot.duplicates.length}</strong><small>No suman dos veces</small></div>
@@ -74,7 +76,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <article className="block-card" key={`${group.stage}-${group.block}`}>
             <div className="block-card__top"><strong>Etapa {group.stage} · Bloque {group.block}</strong><span>{group.paidHomes}/{group.totalHomes}</span></div>
             <div className="progress"><span style={{ width: `${group.collectionRate * 100}%` }} /></div>
-            <p className="lead">{group.pendingHomes} pendientes · {money(group.collected)} recibido</p>
+            <p className="lead">{group.pendingHomes} pendientes · {money(group.collected)} verificado</p>
           </article>
         ))}
       </section>
@@ -131,11 +133,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <div className="section-head"><div><p className="eyebrow">Pagos</p><h2>Historial del período</h2></div><p>Fecha depósito viene del comprobante; Mes pagado sigue el histórico desde agosto 2026.</p></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Fecha depósito</th><th>Vivienda</th><th>Depositante</th><th>Teléfono WhatsApp</th><th>Banco</th><th>Cuota/Monto</th><th>Referencia</th><th>Estado</th><th>Mes pagado</th><th>Comprobante</th><th>Verificación</th></tr></thead>
+          <thead><tr><th>Fecha depósito</th><th>Vivienda</th><th>Depositante</th><th>Teléfono WhatsApp</th><th>Banco</th><th>Cuota esperada</th><th>Monto depósito</th><th>Referencia</th><th>Estado</th><th>Mes pagado</th><th>Comprobante</th><th>Verificación</th></tr></thead>
           <tbody>
             {snapshot.payments.map((payment) => (
               <tr key={payment.id}>
-                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.depositor ?? '—'}</td><td>{payment.phone || '—'}</td><td>{payment.bank || '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td><td>{payment.status.replaceAll('_', ' ')}</td>
+                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.depositor ?? '—'}</td><td>{payment.phone || '—'}</td><td>{payment.bank || '—'}</td><td>{payment.monthlyFee != null ? money(payment.monthlyFee) : '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td><td>{payment.status.replaceAll('_', ' ')}</td>
                 <td>
                   <form method="post" action={`/api/admin/payments/${payment.id}`}>
                     <input type="hidden" name="action" value="set-period" />
@@ -178,15 +180,15 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </table>
       </div>
 
-      <div className="section-head"><div><p className="eyebrow">Revisión humana</p><h2>Casos que requieren decisión</h2></div><p>El encargado compara comprobante y movimiento bancario. La referencia es una señal, no una prueba única.</p></div>
+      <div className="section-head"><div><p className="eyebrow">Revisión humana</p><h2>Casos que requieren decisión</h2></div><p>El encargado compara comprobante y movimiento bancario. La referencia es una señal, no una prueba única. Un monto distinto de L150 permanece en revisión.</p></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Vivienda</th><th>Teléfono WhatsApp</th><th>Banco</th><th>Monto</th><th>Referencia</th><th>Motivo</th><th>Comprobante</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Vivienda</th><th>Teléfono WhatsApp</th><th>Banco</th><th>Cuota</th><th>Monto</th><th>Referencia</th><th>Motivo</th><th>Comprobante</th><th>Acciones</th></tr></thead>
           <tbody>
-            {snapshot.review.length === 0 && <tr><td colSpan={9}>No hay casos en revisión para este período.</td></tr>}
+            {snapshot.review.length === 0 && <tr><td colSpan={10}>No hay casos en revisión para este período.</td></tr>}
             {snapshot.review.map((payment) => (
               <tr key={payment.id}>
-                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.phone || '—'}</td><td>{payment.bank || '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td>
+                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.phone || '—'}</td><td>{payment.bank || '—'}</td><td>{payment.monthlyFee != null ? money(payment.monthlyFee) : '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td>
                 <td>{DUPLICATE_REASON_LABEL[payment.reviewReason ?? ''] ?? payment.reviewReason ?? 'Revisión pendiente'}</td>
                 <td>{payment.receiptFileId ? <a className="admin-link" href={`/api/admin/receipts/${payment.id}`} target="_blank" rel="noreferrer">Ver</a> : '—'}</td>
                 <td>
@@ -196,6 +198,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                       <button className="primary-button" type="submit">Verifiqué en banco</button>{' '}
                     </form>
                   )}
+                  {(payment.reviewReason === 'amount_below_expected' || payment.reviewReason === 'amount_above_expected') && <span>⚠ Revisar monto</span>}
                   {payment.duplicateOf && (
                     <form method="post" action={`/api/admin/payments/${payment.id}`} style={{ display: 'inline' }}>
                       <input type="hidden" name="action" value="mark-duplicate" /><input type="hidden" name="period" value={period} />
@@ -212,7 +215,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <div className="section-head"><div><p className="eyebrow">Excepciones</p><h2>Resumen operativo</h2></div></div>
       <section className="queues">
         <article className="queue"><h3>Duplicados</h3><p>Archivo idéntico o decisión humana confirmada.</p><strong>{snapshot.duplicates.length}</strong></article>
-        <article className="queue"><h3>En revisión</h3><p>Referencias repetidas, conflictos o datos dudosos.</p><strong>{snapshot.review.length}</strong></article>
+        <article className="queue"><h3>En revisión</h3><p>Referencias repetidas, montos distintos de L150, conflictos o datos dudosos.</p><strong>{snapshot.review.length}</strong></article>
         <article className="queue"><h3>Sin identificar</h3><p>Esperando E/B/C por WhatsApp o asignación manual.</p><strong>{snapshot.unidentified.length}</strong></article>
       </section>
     </main>
