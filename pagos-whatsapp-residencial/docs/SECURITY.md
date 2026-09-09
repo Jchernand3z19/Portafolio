@@ -11,7 +11,8 @@ El sistema procesa documentos bancarios y datos de contacto. Las amenazas priori
 - asignación incorrecta de vivienda;
 - monto distinto a la cuota tratado por error como pago normal;
 - filtración de PII o secretos en GitHub/logs;
-- acceso público al panel o comprobantes;
+- persistencia innecesaria de comprobantes bancarios;
+- acceso público al panel;
 - formula injection en Google Sheets;
 - conflicto de referencia que revele información de otra vivienda;
 - reutilización de un mismo movimiento bancario para verificar dos pagos.
@@ -35,14 +36,20 @@ El sistema procesa documentos bancarios y datos de contacto. Las amenazas priori
 
 Esto evita asignaciones incorrectas cuando una vivienda está alquilada o paga un familiar, propietario u otra persona.
 
-### Archivos
+### Archivos y minimización de datos
 
 - formatos del MVP: JPEG/PNG;
 - límite configurable de bytes;
 - MIME declarado y magic bytes deben coincidir;
 - SHA-256 antes de OCR;
 - Sharp recibe el binario sólo después de las validaciones iniciales;
-- PDF no se procesa en esta fase.
+- PDF no se procesa en esta fase;
+- la imagen existe sólo durante el procesamiento de la solicitud;
+- al finalizar no se copia a Google Drive, Blob, S3 ni otro almacenamiento;
+- no se persiste `media_id` ni un identificador de archivo recuperable;
+- sólo se conserva el SHA-256 y los datos estructurados necesarios para operar.
+
+El hash permite reconocer un archivo exactamente igual sin conservar el documento bancario. La ausencia de archivo histórico reduce exposición de datos sensibles, pero significa que una revisión visual futura requerirá que el comprobante sea reenviado.
 
 ### Monto
 
@@ -55,7 +62,7 @@ Esto evita asignaciones incorrectas cuando una vivienda está alquilada o paga u
 ### Duplicados e idempotencia
 
 - `message_id`: retry técnico, silencioso;
-- hash: mismo archivo exacto;
+- hash: mismo archivo exacto, sin necesidad de conservar la imagen;
 - mismo archivo exacto desde otro remitente: revisión;
 - banco + referencia: señal de correlación, **no** duplicado automático;
 - referencia repetida con vivienda/monto/fecha incompatibles: revisión/conflicto;
@@ -82,12 +89,11 @@ Esto evita que dos comprobantes pendientes hagan avanzar artificialmente el hist
 
 ### Google
 
-- Sheets y Drive son privados;
-- archivos se crean en un folder privado;
-- no se generan permisos públicos ni links públicos;
-- el navegador recibe comprobantes únicamente por una ruta autenticada;
+- sólo Google Sheets es necesario para el MVP actual;
+- la Sheet permanece privada y server-side;
 - `valueInputOption=RAW` evita ejecutar contenido OCR como fórmula;
-- cuenta destino se guarda enmascarada.
+- cuenta destino se guarda enmascarada;
+- no se requiere Google Drive ni una carpeta de comprobantes.
 
 ### Panel
 
@@ -96,7 +102,7 @@ Esto evita que dos comprobantes pendientes hagan avanzar artificialmente el hist
 - sesión HMAC con expiración;
 - cookie HttpOnly + SameSite Strict + Secure en producción;
 - comprobación de mismo origen en escrituras;
-- rutas de comprobantes con `Cache-Control: private, no-store`;
+- el panel muestra datos estructurados, no imágenes históricas de comprobantes;
 - los casos de revisión requieren acciones explícitas;
 - excepciones que comprometen contabilidad (monto distinto de L150, conflicto de período o reutilización de movimiento bancario) no pueden saltarse con el botón de verificación.
 
@@ -121,12 +127,14 @@ Nunca versionar:
 - service-account JSON;
 - credenciales descargadas;
 - comprobantes reales;
-- exports de Sheets/Drive de producción;
+- exports de Sheets de producción;
 - teléfonos, nombres o referencias bancarias reales.
 
 Los fixtures actuales usan nombres, teléfonos y referencias deliberadamente ficticios.
 
 ## Límites conocidos
+
+Al no conservar comprobantes, una investigación visual posterior no puede abrir la imagen original desde el panel. El encargado deberá revisar el movimiento real del banco y, si necesita volver a ver el documento, solicitar un reenvío. Este límite es intencional mientras el cliente no autorice almacenamiento de comprobantes.
 
 Google Sheets no garantiza unicidad transaccional ante escrituras concurrentes desde múltiples instancias. El MVP tiene idempotencia de aplicación y controles de revisión; para crecimiento o alta concurrencia debe introducirse un datastore transaccional con índices únicos y mantener Sheets como salida operativa.
 
