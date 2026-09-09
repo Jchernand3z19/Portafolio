@@ -10,6 +10,8 @@ La información que necesita el encargado se presenta como:
 
 El teléfono es el número que envió el comprobante por WhatsApp. **Nunca identifica la vivienda.**
 
+La cuota esperada del MVP es **L150.00**. El monto del comprobante se conserva como dato bancario independiente: si es menor o mayor de L150, el pago queda en `EN_REVISION` y no se considera pagado/verificado automáticamente.
+
 ## `Pagos`
 
 | Columna | Uso |
@@ -23,7 +25,7 @@ El teléfono es el número que envió el comprobante por WhatsApp. **Nunca ident
 | `bank` | banco detectado |
 | `depositor` | depositante/remitente extraído |
 | `transaction_date` / `transaction_time` | fecha/hora del depósito según comprobante |
-| `amount` | monto declarado |
+| `amount` | monto declarado por el comprobante; se compara contra la cuota esperada |
 | `detail` | detalle/concepto |
 | `reference` | referencia/transacción bancaria; señal de comparación, no ID global único |
 | `beneficiary` | beneficiario extraído |
@@ -34,7 +36,7 @@ El teléfono es el número que envió el comprobante por WhatsApp. **Nunca ident
 | `file_hash` | SHA-256 del archivo |
 | `duplicate_of` | pago original relacionado |
 | `duplicate_reason` | señal exacta que originó duplicado/conflicto |
-| `review_reason` | motivo interno de revisión |
+| `review_reason` | motivo interno de revisión, por ejemplo monto menor/mayor a L150 |
 | `verification_source` | fuente usada para verificar |
 | `verified_at` | fecha/hora de verificación |
 
@@ -45,7 +47,7 @@ El teléfono es el número que envió el comprobante por WhatsApp. **Nunca ident
 | `id` | ID interno |
 | `stage` / `block` / `house` | clave operativa principal y única |
 | `responsible` | dato administrativo opcional |
-| `monthly_fee` | cuota mensual |
+| `monthly_fee` | cuota mensual esperada |
 | `active` | vivienda activa/inactiva |
 | `start_date` / `end_date` | vigencia para períodos históricos |
 
@@ -86,8 +88,18 @@ Agosto 2026 es el punto de inicio del histórico:
 
 - depósitos del 1 al 14 de agosto de 2026 → julio 2026;
 - depósitos del 15 al 31 de agosto de 2026 → agosto 2026;
-- desde septiembre, el sistema busca el primer mes pendiente desde agosto;
-- si todos los meses hasta el mes del depósito ya tienen pago, no avanza silenciosamente a un mes futuro: el caso queda visible para revisión/corrección.
+- desde septiembre, el sistema busca el primer mes **no verificado como pagado** desde agosto;
+- un comprobante `PENDIENTE_VERIFICACION` o `EN_REVISION` no hace avanzar el histórico; si llega otro, se mantiene el mismo primer mes pendiente y el conflicto se revisa;
+- si todos los meses hasta el mes del depósito ya están `VERIFICADO`, no se avanza silenciosamente a un mes futuro: el caso queda visible para revisión/corrección.
+
+## Estado operativo
+
+- `PENDIENTE_VERIFICACION`: el comprobante fue recibido y parece válido, pero el banco aún no fue confirmado.
+- `VERIFICADO`: el encargado confirmó el movimiento bancario o una futura fuente bancaria confiable lo confirmó.
+- `EN_REVISION`: existe una excepción que requiere decisión humana; incluye montos diferentes de L150.
+- `DUPLICADO`: no debe volver a contabilizarse.
+
+Una vivienda se considera **pagada** para el período únicamente cuando existe un pago `VERIFICADO` para ese E/B/C y mes.
 
 ## Reglas
 
@@ -98,4 +110,5 @@ Agosto 2026 es el punto de inicio del histórico:
 - Comprobantes: Drive privado, no celdas con URLs públicas.
 - Secretos: únicamente variables de entorno de Vercel.
 - Una referencia bancaria repetida no se descarta automáticamente como duplicado.
+- Un monto distinto de L150 se conserva y se manda a revisión; no se corrige ni se descarta automáticamente.
 - Si una hoja existente tiene encabezados inesperados, el backend falla de forma cerrada en lugar de sobrescribir datos.
