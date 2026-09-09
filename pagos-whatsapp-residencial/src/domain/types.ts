@@ -76,6 +76,8 @@ export interface PaymentRecord {
   reviewReason?: string;
   verificationSource?: string;
   verifiedAt?: string;
+  /** Stable identifier from an authorized bank-side movement source, when available. */
+  bankMovementId?: string;
 }
 
 export interface PendingConversation {
