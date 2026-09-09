@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isAdminAuthenticated, isSameOriginRequest } from '@/src/auth/guard';
 import { isPeriod } from '@/src/domain/periods';
 import { buildManualVerificationUpdate } from '@/src/services/manual-verification';
+import { assignServicePeriod } from '@/src/services/period-assignment';
 import { getPaymentStore } from '@/src/storage';
 
 export const runtime = 'nodejs';
@@ -22,34 +23,62 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (action === 'set-period') {
     const newPeriod = String(form.get('newPeriod') ?? '');
     if (!isPeriod(newPeriod)) return new NextResponse('Invalid period', { status: 400 });
-    await store.updatePayment({ ...payment, period: newPeriod, updatedAt: new Date().toISOString() });
+    const clearsPeriodConflict = payment.reviewReason === 'service_period_already_has_payment';
+    await store.updatePayment({
+      ...payment,
+      period: newPeriod,
+      status: clearsPeriodConflict ? 'PENDIENTE_VERIFICACION' : payment.status,
+      reviewReason: clearsPeriodConflict ? undefined : payment.reviewReason,
+      updatedAt: new Date().toISOString(),
+    });
     return NextResponse.redirect(new URL(`/admin?period=${encodeURIComponent(returnPeriod)}`, request.url), 303);
   }
 
-  if (action === 'verify-manually') {
+  if (action === 'verify-manually' || action === 'verify-reviewed') {
     try {
-      await store.updatePayment(buildManualVerificationUpdate(payment));
+      await store.updatePayment(buildManualVerificationUpdate(payment, new Date(), action === 'verify-reviewed'));
     } catch {
       return new NextResponse('Payment is not eligible for manual verification', { status: 409 });
     }
     return NextResponse.redirect(new URL(`/admin?period=${encodeURIComponent(returnPeriod)}`, request.url), 303);
   }
 
-  if (action === 'assign-home') {
-    const block = Number.parseInt(String(form.get('block') ?? ''), 10);
-    const house = Number.parseInt(String(form.get('house') ?? ''), 10);
-    if (!Number.isInteger(block) || !Number.isInteger(house) || block <= 0 || house <= 0) return new NextResponse('Invalid home', { status: 400 });
-
-    const homes = await store.listHomes();
-    const known = homes.find((home) => home.active && home.block === block && home.house === house);
-    if (!known) return new NextResponse('Home not found', { status: 400 });
-
-    const homeOnlyWarnings = new Set(['receipt_home_not_in_master', 'phone_has_multiple_homes']);
-    const reviewReason = payment.reviewReason && !homeOnlyWarnings.has(payment.reviewReason) ? payment.reviewReason : undefined;
+  if (action === 'mark-duplicate') {
+    if (payment.status !== 'EN_REVISION' || !payment.duplicateOf) {
+      return new NextResponse('Payment is not eligible to mark as duplicate', { status: 409 });
+    }
     await store.updatePayment({
       ...payment,
+      status: 'DUPLICADO',
+      duplicateReason: payment.duplicateReason ?? payment.reviewReason ?? 'manual_review_duplicate',
+      reviewReason: undefined,
+      updatedAt: new Date().toISOString(),
+    });
+    return NextResponse.redirect(new URL(`/admin?period=${encodeURIComponent(returnPeriod)}`, request.url), 303);
+  }
+
+  if (action === 'assign-home') {
+    const stage = Number.parseInt(String(form.get('stage') ?? ''), 10);
+    const block = Number.parseInt(String(form.get('block') ?? ''), 10);
+    const house = Number.parseInt(String(form.get('house') ?? ''), 10);
+    if (!Number.isInteger(stage) || !Number.isInteger(block) || !Number.isInteger(house) || stage <= 0 || block <= 0 || house <= 0) {
+      return new NextResponse('Invalid home', { status: 400 });
+    }
+
+    const homes = await store.listHomes();
+    const known = homes.find((home) => home.active && home.stage === stage && home.block === block && home.house === house);
+    if (!known) return new NextResponse('Home not found', { status: 400 });
+
+    const allPayments = await store.listPayments();
+    const home = { stage, block, house };
+    const newPeriod = assignServicePeriod(home, payment.transactionDate, allPayments, new Date(), payment.id);
+    const reviewReason = payment.reviewReason === 'receipt_home_not_in_master' ? undefined : payment.reviewReason;
+    await store.updatePayment({
+      ...payment,
+      stage,
       block,
       house,
+      period: newPeriod,
       status: reviewReason ? 'EN_REVISION' : 'PENDIENTE_VERIFICACION',
       reviewReason,
       updatedAt: new Date().toISOString(),
