@@ -46,13 +46,13 @@ export default async function HousePage({ params }: { params: Promise<{ stage: s
 
       <div className="section-head">
         <div><p className="eyebrow">Historial</p><h2>Pagos y comprobantes</h2></div>
-        <p>El teléfono es el remitente de WhatsApp y nunca identifica la vivienda. Pagada significa verificada.</p>
+        <p>El teléfono es el remitente de WhatsApp y nunca identifica la vivienda. Pagada significa verificada. Las imágenes no se conservan.</p>
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Mes pagado</th><th>Fecha depósito</th><th>Depositante</th><th>Teléfono WhatsApp</th><th>Cuota</th><th>Monto depósito</th><th>Banco</th><th>Referencia</th><th>Estado</th><th>Verificación</th><th>Comprobante</th></tr></thead>
+          <thead><tr><th>Mes pagado</th><th>Fecha depósito</th><th>Depositante</th><th>Teléfono WhatsApp</th><th>Cuota</th><th>Monto depósito</th><th>Banco</th><th>Referencia</th><th>Estado</th><th>Verificación</th></tr></thead>
           <tbody>
-            {history.payments.length === 0 && <tr><td colSpan={11}>Esta vivienda todavía no tiene pagos registrados.</td></tr>}
+            {history.payments.length === 0 && <tr><td colSpan={10}>Esta vivienda todavía no tiene pagos registrados.</td></tr>}
             {history.payments.map((payment) => (
               <tr key={payment.id}>
                 <td>{periodLabel(payment.period)}</td>
@@ -65,7 +65,6 @@ export default async function HousePage({ params }: { params: Promise<{ stage: s
                 <td>{payment.reference ?? '—'}</td>
                 <td><span className={`status-chip status-chip--${payment.status.toLowerCase()}`}>{payment.status.replaceAll('_', ' ')}</span></td>
                 <td>{payment.verifiedAt ? `✅ ${new Date(payment.verifiedAt).toLocaleDateString('es-HN')}` : '—'}</td>
-                <td>{payment.receiptFileId ? <a className="admin-link" href={`/api/admin/receipts/${payment.id}`} target="_blank" rel="noreferrer">Ver</a> : '—'}</td>
               </tr>
             ))}
           </tbody>
