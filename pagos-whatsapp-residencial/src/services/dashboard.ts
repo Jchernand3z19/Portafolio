@@ -46,7 +46,7 @@ export async function buildDashboardSnapshot(store: PaymentStore, period: string
     .map(({ stage, block }) => {
       const blockHomes = homes.filter((home) => home.stage === stage && home.block === block);
       const paidHomes = blockHomes.filter((home) => paidKeys.has(homeKey(home))).length;
-      const collected = assignedToActiveHomes
+      const collected = verifiedAssigned
         .filter((payment) => payment.stage === stage && payment.block === block)
         .reduce((total, payment) => total + payment.amount, 0);
       return {
@@ -60,12 +60,17 @@ export async function buildDashboardSnapshot(store: PaymentStore, period: string
       };
     });
 
-  const toRow = (payment: PaymentRecord) => ({
-    ...payment,
-    homeLabel: homeLabel(payment.stage != null && payment.block != null && payment.house != null
+  const toRow = (payment: PaymentRecord) => {
+    const ref = payment.stage != null && payment.block != null && payment.house != null
       ? { stage: payment.stage, block: payment.block, house: payment.house }
-      : undefined),
-  });
+      : undefined;
+    const monthlyFee = ref ? homesByKey.get(homeKey(ref))?.monthlyFee : undefined;
+    return {
+      ...payment,
+      homeLabel: homeLabel(ref),
+      monthlyFee,
+    };
+  };
   const sortNewest = (a: PaymentRecord, b: PaymentRecord) => b.createdAt.localeCompare(a.createdAt);
 
   return {
