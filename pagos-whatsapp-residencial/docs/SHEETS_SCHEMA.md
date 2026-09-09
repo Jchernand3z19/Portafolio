@@ -39,6 +39,7 @@ La cuota esperada del MVP es **L150.00**. El monto del comprobante se conserva c
 | `review_reason` | motivo interno de revisión, por ejemplo monto menor/mayor a L150 |
 | `verification_source` | fuente usada para verificar |
 | `verified_at` | fecha/hora de verificación |
+| `bank_movement_id` | identificador estable del movimiento bancario usado por una fuente de conciliación automática; no se reutiliza en otro pago |
 
 ## `Viviendas`
 
@@ -78,6 +79,8 @@ El teléfono se usa únicamente para relacionar una respuesta posterior `E1 B4 C
 
 Reservada para trazabilidad de futuras corridas de conciliación y fuentes bancarias autorizadas. Una misma transacción/movimiento bancario nunca puede verificar dos pagos distintos.
 
+Para conciliación automática segura, la fuente debe aportar un identificador estable de movimiento. Si no existe `bank_movement_id`, el sistema no verifica automáticamente y manda el caso a revisión. Cuando un movimiento se usa, su ID queda persistido en `Pagos` y no puede volver a verificar otro pago en una corrida posterior.
+
 ## `Configuracion`
 
 Reservada para parámetros operativos no secretos. **Nunca** guardar tokens, contraseñas, llaves privadas ni secretos de Meta/Google/BAC en esta hoja.
@@ -111,4 +114,5 @@ Una vivienda se considera **pagada** para el período únicamente cuando existe 
 - Secretos: únicamente variables de entorno de Vercel.
 - Una referencia bancaria repetida no se descarta automáticamente como duplicado.
 - Un monto distinto de L150 se conserva y se manda a revisión; no se corrige ni se descarta automáticamente.
+- Un `bank_movement_id` ya utilizado no puede verificar otro pago.
 - Si una hoja existente tiene encabezados inesperados, el backend falla de forma cerrada en lugar de sobrescribir datos.
