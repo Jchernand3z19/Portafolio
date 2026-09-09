@@ -20,12 +20,16 @@ El MVP inicia con **BAC Honduras**, pero los parsers están desacoplados para in
 - El teléfono que envía el WhatsApp **nunca determina la vivienda**. Sólo sirve para responder al remitente y relacionar temporalmente una respuesta `E1 B4 C18` con su comprobante pendiente.
 - El nombre del depositante tampoco determina la vivienda.
 - El número de teléfono no se almacena en la base maestra `Viviendas`.
+- La cuota bancaria esperada del MVP es **L150.00**. Un comprobante por menos o por más de L150 no se descarta: se conserva y pasa a `EN_REVISION` con el motivo exacto.
+- Un caso con monto distinto de L150 no puede pasar a `VERIFICADO` sólo por pulsar el botón de comprobación bancaria; debe mantenerse como excepción hasta que exista una regla administrativa explícita para resolverlo.
 - Agosto 2026 es el mes base del histórico:
   - depósitos 01–14 de agosto → julio 2026;
   - depósitos 15–31 de agosto → agosto 2026;
-  - desde septiembre, el sistema aplica el nuevo depósito al primer mes pendiente desde agosto;
-  - si todos los meses hasta el mes del depósito ya tienen pago, no adelanta silenciosamente a un mes futuro: deja el caso visible para revisión/corrección.
+  - desde septiembre, el sistema aplica el nuevo depósito al primer mes **no verificado como pagado** desde agosto;
+  - un comprobante meramente recibido o en revisión no hace avanzar el histórico: si llega otro comprobante, ambos compiten por el mismo primer mes pendiente y el conflicto se envía a revisión;
+  - si todos los meses hasta el mes del depósito ya están verificados, no adelanta silenciosamente a un mes futuro: deja el caso visible para revisión/corrección.
 - La **fecha de depósito** proviene del comprobante; el **mes pagado** es un dato separado.
+- Una vivienda se considera **pagada** en el dashboard sólo cuando el pago del período está `VERIFICADO`.
 - Una referencia bancaria repetida es una **señal de revisión**, no un duplicado automático, porque no se asume que sea globalmente única para siempre.
 - El mismo `message_id` de Meta es un retry técnico y se ignora silenciosamente.
 - El mismo archivo exacto (`SHA-256`) es una señal fuerte de reenvío; si llega desde otro remitente se manda a revisión para no revelar ni reasignar datos de terceros.
@@ -40,6 +44,7 @@ El MVP inicia con **BAC Honduras**, pero los parsers están desacoplados para in
 - Parser BAC para banco, depositante, fecha, hora, monto, detalle, referencia, beneficiario y cuenta destino enmascarada.
 - Parser de vivienda completo para `E1 B4 C18`, `Etapa 1 Bloque 4 Casa 18`, `E1-B4-C18` y variantes de orden/espaciado siempre que estén los tres componentes.
 - Contexto pendiente único por remitente de WhatsApp para pedir E/B/C sin repetir OCR.
+- Validación automática de cuota: exactamente L150 sigue el flujo normal; monto menor/mayor pasa a revisión humana.
 - Idempotencia por `message_id` y detección de reenvío exacto por hash.
 - Referencias repetidas, coincidencias débiles y conflictos de datos enviados a revisión humana en vez de descartarse automáticamente.
 - Motivo de duplicado/conflicto persistido para trazabilidad administrativa.
@@ -48,10 +53,10 @@ El MVP inicia con **BAC Honduras**, pero los parsers están desacoplados para in
 - Google Sheets privado como tabla operativa (`Pagos`, `Viviendas`, `Conversaciones`, `Mensajes`, `Conciliacion`, `Configuracion`).
 - Base maestra de viviendas editable desde el panel: etapa, bloque, casa, responsable opcional, cuota, alta/baja y estado activo.
 - Google Drive privado para conservar comprobantes de producción; el identificador del archivo se guarda en Sheets y nunca se publica directamente.
-- Dashboard mensual: viviendas, pagadas, pendientes, cobranza, esperado, recibido, verificado, pendiente y sin identificar.
+- Dashboard mensual: viviendas, pagadas verificadas, pendientes, cobranza, esperado, recibido, verificado, pendiente y sin identificar.
 - Vistas por etapa/bloque y por vivienda, incluyendo historial de cuatro períodos y detalle completo.
 - Bandejas de pagos, depósitos sin identificar, duplicados confirmados y casos en revisión.
-- Corrección administrativa de vivienda y mes pagado sin repetir OCR.
+- Corrección administrativa de vivienda y mes pagado sin repetir OCR; una corrección que choque con otro pago vuelve a revisión.
 - Verificación manual desde el panel después de revisar el movimiento bancario.
 - Conciliación determinística preparada para una futura fuente bancaria; un mismo movimiento bancario nunca puede verificar dos pagos distintos.
 - Panel administrativo protegido con sesión HttpOnly firmada y clave por ambiente.
@@ -67,14 +72,15 @@ PROCESANDO
   ↓
 EXTRAIDO
   ├─ falta E/B/C → ESPERANDO_RESPUESTA → PENDIENTE_VERIFICACION
+  ├─ monto ≠ L150 → EN_REVISION
   ├─ mismo archivo exacto → DUPLICADO / EN_REVISION según contexto
   ├─ referencia repetida o conflicto → EN_REVISION
   └─ válido → PENDIENTE_VERIFICACION
                     ↓
             REVISION DEL BANCO
-              ├─ confirmado → VERIFICADO
+              ├─ confirmado y sin excepción pendiente → VERIFICADO
               ├─ no existe → NO_ENCONTRADO
-              └─ ambiguo → EN_REVISION
+              └─ ambiguo/excepción → EN_REVISION
 ```
 
 ## Estructura
@@ -119,6 +125,7 @@ Requiere variables de entorno en Vercel. Copiar `.env.example` sólo como refere
 
 Variables principales:
 
+- `EXPECTED_PAYMENT_AMOUNT` (150 en el MVP)
 - `ADMIN_ACCESS_KEY`
 - `AUTH_SESSION_SECRET`
 - `GOOGLE_SHEET_ID`
@@ -207,8 +214,9 @@ En el MVP operativo el encargado:
 
 1. abre/revisa el movimiento en BAC por su cuenta;
 2. compara banco, monto, fecha y referencia disponible con el comprobante;
-3. pulsa **Verificar** o, si el caso estaba en revisión, **Verifiqué en banco**;
-4. el sistema registra fuente y fecha de verificación.
+3. si es un pago normal de L150 sin otra excepción, pulsa **Verificar** o, para una revisión resoluble, **Verifiqué en banco**;
+4. si el monto es menor o mayor de L150, el caso permanece en revisión aunque el movimiento exista en BAC;
+5. el sistema registra fuente y fecha de verificación sólo cuando el pago es elegible.
 
 `src/services/reconciliation.ts` queda preparado para una futura carga de archivo/API bancaria. Exige coincidencias consistentes y además impide que un mismo movimiento bancario verifique dos pagos.
 
@@ -226,8 +234,11 @@ La suite cubre, entre otros:
 - firma del webhook;
 - acceso administrativo y sesión manipulada;
 - cuenta destino inesperada;
+- monto menor/mayor a L150 enviado a revisión;
+- excepciones de monto bloqueadas para verificación simple;
 - contexto pendiente y asignación posterior sin re-OCR;
-- histórico base de agosto y asignación del primer mes pendiente;
+- histórico base de agosto y asignación del primer mes pendiente usando sólo pagos verificados;
+- un recibo no verificado no marca una vivienda como pagada ni adelanta automáticamente el mes siguiente;
 - unicidad de vivienda por E/B/C;
 - historial mensual por vivienda;
 - conciliación sin reutilizar un mismo movimiento bancario;
@@ -241,6 +252,7 @@ Todos los datos de prueba son sintéticos.
 - Entrada de comprobantes: JPG/JPEG y PNG; PDF se rechaza de forma segura.
 - La verificación bancaria automática aún necesita una fuente bancaria real autorizada; por ahora se hace manualmente desde el panel.
 - Los pagos en efectivo se dejan para una fase posterior de ingreso manual por encargados.
+- Las excepciones de monto distinto de L150 quedan deliberadamente en revisión hasta definir cómo administrar abonos parciales, pagos múltiples, créditos o devoluciones.
 - Google Sheets es apropiado para el volumen residencial del MVP, pero no es una base transaccional; una evolución de alto volumen debe usar un datastore con unicidad/transactions y mantener Sheets como salida operativa.
 - La demo pública no ejecuta OCR binario real: usa texto OCR sintético y el parser real para demostrar reglas sin publicar imágenes de banca.
 
