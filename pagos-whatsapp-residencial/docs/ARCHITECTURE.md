@@ -5,7 +5,7 @@
 1. **Recibido no significa verificado.** OCR identifica una transacción declarada; una revisión bancaria humana o futura conciliación bancaria confirma el dinero.
 2. **Pagado significa verificado.** Un comprobante pendiente o en revisión no marca una vivienda como pagada ni hace avanzar por sí solo el histórico de meses.
 3. **Fail closed.** Firma inválida, MIME inconsistente, vivienda desconocida, monto inesperado o datos conflictivos no se aceptan silenciosamente.
-4. **Datos privados server-side.** Meta, Google Sheets y Google Drive nunca se consultan desde el navegador público.
+4. **Minimización de datos.** Las imágenes de comprobantes se procesan sólo en memoria durante la solicitud y no se archivan; Google Sheets conserva únicamente datos estructurados, trazabilidad y hash.
 5. **Demo y producción separados.** La demo usa fixtures sintéticos; producción exige variables de entorno y recursos privados.
 6. **Parser por banco.** La lógica bancaria vive detrás de `ReceiptParser`.
 7. **Excepciones visibles.** Sin identificar, duplicados y revisión tienen estados y bandejas propias.
@@ -20,7 +20,7 @@ WhatsApp Cloud API
 /api/whatsapp/webhook
   ├─ valida challenge / HMAC
   ├─ valida payload
-  └─ descarga media autorizada
+  └─ descarga media autorizada temporalmente
         │
         ▼
 Receipt file guard
@@ -45,9 +45,8 @@ Payment processor
   ├─ reglas de mes desde agosto 2026 basadas en pagos verificados
   ├─ duplicados / conflictos / revisión
   ├─ validación beneficiario/cuenta
-  └─ recibido ≠ verificado
-        │
-        ├──────────────► Google Drive privado (imagen)
+  ├─ persiste hash + datos extraídos
+  └─ descarta bytes de imagen al finalizar
         │
         ▼
 Google Sheets privado
@@ -65,7 +64,7 @@ Google Sheets privado
 Se aplican varias capas:
 
 - `message_id` de WhatsApp identifica retries técnicos y se ignora silenciosamente;
-- SHA-256 detecta el mismo archivo exacto reenviado;
+- SHA-256 detecta el mismo archivo exacto reenviado aun cuando la imagen original ya no esté guardada;
 - el mismo archivo desde otro remitente se manda a revisión;
 - `banco + referencia` es una señal de correlación/riesgo, **no** se considera un identificador global único;
 - referencia repetida con otra vivienda, monto o fecha incompatible produce revisión/conflicto;
@@ -108,11 +107,18 @@ La cuota esperada del MVP es L150.00 (`EXPECTED_PAYMENT_AMOUNT=150`). El monto e
 
 Una comprobación humana de que el movimiento existe en BAC no elimina automáticamente una excepción de monto. Esto evita convertir por accidente un abono parcial o un monto múltiple en una cuota normal hasta definir reglas para esos casos.
 
-## Archivos
+## Archivos de comprobantes
 
-Producción conserva la imagen en un folder privado de Google Drive compartido sólo con la cuenta de servicio. La hoja guarda únicamente `receipt_file_id`; el navegador obtiene la imagen a través de una ruta autenticada y `Cache-Control: private, no-store`.
+Producción **no conserva** las imágenes recibidas. El backend descarga la media de WhatsApp, valida tipo/tamaño, calcula el hash, ejecuta OCR y utiliza los bytes únicamente durante esa solicitud.
 
-No se generan enlaces públicos de Drive.
+Después del procesamiento no se guarda:
+
+- la imagen;
+- `media_id` como dato del pago;
+- un `receipt_file_id`;
+- una URL o copia en Drive/S3/Blob.
+
+Sí se conserva `file_hash` (SHA-256) porque permite reconocer un reenvío exacto sin almacenar el documento bancario. Si un caso requiere una revisión visual futura, el encargado tendría que solicitar que el comprobante sea reenviado; la verificación financiera de todas formas se hace contra el movimiento real del banco.
 
 ## Autenticación
 
