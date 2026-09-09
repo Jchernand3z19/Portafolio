@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { isAdminAuthenticated, isSameOriginRequest } from '@/src/auth/guard';
 import { isPeriod } from '@/src/domain/periods';
 import { buildManualVerificationUpdate } from '@/src/services/manual-verification';
-import { assignServicePeriod } from '@/src/services/period-assignment';
+import { assignServicePeriod, hasPeriodConflict } from '@/src/services/period-assignment';
 import { getPaymentStore } from '@/src/storage';
 
 export const runtime = 'nodejs';
@@ -23,14 +23,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (action === 'set-period') {
     const newPeriod = String(form.get('newPeriod') ?? '');
     if (!isPeriod(newPeriod)) return new NextResponse('Invalid period', { status: 400 });
-    const clearsPeriodConflict = payment.reviewReason === 'service_period_already_has_payment';
-    await store.updatePayment({
+
+    const allPayments = await store.listPayments();
+    const clearsOldPeriodConflict = payment.reviewReason === 'service_period_already_has_payment';
+    let updated = {
       ...payment,
       period: newPeriod,
-      status: clearsPeriodConflict ? 'PENDIENTE_VERIFICACION' : payment.status,
-      reviewReason: clearsPeriodConflict ? undefined : payment.reviewReason,
+      status: clearsOldPeriodConflict ? 'PENDIENTE_VERIFICACION' as const : payment.status,
+      reviewReason: clearsOldPeriodConflict ? undefined : payment.reviewReason,
       updatedAt: new Date().toISOString(),
-    });
+    };
+
+    if (hasPeriodConflict(updated, allPayments)) {
+      updated = { ...updated, status: 'EN_REVISION' as const, reviewReason: 'service_period_already_has_payment' };
+    }
+
+    await store.updatePayment(updated);
     return NextResponse.redirect(new URL(`/admin?period=${encodeURIComponent(returnPeriod)}`, request.url), 303);
   }
 
@@ -73,16 +81,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const home = { stage, block, house };
     const newPeriod = assignServicePeriod(home, payment.transactionDate, allPayments, new Date(), payment.id);
     const reviewReason = payment.reviewReason === 'receipt_home_not_in_master' ? undefined : payment.reviewReason;
-    await store.updatePayment({
+    let updated = {
       ...payment,
       stage,
       block,
       house,
       period: newPeriod,
-      status: reviewReason ? 'EN_REVISION' : 'PENDIENTE_VERIFICACION',
+      status: reviewReason ? 'EN_REVISION' as const : 'PENDIENTE_VERIFICACION' as const,
       reviewReason,
       updatedAt: new Date().toISOString(),
-    });
+    };
+
+    if (hasPeriodConflict(updated, allPayments) && !updated.reviewReason) {
+      updated = { ...updated, status: 'EN_REVISION' as const, reviewReason: 'service_period_already_has_payment' };
+    }
+
+    await store.updatePayment(updated);
     await store.clearPending(payment.phone);
     return NextResponse.redirect(new URL(`/admin?period=${encodeURIComponent(returnPeriod)}`, request.url), 303);
   }
