@@ -4,11 +4,36 @@ La hoja de cálculo es **privada**. El backend valida/crea las pestañas necesar
 
 Las imágenes de comprobantes **no se almacenan**. Se descargan temporalmente desde WhatsApp, se validan, se calcula su SHA-256, se ejecuta OCR y después se descartan. La Sheet conserva únicamente datos estructurados y el hash necesario para detectar reenvíos exactos.
 
+## Modelo de negocio
+
+La cobranza se separa en tres conceptos:
+
+1. `Viviendas`: quién debe pagar. Una fila = una vivienda.
+2. `Pagos`: qué comprobantes/dinero llegaron. Una fila = un pago recibido.
+3. `EstadoMensual`: quién está pagado, por verificar, en revisión o pendiente en un mes. Una fila = una vivienda + un período.
+
+`EstadoMensual` es una **vista derivada**, no una fuente de verdad ni una pestaña que se edite manualmente. El backend la reconstruye desde `Viviendas + Pagos` cada vez que la necesita. Esto evita que una celda editada a mano pueda contradecir el historial real.
+
+Su clave lógica es:
+
+`period + stage + block + house`
+
+Estados de cobranza:
+
+- `PAGADO`: existe al menos un pago `VERIFICADO` para la vivienda y el período.
+- `POR_VERIFICAR`: existe un comprobante utilizable asignado, pero todavía no está confirmado por el banco.
+- `EN_REVISION`: existe una excepción sin resolver, como monto distinto de L150 o movimiento no encontrado.
+- `PENDIENTE`: no existe un comprobante utilizable asignado a esa vivienda/período.
+
 ## Vista operativa esperada
 
 La información que necesita el encargado se presenta como:
 
-`Etapa | Bloque | Casa | Cuota | Estado | Banco | Referencia | Fecha depósito | Mes pagado | Teléfono WhatsApp`
+`Etapa | Bloque | Casa | Cuota | Estado | Monto recibido | Comprobantes | Fecha depósito`
+
+y, para el detalle de pagos:
+
+`Etapa | Bloque | Casa | Cuota | Estado pago | Banco | Referencia | Fecha depósito | Mes pagado | Teléfono WhatsApp`
 
 El teléfono es el número que envió el comprobante por WhatsApp. **Nunca identifica la vivienda.**
 
@@ -55,6 +80,31 @@ No existen columnas `media_id` ni `receipt_file_id`, porque el sistema no conser
 | `start_date` / `end_date` | vigencia para períodos históricos |
 
 **No existe columna de teléfono en `Viviendas`.** Una casa puede estar alquilada y el pago puede enviarlo cualquier tercero. Ni el remitente de WhatsApp ni el nombre del depositante se utilizan para determinar la vivienda.
+
+## `EstadoMensual` (vista derivada)
+
+Una fila representa exactamente una vivienda vigente en un mes de servicio.
+
+| Campo derivado | Uso |
+| --- | --- |
+| `period` | período `YYYY-MM` |
+| `home_id` | ID de la vivienda maestra |
+| `stage` / `block` / `house` | identidad E/B/C |
+| `monthly_fee` | cuota esperada tomada de `Viviendas` |
+| `collection_status` | `PAGADO`, `POR_VERIFICAR`, `EN_REVISION` o `PENDIENTE` |
+| `received_amount` | suma de comprobantes utilizables asignados a esa casa/mes |
+| `payment_count` | cantidad de comprobantes utilizables asignados |
+| `payment_id` | pago representativo para seguimiento, si existe |
+| `payment_date` | fecha de depósito del pago representativo |
+
+Reglas:
+
+- `DUPLICADO` y `RECHAZADO` no participan en `received_amount` ni cambian el estado mensual.
+- `VERIFICADO` tiene prioridad y convierte la vivienda/mes en `PAGADO`.
+- si no hay verificado pero existe `EN_REVISION` o `NO_ENCONTRADO`, el estado mensual es `EN_REVISION`;
+- si sólo hay comprobantes recibidos/procesados/pendientes de verificación, es `POR_VERIFICAR`;
+- sin comprobante utilizable, es `PENDIENTE`.
+- la vista se puede reconstruir determinísticamente; no se corrige editando celdas.
 
 ## `Conversaciones`
 
