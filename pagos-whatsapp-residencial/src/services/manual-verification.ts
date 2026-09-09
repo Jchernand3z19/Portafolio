@@ -13,6 +13,21 @@ function hasExpectedAmount(payment: PaymentRecord): boolean {
   return Math.abs(payment.amount - env().EXPECTED_PAYMENT_AMOUNT) <= 0.005;
 }
 
+export function hasVerifiedServicePeriodConflict(
+  payment: PaymentRecord,
+  existingPayments: readonly PaymentRecord[],
+): boolean {
+  if (payment.stage == null || payment.block == null || payment.house == null) return false;
+  return existingPayments.some((other) =>
+    other.id !== payment.id
+    && other.status === 'VERIFICADO'
+    && other.stage === payment.stage
+    && other.block === payment.block
+    && other.house === payment.house
+    && other.period === payment.period,
+  );
+}
+
 export function canManuallyVerify(payment: PaymentRecord, includeReview = false): boolean {
   const statusAllowed = payment.status === 'PENDIENTE_VERIFICACION' || (includeReview && payment.status === 'EN_REVISION');
   if (!statusAllowed) return false;
@@ -26,9 +41,17 @@ export function canManuallyVerify(payment: PaymentRecord, includeReview = false)
     && payment.house != null;
 }
 
-export function buildManualVerificationUpdate(payment: PaymentRecord, now = new Date(), includeReview = false): PaymentRecord {
+export function buildManualVerificationUpdate(
+  payment: PaymentRecord,
+  existingPayments: readonly PaymentRecord[],
+  now = new Date(),
+  includeReview = false,
+): PaymentRecord {
   if (!canManuallyVerify(payment, includeReview)) {
     throw new Error('payment_not_manually_verifiable');
+  }
+  if (hasVerifiedServicePeriodConflict(payment, existingPayments)) {
+    throw new Error('service_period_already_verified');
   }
 
   const at = now.toISOString();
