@@ -14,6 +14,12 @@ function normalizeName(value: string): string {
 export function receiptReviewReason(extraction: ReceiptExtraction): string | undefined {
   const config = env();
   if (!extraction.amount || extraction.amount <= 0) return 'amount_missing';
+
+  const amountDifference = extraction.amount - config.EXPECTED_PAYMENT_AMOUNT;
+  if (Math.abs(amountDifference) > 0.005) {
+    return amountDifference < 0 ? 'amount_below_expected' : 'amount_above_expected';
+  }
+
   if (extraction.confidence < 0.55) return 'ocr_low_confidence';
 
   if (config.EXPECTED_BENEFICIARY) {
