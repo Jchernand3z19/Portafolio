@@ -6,6 +6,7 @@ const MANUAL_VERIFIABLE_STATUSES = new Set<PaymentRecord['status']>([
 
 export function canManuallyVerify(payment: PaymentRecord): boolean {
   return MANUAL_VERIFIABLE_STATUSES.has(payment.status)
+    && payment.stage != null
     && payment.block != null
     && payment.house != null
     && payment.amount > 0;
