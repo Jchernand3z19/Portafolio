@@ -4,17 +4,19 @@ import { useMemo, useState } from 'react';
 import { SYNTHETIC_BAC_RECEIPTS } from '@/src/demo/data';
 import { detectAndParseReceipt } from '@/src/parsers';
 
-type Scenario = 'valid' | 'missingHome' | 'duplicate' | 'editedConflict';
+type Scenario = 'valid' | 'missingHome' | 'amountMismatch' | 'duplicate' | 'editedConflict';
 
 const SCENARIOS: Array<{ id: Scenario; title: string; description: string }> = [
-  { id: 'valid', title: 'Comprobante válido', description: 'BAC + E1 B4 C18 + monto y referencia legibles.' },
+  { id: 'valid', title: 'Comprobante válido', description: 'BAC + E1 B4 C18 + monto L150 y referencia legibles.' },
   { id: 'missingHome', title: 'Falta vivienda', description: 'Si falta etapa, bloque o casa, pregunta los tres datos.' },
+  { id: 'amountMismatch', title: 'Monto diferente', description: 'Menos o más de L150 queda en revisión humana.' },
   { id: 'duplicate', title: 'Reenvío duplicado', description: 'El mismo archivo exacto no vuelve a sumar el pago.' },
   { id: 'editedConflict', title: 'Conflicto sospechoso', description: 'Referencia repetida con datos distintos: revisión humana.' },
 ];
 
 function fakeReceipt(scenario: Scenario): string {
   if (scenario === 'missingHome') return SYNTHETIC_BAC_RECEIPTS.missingHome;
+  if (scenario === 'amountMismatch') return SYNTHETIC_BAC_RECEIPTS.amountMismatch;
   if (scenario === 'editedConflict') return SYNTHETIC_BAC_RECEIPTS.editedConflict;
   return SYNTHETIC_BAC_RECEIPTS.valid;
 }
@@ -26,19 +28,23 @@ export function DemoWorkbench() {
 
   const status = scenario === 'duplicate'
     ? 'DUPLICADO'
-    : scenario === 'editedConflict' && extraction.reference === baseline.reference
+    : scenario === 'amountMismatch'
       ? 'EN_REVISIÓN'
-      : extraction.home
-        ? 'PENDIENTE_VERIFICACIÓN'
-        : 'ESPERANDO_RESPUESTA';
+      : scenario === 'editedConflict' && extraction.reference === baseline.reference
+        ? 'EN_REVISIÓN'
+        : extraction.home
+          ? 'PENDIENTE_VERIFICACIÓN'
+          : 'ESPERANDO_RESPUESTA';
 
   const systemMessage = scenario === 'duplicate'
     ? 'ℹ️ Este mismo comprobante ya había sido recibido.\nNo se registró un segundo pago.'
-    : scenario === 'editedConflict'
-      ? 'Recibimos tu comprobante y quedó en revisión. La referencia repetida por sí sola no se considera duplicado.'
-      : extraction.home
-        ? `✅ Comprobante recibido\nEtapa ${extraction.home.stage} · Bloque ${extraction.home.block} · Casa ${extraction.home.house}\nL${extraction.amount?.toFixed(2)}\nEstado: pendiente de verificación.`
-        : `Recibimos tu comprobante por L${extraction.amount?.toFixed(2)}, pero falta identificar completamente la vivienda.\nPor favor responde con etapa, bloque y casa.\nEjemplo: E1 B4 C18`;
+    : scenario === 'amountMismatch'
+      ? `Recibimos tu comprobante por L${extraction.amount?.toFixed(2)}. La cuota esperada es L150.00, por eso quedó en revisión.`
+      : scenario === 'editedConflict'
+        ? 'Recibimos tu comprobante y quedó en revisión. La referencia repetida por sí sola no se considera duplicado.'
+        : extraction.home
+          ? `✅ Comprobante recibido\nEtapa ${extraction.home.stage} · Bloque ${extraction.home.block} · Casa ${extraction.home.house}\nL${extraction.amount?.toFixed(2)}\nEstado: pendiente de verificación.`
+          : `Recibimos tu comprobante por L${extraction.amount?.toFixed(2)}, pero falta identificar completamente la vivienda.\nPor favor responde con etapa, bloque y casa.\nEjemplo: E1 B4 C18`;
 
   return (
     <div className="workbench">
@@ -76,7 +82,8 @@ export function DemoWorkbench() {
         </div>
         <div className="extraction">
           <div className="field"><span>Banco</span><strong>{extraction.bank}</strong></div>
-          <div className="field"><span>Monto</span><strong>L{extraction.amount?.toFixed(2)}</strong></div>
+          <div className="field"><span>Cuota esperada</span><strong>L150.00</strong></div>
+          <div className="field"><span>Monto depósito</span><strong>L{extraction.amount?.toFixed(2)}</strong></div>
           <div className="field"><span>Referencia</span><strong>{extraction.reference}</strong></div>
           <div className="field"><span>Detalle</span><strong>{extraction.detail}</strong></div>
           <div className="field"><span>Vivienda</span><strong>{extraction.home ? `E${extraction.home.stage} B${extraction.home.block} C${extraction.home.house}` : 'No identificada'}</strong></div>
