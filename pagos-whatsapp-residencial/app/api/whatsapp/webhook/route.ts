@@ -2,7 +2,7 @@ import { ZodError } from 'zod';
 import { env, isDemoMode, requireProductionEnv } from '@/src/config/env';
 import { maskIdentifier, maskPhone, safeLog } from '@/src/security/logging';
 import { ignoreWhatsAppMessage, processHomeReply, processReceiptMessage } from '@/src/services/payment-processor';
-import { getPaymentStore, getReceiptArchive } from '@/src/storage';
+import { getPaymentStore } from '@/src/storage';
 import { downloadWhatsAppMedia, sendWhatsAppText } from '@/src/whatsapp/client';
 import { extractIncomingMessages, type IncomingWhatsAppMessage } from '@/src/whatsapp/payload';
 import { verifyMetaSignature, verifyWebhookChallenge } from '@/src/whatsapp/security';
@@ -37,12 +37,11 @@ export async function POST(request: Request) {
   }
 
   const store = await getPaymentStore();
-  const archive = getReceiptArchive();
   let shouldRetry = false;
 
   for (const message of messages) {
     try {
-      const outcome = await handleMessage(message, store, archive);
+      const outcome = await handleMessage(message, store);
       if (outcome?.reply) {
         try {
           await sendWhatsAppText(message.phone, outcome.reply);
@@ -71,7 +70,6 @@ export async function POST(request: Request) {
 async function handleMessage(
   message: IncomingWhatsAppMessage,
   store: Awaited<ReturnType<typeof getPaymentStore>>,
-  archive: ReturnType<typeof getReceiptArchive>,
 ) {
   // Meta can retry the exact same webhook delivery. Short-circuit before media
   // download/OCR so a technical retry is silent and cannot create a second payment.
@@ -88,6 +86,7 @@ async function handleMessage(
     return { action: 'silent' as const };
   }
 
+  // Media bytes exist only for this request: validate, hash and OCR them, then discard.
   const media = await downloadWhatsAppMedia(message.mediaId);
   const mimeType = media.mimeType ?? message.declaredMime;
   if (message.declaredMime && mimeType && message.declaredMime !== mimeType) {
@@ -113,9 +112,8 @@ async function handleMessage(
   return processReceiptMessage({
     messageId: message.messageId,
     phone: message.phone,
-    mediaId: message.mediaId,
     bytes: media.bytes,
     declaredMime: mimeType,
     kind: message.kind,
-  }, { store, archive });
+  }, { store });
 }
