@@ -1,4 +1,3 @@
-import { samePhone } from '@/src/domain/phone';
 import type { HomeRecord, PaymentRecord, PendingConversation, ProcessedMessage } from '@/src/domain/types';
 import type { PaymentStore } from './types';
 
@@ -47,20 +46,16 @@ export class MemoryPaymentStore implements PaymentStore {
     return Array.from(this.homes.values(), clone);
   }
 
-  async findHomesByPhone(phone: string): Promise<HomeRecord[]> {
-    return (await this.listHomes()).filter((home) => home.active && samePhone(home.phone, phone));
-  }
-
   async saveHome(home: HomeRecord): Promise<void> {
     if (this.homes.has(home.id)) throw new Error('home_already_exists');
-    const duplicate = Array.from(this.homes.values()).some((item) => item.block === home.block && item.house === home.house);
+    const duplicate = Array.from(this.homes.values()).some((item) => item.stage === home.stage && item.block === home.block && item.house === home.house);
     if (duplicate) throw new Error('home_address_already_exists');
     this.homes.set(home.id, clone(home));
   }
 
   async updateHome(home: HomeRecord): Promise<void> {
     if (!this.homes.has(home.id)) throw new Error('home_not_found');
-    const duplicate = Array.from(this.homes.values()).some((item) => item.id !== home.id && item.block === home.block && item.house === home.house);
+    const duplicate = Array.from(this.homes.values()).some((item) => item.id !== home.id && item.stage === home.stage && item.block === home.block && item.house === home.house);
     if (duplicate) throw new Error('home_address_already_exists');
     this.homes.set(home.id, clone(home));
   }
