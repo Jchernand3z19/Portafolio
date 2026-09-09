@@ -2,6 +2,7 @@ import type { PaymentRecord } from '@/src/domain/types';
 import type { PaymentStore } from '@/src/storage/types';
 
 export interface BankMovement {
+  /** Stable identifier supplied by the authorized bank-side source/import. */
   id?: string;
   bank: string;
   reference: string;
@@ -22,6 +23,7 @@ function normalized(value: string): string {
 interface Candidate {
   payment: PaymentRecord;
   movementIndex?: number;
+  movementId?: string;
   outcome: 'candidate' | 'not_found' | 'review';
   reason?: string;
 }
@@ -33,7 +35,12 @@ export async function reconcilePendingPayments(
   now = new Date(),
 ): Promise<ReconciliationSummary> {
   const summary: ReconciliationSummary = { verified: 0, notFound: 0, review: 0 };
-  const payments = (await store.listPayments()).filter((payment) => payment.status === 'PENDIENTE_VERIFICACION' || payment.status === 'NO_ENCONTRADO');
+  const allPayments = await store.listPayments();
+  const payments = allPayments.filter((payment) => payment.status === 'PENDIENTE_VERIFICACION' || payment.status === 'NO_ENCONTRADO');
+  const movementOwners = new Map<string, string>();
+  allPayments.forEach((payment) => {
+    if (payment.bankMovementId) movementOwners.set(payment.bankMovementId, payment.id);
+  });
 
   const candidates: Candidate[] = payments.map((payment) => {
     if (!payment.reference) return { payment, outcome: 'review', reason: 'reference_missing_for_reconciliation' };
@@ -53,26 +60,36 @@ export async function reconcilePendingPayments(
     if (payment.transactionDate && movement.transactionDate && payment.transactionDate !== movement.transactionDate) {
       return { payment, outcome: 'review', reason: 'reconciliation_date_conflict' };
     }
-    return { payment, movementIndex: index, outcome: 'candidate' };
+
+    const movementId = movement.id?.trim();
+    if (!movementId) return { payment, outcome: 'review', reason: 'bank_movement_id_missing' };
+
+    const owner = movementOwners.get(movementId);
+    if (owner && owner !== payment.id) {
+      return { payment, outcome: 'review', reason: 'bank_movement_already_used' };
+    }
+
+    return { payment, movementIndex: index, movementId, outcome: 'candidate' };
   });
 
-  const claims = new Map<number, number>();
+  const claims = new Map<string, number>();
   candidates.forEach((candidate) => {
-    if (candidate.outcome === 'candidate' && candidate.movementIndex != null) {
-      claims.set(candidate.movementIndex, (claims.get(candidate.movementIndex) ?? 0) + 1);
+    if (candidate.outcome === 'candidate' && candidate.movementId) {
+      claims.set(candidate.movementId, (claims.get(candidate.movementId) ?? 0) + 1);
     }
   });
 
   for (const candidate of candidates) {
     const { payment } = candidate;
     let updated: PaymentRecord;
-    if (candidate.outcome === 'candidate' && candidate.movementIndex != null && claims.get(candidate.movementIndex) === 1) {
+    if (candidate.outcome === 'candidate' && candidate.movementId && claims.get(candidate.movementId) === 1) {
       updated = {
         ...payment,
         status: 'VERIFICADO',
         reviewReason: undefined,
         verificationSource: source,
         verifiedAt: now.toISOString(),
+        bankMovementId: candidate.movementId,
         updatedAt: now.toISOString(),
       };
       summary.verified += 1;
