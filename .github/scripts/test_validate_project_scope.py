@@ -114,10 +114,13 @@ class ProjectScopeTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "project-scope-check.yml").read_text()
         self.assertIn("pull_request_target:", workflow)
         self.assertIn("monorepo-project-scope-${{ github.event_name }}-", workflow)
+        self.assertIn("name: tests", workflow)
         self.assertIn("ref: ${{ github.event.pull_request.base.ref }}", workflow)
         self.assertNotIn("ref: ${{ github.event.pull_request.base.sha }}", workflow)
         self.assertIn("persist-credentials: false", workflow)
         self.assertNotIn("secrets.", workflow)
+        rpi_workflow = (ROOT / ".github" / "workflows" / "precios-supermercados-sps-tests.yml").read_text()
+        self.assertIn("name: rpi-tests", rpi_workflow)
 
 
 if __name__ == "__main__":

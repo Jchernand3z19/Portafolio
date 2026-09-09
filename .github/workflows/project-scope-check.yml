@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   validator-unit-tests:
+    name: governance-validator-unit-tests
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -37,6 +38,7 @@ jobs:
             --audit-repository .
 
   validate-pr-scope:
+    name: tests
     if: ${{ github.event_name == 'pull_request_target' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
