@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { isAdminAuthenticated } from '@/src/auth/guard';
 import { periodFromDate, isPeriod, periodLabel } from '@/src/domain/periods';
+import type { MonthlyCollectionStatus } from '@/src/domain/types';
 import { buildDashboardSnapshot } from '@/src/services/dashboard';
 import { buildHouseHistoryGrid, type HousePeriodState } from '@/src/services/house-history';
 import { canManuallyVerify } from '@/src/services/manual-verification';
@@ -11,6 +12,10 @@ export const dynamic = 'force-dynamic';
 
 const money = (value: number) => `L${value.toLocaleString('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (value: number) => `${Math.round(value * 100)}%`;
+const positiveInt = (value: string | undefined): number | undefined => {
+  const parsed = value ? Number.parseInt(value, 10) : Number.NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+};
 const HOUSE_STATE_LABEL: Record<HousePeriodState, string> = {
   VERIFICADO: '✅ Verificado',
   RECIBIDO: '✓ Recibido',
@@ -18,6 +23,20 @@ const HOUSE_STATE_LABEL: Record<HousePeriodState, string> = {
   NO_ENCONTRADO: '✕ No encontrado',
   PENDIENTE: '— Pendiente',
 };
+const MONTHLY_STATE_LABEL: Record<MonthlyCollectionStatus, string> = {
+  PAGADO: '✅ Pagado',
+  POR_VERIFICAR: '⏳ Por verificar',
+  EN_REVISION: '⚠ En revisión',
+  PENDIENTE: '— Pendiente',
+};
+const MONTHLY_STATE_CLASS: Record<MonthlyCollectionStatus, string> = {
+  PAGADO: 'verificado',
+  POR_VERIFICAR: 'pendiente_verificacion',
+  EN_REVISION: 'en_revision',
+  PENDIENTE: 'pendiente',
+};
+const filterLabelStyle = { display: 'grid', gap: 4, color: 'var(--muted)', fontSize: '.8rem' } as const;
+const filterControlStyle = { border: '1px solid var(--line)', background: '#07110f', color: 'var(--text)', borderRadius: 10, padding: '10px 12px' } as const;
 const DUPLICATE_REASON_LABEL: Record<string, string> = {
   file_hash: 'Archivo idéntico',
   exact_file_other_sender: 'Archivo idéntico desde otro remitente',
@@ -30,15 +49,29 @@ const DUPLICATE_REASON_LABEL: Record<string, string> = {
   amount_above_expected: 'Monto mayor a la cuota esperada de L150.00',
 };
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string; stage?: string; block?: string }>;
+}) {
   if (!(await isAdminAuthenticated())) redirect('/login');
   const params = await searchParams;
   const period = params.period && isPeriod(params.period) ? params.period : periodFromDate();
+  const stageFilter = positiveInt(params.stage);
+  const blockFilter = positiveInt(params.block);
   const store = await getPaymentStore();
   const [snapshot, houseGrid] = await Promise.all([
     buildDashboardSnapshot(store, period),
     buildHouseHistoryGrid(store, period, 4),
   ]);
+  const stageOptions = Array.from(new Set(snapshot.monthlyStatus.map((row) => row.stage))).sort((a, b) => a - b);
+  const blockOptions = Array.from(new Set(snapshot.monthlyStatus
+    .filter((row) => stageFilter == null || row.stage === stageFilter)
+    .map((row) => row.block))).sort((a, b) => a - b);
+  const monthlyRows = snapshot.monthlyStatus.filter((row) =>
+    (stageFilter == null || row.stage === stageFilter)
+    && (blockFilter == null || row.block === blockFilter),
+  );
 
   return (
     <main className="shell">
@@ -52,34 +85,75 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
       <div className="section-head">
         <div><h2>{periodLabel(period)}</h2><p>Datos operativos privados · las imágenes de comprobantes se procesan temporalmente y no se conservan.</p></div>
-        <form method="get" action="/admin">
-          <label htmlFor="period">Mes pagado </label>
-          <input id="period" name="period" type="month" defaultValue={period} />
+        <form method="get" action="/admin" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
+          <label htmlFor="period" style={filterLabelStyle}>Mes
+            <input id="period" name="period" type="month" defaultValue={period} style={filterControlStyle} />
+          </label>
+          <label htmlFor="stage" style={filterLabelStyle}>Etapa
+            <select id="stage" name="stage" defaultValue={stageFilter?.toString() ?? ''} style={filterControlStyle}>
+              <option value="">Todas</option>
+              {stageOptions.map((stage) => <option key={stage} value={stage}>Etapa {stage}</option>)}
+            </select>
+          </label>
+          <label htmlFor="block" style={filterLabelStyle}>Bloque
+            <select id="block" name="block" defaultValue={blockFilter?.toString() ?? ''} style={filterControlStyle}>
+              <option value="">Todos</option>
+              {blockOptions.map((block) => <option key={block} value={block}>Bloque {block}</option>)}
+            </select>
+          </label>
           <button className="primary-button" type="submit">Ver</button>
         </form>
       </div>
 
       <section className="kpis">
-        <div className="kpi"><span>Viviendas activas</span><strong>{snapshot.totalHomes}</strong><small>{snapshot.paidHomes} verificadas · {snapshot.pendingHomes} pendientes</small></div>
+        <div className="kpi"><span>Viviendas activas</span><strong>{snapshot.totalHomes}</strong><small>Base maestra vigente en el período</small></div>
+        <div className="kpi"><span>Pagadas</span><strong>{snapshot.paidHomes}</strong><small>Pago confirmado en el banco</small></div>
+        <div className="kpi"><span>Pendientes</span><strong>{snapshot.pendingHomes}</strong><small>Sin comprobante utilizable para el mes</small></div>
+        <div className="kpi"><span>Por verificar</span><strong>{snapshot.verifyingHomes}</strong><small>Comprobante recibido; falta confirmar en banco</small></div>
+        <div className="kpi"><span>En revisión</span><strong>{snapshot.reviewHomes}</strong><small>{snapshot.review.length} comprobantes requieren decisión humana</small></div>
         <div className="kpi"><span>Cobranza</span><strong>{pct(snapshot.collectionRate)}</strong><small>Por vivienda verificada</small></div>
-        <div className="kpi"><span>Esperado</span><strong>{money(snapshot.expectedAmount)}</strong><small>Pendiente {money(snapshot.pendingAmount)}</small></div>
-        <div className="kpi"><span>Recibido</span><strong>{money(snapshot.receivedAmount)}</strong><small>Comprobantes recibidos, aunque aún no estén verificados</small></div>
+        <div className="kpi"><span>Esperado</span><strong>{money(snapshot.expectedAmount)}</strong><small>No verificado {money(snapshot.pendingAmount)}</small></div>
+        <div className="kpi"><span>Recibido</span><strong>{money(snapshot.receivedAmount)}</strong><small>Incluye comprobantes aún no verificados</small></div>
         <div className="kpi"><span>Sin identificar</span><strong>{money(snapshot.unidentifiedAmount)}</strong><small>{snapshot.unidentified.length} casos</small></div>
-        <div className="kpi"><span>En revisión</span><strong>{snapshot.review.length}</strong><small>Requieren validación humana</small></div>
         <div className="kpi"><span>Duplicados</span><strong>{snapshot.duplicates.length}</strong><small>No suman dos veces</small></div>
         <div className="kpi"><span>Verificado</span><strong>{money(snapshot.verifiedAmount)}</strong><small>Confirmado revisando el banco</small></div>
       </section>
 
-      <div className="section-head"><div><p className="eyebrow">Por etapa y bloque</p><h2>Pagadas y pendientes</h2></div></div>
+      <div className="section-head"><div><p className="eyebrow">Por etapa y bloque</p><h2>Estado de cobranza</h2></div></div>
       <section className="blocks">
         {snapshot.blocks.map((group) => (
           <article className="block-card" key={`${group.stage}-${group.block}`}>
-            <div className="block-card__top"><strong>Etapa {group.stage} · Bloque {group.block}</strong><span>{group.paidHomes}/{group.totalHomes}</span></div>
+            <div className="block-card__top"><strong>Etapa {group.stage} · Bloque {group.block}</strong><span>{group.paidHomes}/{group.totalHomes} pagadas</span></div>
             <div className="progress"><span style={{ width: `${group.collectionRate * 100}%` }} /></div>
-            <p className="lead">{group.pendingHomes} pendientes · {money(group.collected)} verificado</p>
+            <p className="lead">{group.pendingHomes} pendientes · {group.verifyingHomes} por verificar · {group.reviewHomes} en revisión · {money(group.collected)} verificado</p>
           </article>
         ))}
       </section>
+
+      <div className="section-head">
+        <div><p className="eyebrow">Estado mensual</p><h2>Casa por casa</h2></div>
+        <p>{monthlyRows.length} viviendas en el filtro · esta vista se deriva de Viviendas + Pagos y no se edita manualmente.</p>
+      </div>
+      <div className="table-wrap monthly-status-table">
+        <table>
+          <thead><tr><th>Etapa</th><th>Bloque</th><th>Casa</th><th>Cuota</th><th>Estado</th><th>Monto recibido</th><th>Comprobantes</th><th>Fecha depósito</th></tr></thead>
+          <tbody>
+            {monthlyRows.length === 0 && <tr><td colSpan={8}>No hay viviendas para el filtro seleccionado.</td></tr>}
+            {monthlyRows.map((row) => (
+              <tr key={`${row.period}-${row.homeId}`}>
+                <td>{row.stage}</td>
+                <td>{row.block}</td>
+                <td><Link className="admin-link" href={`/admin/homes/${row.stage}/${row.block}/${row.house}`}>C{row.house}</Link></td>
+                <td>{money(row.monthlyFee)}</td>
+                <td><span className={`status-chip status-chip--${MONTHLY_STATE_CLASS[row.status]}`}>{MONTHLY_STATE_LABEL[row.status]}</span></td>
+                <td>{row.receivedAmount > 0 ? money(row.receivedAmount) : '—'}</td>
+                <td>{row.paymentCount || '—'}</td>
+                <td>{row.paymentDate ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <div className="section-head">
         <div><p className="eyebrow">Por vivienda</p><h2>Historial de los últimos 4 períodos</h2></div>
