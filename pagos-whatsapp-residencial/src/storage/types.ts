@@ -7,7 +7,6 @@ export interface PaymentStore {
   updatePayment(payment: PaymentRecord): Promise<void>;
 
   listHomes(): Promise<HomeRecord[]>;
-  findHomesByPhone(phone: string): Promise<HomeRecord[]>;
   saveHome(home: HomeRecord): Promise<void>;
   updateHome(home: HomeRecord): Promise<void>;
 
