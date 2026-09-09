@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resetEnvForTests } from '@/src/config/env';
 import { SYNTHETIC_BAC_RECEIPTS } from '@/src/demo/data';
-import type { HomeRecord } from '@/src/domain/types';
+import type { HomeRecord, PaymentRecord } from '@/src/domain/types';
 import { processHomeReply, processReceiptMessage } from '@/src/services/payment-processor';
 import { MemoryPaymentStore } from '@/src/storage/memory';
 
 const homes: HomeRecord[] = [
-  { id: 'home-4-18', block: 4, house: 18, phone: '+50400000010', monthlyFee: 150, active: true },
-  { id: 'home-2-2', block: 2, house: 2, phone: '+50400000020', monthlyFee: 150, active: true },
+  { id: 'home-e1-b4-c18', stage: 1, block: 4, house: 18, monthlyFee: 150, active: true },
+  { id: 'home-e1-b2-c2', stage: 1, block: 2, house: 2, monthlyFee: 150, active: true },
 ];
 
 function png(variant: number): Buffer {
@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe('payment processor', () => {
-  it('registers a valid BAC receipt as pending verification', async () => {
+  it('registers a valid BAC receipt and assigns August when it is the first pending month', async () => {
     const store = new MemoryPaymentStore({ homes }, now);
     const result = await processReceiptMessage({
       messageId: 'msg-valid', phone: '+50400000999', bytes: png(1), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.valid,
@@ -40,31 +40,52 @@ describe('payment processor', () => {
     expect(result.action).toBe('reply');
     expect(result.status).toBe('PENDIENTE_VERIFICACION');
     const payment = (await store.listPayments())[0];
+    expect(payment.stage).toBe(1);
     expect(payment.block).toBe(4);
     expect(payment.house).toBe(18);
-    expect(payment.period).toBe('2026-09');
+    expect(payment.period).toBe('2026-08');
     expect(payment.status).not.toBe('VERIFICADO');
   });
 
-  it('asks for home, preserves context, and assigns it without rerunning OCR', async () => {
+  it('uses September when August already has a payment for the same EBC home', async () => {
+    const august: PaymentRecord = {
+      id: 'pay-aug', createdAt: '2026-08-31T12:00:00.000Z', updatedAt: '2026-08-31T12:00:00.000Z', sourceMessageId: 'old-msg',
+      phone: '+50400000111', bank: 'BAC Honduras', amount: 150, transactionDate: '2026-08-31', reference: 'OLDREF001',
+      stage: 1, block: 4, house: 18, period: '2026-08', status: 'VERIFICADO', fileHash: 'old-hash',
+    };
+    const store = new MemoryPaymentStore({ homes, payments: [august] }, now);
+    const result = await processReceiptMessage({
+      messageId: 'msg-september', phone: '+50400000999', bytes: png(7), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.valid,
+    }, { store, now });
+    expect(result.status).toBe('PENDIENTE_VERIFICACION');
+    const payment = (await store.listPayments()).find((item) => item.id !== 'pay-aug');
+    expect(payment?.period).toBe('2026-09');
+  });
+
+  it('asks for all EBC values, preserves context, and assigns without rerunning OCR', async () => {
     const store = new MemoryPaymentStore({ homes }, now);
     const received = await processReceiptMessage({
       messageId: 'msg-missing-home', phone: '+50400000999', bytes: png(2), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.missingHome,
     }, { store, now });
 
     expect(received.status).toBe('ESPERANDO_RESPUESTA');
-    expect(received.reply).toContain('Ejemplo: B4 C18');
+    expect(received.reply).toContain('Ejemplo: E1 B4 C18');
     expect(await store.getPendingByPhone('+50400000999')).toBeDefined();
 
-    const assigned = await processHomeReply('msg-home-reply', '+50400000999', 'B4 C18', { store, now });
+    const incomplete = await processHomeReply('msg-incomplete', '+50400000999', 'B4 C18', { store, now });
+    expect(incomplete.reason).toBe('invalid_home_reply');
+
+    const assigned = await processHomeReply('msg-home-reply', '+50400000999', 'E1 B4 C18', { store, now });
     expect(assigned.status).toBe('PENDIENTE_VERIFICACION');
     const payment = await store.getPayment(received.paymentId!);
+    expect(payment?.stage).toBe(1);
     expect(payment?.block).toBe(4);
     expect(payment?.house).toBe(18);
+    expect(payment?.period).toBe('2026-08');
     expect(await store.getPendingByPhone('+50400000999')).toBeUndefined();
   });
 
-  it('ignores a Meta retry silently and detects a user resend as duplicate', async () => {
+  it('ignores a Meta retry silently and detects an exact user resend as duplicate', async () => {
     const store = new MemoryPaymentStore({ homes }, now);
     const input = { messageId: 'msg-original', phone: '+50400000010', bytes: png(3), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.valid } as const;
     await processReceiptMessage(input, { store, now });
@@ -89,7 +110,7 @@ describe('payment processor', () => {
     expect((await store.listPayments())[0].reviewReason).toBe('destination_account_unexpected');
   });
 
-  it('does not create a second ambiguous pending context for the same phone', async () => {
+  it('does not create a second ambiguous pending context for the same WhatsApp sender', async () => {
     const store = new MemoryPaymentStore({ homes }, now);
     await processReceiptMessage({
       messageId: 'msg-pending-1', phone: '+50400000999', bytes: png(5), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.missingHome,
