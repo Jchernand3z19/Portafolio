@@ -55,7 +55,7 @@
       "owned_paths": ["pagos-whatsapp-residencial/**"],
       "owned_workflows": [".github/workflows/pagos-whatsapp-residencial-ci.yml"],
       "public_output_namespaces": ["pagos-whatsapp-residencial/**"],
-      "secret_owners": ["WHATSAPP_*", "META_*", "PAGOS_*", "GOOGLE_DRIVE_*", "GOOGLE_SHEETS_*"]
+      "secret_owners": ["WHATSAPP_*", "META_*", "PAGOS_*", "GOOGLE_SHEETS_*"]
     },
     "mundial": {
       "display_name": "Mundial 2026",
