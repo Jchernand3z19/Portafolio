@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { isAdminAuthenticated, isSameOriginRequest } from '@/src/auth/guard';
-import { normalizeOptionalPhone } from '@/src/domain/phone';
 import type { HomeRecord } from '@/src/domain/types';
 import { getPaymentStore } from '@/src/storage';
 
@@ -19,10 +18,11 @@ export async function POST(request: Request) {
 
   try {
     const form = await request.formData();
+    const stage = Number.parseInt(String(form.get('stage') ?? ''), 10);
     const block = Number.parseInt(String(form.get('block') ?? ''), 10);
     const house = Number.parseInt(String(form.get('house') ?? ''), 10);
     const monthlyFee = Number.parseFloat(String(form.get('monthlyFee') ?? ''));
-    if (!Number.isInteger(block) || block <= 0 || !Number.isInteger(house) || house <= 0) {
+    if (!Number.isInteger(stage) || stage <= 0 || !Number.isInteger(block) || block <= 0 || !Number.isInteger(house) || house <= 0) {
       return new NextResponse('Invalid home', { status: 400 });
     }
     if (!Number.isFinite(monthlyFee) || monthlyFee <= 0 || monthlyFee > 1_000_000) {
@@ -30,15 +30,14 @@ export async function POST(request: Request) {
     }
 
     const responsible = String(form.get('responsible') ?? '').trim().slice(0, 160) || undefined;
-    const phone = normalizeOptionalPhone(String(form.get('phone') ?? ''));
     const startDate = optionalDate(form.get('startDate'));
     const store = await getPaymentStore();
     const home: HomeRecord = {
-      id: `home-b${block}-c${house}`,
+      id: `home-e${stage}-b${block}-c${house}`,
+      stage,
       block,
       house,
       responsible,
-      phone,
       monthlyFee,
       active: true,
       startDate,
