@@ -130,14 +130,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </table>
       </div>
 
-      <div className="section-head"><div><p className="eyebrow">Pagos</p><h2>Historial del período</h2></div><p>El encargado verifica el depósito en el banco antes de confirmar el pago.</p></div>
+      <div className="section-head"><div><p className="eyebrow">Pagos</p><h2>Historial del período</h2></div><p>El teléfono mostrado es sólo el remitente del comprobante; no identifica la vivienda.</p></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Fecha depósito</th><th>Vivienda</th><th>Depositante</th><th>Banco</th><th>Monto</th><th>Referencia</th><th>Estado</th><th>Mes pagado</th><th>Comprobante</th><th>Verificación</th></tr></thead>
+          <thead><tr><th>Fecha depósito</th><th>Vivienda</th><th>Depositante</th><th>Teléfono WhatsApp</th><th>Banco</th><th>Monto</th><th>Referencia</th><th>Estado</th><th>Mes pagado</th><th>Comprobante</th><th>Verificación</th></tr></thead>
           <tbody>
             {snapshot.payments.map((payment) => (
               <tr key={payment.id}>
-                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.depositor ?? '—'}</td><td>{payment.bank || '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td><td>{payment.status.replaceAll('_', ' ')}</td>
+                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.depositor ?? '—'}</td><td>{payment.phone || '—'}</td><td>{payment.bank || '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td><td>{payment.status.replaceAll('_', ' ')}</td>
                 <td>
                   <form method="post" action={`/api/admin/payments/${payment.id}`}>
                     <input type="hidden" name="action" value="set-period" />
@@ -167,12 +167,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <div className="section-head"><div><p className="eyebrow">Duplicados</p><h2>Comprobantes repetidos</h2></div><p>Conservan trazabilidad del registro original, pero no vuelven a sumar.</p></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Vivienda</th><th>Monto</th><th>Referencia</th><th>Motivo</th><th>Original relacionado</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Vivienda</th><th>Teléfono WhatsApp</th><th>Monto</th><th>Referencia</th><th>Motivo</th><th>Original relacionado</th></tr></thead>
           <tbody>
-            {snapshot.duplicates.length === 0 && <tr><td colSpan={6}>No hay duplicados en este período.</td></tr>}
+            {snapshot.duplicates.length === 0 && <tr><td colSpan={7}>No hay duplicados en este período.</td></tr>}
             {snapshot.duplicates.map((payment) => (
               <tr key={payment.id}>
-                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td>
+                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.phone || '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td>
                 <td>{DUPLICATE_REASON_LABEL[payment.duplicateReason ?? ''] ?? payment.duplicateReason ?? 'Coincidencia detectada'}</td><td>{payment.duplicateOf ?? '—'}</td>
               </tr>
             ))}
@@ -183,12 +183,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <div className="section-head"><div><p className="eyebrow">En revisión</p><h2>Casos que requieren validación</h2></div><p>No se muestran datos de terceros relacionados con el conflicto.</p></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Vivienda</th><th>Depositante</th><th>Monto</th><th>Referencia</th><th>Estado</th><th>Motivo</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Vivienda</th><th>Depositante</th><th>Teléfono WhatsApp</th><th>Monto</th><th>Referencia</th><th>Estado</th><th>Motivo</th></tr></thead>
           <tbody>
-            {snapshot.review.length === 0 && <tr><td colSpan={7}>No hay casos en revisión para este período.</td></tr>}
+            {snapshot.review.length === 0 && <tr><td colSpan={8}>No hay casos en revisión para este período.</td></tr>}
             {snapshot.review.map((payment) => (
               <tr key={payment.id}>
-                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.depositor ?? '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td>
+                <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.depositor ?? '—'}</td><td>{payment.phone || '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td>
                 <td>{payment.status.replaceAll('_', ' ')}</td><td>{payment.reviewReason ?? 'Conciliación pendiente o ambigua'}</td>
               </tr>
             ))}
