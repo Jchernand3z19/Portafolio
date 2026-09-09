@@ -1,16 +1,35 @@
 # Pagos residenciales por WhatsApp
 
-Plataforma de automatización de cobros residenciales por WhatsApp con OCR, validación de transacciones, conciliación, control de cartera y dashboard administrativo.
+Plataforma de automatización de cobros residenciales por WhatsApp con OCR, validación de transacciones, control de cartera y dashboard administrativo.
 
-> **Importante:** un comprobante leído por OCR no demuestra que el dinero exista. El sistema separa explícitamente `comprobante recibido` de `pago verificado`; sólo una fuente bancaria confiable puede llevar un pago a `VERIFICADO`.
+> **Importante:** un comprobante leído por OCR no demuestra que el dinero exista. El sistema separa explícitamente `comprobante recibido` de `pago verificado`. En la primera etapa un encargado revisa el movimiento directamente en el banco y pulsa **Verificar**; una fuente bancaria automatizada puede integrarse después.
 
 ## Objetivo
 
 Automatizar el flujo operativo de una empresa residencial que recibe comprobantes bancarios por WhatsApp:
 
-`Vecino → WhatsApp → archivo → validación → OCR → parser bancario → vivienda → duplicados → registro → conciliación → dashboard → respuesta`
+`Vecino/tercero → WhatsApp → archivo → validación → OCR → parser bancario → Etapa/Bloque/Casa → filtro de duplicados → registro → revisión/verificación → dashboard → respuesta`
 
-El MVP inicia con **BAC Honduras**, pero los parsers están desacoplados para incorporar Ficohsa, Atlántida, Banpaís, Occidente y otros sin reescribir la lógica central.
+El MVP inicia con **BAC Honduras**, pero los parsers están desacoplados para incorporar otros bancos sin reescribir la lógica central.
+
+## Reglas de negocio definitivas
+
+- La vivienda se identifica únicamente por **Etapa + Bloque + Casa**.
+- El formato recomendado para el detalle y para la respuesta por WhatsApp es `E1 B4 C18`.
+- Si falta etapa, bloque, casa o cualquiera de los tres datos es inválido, se piden **los tres nuevamente**.
+- El teléfono que envía el WhatsApp **nunca determina la vivienda**. Sólo sirve para responder al remitente y relacionar temporalmente una respuesta `E1 B4 C18` con su comprobante pendiente.
+- El nombre del depositante tampoco determina la vivienda.
+- El número de teléfono no se almacena en la base maestra `Viviendas`.
+- Agosto 2026 es el mes base del histórico:
+  - depósitos 01–14 de agosto → julio 2026;
+  - depósitos 15–31 de agosto → agosto 2026;
+  - desde septiembre, el sistema aplica el nuevo depósito al primer mes pendiente desde agosto;
+  - si todos los meses hasta el mes del depósito ya tienen pago, no adelanta silenciosamente a un mes futuro: deja el caso visible para revisión/corrección.
+- La **fecha de depósito** proviene del comprobante; el **mes pagado** es un dato separado.
+- Una referencia bancaria repetida es una **señal de revisión**, no un duplicado automático, porque no se asume que sea globalmente única para siempre.
+- El mismo `message_id` de Meta es un retry técnico y se ignora silenciosamente.
+- El mismo archivo exacto (`SHA-256`) es una señal fuerte de reenvío; si llega desde otro remitente se manda a revisión para no revelar ni reasignar datos de terceros.
+- Un pago sólo pasa a `VERIFICADO` después de una comprobación bancaria humana o una futura fuente bancaria confiable.
 
 ## Capacidades implementadas
 
@@ -19,22 +38,22 @@ El MVP inicia con **BAC Honduras**, pero los parsers están desacoplados para in
 - Descarga server-side de media; JPG/JPEG y PNG con validación de MIME, magic bytes y tamaño antes de OCR.
 - OCR local/server-side con Tesseract.js + modelo español y preprocesamiento Sharp.
 - Parser BAC para banco, depositante, fecha, hora, monto, detalle, referencia, beneficiario y cuenta destino enmascarada.
-- Normalización de vivienda: `B4 C18`, `Bloque 4 Casa 18`, `B4-C18`, `B 4 C 18` y variantes.
-- Normalización de identidad telefónica para comparar formatos equivalentes como `+504...` y `504...`.
-- Resolución por comprobante → teléfono de vivienda → pregunta automática por WhatsApp.
-- Contexto pendiente único por teléfono para evitar asignaciones ambiguas.
-- Idempotencia por `message_id` y detección de duplicados por hash, referencia bancaria y señales débiles.
+- Parser de vivienda completo para `E1 B4 C18`, `Etapa 1 Bloque 4 Casa 18`, `E1-B4-C18` y variantes de orden/espaciado siempre que estén los tres componentes.
+- Contexto pendiente único por remitente de WhatsApp para pedir E/B/C sin repetir OCR.
+- Idempotencia por `message_id` y detección de reenvío exacto por hash.
+- Referencias repetidas, coincidencias débiles y conflictos de datos enviados a revisión humana en vez de descartarse automáticamente.
 - Motivo de duplicado/conflicto persistido para trazabilidad administrativa.
-- Conflictos entre usuarios/viviendas enviados a revisión sin revelar datos de terceros.
+- Conflictos entre remitentes/viviendas enviados a revisión sin revelar datos de terceros.
 - Estados separados para recibido, pendiente de verificación, verificado, duplicado, no encontrado, revisión y rechazo.
 - Google Sheets privado como tabla operativa (`Pagos`, `Viviendas`, `Conversaciones`, `Mensajes`, `Conciliacion`, `Configuracion`).
-- Base maestra de viviendas editable desde el panel: bloque, casa, responsable opcional, teléfono, cuota, alta/baja y estado activo.
+- Base maestra de viviendas editable desde el panel: etapa, bloque, casa, responsable opcional, cuota, alta/baja y estado activo.
 - Google Drive privado para conservar comprobantes de producción; el identificador del archivo se guarda en Sheets y nunca se publica directamente.
 - Dashboard mensual: viviendas, pagadas, pendientes, cobranza, esperado, recibido, verificado, pendiente y sin identificar.
-- Vistas por bloque y por casa, incluyendo historial de cuatro períodos y detalle completo de una vivienda.
-- Bandejas de pagos, depósitos sin identificar, duplicados y casos en revisión.
-- Corrección administrativa de vivienda y período sin repetir OCR.
-- Conciliación determinística contra movimientos bancarios por banco + referencia + monto.
+- Vistas por etapa/bloque y por vivienda, incluyendo historial de cuatro períodos y detalle completo.
+- Bandejas de pagos, depósitos sin identificar, duplicados confirmados y casos en revisión.
+- Corrección administrativa de vivienda y mes pagado sin repetir OCR.
+- Verificación manual desde el panel después de revisar el movimiento bancario.
+- Conciliación determinística preparada para una futura fuente bancaria; un mismo movimiento bancario nunca puede verificar dos pagos distintos.
 - Panel administrativo protegido con sesión HttpOnly firmada y clave por ambiente.
 - Demo pública completamente sintética y separada de producción.
 - Suite de pruebas y CI aislado.
@@ -47,13 +66,13 @@ COMPROBANTE_RECIBIDO
 PROCESANDO
   ↓
 EXTRAIDO
-  ├─ falta vivienda → ESPERANDO_RESPUESTA → PENDIENTE_VERIFICACION
-  ├─ duplicado → DUPLICADO
-  ├─ conflicto → EN_REVISION
+  ├─ falta E/B/C → ESPERANDO_RESPUESTA → PENDIENTE_VERIFICACION
+  ├─ mismo archivo exacto → DUPLICADO / EN_REVISION según contexto
+  ├─ referencia repetida o conflicto → EN_REVISION
   └─ válido → PENDIENTE_VERIFICACION
                     ↓
-              CONCILIACION
-              ├─ coincide → VERIFICADO
+            REVISION DEL BANCO
+              ├─ confirmado → VERIFICADO
               ├─ no existe → NO_ENCONTRADO
               └─ ambiguo → EN_REVISION
 ```
@@ -72,11 +91,12 @@ pagos-whatsapp-residencial/
 │   ├── parsers/            # parsers desacoplados por banco
 │   │   └── bac/
 │   ├── security/           # archivos, firmas y logging seguro
-│   ├── services/           # procesamiento, dashboard, historial, conciliación
+│   ├── services/           # procesamiento, meses, dashboard, historial, conciliación
 │   ├── storage/            # Google Sheets, Drive y memoria demo
 │   └── whatsapp/           # payload y cliente Cloud API
 ├── tests/
 ├── docs/
+├── AGENTS.md
 └── .env.example
 ```
 
@@ -89,7 +109,7 @@ pagos-whatsapp-residencial/
 - no utiliza Meta, Google ni credenciales;
 - no acepta el webhook real;
 - usa únicamente datos ficticios;
-- permite mostrar dashboard, parser, bloque/casa, duplicados y excepciones sin exponer información sensible.
+- permite mostrar dashboard, parser, E/B/C, meses, duplicados y excepciones sin exponer información sensible.
 
 ### Producción
 
@@ -144,14 +164,18 @@ En producción:
 1. `GET` valida `hub.mode`, `hub.verify_token` y devuelve `hub.challenge`.
 2. `POST` lee el cuerpo crudo y valida HMAC-SHA256 antes de parsear JSON.
 3. sólo procesa mensajes soportados;
-4. los textos normales se ignoran salvo que exista un comprobante pendiente de vivienda;
+4. los textos normales se ignoran salvo que exista un comprobante pendiente de E/B/C;
 5. un retry técnico con el mismo `message_id` no vuelve a descargar el archivo, no repite OCR y no genera una respuesta intencional.
 
 ## Google Sheets
 
 El backend crea/valida las hojas requeridas y usa `valueInputOption=RAW` para evitar que texto extraído por OCR se convierta en fórmulas de Sheets.
 
-La Sheet no debe publicarse. La cuenta de servicio sólo necesita acceso al documento operativo y al folder privado de comprobantes. La base `Viviendas` puede administrarse desde el panel, por lo que la operación normal no requiere editar filas manualmente.
+La vista operativa principal es:
+
+`Etapa | Bloque | Casa | Cuota | Estado | Banco | Referencia | Fecha depósito | Mes pagado | Teléfono WhatsApp`
+
+La Sheet no debe publicarse. El teléfono de WhatsApp vive en `Pagos`/`Conversaciones`, no en `Viviendas`.
 
 Ver [`docs/SHEETS_SCHEMA.md`](docs/SHEETS_SCHEMA.md).
 
@@ -173,39 +197,40 @@ Ver [`docs/SECURITY.md`](docs/SECURITY.md).
 
 La primera versión usa Tesseract.js en Node.js con modelo español local y Sharp para rotación, reducción, escala de grises, normalización y enfoque. No envía el comprobante a un proveedor de IA externo.
 
-PDF no se habilita en el MVP inicial: Tesseract.js procesa imágenes, y añadir rasterización/PDF aumenta peso, superficie de ataque y cold start. El usuario recibe una instrucción clara para enviar JPG/PNG. Esta decisión puede revisarse en una fase posterior.
+PDF no se habilita en el MVP inicial: Tesseract.js procesa imágenes, y añadir rasterización/PDF aumenta peso, superficie de ataque y cold start. El usuario recibe una instrucción clara para enviar JPG/PNG.
 
 Ver [`docs/OCR_DECISION.md`](docs/OCR_DECISION.md).
 
-## Conciliación
+## Verificación y conciliación
 
-`src/services/reconciliation.ts` no confía en el OCR para verificar dinero. Para marcar `VERIFICADO` exige una coincidencia única de:
+En el MVP operativo el encargado:
 
-- banco;
-- referencia;
-- monto;
-- y, si ambas fuentes tienen fecha, una fecha consistente.
+1. abre/revisa el movimiento en BAC por su cuenta;
+2. compara banco, monto, fecha y referencia disponible con el comprobante;
+3. pulsa **Verificar** o, si el caso estaba en revisión, **Verifiqué en banco**;
+4. el sistema registra fuente y fecha de verificación.
 
-La entrada puede provenir posteriormente de un archivo de movimientos, notificación bancaria o integración autorizada.
+`src/services/reconciliation.ts` queda preparado para una futura carga de archivo/API bancaria. Exige coincidencias consistentes y además impide que un mismo movimiento bancario verifique dos pagos.
+
+Nunca se requiere guardar usuario, contraseña, PIN ni códigos de BAC en el proyecto.
 
 ## Pruebas
 
 La suite cubre, entre otros:
 
 - BAC válido y sin vivienda;
-- variaciones `B4 C18`;
-- referencia y archivo duplicados;
-- retry de webhook;
+- requisito de Etapa + Bloque + Casa completos;
+- reintentos técnicos y reenvíos exactos;
+- referencia repetida como revisión, no duplicado automático;
 - archivo/MIME inválido;
 - firma del webhook;
 - acceso administrativo y sesión manipulada;
 - cuenta destino inesperada;
-- estado sin identificar y asignación posterior;
-- contexto pendiente único;
-- normalización de teléfonos;
-- creación/actualización y unicidad de viviendas;
-- historial mensual por casa;
-- conciliación;
+- contexto pendiente y asignación posterior sin re-OCR;
+- histórico base de agosto y asignación del primer mes pendiente;
+- unicidad de vivienda por E/B/C;
+- historial mensual por vivienda;
+- conciliación sin reutilizar un mismo movimiento bancario;
 - exclusión de duplicados en totales.
 
 Todos los datos de prueba son sintéticos.
@@ -214,7 +239,8 @@ Todos los datos de prueba son sintéticos.
 
 - Banco parseado: BAC Honduras.
 - Entrada de comprobantes: JPG/JPEG y PNG; PDF se rechaza de forma segura.
-- La conciliación bancaria está implementada como servicio determinístico, pero aún necesita una fuente bancaria real autorizada para producción.
+- La verificación bancaria automática aún necesita una fuente bancaria real autorizada; por ahora se hace manualmente desde el panel.
+- Los pagos en efectivo se dejan para una fase posterior de ingreso manual por encargados.
 - Google Sheets es apropiado para el volumen residencial del MVP, pero no es una base transaccional; una evolución de alto volumen debe usar un datastore con unicidad/transactions y mantener Sheets como salida operativa.
 - La demo pública no ejecuta OCR binario real: usa texto OCR sintético y el parser real para demostrar reglas sin publicar imágenes de banca.
 
@@ -227,4 +253,4 @@ Todos los datos de prueba son sintéticos.
 
 ## Portafolio
 
-Este proyecto debe presentarse como una **plataforma de automatización de cobros residenciales**, no como un OCR aislado. Demuestra integración de APIs, backend, frontend, procesamiento documental, seguridad, idempotencia, reglas de negocio, excepciones, conciliación, pruebas y CI/CD.
+Este proyecto debe presentarse como una **plataforma de automatización de cobros residenciales**, no como un OCR aislado. Demuestra integración de APIs, backend, frontend, procesamiento documental, seguridad, idempotencia, reglas de negocio, excepciones, revisión humana, conciliación, pruebas y CI/CD.
