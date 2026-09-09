@@ -51,7 +51,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </header>
 
       <div className="section-head">
-        <div><h2>{periodLabel(period)}</h2><p>Datos operativos privados</p></div>
+        <div><h2>{periodLabel(period)}</h2><p>Datos operativos privados · las imágenes de comprobantes se procesan temporalmente y no se conservan.</p></div>
         <form method="get" action="/admin">
           <label htmlFor="period">Mes pagado </label>
           <input id="period" name="period" type="month" defaultValue={period} />
@@ -107,13 +107,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <div className="section-head"><div><p className="eyebrow">Sin identificar</p><h2>Asignación de vivienda</h2></div><p>Si falta etapa, bloque o casa, se piden los tres por WhatsApp. Esta asignación no repite OCR.</p></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Fecha depósito</th><th>Depositante</th><th>Teléfono WhatsApp</th><th>Monto</th><th>Referencia</th><th>Comprobante</th><th>Asignar E/B/C</th></tr></thead>
+          <thead><tr><th>Fecha depósito</th><th>Depositante</th><th>Teléfono WhatsApp</th><th>Monto</th><th>Referencia</th><th>Asignar E/B/C</th></tr></thead>
           <tbody>
-            {snapshot.unidentified.length === 0 && <tr><td colSpan={7}>No hay comprobantes sin identificar para este período.</td></tr>}
+            {snapshot.unidentified.length === 0 && <tr><td colSpan={6}>No hay comprobantes sin identificar para este período.</td></tr>}
             {snapshot.unidentified.map((payment) => (
               <tr key={payment.id}>
                 <td>{payment.transactionDate ?? '—'}</td><td>{payment.depositor ?? '—'}</td><td>{payment.phone}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td>
-                <td>{payment.receiptFileId ? <a className="admin-link" href={`/api/admin/receipts/${payment.id}`} target="_blank" rel="noreferrer">Ver</a> : 'No archivado'}</td>
                 <td>
                   <form method="post" action={`/api/admin/payments/${payment.id}`}>
                     <input type="hidden" name="action" value="assign-home" />
@@ -133,7 +132,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <div className="section-head"><div><p className="eyebrow">Pagos</p><h2>Historial del período</h2></div><p>Fecha depósito viene del comprobante; Mes pagado sigue el histórico desde agosto 2026.</p></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Fecha depósito</th><th>Vivienda</th><th>Depositante</th><th>Teléfono WhatsApp</th><th>Banco</th><th>Cuota esperada</th><th>Monto depósito</th><th>Referencia</th><th>Estado</th><th>Mes pagado</th><th>Comprobante</th><th>Verificación</th></tr></thead>
+          <thead><tr><th>Fecha depósito</th><th>Vivienda</th><th>Depositante</th><th>Teléfono WhatsApp</th><th>Banco</th><th>Cuota esperada</th><th>Monto depósito</th><th>Referencia</th><th>Estado</th><th>Mes pagado</th><th>Verificación</th></tr></thead>
           <tbody>
             {snapshot.payments.map((payment) => (
               <tr key={payment.id}>
@@ -146,7 +145,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                     <button type="submit">Guardar</button>
                   </form>
                 </td>
-                <td>{payment.receiptFileId ? <a className="admin-link" href={`/api/admin/receipts/${payment.id}`} target="_blank" rel="noreferrer">Ver</a> : '—'}</td>
                 <td>
                   {canManuallyVerify(payment) ? (
                     <form method="post" action={`/api/admin/payments/${payment.id}`}>
@@ -180,17 +178,16 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </table>
       </div>
 
-      <div className="section-head"><div><p className="eyebrow">Revisión humana</p><h2>Casos que requieren decisión</h2></div><p>El encargado compara comprobante y movimiento bancario. La referencia es una señal, no una prueba única. Un monto distinto de L150 permanece en revisión.</p></div>
+      <div className="section-head"><div><p className="eyebrow">Revisión humana</p><h2>Casos que requieren decisión</h2></div><p>El encargado compara los datos extraídos con el movimiento bancario. La referencia es una señal, no una prueba única. Un monto distinto de L150 permanece en revisión.</p></div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Vivienda</th><th>Teléfono WhatsApp</th><th>Banco</th><th>Cuota</th><th>Monto</th><th>Referencia</th><th>Motivo</th><th>Comprobante</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Vivienda</th><th>Teléfono WhatsApp</th><th>Banco</th><th>Cuota</th><th>Monto</th><th>Referencia</th><th>Motivo</th><th>Acciones</th></tr></thead>
           <tbody>
-            {snapshot.review.length === 0 && <tr><td colSpan={10}>No hay casos en revisión para este período.</td></tr>}
+            {snapshot.review.length === 0 && <tr><td colSpan={9}>No hay casos en revisión para este período.</td></tr>}
             {snapshot.review.map((payment) => (
               <tr key={payment.id}>
                 <td>{payment.transactionDate ?? '—'}</td><td>{payment.homeLabel}</td><td>{payment.phone || '—'}</td><td>{payment.bank || '—'}</td><td>{payment.monthlyFee != null ? money(payment.monthlyFee) : '—'}</td><td>{money(payment.amount)}</td><td>{payment.reference ?? '—'}</td>
                 <td>{DUPLICATE_REASON_LABEL[payment.reviewReason ?? ''] ?? payment.reviewReason ?? 'Revisión pendiente'}</td>
-                <td>{payment.receiptFileId ? <a className="admin-link" href={`/api/admin/receipts/${payment.id}`} target="_blank" rel="noreferrer">Ver</a> : '—'}</td>
                 <td>
                   {canManuallyVerify(payment, true) && (
                     <form method="post" action={`/api/admin/payments/${payment.id}`} style={{ display: 'inline' }}>
