@@ -3,6 +3,9 @@ import type { PaymentRecord } from '@/src/domain/types';
 const NON_VERIFIABLE_REVIEW_REASONS = new Set([
   'amount_below_expected',
   'amount_above_expected',
+  'service_period_already_has_payment',
+  'reconciliation_movement_claimed_multiple_times',
+  'bank_movement_already_used',
 ]);
 
 export function canManuallyVerify(payment: PaymentRecord, includeReview = false): boolean {
