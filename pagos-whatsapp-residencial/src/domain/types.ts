@@ -58,6 +58,7 @@ export interface PaymentRecord {
   depositor?: string;
   transactionDate?: string;
   transactionTime?: string;
+  /** Amount shown by the bank receipt. */
   amount: number;
   detail?: string;
   reference?: string;
@@ -99,17 +100,21 @@ export interface DashboardBlockSummary {
   totalHomes: number;
   paidHomes: number;
   pendingHomes: number;
+  /** Bank-verified amount only. */
   collected: number;
   collectionRate: number;
 }
 
 export interface DashboardPaymentRow extends PaymentRecord {
   homeLabel: string;
+  /** Expected fee from the housing master; not copied from the receipt. */
+  monthlyFee?: number;
 }
 
 export interface DashboardSnapshot {
   period: string;
   totalHomes: number;
+  /** Homes with at least one bank-verified payment for the service month. */
   paidHomes: number;
   pendingHomes: number;
   collectionRate: number;
