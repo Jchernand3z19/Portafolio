@@ -11,12 +11,14 @@ const payment: PaymentRecord = {
 const home: HomeRecord = { id: 'home-e1-b4-c18', stage: 1, block: 4, house: 18, monthlyFee: 150, active: true };
 
 describe('Google Sheets schema', () => {
-  it('round-trips payment stage, duplicate trace and bank movement fields without shifting columns', () => {
+  it('round-trips payment stage, duplicate trace and bank movement fields without receipt media pointers', () => {
     const row = paymentToRow(payment);
     expect(row).toHaveLength(PAYMENT_HEADERS.length);
-    expect(PAYMENT_HEADERS[16]).toBe('stage');
-    expect(PAYMENT_HEADERS[23]).toBe('duplicate_reason');
-    expect(PAYMENT_HEADERS[27]).toBe('bank_movement_id');
+    expect(PAYMENT_HEADERS).not.toContain('media_id');
+    expect(PAYMENT_HEADERS).not.toContain('receipt_file_id');
+    expect(PAYMENT_HEADERS[14]).toBe('stage');
+    expect(PAYMENT_HEADERS[21]).toBe('duplicate_reason');
+    expect(PAYMENT_HEADERS[25]).toBe('bank_movement_id');
     expect(paymentFromRow(row)).toMatchObject({
       id: payment.id, stage: 1, block: 4, house: 18, status: 'DUPLICADO', duplicateOf: 'pay-original', duplicateReason: 'file_hash', bankMovementId: 'mov-demo-001',
     });
