@@ -20,12 +20,20 @@ describe('manual verification', () => {
     expect(updated.verifiedAt).toBe('2026-09-09T20:30:00.000Z');
   });
 
-  it('requires explicit reviewed mode for an EN_REVISION payment', () => {
+  it('requires explicit reviewed mode for a resolvable EN_REVISION payment', () => {
     const reviewed = { ...payment, status: 'EN_REVISION' as const, reviewReason: 'bank_reference_reused' };
     expect(canManuallyVerify(reviewed)).toBe(false);
     expect(canManuallyVerify(reviewed, true)).toBe(true);
     expect(buildManualVerificationUpdate(reviewed, new Date('2026-09-09T20:30:00.000Z'), true).verificationSource)
       .toBe('manual_admin_bank_check_after_review');
+  });
+
+  it('keeps payments above or below L150 in review even after a bank check', () => {
+    const below = { ...payment, amount: 149, status: 'EN_REVISION' as const, reviewReason: 'amount_below_expected' };
+    const above = { ...payment, amount: 151, status: 'EN_REVISION' as const, reviewReason: 'amount_above_expected' };
+    expect(canManuallyVerify(below, true)).toBe(false);
+    expect(canManuallyVerify(above, true)).toBe(false);
+    expect(() => buildManualVerificationUpdate(above, new Date(), true)).toThrow('payment_not_manually_verifiable');
   });
 
   it('does not allow incomplete EBC or duplicate payments to be verified', () => {
