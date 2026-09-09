@@ -2,6 +2,7 @@ import type { PaymentRecord } from '@/src/domain/types';
 import type { PaymentStore } from '@/src/storage/types';
 
 export interface BankMovement {
+  id?: string;
   bank: string;
   reference: string;
   amount: number;
@@ -18,6 +19,13 @@ function normalized(value: string): string {
   return value.trim().toUpperCase().replace(/\s+/g, '');
 }
 
+interface Candidate {
+  payment: PaymentRecord;
+  movementIndex?: number;
+  outcome: 'candidate' | 'not_found' | 'review';
+  reason?: string;
+}
+
 export async function reconcilePendingPayments(
   store: PaymentStore,
   movements: readonly BankMovement[],
@@ -25,44 +33,56 @@ export async function reconcilePendingPayments(
   now = new Date(),
 ): Promise<ReconciliationSummary> {
   const summary: ReconciliationSummary = { verified: 0, notFound: 0, review: 0 };
-  const candidates = (await store.listPayments()).filter((payment) => payment.status === 'PENDIENTE_VERIFICACION' || payment.status === 'NO_ENCONTRADO');
+  const payments = (await store.listPayments()).filter((payment) => payment.status === 'PENDIENTE_VERIFICACION' || payment.status === 'NO_ENCONTRADO');
 
-  for (const payment of candidates) {
-    let updated: PaymentRecord;
-    if (!payment.reference) {
-      updated = { ...payment, status: 'EN_REVISION', reviewReason: 'reference_missing_for_reconciliation', updatedAt: now.toISOString() };
-      summary.review += 1;
-    } else {
-      const matches = movements.filter((movement) =>
-        normalized(movement.bank) === normalized(payment.bank) &&
-        normalized(movement.reference) === normalized(payment.reference!) &&
-        movement.amount === payment.amount,
+  const candidates: Candidate[] = payments.map((payment) => {
+    if (!payment.reference) return { payment, outcome: 'review', reason: 'reference_missing_for_reconciliation' };
+
+    const matches = movements
+      .map((movement, index) => ({ movement, index }))
+      .filter(({ movement }) =>
+        normalized(movement.bank) === normalized(payment.bank)
+        && normalized(movement.reference) === normalized(payment.reference!)
+        && movement.amount === payment.amount,
       );
 
-      if (matches.length === 1) {
-        const movement = matches[0];
-        const dateConflict = payment.transactionDate && movement.transactionDate && payment.transactionDate !== movement.transactionDate;
-        if (dateConflict) {
-          updated = { ...payment, status: 'EN_REVISION', reviewReason: 'reconciliation_date_conflict', updatedAt: now.toISOString() };
-          summary.review += 1;
-        } else {
-          updated = {
-            ...payment,
-            status: 'VERIFICADO',
-            reviewReason: undefined,
-            verificationSource: source,
-            verifiedAt: now.toISOString(),
-            updatedAt: now.toISOString(),
-          };
-          summary.verified += 1;
-        }
-      } else if (matches.length === 0) {
-        updated = { ...payment, status: 'NO_ENCONTRADO', reviewReason: 'bank_movement_not_found', updatedAt: now.toISOString() };
-        summary.notFound += 1;
-      } else {
-        updated = { ...payment, status: 'EN_REVISION', reviewReason: 'reconciliation_ambiguous', updatedAt: now.toISOString() };
-        summary.review += 1;
-      }
+    if (matches.length === 0) return { payment, outcome: 'not_found', reason: 'bank_movement_not_found' };
+    if (matches.length > 1) return { payment, outcome: 'review', reason: 'reconciliation_ambiguous' };
+
+    const { movement, index } = matches[0];
+    if (payment.transactionDate && movement.transactionDate && payment.transactionDate !== movement.transactionDate) {
+      return { payment, outcome: 'review', reason: 'reconciliation_date_conflict' };
+    }
+    return { payment, movementIndex: index, outcome: 'candidate' };
+  });
+
+  const claims = new Map<number, number>();
+  candidates.forEach((candidate) => {
+    if (candidate.outcome === 'candidate' && candidate.movementIndex != null) {
+      claims.set(candidate.movementIndex, (claims.get(candidate.movementIndex) ?? 0) + 1);
+    }
+  });
+
+  for (const candidate of candidates) {
+    const { payment } = candidate;
+    let updated: PaymentRecord;
+    if (candidate.outcome === 'candidate' && candidate.movementIndex != null && claims.get(candidate.movementIndex) === 1) {
+      updated = {
+        ...payment,
+        status: 'VERIFICADO',
+        reviewReason: undefined,
+        verificationSource: source,
+        verifiedAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      summary.verified += 1;
+    } else if (candidate.outcome === 'not_found') {
+      updated = { ...payment, status: 'NO_ENCONTRADO', reviewReason: candidate.reason, updatedAt: now.toISOString() };
+      summary.notFound += 1;
+    } else {
+      const reason = candidate.outcome === 'candidate' ? 'reconciliation_movement_claimed_multiple_times' : candidate.reason;
+      updated = { ...payment, status: 'EN_REVISION', reviewReason: reason, updatedAt: now.toISOString() };
+      summary.review += 1;
     }
     await store.updatePayment(updated);
   }
