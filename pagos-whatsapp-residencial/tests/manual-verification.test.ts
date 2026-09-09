@@ -36,6 +36,18 @@ describe('manual verification', () => {
     expect(() => buildManualVerificationUpdate(above, new Date(), true)).toThrow('payment_not_manually_verifiable');
   });
 
+  it('does not allow a conflicting service month to be verified until the period is corrected', () => {
+    const conflict = { ...payment, status: 'EN_REVISION' as const, reviewReason: 'service_period_already_has_payment' };
+    expect(canManuallyVerify(conflict, true)).toBe(false);
+  });
+
+  it('does not override evidence that a bank movement is already claimed or reused', () => {
+    const claimed = { ...payment, status: 'EN_REVISION' as const, reviewReason: 'reconciliation_movement_claimed_multiple_times' };
+    const reused = { ...payment, status: 'EN_REVISION' as const, reviewReason: 'bank_movement_already_used' };
+    expect(canManuallyVerify(claimed, true)).toBe(false);
+    expect(canManuallyVerify(reused, true)).toBe(false);
+  });
+
   it('does not allow incomplete EBC or duplicate payments to be verified', () => {
     expect(canManuallyVerify({ ...payment, stage: undefined, status: 'ESPERANDO_RESPUESTA' })).toBe(false);
     expect(canManuallyVerify({ ...payment, status: 'DUPLICADO' })).toBe(false);
