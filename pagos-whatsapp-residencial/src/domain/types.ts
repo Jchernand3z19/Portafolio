@@ -14,6 +14,15 @@ export const PAYMENT_STATUSES = [
 
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
+export const MONTHLY_COLLECTION_STATUSES = [
+  'PAGADO',
+  'POR_VERIFICAR',
+  'EN_REVISION',
+  'PENDIENTE',
+] as const;
+
+export type MonthlyCollectionStatus = (typeof MONTHLY_COLLECTION_STATUSES)[number];
+
 export interface HomeRef {
   stage: number;
   block: number;
@@ -95,11 +104,30 @@ export interface ProcessedMessage {
   outcome: 'processed' | 'ignored' | 'rejected';
 }
 
+/**
+ * Derived business view: one active home in one service month.
+ * It is reconstructed from Viviendas + Pagos and is never a second source of truth.
+ */
+export interface MonthlyHomeStatusRow extends HomeRef {
+  period: string;
+  homeId: string;
+  monthlyFee: number;
+  status: MonthlyCollectionStatus;
+  /** Sum of non-duplicate/non-rejected receipts assigned to this home/month. */
+  receivedAmount: number;
+  paymentCount: number;
+  /** Representative payment for operational drill-down, if one exists. */
+  paymentId?: string;
+  paymentDate?: string;
+}
+
 export interface DashboardBlockSummary {
   stage: number;
   block: number;
   totalHomes: number;
   paidHomes: number;
+  verifyingHomes: number;
+  reviewHomes: number;
   pendingHomes: number;
   /** Bank-verified amount only. */
   collected: number;
@@ -117,14 +145,21 @@ export interface DashboardSnapshot {
   totalHomes: number;
   /** Homes with at least one bank-verified payment for the service month. */
   paidHomes: number;
+  /** Homes with a receipt assigned but still awaiting bank verification. */
+  verifyingHomes: number;
+  /** Homes whose assigned payment has an unresolved exception. */
+  reviewHomes: number;
+  /** Homes with no usable receipt assigned for the service month. */
   pendingHomes: number;
   collectionRate: number;
   expectedAmount: number;
   receivedAmount: number;
   verifiedAmount: number;
+  /** Expected fees not yet covered by a verified payment. */
   pendingAmount: number;
   unidentifiedAmount: number;
   blocks: DashboardBlockSummary[];
+  monthlyStatus: MonthlyHomeStatusRow[];
   payments: DashboardPaymentRow[];
   unidentified: DashboardPaymentRow[];
   duplicates: DashboardPaymentRow[];
