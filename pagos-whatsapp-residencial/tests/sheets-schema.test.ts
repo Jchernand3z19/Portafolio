@@ -5,19 +5,20 @@ import { HOME_HEADERS, PAYMENT_HEADERS, homeFromRow, homeToRow, paymentFromRow, 
 const payment: PaymentRecord = {
   id: 'pay-demo', createdAt: '2026-09-08T12:00:00.000Z', updatedAt: '2026-09-08T12:00:00.000Z', sourceMessageId: 'msg-demo',
   phone: '50400000001', bank: 'BAC Honduras', amount: 150, reference: 'DEMOREF000001', stage: 1, block: 4, house: 18,
-  period: '2026-09', status: 'DUPLICADO', fileHash: 'hash-demo', duplicateOf: 'pay-original', duplicateReason: 'file_hash',
+  period: '2026-09', status: 'DUPLICADO', fileHash: 'hash-demo', duplicateOf: 'pay-original', duplicateReason: 'file_hash', bankMovementId: 'mov-demo-001',
 };
 
 const home: HomeRecord = { id: 'home-e1-b4-c18', stage: 1, block: 4, house: 18, monthlyFee: 150, active: true };
 
 describe('Google Sheets schema', () => {
-  it('round-trips payment stage and duplicate trace fields without shifting columns', () => {
+  it('round-trips payment stage, duplicate trace and bank movement fields without shifting columns', () => {
     const row = paymentToRow(payment);
     expect(row).toHaveLength(PAYMENT_HEADERS.length);
     expect(PAYMENT_HEADERS[16]).toBe('stage');
     expect(PAYMENT_HEADERS[23]).toBe('duplicate_reason');
+    expect(PAYMENT_HEADERS[27]).toBe('bank_movement_id');
     expect(paymentFromRow(row)).toMatchObject({
-      id: payment.id, stage: 1, block: 4, house: 18, status: 'DUPLICADO', duplicateOf: 'pay-original', duplicateReason: 'file_hash',
+      id: payment.id, stage: 1, block: 4, house: 18, status: 'DUPLICADO', duplicateOf: 'pay-original', duplicateReason: 'file_hash', bankMovementId: 'mov-demo-001',
     });
   });
 
