@@ -59,5 +59,6 @@ export const DEMO_PAYMENTS: PaymentRecord[] = [
 export const SYNTHETIC_BAC_RECEIPTS = {
   valid: `BAC\nTransferencia realizada\nRemitente: JUAN PÉREZ DEMO\nFecha: 07/09/2026\nHora: 08:12 AM\nMonto: L150.00\nDetalle: E1 B4 C18\nReferencia: DEMOREF000001\nBeneficiario: RESIDENCIAL DEMO\nCuenta destino: 000000000001`,
   missingHome: `BAC\nTransferencia realizada\nRemitente: ANA DEMO\nFecha: 08/09/2026\nHora: 09:05 AM\nMonto: L150.00\nDetalle: Cuota mensual\nReferencia: DEMOREF000002\nBeneficiario: RESIDENCIAL DEMO\nCuenta destino: 000000000001`,
+  amountMismatch: `BAC\nTransferencia realizada\nRemitente: PERSONA DEMO\nFecha: 09/09/2026\nHora: 11:10 AM\nMonto: L175.00\nDetalle: E1 B2 C2\nReferencia: DEMOREF000175\nBeneficiario: RESIDENCIAL DEMO\nCuenta destino: 000000000001`,
   editedConflict: `BAC\nTransferencia realizada\nRemitente: PERSONA DEMO\nFecha: 07/09/2026\nHora: 08:12 AM\nMonto: L900.00\nDetalle: E1 B2 C2\nReferencia: DEMOREF000001\nBeneficiario: RESIDENCIAL DEMO\nCuenta destino: 000000000001`,
 } as const;
