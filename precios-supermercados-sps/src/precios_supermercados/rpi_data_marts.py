@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Iterable
 
 from .analytics_quality import FreshnessAssessment, MarketWindowStatus
@@ -107,6 +107,27 @@ def _decimal(value: Decimal | None) -> str | None:
     return None if value is None else format(value, "f")
 
 
+def _comparison_delta(current_minor: int, best_minor: int) -> tuple[str, str]:
+    if best_minor <= 0:
+        raise RpiDataMartError("mart_best_price_invalid")
+    delta_minor = current_minor - best_minor
+    if delta_minor < 0:
+        raise RpiDataMartError("mart_offer_below_market_minimum")
+    delta_pct = (
+        Decimal(delta_minor) * Decimal(100) / Decimal(best_minor)
+    ).quantize(Decimal("0.01"))
+    return _money(delta_minor) or "0.00", format(delta_pct, "f")
+
+
+def _change_pct(current_minor: int, previous_minor: int) -> str:
+    if previous_minor <= 0:
+        raise RpiDataMartError("mart_history_previous_price_invalid")
+    value = (
+        Decimal(current_minor - previous_minor) * Decimal(100) / Decimal(previous_minor)
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return format(value, "f")
+
+
 def _iso(value: datetime | None) -> str | None:
     return None if value is None else value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -139,26 +160,21 @@ def _history_by_source(
     return result
 
 
-def _historical_summary(
-    *,
-    canonical_product_id: str,
-    supermarket_id: str,
-    location_id: str,
+def _effective_history(
     current_state: MartCommercialState,
     history: tuple[MartHistoricalState, ...],
     as_of_utc: datetime,
-) -> dict[str, Any]:
-    if not history:
-        history = (
-            MartHistoricalState(
-                current_state.source_record_id,
-                current_state.current_price_minor,
-                current_state.reported_regular_price_minor,
-                current_state.is_promotion,
-                current_state.observed_at_utc,
-            ),
-        )
-    latest = history[-1]
+) -> tuple[MartHistoricalState, ...]:
+    effective = history or (
+        MartHistoricalState(
+            current_state.source_record_id,
+            current_state.current_price_minor,
+            current_state.reported_regular_price_minor,
+            current_state.is_promotion,
+            current_state.observed_at_utc,
+        ),
+    )
+    latest = effective[-1]
     if (
         latest.current_price_minor != current_state.current_price_minor
         or latest.reported_regular_price_minor != current_state.reported_regular_price_minor
@@ -168,18 +184,16 @@ def _historical_summary(
         raise RpiDataMartError("mart_history_current_state_mismatch")
     if latest.observed_at_utc > as_of_utc:
         raise RpiDataMartError("mart_history_after_as_of")
+    return effective
 
-    historical_rows = tuple(
-        HistoricalPriceObservation(
-            canonical_product_id,
-            supermarket_id,
-            location_id,
-            item.observed_at_utc,
-            item.current_price_minor,
-        )
-        for item in history
-    )
-    promotion_rows = tuple(
+
+def _promotion_observations(
+    canonical_product_id: str,
+    supermarket_id: str,
+    location_id: str,
+    history: tuple[MartHistoricalState, ...],
+) -> tuple[PromotionPriceObservation, ...]:
+    return tuple(
         PromotionPriceObservation(
             canonical_product_id,
             supermarket_id,
@@ -188,6 +202,28 @@ def _historical_summary(
             item.current_price_minor,
             item.is_promotion,
             item.reported_regular_price_minor,
+        )
+        for item in history
+    )
+
+
+def _historical_summary(
+    *,
+    canonical_product_id: str,
+    supermarket_id: str,
+    location_id: str,
+    current_state: MartCommercialState,
+    history: tuple[MartHistoricalState, ...],
+    as_of_utc: datetime,
+) -> dict[str, Any]:
+    history = _effective_history(current_state, history, as_of_utc)
+    historical_rows = tuple(
+        HistoricalPriceObservation(
+            canonical_product_id,
+            supermarket_id,
+            location_id,
+            item.observed_at_utc,
+            item.current_price_minor,
         )
         for item in history
     )
@@ -200,7 +236,10 @@ def _historical_summary(
             windows=(30, 90),
         )
     }
-    promotion = analyze_promotions(promotion_rows, as_of_utc=as_of_utc)
+    promotion = analyze_promotions(
+        _promotion_observations(canonical_product_id, supermarket_id, location_id, history),
+        as_of_utc=as_of_utc,
+    )
 
     def window_payload(days: int) -> dict[str, Any]:
         window = windows[days]
@@ -282,6 +321,8 @@ def build_rpi_data_marts(
 
     product_dimensions: list[dict[str, Any]] = []
     fact_rows: list[dict[str, Any]] = []
+    price_history_fact_rows: list[dict[str, Any]] = []
+    promotion_fact_rows: list[dict[str, Any]] = []
     consumer_products: list[dict[str, Any]] = []
     category_names: set[str] = set()
     brand_names: set[str] = set()
@@ -311,7 +352,7 @@ def build_rpi_data_marts(
                 category_names.add(descriptor.category)
             if descriptor.brand:
                 brand_names.add(descriptor.brand)
-            common = {
+            common_identity = {
                 "canonical_product_id": product.canonical_product_id,
                 "canonical_gtin": product.canonical_gtin,
                 "source_product_id": offer.source_record_id,
@@ -323,6 +364,9 @@ def build_rpi_data_marts(
                 "brand": descriptor.brand,
                 "variant": descriptor.variant,
                 "presentation": descriptor.presentation,
+            }
+            common = {
+                **common_identity,
                 "current_price": _money(state.current_price_minor),
                 "reported_regular_price": _money(state.reported_regular_price_minor),
                 "is_promotion": state.is_promotion,
@@ -346,17 +390,100 @@ def build_rpi_data_marts(
                     "spread_pct": None if competitive is None else format(competitive.spread_pct, "f"),
                 }
             )
+
+            history = _effective_history(
+                state,
+                history_by_id.get(offer.source_record_id, ()),
+                as_of_utc,
+            )
+            for index, historical in enumerate(history):
+                previous = None if index == 0 else history[index - 1]
+                change_minor = (
+                    None
+                    if previous is None
+                    else historical.current_price_minor - previous.current_price_minor
+                )
+                direction = (
+                    "initial"
+                    if previous is None
+                    else "up"
+                    if change_minor > 0
+                    else "down"
+                    if change_minor < 0
+                    else "unchanged"
+                )
+                price_history_fact_rows.append(
+                    {
+                        **common_identity,
+                        "period_start": _iso(historical.observed_at_utc),
+                        "current_price": _money(historical.current_price_minor),
+                        "reported_regular_price": _money(historical.reported_regular_price_minor),
+                        "is_promotion": historical.is_promotion,
+                        "previous_price": None if previous is None else _money(previous.current_price_minor),
+                        "change_abs": _money(change_minor),
+                        "change_pct": (
+                            None
+                            if previous is None
+                            else _change_pct(historical.current_price_minor, previous.current_price_minor)
+                        ),
+                        "direction": direction,
+                        "is_current": historical.observed_at_utc == state.observed_at_utc,
+                        "source_last_successful_at": _iso(freshness.observed_at_utc),
+                        "freshness_status": freshness.freshness_status.value,
+                    }
+                )
+
+            promotion = analyze_promotions(
+                _promotion_observations(
+                    product.canonical_product_id,
+                    offer.supermarket_id,
+                    offer.location_id,
+                    history,
+                ),
+                as_of_utc=as_of_utc,
+            )
+            promotion_fact_rows.append(
+                {
+                    **common_identity,
+                    "as_of": _iso(promotion.as_of_utc),
+                    "history_observation_count": len(history),
+                    "current_price": _money(promotion.current_price_minor),
+                    "previous_price": _money(promotion.previous_price_minor),
+                    "reported_regular_price": _money(promotion.reported_regular_price_minor),
+                    "source_reports_promotion": promotion.source_reports_promotion,
+                    "historical_price_reduction": promotion.historical_price_reduction,
+                    "source_discount_depth_pct": _decimal(promotion.source_discount_depth_pct),
+                    "current_vs_previous_pct": _decimal(promotion.current_vs_previous_pct),
+                    "current_vs_average_30d_pct": _decimal(promotion.current_vs_average_30d_pct),
+                    "current_vs_average_90d_pct": _decimal(promotion.current_vs_average_90d_pct),
+                    "current_vs_minimum_90d_pct": _decimal(promotion.current_vs_minimum_90d_pct),
+                    "promotion_duration_days": _decimal(promotion.promotion_duration_days),
+                    "promotion_event_count": promotion.promotion_event_count,
+                    "promotion_share_pct": _decimal(promotion.promotion_share_pct),
+                    "historical_position": promotion.historical_position.value,
+                    "source_last_successful_at": _iso(freshness.observed_at_utc),
+                    "freshness_status": freshness.freshness_status.value,
+                }
+            )
+
+            delta_abs, delta_pct = (
+                (None, None)
+                if metric is None or competitive is None
+                else _comparison_delta(state.current_price_minor, competitive.market_min_minor)
+            )
             consumer_offers.append(
                 {
                     **common,
                     "rank": None if metric is None else metric.rank,
                     "is_best_price": metric is not None and metric.rank == 1,
+                    "difference_vs_best_abs": delta_abs,
+                    "difference_vs_best_pct": delta_pct,
                     "historical_summary": _historical_summary(
                         canonical_product_id=product.canonical_product_id,
                         supermarket_id=offer.supermarket_id,
                         location_id=offer.location_id,
                         current_state=state,
-                        history=history_by_id.get(offer.source_record_id, ()),
+                        history=history,
                         as_of_utc=as_of_utc,
                     ),
                 }
@@ -416,6 +543,19 @@ def build_rpi_data_marts(
         "facts": {
             "fact_current_comparison": sorted(
                 fact_rows,
+                key=lambda row: (row["canonical_product_id"], row["supermarket_id"], row["location_id"]),
+            ),
+            "fact_price_history": sorted(
+                price_history_fact_rows,
+                key=lambda row: (
+                    row["canonical_product_id"],
+                    row["supermarket_id"],
+                    row["location_id"],
+                    row["period_start"],
+                ),
+            ),
+            "fact_promotion_analysis": sorted(
+                promotion_fact_rows,
                 key=lambda row: (row["canonical_product_id"], row["supermarket_id"], row["location_id"]),
             ),
             "fact_basket_cost": [

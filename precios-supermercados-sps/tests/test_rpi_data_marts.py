@@ -103,9 +103,67 @@ def test_business_and_consumer_marts_share_safe_inputs_and_metric_truth() -> Non
     assert marts.consumer["comparison_status"] == "COMPARABLE"
     assert marts.consumer["product_count"] == 1
     assert len(marts.business["facts"]["fact_current_comparison"]) == 2
+    assert len(marts.business["facts"]["fact_price_history"]) == 6
+    assert len(marts.business["facts"]["fact_promotion_analysis"]) == 2
     assert marts.business["coverage"] == marts.consumer["coverage"]
     assert marts.business["source_freshness"] == marts.consumer["source_freshness"]
     assert {row["pci"] for row in marts.business["facts"]["fact_current_comparison"]} == {"95.24", "104.76"}
+
+    offers = {offer["source_product_id"]: offer for offer in marts.consumer["products"][0]["offers"]}
+    assert offers["a:1"]["difference_vs_best_abs"] == "0.00"
+    assert offers["a:1"]["difference_vs_best_pct"] == "0.00"
+    assert offers["b:2"]["difference_vs_best_abs"] == "2.00"
+    assert offers["b:2"]["difference_vs_best_pct"] == "10.00"
+
+
+def test_business_price_history_fact_keeps_real_periods_and_change_truth() -> None:
+    business = build_rpi_data_marts(*inputs()).business
+    rows = [
+        row for row in business["facts"]["fact_price_history"]
+        if row["source_product_id"] == "a:1"
+    ]
+
+    assert [row["period_start"] for row in rows] == [
+        "2026-05-01T12:00:00Z",
+        "2026-08-20T12:00:00Z",
+        "2026-09-01T12:00:00Z",
+    ]
+    assert rows[0]["previous_price"] is None
+    assert rows[0]["change_abs"] is None
+    assert rows[0]["change_pct"] is None
+    assert rows[0]["direction"] == "initial"
+    assert rows[1]["current_price"] == "22.00"
+    assert rows[1]["previous_price"] == "24.00"
+    assert rows[1]["change_abs"] == "-2.00"
+    assert rows[1]["change_pct"] == "-8.33"
+    assert rows[1]["direction"] == "down"
+    assert rows[2]["current_price"] == "20.00"
+    assert rows[2]["reported_regular_price"] == "25.00"
+    assert rows[2]["is_promotion"] is True
+    assert rows[2]["is_current"] is True
+    assert rows[2]["freshness_status"] == "FRESH"
+
+
+def test_business_promotion_fact_separates_source_claim_from_history() -> None:
+    business = build_rpi_data_marts(*inputs()).business
+    rows = {
+        row["source_product_id"]: row
+        for row in business["facts"]["fact_promotion_analysis"]
+    }
+    promoted = rows["a:1"]
+    regular = rows["b:2"]
+
+    assert promoted["history_observation_count"] == 3
+    assert promoted["source_reports_promotion"] is True
+    assert promoted["historical_price_reduction"] is True
+    assert promoted["source_discount_depth_pct"] == "20.00"
+    assert promoted["current_vs_previous_pct"] == "-9.09"
+    assert promoted["current_vs_average_30d_pct"] == "-9.09"
+    assert promoted["historical_position"] == "near_recent_minimum"
+    assert promoted["promotion_event_count"] == 1
+    assert regular["source_reports_promotion"] is False
+    assert regular["historical_price_reduction"] is False
+    assert regular["source_discount_depth_pct"] is None
 
 
 def test_consumer_mart_preserves_price_history_and_shopping_descriptors_without_secrets() -> None:
@@ -122,6 +180,8 @@ def test_consumer_mart_preserves_price_history_and_shopping_descriptors_without_
     assert offer["presentation"] == "1 L"
     assert offer["rank"] == 1
     assert offer["is_best_price"] is True
+    assert offer["difference_vs_best_abs"] == "0.00"
+    assert offer["difference_vs_best_pct"] == "0.00"
     history = offer["historical_summary"]
     assert history["observation_count"] == 3
     assert history["previous_price"] == "22.00"
@@ -148,20 +208,26 @@ def test_consumer_mart_preserves_price_history_and_shopping_descriptors_without_
 def test_consumer_history_keeps_explicit_insufficient_history_windows() -> None:
     analytics, competition, descriptors, states, freshness, history = inputs()
     current_only = tuple(row for row in history if row.observed_at_utc in {A_CURRENT_AT, B_CURRENT_AT})
-    consumer = build_rpi_data_marts(
+    marts = build_rpi_data_marts(
         analytics,
         competition,
         descriptors,
         states,
         freshness,
         current_only,
-    ).consumer
+    )
+    consumer = marts.consumer
 
     for offer in consumer["products"][0]["offers"]:
         assert offer["historical_summary"]["windows"]["30d"]["status"] == "insufficient_history"
         assert offer["historical_summary"]["windows"]["30d"]["average"] is None
         assert offer["historical_summary"]["windows"]["90d"]["status"] == "insufficient_history"
         assert offer["historical_summary"]["windows"]["90d"]["minimum"] is None
+    assert len(marts.business["facts"]["fact_price_history"]) == 2
+    assert all(
+        row["history_observation_count"] == 1
+        for row in marts.business["facts"]["fact_promotion_analysis"]
+    )
 
 
 def test_stale_market_keeps_lkg_offers_visible_but_removes_rank_and_pci() -> None:
@@ -173,12 +239,23 @@ def test_stale_market_keeps_lkg_offers_visible_but_removes_rank_and_pci() -> Non
     assert "source_data_stale" in marts.consumer["blocked_reasons"]
     assert all(row["rank"] is None and row["pci"] is None for row in facts)
     assert all(
-        offer["rank"] is None and offer["is_best_price"] is False
+        offer["rank"] is None
+        and offer["is_best_price"] is False
+        and offer["difference_vs_best_abs"] is None
+        and offer["difference_vs_best_pct"] is None
         for product in marts.consumer["products"]
         for offer in product["offers"]
     )
     assert marts.consumer["products"][0]["recommended_source_product_ids"] == []
     assert any(row["freshness_status"] == "STALE" for row in facts)
+    assert any(
+        row["freshness_status"] == "STALE"
+        for row in marts.business["facts"]["fact_price_history"]
+    )
+    assert any(
+        row["freshness_status"] == "STALE"
+        for row in marts.business["facts"]["fact_promotion_analysis"]
+    )
 
 
 def test_mart_rejects_descriptor_price_or_history_drift_from_safe_universe() -> None:

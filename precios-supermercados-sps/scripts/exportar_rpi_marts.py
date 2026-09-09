@@ -338,15 +338,33 @@ def export_rpi_marts(
         "dim_category": ["category"],
         "dim_brand": ["brand"],
     }
+    fact_identity_fields = [
+        "canonical_product_id", "canonical_gtin", "source_product_id",
+        "supermarket_id", "location_id", "category", "product_type",
+        "product_name", "brand", "variant", "presentation",
+    ]
     fact_fields = {
         "fact_current_comparison": [
-            "canonical_product_id", "canonical_gtin", "source_product_id",
-            "supermarket_id", "location_id", "category", "product_type",
-            "product_name", "brand", "variant", "presentation", "current_price",
-            "reported_regular_price", "is_promotion", "availability", "observed_at",
-            "last_successful_run", "source_last_successful_at", "data_age_hours",
-            "freshness_status", "rank", "pci", "market_min", "market_max",
-            "market_mean", "market_median", "spread_abs", "spread_pct",
+            *fact_identity_fields, "current_price", "reported_regular_price",
+            "is_promotion", "availability", "observed_at", "last_successful_run",
+            "source_last_successful_at", "data_age_hours", "freshness_status", "rank",
+            "pci", "market_min", "market_max", "market_mean", "market_median",
+            "spread_abs", "spread_pct",
+        ],
+        "fact_price_history": [
+            *fact_identity_fields, "period_start", "current_price",
+            "reported_regular_price", "is_promotion", "previous_price", "change_abs",
+            "change_pct", "direction", "is_current", "source_last_successful_at",
+            "freshness_status",
+        ],
+        "fact_promotion_analysis": [
+            *fact_identity_fields, "as_of", "history_observation_count", "current_price",
+            "previous_price", "reported_regular_price", "source_reports_promotion",
+            "historical_price_reduction", "source_discount_depth_pct",
+            "current_vs_previous_pct", "current_vs_average_30d_pct",
+            "current_vs_average_90d_pct", "current_vs_minimum_90d_pct",
+            "promotion_duration_days", "promotion_event_count", "promotion_share_pct",
+            "historical_position", "source_last_successful_at", "freshness_status",
         ],
         "fact_basket_cost": [
             "supermarket_id", "location_id", "total", "product_count", "is_complete",
@@ -418,17 +436,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             os.environ.get("TURSO_DATABASE_URL", ""),
             os.environ.get("TURSO_AUTH_TOKEN", ""),
         )
-    try:
-        manifest = export_rpi_marts(
-            backend,
-            scope,
-            args.output_directory,
-            as_of_utc=as_of,
-            freshness_window=timedelta(hours=args.freshness_hours),
-            require_products=args.require_products,
-        )
-    finally:
-        backend.close()
+    manifest = export_rpi_marts(
+        backend,
+        scope,
+        args.output_directory,
+        as_of_utc=as_of,
+        freshness_window=timedelta(hours=args.freshness_hours),
+        require_products=args.require_products,
+    )
     print(json.dumps(manifest, ensure_ascii=False, sort_keys=True))
     return 0
 

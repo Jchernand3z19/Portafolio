@@ -706,9 +706,12 @@ def test_google_sheets_storage_has_controlled_main_trigger_and_least_privilege()
     assert "CLOUDFLARE_PROBE_GATEWAY_URL" not in raw
 
 
-def test_ci_paths_cover_project_policy_and_every_sps_workflow():
+def test_ci_paths_are_isolated_to_rpi_project_and_its_own_ci_workflow():
     workflow = load_workflow(WORKFLOW_DIR / TEST_WORKFLOW)
-    expected_paths = {"precios-supermercados-sps/**", ".github/workflows/**"}
+    expected_paths = {
+        "precios-supermercados-sps/**",
+        ".github/workflows/precios-supermercados-sps-tests.yml",
+    }
     pull_request = workflow["on"]["pull_request"]
     push = workflow["on"]["push"]
     assert set(pull_request["paths"]) == expected_paths
