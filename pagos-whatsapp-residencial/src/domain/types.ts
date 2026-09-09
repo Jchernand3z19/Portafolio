@@ -52,8 +52,6 @@ export interface PaymentRecord {
   sourceMessageId: string;
   /** WhatsApp sender. It is never housing identity. */
   phone: string;
-  mediaId?: string;
-  receiptFileId?: string;
   bank: string;
   depositor?: string;
   transactionDate?: string;
@@ -70,6 +68,7 @@ export interface PaymentRecord {
   /** Service month paid, YYYY-MM. */
   period: string;
   status: PaymentStatus;
+  /** SHA-256 of the transient receipt bytes; the image itself is not retained. */
   fileHash: string;
   duplicateOf?: string;
   duplicateReason?: string;
