@@ -49,7 +49,7 @@ describe('payment processor', () => {
     expect(payment.status).not.toBe('VERIFICADO');
   });
 
-  it('uses September when August already has a payment for the same EBC home', async () => {
+  it('uses September when August already has a verified payment for the same EBC home', async () => {
     const august: PaymentRecord = {
       id: 'pay-aug', createdAt: '2026-08-31T12:00:00.000Z', updatedAt: '2026-08-31T12:00:00.000Z', sourceMessageId: 'old-msg',
       phone: '+50400000111', bank: 'BAC Honduras', amount: 150, transactionDate: '2026-08-31', reference: 'OLDREF001',
@@ -62,6 +62,22 @@ describe('payment processor', () => {
     expect(result.status).toBe('PENDIENTE_VERIFICACION');
     const payment = (await store.listPayments()).find((item) => item.id !== 'pay-aug');
     expect(payment?.period).toBe('2026-09');
+  });
+
+  it('keeps a second receipt on August and sends it to review when the first August receipt is still unverified', async () => {
+    const augustPending: PaymentRecord = {
+      id: 'pay-aug-pending', createdAt: '2026-09-01T12:00:00.000Z', updatedAt: '2026-09-01T12:00:00.000Z', sourceMessageId: 'old-pending-msg',
+      phone: '+50400000111', bank: 'BAC Honduras', amount: 150, transactionDate: '2026-09-01', reference: 'OLDPENDING001',
+      stage: 1, block: 4, house: 18, period: '2026-08', status: 'PENDIENTE_VERIFICACION', fileHash: 'old-pending-hash',
+    };
+    const store = new MemoryPaymentStore({ homes, payments: [augustPending] }, now);
+    const result = await processReceiptMessage({
+      messageId: 'msg-second-august', phone: '+50400000999', bytes: png(10), declaredMime: 'image/png', syntheticOcrText: SYNTHETIC_BAC_RECEIPTS.valid,
+    }, { store, now });
+    expect(result.status).toBe('EN_REVISION');
+    const payment = (await store.listPayments()).find((item) => item.id !== 'pay-aug-pending');
+    expect(payment?.period).toBe('2026-08');
+    expect(payment?.reviewReason).toBe('service_period_already_has_payment');
   });
 
   it('asks for all EBC values, preserves context, and assigns without rerunning OCR', async () => {
