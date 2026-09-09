@@ -12,9 +12,9 @@ export const SHEETS = {
 export const PAYMENT_HEADERS = [
   'id', 'created_at', 'updated_at', 'source_message_id', 'phone', 'media_id', 'receipt_file_id', 'bank', 'depositor',
   'transaction_date', 'transaction_time', 'amount', 'detail', 'reference', 'beneficiary', 'destination_account_masked',
-  'block', 'house', 'period', 'status', 'file_hash', 'duplicate_of', 'duplicate_reason', 'review_reason', 'verification_source', 'verified_at',
+  'stage', 'block', 'house', 'period', 'status', 'file_hash', 'duplicate_of', 'duplicate_reason', 'review_reason', 'verification_source', 'verified_at',
 ] as const;
-export const HOME_HEADERS = ['id', 'block', 'house', 'responsible', 'phone', 'monthly_fee', 'active', 'start_date', 'end_date'] as const;
+export const HOME_HEADERS = ['id', 'stage', 'block', 'house', 'responsible', 'monthly_fee', 'active', 'start_date', 'end_date'] as const;
 export const PENDING_HEADERS = ['id', 'phone', 'payment_id', 'created_at', 'expires_at'] as const;
 export const MESSAGE_HEADERS = ['message_id', 'received_at', 'kind', 'outcome'] as const;
 
@@ -28,35 +28,36 @@ export function paymentToRow(payment: PaymentRecord): Array<string | number | bo
   return [
     payment.id, payment.createdAt, payment.updatedAt, payment.sourceMessageId, payment.phone, cell(payment.mediaId), cell(payment.receiptFileId),
     payment.bank, cell(payment.depositor), cell(payment.transactionDate), cell(payment.transactionTime), payment.amount, cell(payment.detail),
-    cell(payment.reference), cell(payment.beneficiary), cell(payment.destinationAccountMasked), cell(payment.block), cell(payment.house),
+    cell(payment.reference), cell(payment.beneficiary), cell(payment.destinationAccountMasked), cell(payment.stage), cell(payment.block), cell(payment.house),
     payment.period, payment.status, payment.fileHash, cell(payment.duplicateOf), cell(payment.duplicateReason), cell(payment.reviewReason),
     cell(payment.verificationSource), cell(payment.verifiedAt),
   ];
 }
 
 export function paymentFromRow(row: unknown[]): PaymentRecord | undefined {
-  if (!row[0] || !row[3] || !row[7] || !row[19] || !row[20]) return undefined;
-  const status = String(row[19]);
+  if (!row[0] || !row[3] || !row[7] || !row[20] || !row[21]) return undefined;
+  const status = String(row[20]);
   if (!PAYMENT_STATUSES.includes(status as PaymentRecord['status'])) return undefined;
   return {
     id: String(row[0]), createdAt: String(row[1] ?? ''), updatedAt: String(row[2] ?? ''), sourceMessageId: String(row[3]),
     phone: String(row[4] ?? ''), mediaId: text(row[5]), receiptFileId: text(row[6]), bank: String(row[7]), depositor: text(row[8]),
     transactionDate: text(row[9]), transactionTime: text(row[10]), amount: num(row[11]), detail: text(row[12]), reference: text(row[13]),
-    beneficiary: text(row[14]), destinationAccountMasked: text(row[15]), block: int(row[16]), house: int(row[17]), period: String(row[18] ?? ''),
-    status: status as PaymentRecord['status'], fileHash: String(row[20]), duplicateOf: text(row[21]), duplicateReason: text(row[22]),
-    reviewReason: text(row[23]), verificationSource: text(row[24]), verifiedAt: text(row[25]),
+    beneficiary: text(row[14]), destinationAccountMasked: text(row[15]), stage: int(row[16]), block: int(row[17]), house: int(row[18]),
+    period: String(row[19] ?? ''), status: status as PaymentRecord['status'], fileHash: String(row[21]), duplicateOf: text(row[22]),
+    duplicateReason: text(row[23]), reviewReason: text(row[24]), verificationSource: text(row[25]), verifiedAt: text(row[26]),
   };
 }
 
 export function homeToRow(home: HomeRecord): Array<string | number | boolean> {
-  return [home.id, home.block, home.house, cell(home.responsible), cell(home.phone), home.monthlyFee, home.active, cell(home.startDate), cell(home.endDate)];
+  return [home.id, home.stage, home.block, home.house, cell(home.responsible), home.monthlyFee, home.active, cell(home.startDate), cell(home.endDate)];
 }
 
 export function homeFromRow(row: unknown[]): HomeRecord | undefined {
-  const block = int(row[1]);
-  const house = int(row[2]);
-  if (!row[0] || block == null || house == null) return undefined;
-  return { id: String(row[0]), block, house, responsible: text(row[3]), phone: text(row[4]), monthlyFee: num(row[5]), active: bool(row[6]), startDate: text(row[7]), endDate: text(row[8]) };
+  const stage = int(row[1]);
+  const block = int(row[2]);
+  const house = int(row[3]);
+  if (!row[0] || stage == null || block == null || house == null) return undefined;
+  return { id: String(row[0]), stage, block, house, responsible: text(row[4]), monthlyFee: num(row[5]), active: bool(row[6]), startDate: text(row[7]), endDate: text(row[8]) };
 }
 
 export function pendingToRow(pending: PendingConversation): string[] {
