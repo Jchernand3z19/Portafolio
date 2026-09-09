@@ -19,7 +19,8 @@ export default async function HousePage({ params }: { params: Promise<{ stage: s
 
   const store = await getPaymentStore();
   const history = await getHouseHistory(store, stage, block, house);
-  if (!history.home) notFound();
+  const homeRecord = history.home;
+  if (!homeRecord) notFound();
 
   const accepted = history.payments.filter((payment) => payment.status !== 'DUPLICADO' && payment.status !== 'RECHAZADO');
   const verifiedPeriods = new Set(accepted.filter((payment) => payment.status === 'VERIFICADO').map((payment) => payment.period));
@@ -31,7 +32,7 @@ export default async function HousePage({ params }: { params: Promise<{ stage: s
         <div>
           <p className="eyebrow">Historial por vivienda</p>
           <h1 style={{ fontSize: 'clamp(2rem,5vw,3.6rem)' }}>Etapa {stage} · Bloque {block} · Casa {house}</h1>
-          <p className="lead">{history.home.responsible ?? 'Responsable no registrado'} · Cuota mensual {money(history.home.monthlyFee)}</p>
+          <p className="lead">{homeRecord.responsible ?? 'Responsable no registrado'} · Cuota mensual {money(homeRecord.monthlyFee)}</p>
         </div>
         <Link className="primary-button" href="/admin">Volver al panel</Link>
       </header>
@@ -40,7 +41,7 @@ export default async function HousePage({ params }: { params: Promise<{ stage: s
         <div className="kpi"><span>Períodos con comprobante</span><strong>{receiptPeriods.size}</strong><small>Sin duplicados ni rechazados</small></div>
         <div className="kpi"><span>Períodos verificados</span><strong>{verifiedPeriods.size}</strong><small>Confirmados por revisión bancaria</small></div>
         <div className="kpi"><span>Registros trazables</span><strong>{history.payments.length}</strong><small>Incluye duplicados y revisión</small></div>
-        <div className="kpi"><span>Estado vivienda</span><strong>{history.home.active ? 'Activa' : 'Inactiva'}</strong><small>ID operativo E{stage}-B{block}-C{house}</small></div>
+        <div className="kpi"><span>Estado vivienda</span><strong>{homeRecord.active ? 'Activa' : 'Inactiva'}</strong><small>ID operativo E{stage}-B{block}-C{house}</small></div>
       </section>
 
       <div className="section-head">
@@ -58,7 +59,7 @@ export default async function HousePage({ params }: { params: Promise<{ stage: s
                 <td>{payment.transactionDate ?? '—'}</td>
                 <td>{payment.depositor ?? '—'}</td>
                 <td>{payment.phone || '—'}</td>
-                <td>{money(history.home.monthlyFee)}</td>
+                <td>{money(homeRecord.monthlyFee)}</td>
                 <td>{money(payment.amount)}</td>
                 <td>{payment.bank}</td>
                 <td>{payment.reference ?? '—'}</td>
