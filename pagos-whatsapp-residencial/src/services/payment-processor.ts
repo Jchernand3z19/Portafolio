@@ -8,14 +8,12 @@ import type { HomeRef, PaymentRecord, PendingConversation, ProcessedMessage } fr
 import { recognizeReceipt } from '@/src/ocr/tesseract';
 import { detectAndParseReceipt } from '@/src/parsers';
 import { validateReceiptFile } from '@/src/security/files';
-import type { ReceiptArchive } from '@/src/storage/receipts';
 import type { PaymentStore } from '@/src/storage/types';
 import { assignServicePeriod, baselinePeriodFromDepositDate, hasPeriodConflict } from './period-assignment';
 import { receiptReviewReason } from './validation';
 
 export interface ProcessorDependencies {
   store: PaymentStore;
-  archive?: ReceiptArchive;
   now?: () => Date;
   ocr?: (bytes: Buffer) => Promise<{ text: string; confidence: number }>;
 }
@@ -23,7 +21,6 @@ export interface ProcessorDependencies {
 export interface ReceiptMessageInput {
   messageId: string;
   phone: string;
-  mediaId?: string;
   bytes: Uint8Array;
   declaredMime?: string;
   kind?: 'image' | 'document';
@@ -101,8 +98,6 @@ function duplicateRecord(original: PaymentRecord, input: ReceiptMessageInput, fi
     updatedAt: at,
     sourceMessageId: input.messageId,
     phone: input.phone,
-    mediaId: input.mediaId,
-    receiptFileId: undefined,
     status,
     fileHash,
     duplicateOf: original.id,
@@ -110,6 +105,7 @@ function duplicateRecord(original: PaymentRecord, input: ReceiptMessageInput, fi
     reviewReason: status === 'EN_REVISION' ? reason : undefined,
     verifiedAt: undefined,
     verificationSource: undefined,
+    bankMovementId: undefined,
   };
 }
 
@@ -236,10 +232,6 @@ export async function processReceiptMessage(input: ReceiptMessageInput, deps: Pr
       }
     }
 
-    const receiptFileId = deps.archive
-      ? await deps.archive.save(validated.bytes, validated.mimeType, validated.sha256)
-      : undefined;
-
     const period = home
       ? assignServicePeriod(home, extraction.transactionDate, existing, now)
       : baselinePeriodFromDepositDate(extraction.transactionDate, now);
@@ -250,8 +242,6 @@ export async function processReceiptMessage(input: ReceiptMessageInput, deps: Pr
       updatedAt: at,
       sourceMessageId: input.messageId,
       phone: input.phone,
-      mediaId: input.mediaId,
-      receiptFileId,
       bank: extraction.bank,
       depositor: extraction.depositor,
       transactionDate: extraction.transactionDate,
