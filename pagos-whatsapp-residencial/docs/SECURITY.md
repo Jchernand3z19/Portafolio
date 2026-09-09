@@ -7,11 +7,13 @@ El sistema procesa documentos bancarios y datos de contacto. Las amenazas priori
 - webhook falso;
 - archivo malicioso o con MIME suplantado;
 - reenvío/retry que contabilice dos veces;
-- comprobante editado;
+- comprobante editado o reutilizado;
+- asignación incorrecta de vivienda;
 - filtración de PII o secretos en GitHub/logs;
 - acceso público al panel o comprobantes;
 - formula injection en Google Sheets;
-- conflicto de referencia que revele información de otra vivienda.
+- conflicto de referencia que revele información de otra vivienda;
+- reutilización de un mismo movimiento bancario para verificar dos pagos.
 
 ## Controles implementados
 
@@ -21,6 +23,16 @@ El sistema procesa documentos bancarios y datos de contacto. Las amenazas priori
 - `POST` valida `X-Hub-Signature-256` con HMAC-SHA256 sobre el body crudo.
 - payload acotado con Zod antes de procesarlo.
 - mensajes normales no se convierten en pagos; un texto sólo se interpreta como vivienda si existe contexto pendiente.
+
+### Vivienda y teléfono
+
+- la identidad de vivienda es únicamente `Etapa + Bloque + Casa`;
+- si falta cualquiera de los tres valores se solicitan los tres de nuevo (`E1 B4 C18`);
+- el número de WhatsApp se conserva como remitente del pago y como clave temporal de conversación, nunca como vínculo vivienda → teléfono;
+- `Viviendas` no guarda teléfono para resolver pagos;
+- el depositante extraído por OCR tampoco determina la vivienda.
+
+Esto evita asignaciones incorrectas cuando una vivienda está alquilada o paga un familiar, propietario u otra persona.
 
 ### Archivos
 
@@ -33,18 +45,21 @@ El sistema procesa documentos bancarios y datos de contacto. Las amenazas priori
 
 ### Duplicados e idempotencia
 
-- `message_id`: retry técnico;
-- hash: mismo archivo;
-- banco + referencia: misma transacción declarada;
-- señal débil monto/fecha no deduplica automáticamente;
-- una referencia asociada a otro remitente/vivienda produce revisión sin revelar datos del original;
-- el agregado del dashboard canonicaliza pagos para evitar doble conteo.
+- `message_id`: retry técnico, silencioso;
+- hash: mismo archivo exacto;
+- mismo archivo exacto desde otro remitente: revisión;
+- banco + referencia: señal de correlación, **no** duplicado automático;
+- referencia repetida con vivienda/monto/fecha incompatibles: revisión/conflicto;
+- señal débil banco + vivienda + monto + fecha: sólo revisión;
+- el dashboard excluye únicamente filas explícitamente marcadas `DUPLICADO` o `RECHAZADO`; no canonicaliza por referencia.
 
-### Fraude
+### Fraude y verificación
 
 OCR no autentica una imagen. Estados como `PENDIENTE_VERIFICACION`, `NO_ENCONTRADO` y `EN_REVISION` impiden convertir una captura legible en dinero confirmado.
 
-`VERIFICADO` se obtiene mediante conciliación con una fuente bancaria confiable.
+En el MVP, `VERIFICADO` sólo se obtiene cuando el encargado revisa el movimiento directamente en el banco y ejecuta la acción de verificación del panel. El sistema no almacena usuario, contraseña, PIN ni códigos de BAC.
+
+Una futura conciliación puede usar una fuente bancaria autorizada. Su lógica impide que un mismo movimiento bancario verifique dos pagos distintos.
 
 ### Google
 
@@ -62,7 +77,8 @@ OCR no autentica una imagen. Estados como `PENDIENTE_VERIFICACION`, `NO_ENCONTRA
 - sesión HMAC con expiración;
 - cookie HttpOnly + SameSite Strict + Secure en producción;
 - comprobación de mismo origen en escrituras;
-- rutas de comprobantes con `Cache-Control: private, no-store`.
+- rutas de comprobantes con `Cache-Control: private, no-store`;
+- los casos de revisión requieren una acción explícita y separada para confirmar tras revisar el banco o marcar duplicado.
 
 ### Logs
 
@@ -88,11 +104,11 @@ Nunca versionar:
 - exports de Sheets/Drive de producción;
 - teléfonos, nombres o referencias bancarias reales.
 
-Los fixtures actuales usan nombres y números deliberadamente ficticios.
+Los fixtures actuales usan nombres, teléfonos y referencias deliberadamente ficticios.
 
 ## Límites conocidos
 
-Google Sheets no garantiza unicidad transaccional ante escrituras concurrentes desde múltiples instancias. El MVP tiene idempotencia de aplicación y deduplicación de agregado; para crecimiento o alta concurrencia debe introducirse un datastore transaccional con índices únicos y mantener Sheets como salida operativa.
+Google Sheets no garantiza unicidad transaccional ante escrituras concurrentes desde múltiples instancias. El MVP tiene idempotencia de aplicación y controles de revisión; para crecimiento o alta concurrencia debe introducirse un datastore transaccional con índices únicos y mantener Sheets como salida operativa.
 
 El envío de respuesta por WhatsApp no usa todavía un outbox durable. Si Meta acepta el comprobante pero falla el envío de la respuesta, el pago permanece seguro y no se duplica, pero el mensaje al usuario puede necesitar reintento operativo. Un outbox durable es una mejora prioritaria antes de escalar.
 
