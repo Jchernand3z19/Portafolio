@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { env } from '@/src/config/env';
 import { decideDuplicate } from '@/src/domain/duplicates';
 import { parseHomeReference } from '@/src/domain/housing';
-import { periodFromDate } from '@/src/domain/periods';
+import { periodLabel } from '@/src/domain/periods';
 import { samePhone } from '@/src/domain/phone';
 import type { HomeRef, PaymentRecord, PendingConversation, ProcessedMessage } from '@/src/domain/types';
 import { recognizeReceipt } from '@/src/ocr/tesseract';
@@ -10,6 +10,7 @@ import { detectAndParseReceipt } from '@/src/parsers';
 import { validateReceiptFile } from '@/src/security/files';
 import type { ReceiptArchive } from '@/src/storage/receipts';
 import type { PaymentStore } from '@/src/storage/types';
+import { assignServicePeriod, baselinePeriodFromDepositDate, hasPeriodConflict } from './period-assignment';
 import { receiptReviewReason } from './validation';
 
 export interface ProcessorDependencies {
@@ -56,20 +57,21 @@ function dateLabel(iso: string | undefined): string {
 function receiptAcceptedReply(payment: PaymentRecord): string {
   const lines = [
     '✅ Comprobante recibido',
-    `Bloque ${payment.block} · Casa ${payment.house}`,
+    `Etapa ${payment.stage} · Bloque ${payment.block} · Casa ${payment.house}`,
     amountLabel(payment.amount),
   ];
   const date = dateLabel(payment.transactionDate);
-  if (date) lines.push(date);
+  if (date) lines.push(`Fecha depósito: ${date}`);
+  lines.push(`Mes aplicado: ${periodLabel(payment.period)}`);
   lines.push('Estado: pendiente de verificación.');
   return lines.join('\n');
 }
 
 function unidentifiedReply(payment: PaymentRecord): string {
   return [
-    `Recibimos tu comprobante por ${amountLabel(payment.amount)}, pero falta identificar la vivienda.`,
-    'Por favor responde con tu bloque y casa.',
-    'Ejemplo: B4 C18',
+    `Recibimos tu comprobante por ${amountLabel(payment.amount)}, pero falta identificar completamente la vivienda.`,
+    'Por favor responde con etapa, bloque y casa.',
+    'Ejemplo: E1 B4 C18',
   ].join('\n');
 }
 
@@ -78,7 +80,7 @@ function reviewReply(): string {
 }
 
 function duplicateReply(): string {
-  return 'ℹ️ Este comprobante ya había sido recibido. No se registró un segundo pago.';
+  return 'ℹ️ Este mismo comprobante ya había sido recibido. No se registró un segundo pago.';
 }
 
 async function markMessage(
@@ -111,18 +113,17 @@ function duplicateRecord(original: PaymentRecord, input: ReceiptMessageInput, fi
   };
 }
 
-async function resolveHome(store: PaymentStore, parsedHome: HomeRef | undefined, phone: string): Promise<{ home?: HomeRef; warning?: string }> {
+async function resolveHome(store: PaymentStore, parsedHome: HomeRef | undefined): Promise<{ home?: HomeRef; warning?: string }> {
+  if (!parsedHome) return {};
   const homes = await store.listHomes();
-  if (parsedHome) {
-    const match = homes.find((home) => home.active && home.block === parsedHome.block && home.house === parsedHome.house);
-    if (match) return { home: parsedHome };
-    return { warning: 'receipt_home_not_in_master' };
-  }
-
-  const phoneHomes = homes.filter((home) => home.active && samePhone(home.phone, phone));
-  if (phoneHomes.length === 1) return { home: { block: phoneHomes[0].block, house: phoneHomes[0].house } };
-  if (phoneHomes.length > 1) return { warning: 'phone_has_multiple_homes' };
-  return {};
+  const match = homes.find((home) =>
+    home.active
+    && home.stage === parsedHome.stage
+    && home.block === parsedHome.block
+    && home.house === parsedHome.house,
+  );
+  if (match) return { home: parsedHome };
+  return { warning: 'receipt_home_not_in_master' };
 }
 
 export async function processReceiptMessage(input: ReceiptMessageInput, deps: ProcessorDependencies): Promise<ProcessOutcome> {
@@ -193,7 +194,7 @@ export async function processReceiptMessage(input: ReceiptMessageInput, deps: Pr
       return { action: 'reply', reply: 'No pudimos leer el monto del comprobante. No se registró ningún pago.', reason: 'amount_missing' };
     }
 
-    const homeResolution = await resolveHome(store, extraction.home, input.phone);
+    const homeResolution = await resolveHome(store, extraction.home);
     const home = homeResolution.home;
     const duplicate = decideDuplicate({
       sourceMessageId: input.messageId,
@@ -202,7 +203,6 @@ export async function processReceiptMessage(input: ReceiptMessageInput, deps: Pr
       reference: extraction.reference,
       amount: extraction.amount,
       transactionDate: extraction.transactionDate,
-      phone: input.phone,
       home,
     }, existing);
 
@@ -240,7 +240,11 @@ export async function processReceiptMessage(input: ReceiptMessageInput, deps: Pr
       ? await deps.archive.save(validated.bytes, validated.mimeType, validated.sha256)
       : undefined;
 
-    const record: PaymentRecord = {
+    const period = home
+      ? assignServicePeriod(home, extraction.transactionDate, existing, now)
+      : baselinePeriodFromDepositDate(extraction.transactionDate, now);
+
+    let record: PaymentRecord = {
       id: deterministicId('pay', input.messageId),
       createdAt: at,
       updatedAt: at,
@@ -257,15 +261,20 @@ export async function processReceiptMessage(input: ReceiptMessageInput, deps: Pr
       reference: extraction.reference,
       beneficiary: extraction.beneficiary,
       destinationAccountMasked: extraction.destinationAccountMasked,
+      stage: home?.stage,
       block: home?.block,
       house: home?.house,
-      period: periodFromDate(now),
+      period,
       status,
       fileHash: validated.sha256,
       duplicateOf: duplicate.kind === 'conflict' || duplicate.kind === 'review' ? duplicate.original.id : undefined,
       duplicateReason: duplicate.kind === 'conflict' || duplicate.kind === 'review' ? duplicate.reason : undefined,
       reviewReason,
     };
+
+    if (home && hasPeriodConflict(record, existing) && !record.reviewReason) {
+      record = { ...record, status: 'EN_REVISION', reviewReason: 'service_period_already_has_payment' };
+    }
 
     await store.savePayment(record);
 
@@ -284,7 +293,7 @@ export async function processReceiptMessage(input: ReceiptMessageInput, deps: Pr
     await markMessage(store, input.messageId, kind, 'processed', at);
 
     if (shouldAskHome) return { action: 'reply', reply: unidentifiedReply(record), paymentId: record.id, status: record.status, reason: reviewReason };
-    if (pendingConflict || record.status === 'EN_REVISION') return { action: 'reply', reply: reviewReply(), paymentId: record.id, status: record.status, reason: reviewReason };
+    if (pendingConflict || record.status === 'EN_REVISION') return { action: 'reply', reply: reviewReply(), paymentId: record.id, status: record.status, reason: record.reviewReason };
     return { action: 'reply', reply: receiptAcceptedReply(record), paymentId: record.id, status: record.status };
   } finally {
     activeMessages.delete(input.messageId);
@@ -306,14 +315,19 @@ export async function processHomeReply(messageId: string, phone: string, body: s
   const home = parseHomeReference(body);
   if (!home) {
     await markMessage(store, messageId, 'text', 'processed', at);
-    return { action: 'reply', reply: 'No pudimos identificar el bloque y la casa. Responde, por ejemplo: B4 C18', paymentId: pending.paymentId, reason: 'invalid_home_reply' };
+    return { action: 'reply', reply: 'No pudimos identificar etapa, bloque y casa completos. Responde, por ejemplo: E1 B4 C18', paymentId: pending.paymentId, reason: 'invalid_home_reply' };
   }
 
   const homes = await store.listHomes();
-  const known = homes.find((candidate) => candidate.active && candidate.block === home.block && candidate.house === home.house);
+  const known = homes.find((candidate) =>
+    candidate.active
+    && candidate.stage === home.stage
+    && candidate.block === home.block
+    && candidate.house === home.house,
+  );
   if (!known) {
     await markMessage(store, messageId, 'text', 'processed', at);
-    return { action: 'reply', reply: 'No encontramos esa vivienda activa. Verifica el bloque y la casa e inténtalo de nuevo.', paymentId: pending.paymentId, reason: 'home_not_found' };
+    return { action: 'reply', reply: 'No encontramos esa vivienda activa. Verifica etapa, bloque y casa e inténtalo de nuevo.', paymentId: pending.paymentId, reason: 'home_not_found' };
   }
 
   const payment = await store.getPayment(pending.paymentId);
@@ -323,26 +337,31 @@ export async function processHomeReply(messageId: string, phone: string, body: s
     return { action: 'reply', reply: 'No pudimos relacionar la respuesta con un comprobante pendiente. El caso quedó para revisión.', reason: 'pending_payment_missing' };
   }
 
-  const updated: PaymentRecord = {
+  const allPayments = await store.listPayments();
+  const period = assignServicePeriod(home, payment.transactionDate, allPayments, now, payment.id);
+  const clearedReason = payment.reviewReason === 'receipt_home_not_in_master' ? undefined : payment.reviewReason;
+  let updated: PaymentRecord = {
     ...payment,
+    stage: home.stage,
     block: home.block,
     house: home.house,
+    period,
     updatedAt: at,
-    status: payment.reviewReason && payment.reviewReason !== 'receipt_home_not_in_master' && payment.reviewReason !== 'phone_has_multiple_homes'
-      ? 'EN_REVISION'
-      : 'PENDIENTE_VERIFICACION',
-    reviewReason: payment.reviewReason === 'receipt_home_not_in_master' || payment.reviewReason === 'phone_has_multiple_homes'
-      ? undefined
-      : payment.reviewReason,
+    status: clearedReason ? 'EN_REVISION' : 'PENDIENTE_VERIFICACION',
+    reviewReason: clearedReason,
   };
+
+  if (hasPeriodConflict(updated, allPayments) && !updated.reviewReason) {
+    updated = { ...updated, status: 'EN_REVISION', reviewReason: 'service_period_already_has_payment' };
+  }
 
   await store.updatePayment(updated);
   await store.clearPending(phone);
   await markMessage(store, messageId, 'text', 'processed', at);
 
   const reply = updated.status === 'EN_REVISION'
-    ? `✅ Vivienda identificada: Bloque ${home.block}, Casa ${home.house}. El comprobante continúa en revisión.`
-    : `✅ Comprobante registrado para Bloque ${home.block}, Casa ${home.house}. Estado: pendiente de verificación.`;
+    ? `✅ Vivienda identificada: Etapa ${home.stage}, Bloque ${home.block}, Casa ${home.house}. El comprobante continúa en revisión.`
+    : `✅ Comprobante registrado para Etapa ${home.stage}, Bloque ${home.block}, Casa ${home.house}. Mes aplicado: ${periodLabel(updated.period)}. Estado: pendiente de verificación.`;
   return { action: 'reply', reply, paymentId: updated.id, status: updated.status };
 }
 
