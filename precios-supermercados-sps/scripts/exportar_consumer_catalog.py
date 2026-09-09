@@ -50,7 +50,7 @@ class VisibleOffer:
     presentation: str | None
     current_price_minor: int | None
     reported_regular_price_minor: int | None
-    is_promotion: bool
+    is_promotion: bool | None
     availability: str
     observed_at: str
     canonical_product_id: str | None
@@ -154,8 +154,7 @@ def fetch_visible_offers(
                 or not _text(name)
                 or (current_price is not None and type(current_price) is not int)
                 or (regular_price is not None and type(regular_price) is not int)
-                or type(is_promotion) is not int
-                or is_promotion not in {0, 1}
+                or (is_promotion is not None and (type(is_promotion) is not int or is_promotion not in {0, 1}))
                 or availability not in {"in_stock", "out_of_stock", "unknown"}
                 or not _text(observed_at)
                 or comparison_status not in {"ready", "review_required", "single_source", "unmapped"}
@@ -172,7 +171,7 @@ def fetch_visible_offers(
                     presentation=_text(presentation),
                     current_price_minor=current_price,
                     reported_regular_price_minor=regular_price,
-                    is_promotion=bool(is_promotion),
+                    is_promotion=None if is_promotion is None else bool(is_promotion),
                     availability=availability,
                     observed_at=_text(observed_at) or "",
                     canonical_product_id=_text(canonical_product_id),
