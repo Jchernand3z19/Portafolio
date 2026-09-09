@@ -16,6 +16,8 @@ describe('dashboard snapshot', () => {
     expect(snapshot.verifiedAmount).toBe(300);
     expect(snapshot.pendingAmount).toBe(1500);
     expect(snapshot.unidentifiedAmount).toBe(150);
+    expect(snapshot.blocks.reduce((total, block) => total + block.collected, 0)).toBe(300);
+    expect(snapshot.payments.find((payment) => payment.id === 'pay-demo-001')?.monthlyFee).toBe(150);
   });
 
   it('does not count a payment assigned outside the active EBC master as a paid home', async () => {
@@ -30,7 +32,8 @@ describe('dashboard snapshot', () => {
     expect(snapshot.paidHomes).toBe(2);
     expect(snapshot.receivedAmount).toBe(900);
     expect(snapshot.pendingAmount).toBe(1500);
-    expect(snapshot.blocks.reduce((total, block) => total + block.collected, 0)).toBe(600);
+    expect(snapshot.blocks.reduce((total, block) => total + block.collected, 0)).toBe(300);
+    expect(snapshot.payments.find((payment) => payment.id === 'pay-external')?.monthlyFee).toBeUndefined();
   });
 
   it('keeps identical block and house numbers separate across stages', async () => {
@@ -63,6 +66,7 @@ describe('dashboard snapshot', () => {
     expect(snapshot.paidHomes).toBe(0);
     expect(snapshot.pendingHomes).toBe(1);
     expect(snapshot.pendingAmount).toBe(150);
+    expect(snapshot.blocks[0]?.collected).toBe(0);
   });
 
   it('includes a deactivated home in historical periods covered by its end date', async () => {
