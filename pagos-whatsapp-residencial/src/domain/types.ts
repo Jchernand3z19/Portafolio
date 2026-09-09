@@ -15,13 +15,13 @@ export const PAYMENT_STATUSES = [
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 export interface HomeRef {
+  stage: number;
   block: number;
   house: number;
 }
 
 export interface HomeRecord extends HomeRef {
   id: string;
-  phone?: string;
   responsible?: string;
   monthlyFee: number;
   active: boolean;
@@ -50,6 +50,7 @@ export interface PaymentRecord {
   createdAt: string;
   updatedAt: string;
   sourceMessageId: string;
+  /** WhatsApp sender. It is never housing identity. */
   phone: string;
   mediaId?: string;
   receiptFileId?: string;
@@ -62,8 +63,10 @@ export interface PaymentRecord {
   reference?: string;
   beneficiary?: string;
   destinationAccountMasked?: string;
+  stage?: number;
   block?: number;
   house?: number;
+  /** Service month paid, YYYY-MM. */
   period: string;
   status: PaymentStatus;
   fileHash: string;
@@ -76,6 +79,7 @@ export interface PaymentRecord {
 
 export interface PendingConversation {
   id: string;
+  /** WhatsApp sender used only to correlate the requested E/B/C reply. */
   phone: string;
   paymentId: string;
   createdAt: string;
@@ -90,6 +94,7 @@ export interface ProcessedMessage {
 }
 
 export interface DashboardBlockSummary {
+  stage: number;
   block: number;
   totalHomes: number;
   paidHomes: number;
@@ -121,5 +126,5 @@ export interface DashboardSnapshot {
 }
 
 export function homeKey(home: HomeRef): string {
-  return `B${home.block}-C${home.house}`;
+  return `E${home.stage}-B${home.block}-C${home.house}`;
 }
