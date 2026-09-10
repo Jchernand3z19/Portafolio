@@ -16,7 +16,7 @@ SPEC.loader.exec_module(module)
 
 
 def _handoff(root: Path, retailer: str, run_id: str, attempt: int, *, accepted: bool = True) -> Path:
-    artifact = root / f"daily-acquisition-{retailer}-{run_id}-attempt-{attempt}" / "run-artifacts"
+    artifact = root / f"daily-acquisition-{retailer}-{run_id}-attempt-{attempt}"
     artifact.mkdir(parents=True)
     marker = {
         "schema": module.HANDOFF_SCHEMA,
@@ -54,7 +54,7 @@ def test_selects_latest_accepted_attempt_per_retailer(tmp_path: Path) -> None:
 def test_failed_attempt_without_acceptance_marker_is_not_reused(tmp_path: Path) -> None:
     run_id = "34500000000"
     root = _complete_root(tmp_path, run_id)
-    failed = root / f"daily-acquisition-los_andes-{run_id}-attempt-2" / "run-artifacts"
+    failed = root / f"daily-acquisition-los_andes-{run_id}-attempt-2"
     failed.mkdir(parents=True)
     for relative in module.EXPECTED["los_andes"]:
         path = failed / relative
