@@ -30,7 +30,7 @@ jobs:
             github.event.workflow_run.conclusion == 'success' &&
             github.event.workflow_run.head_branch == 'main')) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     env:
       PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
