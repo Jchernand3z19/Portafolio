@@ -60,9 +60,7 @@ jobs:
               {'supermarket_id': 'pricesmart', 'location_id': 'pricesmart_sps'},
               {'supermarket_id': 'comisariato_los_andes', 'location_id': 'comisariato_los_andes_sps'},
           ]
-          expected_keys = {
-              'schema', 'action', 'scope', 'read_only', 'reason', 'sequence'
-          }
+          expected_keys = {'schema', 'action', 'scope', 'read_only', 'reason', 'sequence'}
           if set(document) != expected_keys:
               raise SystemExit('rpi_publication_request_schema_closed_set_mismatch')
           if document.get('schema') != 'precios-sps-rpi-publication-request/v1':
@@ -73,10 +71,7 @@ jobs:
               raise SystemExit('rpi_publication_request_scope_invalid')
           if document.get('read_only') is not True:
               raise SystemExit('rpi_publication_request_read_only_required')
-          if document.get('reason') not in {
-              'bootstrap_rpi_consumer_publication',
-              'operator_requested_republication',
-          }:
+          if document.get('reason') not in {'bootstrap_rpi_consumer_publication', 'operator_requested_republication'}:
               raise SystemExit('rpi_publication_request_reason_invalid')
           if type(document.get('sequence')) is not int or document['sequence'] < 1:
               raise SystemExit('rpi_publication_request_sequence_invalid')
@@ -130,6 +125,16 @@ jobs:
             --require-products \
             | tee run-artifacts/analytics/rpi-consumer-v3-run.json
 
+      - name: Exportar catálogo público B2C de Tegucigalpa por sucursal exacta
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python scripts/exportar_consumer_catalog_tgu.py \
+            --turso \
+            --output-directory run-artifacts/analytics/rpi-la-colonia-walmart-sps/consumer-v3-tgu \
+            --require-products \
+            | tee run-artifacts/analytics/rpi-consumer-v3-tgu-run.json
+
       - name: Generar muestra segura para portafolio desde Consumer Mart
         working-directory: precios-supermercados-sps
         run: |
@@ -156,6 +161,8 @@ jobs:
           sample = json.loads((root / 'portfolio-sample.json').read_text(encoding='utf-8'))
           catalog_root = root / 'consumer-v3'
           catalog_manifest = json.loads((catalog_root / 'manifest.json').read_text(encoding='utf-8'))
+          tgu_root = root / 'consumer-v3-tgu'
+          tgu_manifest = json.loads((tgu_root / 'manifest.json').read_text(encoding='utf-8'))
           policy = 'fail_closed_strong_identity_and_commercial_consistency'
           expected_scope = [
               {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_sps'},
@@ -167,6 +174,14 @@ jobs:
               {'supermarket_id': 'walmart', 'location_id': 'walmart_sps'},
               {'supermarket_id': 'pricesmart', 'location_id': 'pricesmart_sps'},
               {'supermarket_id': 'comisariato_los_andes', 'location_id': 'comisariato_los_andes_sps'},
+          ]
+          expected_tgu_scope = [
+              {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_tgu'},
+              {'supermarket_id': 'walmart', 'location_id': 'walmart_tgu_ffaa'},
+              {'supermarket_id': 'walmart', 'location_id': 'walmart_tgu_el_sauce'},
+              {'supermarket_id': 'pricesmart', 'location_id': 'pricesmart_tgu'},
+              {'supermarket_id': 'paiz', 'location_id': 'paiz_tgu_multiplaza'},
+              {'supermarket_id': 'paiz', 'location_id': 'paiz_tgu_proceres'},
           ]
 
           assert business['schema'] == 'rpi-business-mart/v1'
@@ -199,9 +214,7 @@ jobs:
           assert catalog_manifest['scope'] == expected_catalog_scope
           assert catalog_manifest['visible_rows'] > 0
           assert catalog_manifest['source_offers'] >= catalog_manifest['visible_rows']
-          assert set(catalog_manifest['retailer_offer_counts']) == {
-              item['supermarket_id'] for item in expected_catalog_scope
-          }
+          assert set(catalog_manifest['retailer_offer_counts']) == {item['supermarket_id'] for item in expected_catalog_scope}
           assert all(count > 0 for count in catalog_manifest['retailer_offer_counts'].values())
           assert catalog_manifest['partition_count'] > 0
           assert catalog_manifest['public_boundary'] == {
@@ -210,16 +223,36 @@ jobs:
               'contains_raw': False,
               'contains_review_queue': False,
           }
-          catalog_files = catalog_manifest.get('files')
-          assert isinstance(catalog_files, list) and catalog_files
-          assert catalog_manifest['initial_payload']['request_count'] == 2
-          for item in catalog_files:
-              relative = Path(item['path'])
-              assert not relative.is_absolute() and '..' not in relative.parts
-              path = catalog_root / relative
-              assert path.is_file(), relative
-              assert hashlib.sha256(path.read_bytes()).hexdigest() == item['sha256']
-              assert path.stat().st_size == item['bytes'] > 0
+
+          assert tgu_manifest['schema'] == 'rpi-consumer-catalog-manifest/v3'
+          assert tgu_manifest['catalog_schema'] == 'rpi-consumer-catalog/v3'
+          assert tgu_manifest['source_backend'] == 'turso'
+          assert tgu_manifest['location'] == {'city': 'Tegucigalpa', 'country_code': 'HN'}
+          assert tgu_manifest['scope'] == expected_tgu_scope
+          assert tgu_manifest['visible_rows'] > 0
+          assert tgu_manifest['source_offers'] >= tgu_manifest['visible_rows']
+          assert tgu_manifest['initial_files'] == ['facets-tgu.json']
+          assert tgu_manifest['public_boundary'] == catalog_manifest['public_boundary']
+          exact_counts = tgu_manifest.get('context_offer_counts')
+          assert isinstance(exact_counts, list) and len(exact_counts) == len(expected_tgu_scope)
+          assert [
+              {'supermarket_id': item['supermarket_id'], 'location_id': item['location_id']}
+              for item in exact_counts
+          ] == expected_tgu_scope
+          assert all(item['offer_count'] > 0 for item in exact_counts)
+          assert len({item['name'] for item in tgu_manifest['retailers']}) == 6
+
+          for public_root, public_manifest in ((catalog_root, catalog_manifest), (tgu_root, tgu_manifest)):
+              public_files = public_manifest.get('files')
+              assert isinstance(public_files, list) and public_files
+              assert public_manifest['initial_payload']['request_count'] == 2
+              for item in public_files:
+                  relative = Path(item['path'])
+                  assert not relative.is_absolute() and '..' not in relative.parts
+                  path = public_root / relative
+                  assert path.is_file(), relative
+                  assert hashlib.sha256(path.read_bytes()).hexdigest() == item['sha256']
+                  assert path.stat().st_size == item['bytes'] > 0
 
           hashes = manifest.get('files_sha256')
           assert isinstance(hashes, dict) and hashes
@@ -253,8 +286,9 @@ jobs:
               'consumer_v3_visible_rows': catalog_manifest['visible_rows'],
               'consumer_v3_source_offers': catalog_manifest['source_offers'],
               'consumer_v3_partitions': catalog_manifest['partition_count'],
-              'consumer_v3_initial_bytes': catalog_manifest['initial_payload']['bytes'],
-              'consumer_v3_initial_gzip_bytes': catalog_manifest['initial_payload']['gzip_bytes'],
+              'consumer_v3_tgu_visible_rows': tgu_manifest['visible_rows'],
+              'consumer_v3_tgu_source_offers': tgu_manifest['source_offers'],
+              'consumer_v3_tgu_partitions': tgu_manifest['partition_count'],
           }, sort_keys=True))
           PY
 
@@ -268,5 +302,6 @@ jobs:
             precios-supermercados-sps/run-artifacts/analytics/rpi-la-colonia-walmart-sps-run.json
             precios-supermercados-sps/run-artifacts/analytics/rpi-la-colonia-walmart-sps-portfolio-run.json
             precios-supermercados-sps/run-artifacts/analytics/rpi-consumer-v3-run.json
+            precios-supermercados-sps/run-artifacts/analytics/rpi-consumer-v3-tgu-run.json
           if-no-files-found: warn
           retention-days: 30

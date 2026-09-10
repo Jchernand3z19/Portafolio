@@ -4,16 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#123d31">
-  <meta name="description" content="Compara precios públicos observados y planifica tu lista de compra por supermercado.">
-  <title>Compra Inteligente · RPI Honduras</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta name="description" content="Compara precios públicos observados en Tegucigalpa y planifica tu lista de compra por supermercado y sucursal.">
+  <title>Compra Inteligente · Tegucigalpa · RPI Honduras</title>
+  <link rel="stylesheet" href="../styles.css">
+  <script type="importmap">
+    {"imports":{"../catalog.js":"../catalog-tgu.js"}}
+  </script>
 </head>
 <body
-  data-city-slug="san-pedro-sula"
-  data-city-name="San Pedro Sula"
-  data-catalog-url="https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/rpi/v3/manifest.json">
+  data-city-slug="tegucigalpa"
+  data-city-name="Tegucigalpa"
+  data-catalog-url="https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/rpi/v3/cities/tegucigalpa/manifest.json">
   <header class="app-header">
-    <a class="brand" href="../../index.html" aria-label="Volver al portafolio">RPI</a>
+    <a class="brand" href="../../../index.html" aria-label="Volver al portafolio">RPI</a>
     <nav aria-label="Secciones">
       <a href="#comparar">Comparar</a>
       <a class="cart-link" href="#mi-compra">Mi lista <span id="cart-count" aria-label="productos en Mi lista">0</span></a>
@@ -22,7 +25,7 @@
 
   <main>
     <section class="hero" id="comparar">
-      <p class="eyebrow">Retail Price Intelligence · San Pedro Sula</p>
+      <p class="eyebrow">Retail Price Intelligence · Tegucigalpa</p>
       <h1>Compra Inteligente</h1>
       <p>Compara precios públicos y planifica tu lista antes de visitar el supermercado. Esta página no vende productos ni procesa pagos.</p>
       <p id="dataset-status" class="data-status" role="status" aria-live="polite">Comprobando fecha del último corte válido…</p>
@@ -40,14 +43,14 @@
           <label>Producto<select id="type-filter" disabled><option value="">Elige un producto</option></select></label>
           <label>Marca<select id="brand-filter" disabled><option value="">Todas</option></select></label>
           <label>Presentación<select id="presentation-filter" disabled><option value="">Todas</option></select></label>
-          <label class="search-field">Búsqueda secundaria<input id="product-search" type="search" inputmode="search" autocomplete="off" placeholder="Ej. leche Sula 1 L" aria-describedby="data-status"></label>
+          <label class="search-field">Búsqueda secundaria<input id="product-search" type="search" inputmode="search" autocomplete="off" placeholder="Ej. leche 1 L" aria-describedby="data-status"></label>
         </div>
         <div id="active-filters" class="active-filters" aria-label="Filtros activos"></div>
         <p id="data-status" class="data-status" role="status" aria-live="polite">Cargando publicación segura…</p>
       </div>
 
       <aside class="mini-cart" aria-labelledby="mini-cart-title">
-        <p class="eyebrow">MI LISTA · SAN PEDRO SULA</p>
+        <p class="eyebrow">MI LISTA · TEGUCIGALPA</p>
         <h2 id="mini-cart-title">Resumen</h2>
         <p id="mini-cart-stats">0 productos · 0 unidades</p>
         <div id="mini-cart-retailers"></div>
@@ -58,10 +61,10 @@
 
     <section class="results-section" aria-labelledby="results-title">
       <div class="section-heading">
-        <div><p class="eyebrow">COMPARACIÓN EXACTA</p><h2 id="results-title">Precios por supermercado</h2></div>
+        <div><p class="eyebrow">COMPARACIÓN EXACTA</p><h2 id="results-title">Precios por supermercado y sucursal</h2></div>
         <p id="result-count">0 resultados</p>
       </div>
-      <p class="section-note">El color sólo compara ofertas homologadas y vigentes. Elige un supermercado por producto; la cantidad se aplica una sola vez a la fila.</p>
+      <p class="section-note">El color sólo compara ofertas homologadas y vigentes. Las sucursales de una misma cadena se mantienen separadas.</p>
       <div id="results" class="results" aria-live="polite"><p class="empty-state">Selecciona una categoría para comenzar.</p></div>
       <div id="batch-bar" class="batch-bar">
         <span id="batch-status">Ningún producto preparado</span>
@@ -75,13 +78,13 @@
 
     <section class="cart-panel" id="mi-compra" aria-labelledby="cart-title">
       <div class="section-heading">
-        <div><p class="eyebrow">MI LISTA · SAN PEDRO SULA</p><h2 id="cart-title">Lista por supermercado</h2></div>
+        <div><p class="eyebrow">MI LISTA · TEGUCIGALPA</p><h2 id="cart-title">Lista por supermercado y sucursal</h2></div>
         <p id="cart-stats">0 productos · 0 unidades · 0 supermercados · 0 incompletos</p>
       </div>
       <aside id="price-refresh" class="price-refresh" role="status" aria-live="polite" hidden>
         <p id="price-refresh-message"></p>
         <button id="price-refresh-button" class="secondary-button" type="button">Actualizar precios</button>
-        <small>Se conserva el mismo producto, supermercado y cantidad. Una oferta faltante se marca y nunca se sustituye en silencio.</small>
+        <small>Se conserva el mismo producto, supermercado, sucursal y cantidad. Una oferta faltante se marca y nunca se sustituye en silencio.</small>
       </aside>
       <div id="cart-groups"></div>
       <section id="basket-analysis" class="basket-analysis" aria-labelledby="basket-analysis-title" hidden>
@@ -106,9 +109,9 @@
   </main>
 
   <a class="mobile-cart" href="#mi-compra" aria-label="Abrir Mi lista">Mi lista · <span id="mobile-cart-count">0</span> ↑</a>
-  <script type="module" src="app.js"></script>
-  <script type="module" src="status.js"></script>
-  <script type="module" src="share.js"></script>
-  <script type="module" src="city-nav.js"></script>
+  <script type="module" src="../app.js"></script>
+  <script type="module" src="../status.js"></script>
+  <script type="module" src="../share.js"></script>
+  <script type="module" src="../city-nav.js"></script>
 </body>
 </html>
