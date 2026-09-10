@@ -49,11 +49,16 @@ def test_daily_workflow_uses_one_matrix_child_per_retailer_and_keeps_schedule() 
 def test_acquisition_job_is_read_only_and_publishes_attempt_scoped_handoff() -> None:
     workflow = _workflow()
     acquire = workflow["jobs"]["acquire"]
-    raw_steps = "\n".join(str(step) for step in acquire["steps"])
-    assert "scripts/ejecutar_adquisicion_diaria.py" in raw_steps
-    assert "${{ matrix.retailer }}" in raw_steps
-    assert "daily-acquisition-${{ matrix.retailer }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}" in raw_steps
-    assert "if': 'always()" in raw_steps or "'if': 'always()'" in raw_steps
+    steps = acquire["steps"]
+    runtime = next(step for step in steps if "ejecutar_adquisicion_diaria.py" in str(step.get("run", "")))
+    upload = next(step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@"))
+
+    assert runtime["run"] == 'python scripts/ejecutar_adquisicion_diaria.py --retailer "${{ matrix.retailer }}"'
+    assert upload["if"] == "always()"
+    assert upload["with"]["name"] == "daily-acquisition-${{ matrix.retailer }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}"
+    assert upload["with"]["path"] == "precios-supermercados-sps/run-artifacts/"
+
+    raw_steps = "\n".join(str(step) for step in steps)
     assert "TURSO_DATABASE_URL" not in raw_steps
     assert "TURSO_AUTH_TOKEN" not in raw_steps
     assert "actions: write" not in WORKFLOW.read_text(encoding="utf-8")
