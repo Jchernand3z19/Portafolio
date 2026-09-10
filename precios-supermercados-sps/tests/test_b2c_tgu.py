@@ -54,6 +54,19 @@ def offer(source: str, supermarket: str, location: str, canonical: str = "gtin:t
     )
 
 
+def test_tgu_scope_accepts_multiple_locations_for_same_chain_and_rejects_exact_duplicates() -> None:
+    scope = TGU.CityCatalogScope(TGU.TGU_SCOPE)
+    assert scope.locations == TGU.TGU_SCOPE
+    assert scope.supermarket_ids == ("la_colonia", "walmart", "pricesmart", "paiz")
+    assert scope.locations.count(("walmart", "walmart_tgu_ffaa")) == 1
+    assert scope.locations.count(("walmart", "walmart_tgu_el_sauce")) == 1
+    assert scope.locations.count(("paiz", "paiz_tgu_multiplaza")) == 1
+    assert scope.locations.count(("paiz", "paiz_tgu_proceres")) == 1
+
+    with pytest.raises(TGU.ExportError, match="consumer_catalog_tgu_scope_context_duplicate"):
+        TGU.CityCatalogScope((("walmart", "walmart_tgu_ffaa"), ("walmart", "walmart_tgu_ffaa")))
+
+
 def test_tgu_same_chain_branches_do_not_create_cross_retailer_comparison() -> None:
     walmart_ffaa = offer("w:1", "walmart", "walmart_tgu_ffaa")
     walmart_sauce = offer("w:1", "walmart", "walmart_tgu_el_sauce")
