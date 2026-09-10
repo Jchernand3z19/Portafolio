@@ -1,5 +1,7 @@
 # Decisiones técnicas
 
+Este archivo conserva decisiones históricas en orden. Cuando una decisión deja de ser vigente, se mantiene para trazabilidad y una decisión posterior la marca explícitamente como supersedida.
+
 ## DT-001 — Monorepositorio
 
 El proyecto vive en `precios-supermercados-sps/`. Los workflows viven en `.github/workflows/`.
@@ -132,100 +134,86 @@ Todo periodo cerrado debe registrar `closed_by_scrape_run_id`; un periodo abiert
 
 ## DT-030 — `main` protegido con enforcement funcional verificable
 
-GATE-17 no se considera cerrado sólo porque exista un ruleset configurado. La evidencia productiva exige observar a GitHub bloquear merges reales.
-
-En PR #29, con `main` reportado como `protected: true`, GitHub rechazó un intento de merge mientras `tests` estaba en progreso. Después de que el check terminó en `success`, un segundo intento fue rechazado por una conversación de review sin resolver. Tras resolver el hilo y volver a validar el head final, el merge fue permitido.
-
-Por esa evidencia, `GATE-17 = PASS_PRODUCTIVE_EVIDENCE`. Esto protege la gobernanza de `main`, pero no concede autoridad live ni sustituye provenance físico.
+GATE-17 no se considera cerrado sólo porque exista un ruleset configurado. La evidencia productiva exige observar a GitHub bloquear merges reales. La evidencia de PR #29 demostró bloqueo por check pendiente y por conversación de review sin resolver antes del merge permitido.
 
 ## DT-031 — Diseño Google Cloud evaluado y supersedido
 
-La arquitectura con Cloud Run, Direct VPC egress, Secure Web Proxy, Cloud Logging y Cloud KMS fue diseñada como una posible frontera física independiente. No llegó a convertirse en infraestructura productiva y dejó de ser la ruta seleccionada cuando la implementación Cloudflare alcanzó las fronteras necesarias con menor dependencia operativa.
+La arquitectura Cloud Run/Direct VPC/Secure Web Proxy/Logging/KMS se conserva únicamente como historial; no llegó a ser la ruta productiva final.
 
-Se conserva esta decisión únicamente como historial arquitectónico.
+## DT-032 — Cloudflare como frontera física seleccionada en la etapa de prueba
 
-## DT-032 — Cloudflare es la frontera física seleccionada
-
-La ruta seleccionada usa **Cloudflare Workers + Durable Objects SQLite + GitHub OIDC + Ed25519 + Workers Observability**.
-
-La implementación fija repo, repository ID, `main`, workflow, environment, event, audience, host/path/método y límites. El caller no puede elegir un destino arbitrario. El Durable Object controla presupuesto, pacing, single-flight, replay y fencing. El Worker liga receipts Ed25519 a request, run, commit, release y respuesta cruda; la capa Python verifica firma/body y reconcilia evidencia contra Workers Observability.
-
-Esta decisión describe la arquitectura elegida. La autoridad productiva sigue separada de la mera existencia de infraestructura.
+La ruta Cloudflare Workers + Durable Objects + OIDC + Ed25519 fue seleccionada y validada como frontera física durante la etapa correspondiente. Sus evidencias y límites se conservan históricamente; no define por sí sola el backend comercial actual.
 
 ## DT-033 — Completitud técnica no equivale a aceptación productiva
 
-La cadena puede cerrar structural discovery autenticado, derivar el plan canónico, verificar receipts, reconciliar observability y construir un manifest completo. `CatalogAcceptanceReadiness` separa explícitamente completitud técnica de autoridad productiva y no produce por sí mismo `catalog_accepted=true` ni `production_authority=true`.
+La cadena puede cerrar discovery, receipts y reconciliación técnica sin que eso conceda `catalog_accepted=true` o `production_authority=true`.
 
-## DT-034 — Cloudflare se prueba primero contra un origen controlado no-La-Colonia
+## DT-034 — Cloudflare se prueba primero contra origen controlado
 
-Antes de cualquier validación física del collector contra La Colonia, la infraestructura Cloudflare se prueba contra un origen controlado propio. La sonda usa Worker de origen, gateway, Durable Object, OIDC audience/environment, claves, signing key ID, schema y dominio criptográfico separados de la ruta productiva.
-
-El caller no suministra la URL física. La sonda rechaza La Colonia antes de cualquier fetch. Un receipt de sonda no puede convertirse en evidencia de catálogo ni conceder autoridad productiva.
+Antes de una validación física contra una fuente real, la infraestructura se prueba contra un origen propio. La sonda no concede autoridad de catálogo.
 
 ## DT-035 — `la_colonia_online` es contexto fuente, no ubicación comercial
 
-El extractor de La Colonia conserva `location_id=la_colonia_online` únicamente como identidad del contexto raw del catálogo público en línea. Este ID no representa SPS, Tegucigalpa ni una tienda y debe permanecer `location_status=unknown`, sin `location_confidence`.
-
-La normalización falla cerrada si un `RawProduct` registrado bajo ese contexto intenta declararse `confirmed` o `inferred`. El binding de ubicación debe producir una ubicación comercial distinta (`la_colonia_sps`, una tienda futura, etc.) sólo después de evidencia técnica suficiente. Así se impide que el nombre de un contexto fuente se convierta accidentalmente en autoridad geográfica.
+`la_colonia_online` no representa SPS/Tegucigalpa ni una tienda. El binding comercial debe producir un `location_id` distinto sólo después de evidencia suficiente.
 
 ## DT-036 — GTIN válido es identidad fuerte; lo demás queda pendiente
 
-Un barcode sólo puede crear automáticamente un `product_id` cross-supermercado cuando es GTIN-8/12/13/14 numérico y supera el check digit. Su representación canónica es GTIN-14 y el ID derivado es `prod_gtin_<gtin14>`.
+Un barcode sólo crea identidad cross-retailer automática cuando es GTIN-8/12/13/14 válido y supera check digit. Sin ello se conserva identidad pendiente/revisable.
 
-Si el barcode falta o no es GTIN válido, la observación no se descarta: conserva un `prod_pending_*` ligado al `source_product_id` y `pending_product_mapping`. Un resolver explícito/revisado puede asignar posteriormente otro `product_id` sin cambiar `source_product_id` ni `offer_id`.
+## DT-037 — Producto normalizado y mapping fuente son conceptos distintos
 
-## DT-037 — Producto normalizado y mapping fuente son tablas distintas
+`dim_products` y `map_source_products` separan identidad canónica de relación fuente. Esta decisión define el contrato lógico, no obliga a su materialización física temprana.
 
-El contrato tabular común incorpora:
+## DT-038 — Observability se valida con el verifier actual
 
-```text
-dim_products
-map_source_products
-```
+Las conclusiones históricas sobre limitaciones de observability no se elevan a propiedades permanentes; se usa evidencia del verifier vigente.
 
-`dim_products` contiene sólo atributos normalizados/canónicos por `product_id`; no incluye supermercado, ubicación, precio, promoción, disponibilidad, URL fuente ni run. `map_source_products` conserva la relación por `source_product_id`, descriptores fuente, `product_id`, método/estado de mapping y razón de revisión.
+## DT-039 — Ramas históricas se clasifican con evidencia
 
-Con estas dos tablas el contrato gestionado pasa de seis a ocho tablas. Un run no aceptado no materializa dimensión/mapping/current/history.
+La auditoría de ramas usa ancestry, igualdad de tree y patch-equivalence. Las decisiones de cierre se ligan al SHA auditado.
 
-## DT-038 — Observability se valida con el verifier actual, no con la limitación histórica
+## DT-040 — Google Sheets fue backend temporal de una fase anterior
 
-La conclusión histórica de que la superficie pública de Workers Observability no podía exponer el detalle necesario no se usa como una propiedad arquitectónica permanente. El código actual descubre candidatos y consulta detalle con `view: events`, exigiendo custom span único, relación padre-hijo y fetch físico reconciliado con el receipt.
+En esa etapa Google Sheets se seleccionó como almacenamiento temporal estructurado. Esta decisión queda **supersedida por DT-043** para la arquitectura productiva actual.
 
-La frontera sigue abierta hasta observar una ejecución exitosa del verifier actual contra la evidencia física de la sonda existente. Esa comprobación no requiere una nueva request a La Colonia ni concede autoridad de catálogo.
+## DT-041 — `prod_pending_*` también es identidad determinista protegida
 
-## DT-039 — Ramas históricas se clasifican con evidencia y decisión versionada
+El prefijo no basta: la identidad pendiente se recalcula y valida. Un ID pendiente forjado falla cerrado.
 
-La auditoría de ramas `precios-sps` usa ancestry, igualdad de tree y patch-equivalence antes de recurrir a inspección manual. Las decisiones `CLOSED_SUPERSEDED` quedan versionadas y ligadas al SHA exacto de `main` auditado.
+## DT-042 — Materialización MDM diferida en la etapa de una sola fuente
 
-El inventario falla cerrado si cambia el snapshot sin renovar la inspección, aparece una rama no resuelta o queda un `UNIQUE_UNMERGED`. El cierre de una rama histórica nunca sustituye la recuperación focalizada de hardening útil; ese patrón se aplicó al hardening de evidencia física recuperado antes del cierre del inventario.
+Durante la fase temprana no se materializaron estructuras MDM sin necesidad real. La decisión fue válida para aquella etapa; la arquitectura multi-fuente actual se rige por la homologación productiva y DT-043/DT-044.
 
-## DT-040 — Google Sheets es el backend temporal seleccionado
+## DT-043 — Turso/libSQL es el backend comercial productivo vigente
 
-DT-020 se conserva como decisión histórica de una etapa en la que el backend todavía no estaba elegido. Queda **supersedida** por esta decisión: Google Sheets es el backend temporal estructurado de la primera fase y BigQuery queda como evolución posterior.
+Google Sheets deja de ser el backend temporal seleccionado para el producto actual. El estado comercial productivo compartido se mantiene en **Turso/libSQL**, con SQLite como equivalente local/reproducible.
 
-La selección no acopla la lógica comercial al proveedor. `TabularBatch`, current/history, rehidratación, identidad, pricing y autoridad permanecen backend-neutral. El acceso productivo a Sheets usa un Environment dedicado, service account, workflow de un solo escritor, preflight sin secretos, operación controlada y read-back. La existencia del workbook nunca concede `production_authority` ni `catalog_accepted`.
+`products`, `locations`, `price_history` y `scrape_runs` forman la base comercial común multi-fuente. La capa de homologación es derivada y reconstruible. Ningún frontend consulta Turso directamente.
 
-## DT-041 — Un `prod_pending_*` también es identidad determinista protegida
+Esta decisión supersede DT-040 como selección de backend vigente sin borrar la evidencia histórica de esa fase.
 
-El prefijo reservado `prod_pending_` no basta para clasificar un producto como pendiente legítimo. Antes de materializar `dim_products` o `map_source_products`, la frontera tabular recalcula `generate_pending_product_id(source_product_id)` y exige coincidencia exacta.
+## DT-044 — RPI usa contratos B2B y B2C separados
 
-Un ID pendiente forjado o inconsistente falla cerrado. Esto preserva la cola de revisión sin permitir que un caller fabrique una identidad provisional arbitraria. Un mapping explícito/revisado sigue pudiendo reemplazar posteriormente el `product_id` provisional sin alterar `source_product_id` ni `offer_id`.
+La capa SERVE actual se divide deliberadamente en:
 
-## DT-042 — El modelo lógico no obliga a materializar MDM antes de necesitarlo
+- `rpi-business-mart/v1`: privado, B2B / Power BI;
+- `rpi-consumer-mart/v2`: público, comparación analítica segura;
+- `rpi-consumer-catalog/v3`: público, navegación escalable de Compra Inteligente.
 
-DT-037 y DT-041 se conservan como contratos de identidad y mapping cross-source, pero queda **supersedida la decisión de materializar esas dos estructuras durante la fase de una sola fuente**.
+El Consumer Catalog separa visibilidad de comparabilidad. Una oferta individual puede publicarse sin autorización cross-retailer; sólo Python puede producir ranking/recomendación.
 
-Google Sheets mantiene activas únicamente:
+`precios-sps-publication/v1` y `precios-sps-static-bi-dataset/v1` quedan como contratos legados/compatibilidad.
 
-```text
-cfg_supermarkets
-cfg_locations
-fact_offers_current
-fact_offer_history
-fact_scrape_runs
-fact_quality_events
-```
+## DT-045 — Publicación RPI pública atómica y Business Mart privado
 
-`dim_products` y `map_source_products` permanecen como contratos lógicos diferidos. Sus validaciones y funciones pueden seguir probándose, pero no se leen ni escriben como tabs físicos activos hasta que exista una segunda fuente o un consumidor real que requiera equivalencias canónicas.
+El pipeline derivado valida schema, scope, hashes, tamaños y ausencia de secretos antes de publicar. Consumer Mart v2 y Consumer Catalog v3 se sincronizan a `portfolio-data`; Business Mart v1 permanece dentro del artifact privado B2B.
 
-La decisión se basa en grain/lifecycle/consumo, no en reducir tablas por estética: `source_product_id` y `product_id` ya permanecen en current/history, por lo que no se pierde trazabilidad ni capacidad de backfill. El adapter de Sheets rechaza explícitamente batches que intenten persistir una tabla diferida. La activación futura de MDM requerirá reglas de equivalencia/revisión, backfill y reconciliación demostrables.
+El navegador carga datos estáticos, no ejecuta Turso ni matching. Un fallo de exportación/sync conserva la publicación last-known-good.
+
+## DT-046 — El catálogo B2C se sirve bajo demanda
+
+El Consumer Catalog v3 usa manifest + facetas + índices bajo demanda + particiones de máximo 250 filas. La partición física sigue grupos de navegación para evitar fan-out excesivo. El arranque no descarga el catálogo completo.
+
+## DT-047 — Reintentos de Los Andes limitados a fallos transitorios de transporte
+
+Después del timeout productivo del 2026-09-10, Comisariato Los Andes permite como máximo un reintento por solicitud únicamente ante `URLError`/`TimeoutError`, con un tope adicional de diez reintentos acumulados y respetando el presupuesto total de intentos. Errores HTTP no se reintentan y la compuerta de completitud permanece fail-closed.
