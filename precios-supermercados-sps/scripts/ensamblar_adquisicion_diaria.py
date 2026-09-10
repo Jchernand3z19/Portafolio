@@ -94,11 +94,8 @@ def _attempts(root: Path, retailer: str, run_id: str) -> list[tuple[int, Path]]:
         if not match:
             continue
         attempt = int(match.group(1))
-        artifacts = child / "run-artifacts"
-        if not artifacts.is_dir() or artifacts.is_symlink():
-            continue
-        if _read_handoff(artifacts, retailer=retailer, run_id=run_id, attempt=attempt):
-            result.append((attempt, artifacts))
+        if _read_handoff(child, retailer=retailer, run_id=run_id, attempt=attempt):
+            result.append((attempt, child))
     return sorted(result)
 
 
