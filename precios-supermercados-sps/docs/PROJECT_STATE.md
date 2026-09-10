@@ -117,6 +117,24 @@ El PR **#455** (`[RPI] Retry transient Los Andes timeouts safely`) fue fusionado
 
 **Pendiente operativo único:** observar una siguiente ejecución programada con el ajuste #455 para confirmar el ciclo end-to-end en producción. No hace falta otro cambio de producto para esa comprobación y no se debe provocar scraping live adicional sólo para obtener evidencia.
 
+## Autoridad live y binding SPS
+
+La evidencia histórica o una autorización temporal consumida **no se interpreta como autorización abierta**. Cualquier nueva observación live fuera de los workflows productivos ya autorizados por su ejecución recurrente **requiere autorización humana explícita vigente** para ese alcance.
+
+El entrypoint manual de binding de ubicación permanece cerrado por defecto y no tiene autorizaciones activas:
+
+```text
+ACTIVE_AUTHORIZATION_IDS = []
+```
+
+El fingerprint canónico de la evidencia de región SPS que debe seguir coincidiendo con el contrato productivo es:
+
+```text
+d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+```
+
+Ese fingerprint demuestra continuidad de la evidencia técnica de binding; no concede por sí mismo autoridad para iniciar tráfico live.
+
 ## Cadena de publicación vigente
 
 Tras una actualización aceptada:
