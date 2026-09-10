@@ -27,16 +27,14 @@ def test_rpi_consumer_publication_reuses_safe_artifact_without_turso_reads_and_i
     assert "portfolio_sync_secret_material_detected" in raw
     assert "source_workflow_run_id" in raw
     assert "source_head_sha" in raw
-    assert "precios-supermercados-sps/published/rpi/consumer-mart.json" in raw
-    assert "precios-supermercados-sps/published/rpi/manifest.json" in raw
+    assert 'published="$repository/precios-supermercados-sps/published/rpi"' in raw
+    assert '"$published/consumer-mart.json"' in raw
+    assert '"$published/manifest.json"' in raw
     assert "precios-supermercados-sps/portfolio/sample-data.json" in raw
     assert "precios-supermercados-sps/published/rpi/business-mart.json" not in raw
-    assert "const dataBranch = 'portfolio-data';" in raw
-    assert "createBlob" in raw
-    assert "createTree" in raw
-    assert "createCommit" in raw
-    assert "updateRef" in raw
-    assert "force: false" in raw
+    assert "ref: portfolio-data" in raw
+    assert 'git -C "$repository" push origin HEAD:portfolio-data' in raw
+    assert "createBlob" not in raw
     assert "createOrUpdateFileContents" not in raw
 
     assert "TURSO_DATABASE_URL: ${{ secrets." not in raw
@@ -44,7 +42,7 @@ def test_rpi_consumer_publication_reuses_safe_artifact_without_turso_reads_and_i
     assert "scripts/exportar_modelo_analitico.py" not in raw
     assert "scripts/generar_descriptores_publicacion_segura.py" not in raw
     assert "scripts/exportar_rpi_marts.py" not in raw
-    assert "actions/checkout@" not in raw
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in raw
 
 
 def test_power_bi_legacy_refresh_path_remains_available_while_rpi_business_mart_uses_artifacts() -> None:
