@@ -11,8 +11,10 @@ on:
       - 'pagos-whatsapp-residencial/**'
       - '.github/workflows/pagos-whatsapp-residencial-ci.yml'
 
+# One-time bootstrap: write is restricted to this same-repository PAGOS branch and
+# removed immediately after package-lock.json is committed.
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: pagos-whatsapp-residencial-${{ github.workflow }}-${{ github.ref }}
@@ -40,12 +42,25 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Upload lockfile bootstrap artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: pagos-package-lock-bootstrap
-          path: pagos-whatsapp-residencial/package-lock.json
-          retention-days: 1
+      - name: Commit generated lockfile once
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.head_ref == 'feat/pagos-whatsapp-residencial-mvp'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
+            echo 'package-lock.json is already tracked; nothing to bootstrap.'
+            exit 0
+          fi
+          git fetch origin "$HEAD_REF"
+          git checkout -B "$HEAD_REF" "origin/$HEAD_REF"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m '[PAGOS] Add reproducible npm lockfile'
+          git push origin "$HEAD_REF"
 
       - name: Lint
         run: npm run lint
