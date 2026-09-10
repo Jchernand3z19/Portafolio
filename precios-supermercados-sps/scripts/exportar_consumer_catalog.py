@@ -193,6 +193,10 @@ def _row_id(prefix: str, value: str) -> str:
 def _category_key(value: str | None) -> str:
     identity = "__unknown__" if value is None else value
     return f"{_slug(value)}-{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:8]}"
+def _search_prefix(value: object) -> str:
+    folded = unicodedata.normalize("NFKD", str(value or ""))
+    normalized = re.sub(r"[^a-z0-9]+", "", "".join(char for char in folded if not unicodedata.combining(char)).casefold())
+    return normalized[:2] or "__"
 def _identity_groups(offers: Iterable[VisibleOffer]) -> list[tuple[str, list[VisibleOffer]]]:
     """Agrupa sólo IDs canónicos ready sin colisiones por supermercado."""
     values = tuple(offers)
@@ -349,7 +353,6 @@ def export_consumer_catalog(
     categories: dict[str | None, list[dict[str, object]]] = defaultdict(list)
     for row in rows:
         categories[row["category"] if isinstance(row["category"], str) else None].append(row)
-    index_rows: list[dict[str, object]] = []
     partition_paths: list[str] = []
     for category, category_rows in sorted(categories.items(), key=lambda item: (item[0] is None, str(item[0]).casefold())):
         slug = _category_key(category)
@@ -362,17 +365,37 @@ def export_consumer_catalog(
             )
             partition_paths.append(relative)
             for row in chunk:
-                index_rows.append(
-                    {
-                        "row_id": row["row_id"],
-                        "partition": relative,
-                        "category": row["category"],
-                        "product_type": row["product_type"],
-                        "brand": row["brand"],
-                        "presentation": row["presentation"],
-                        "product_name": row["product_name"],
-                    }
-                )
+                row["_partition"] = relative
+    index_paths: list[str] = []
+    category_facets: list[dict[str, object]] = []
+    for category, category_rows in sorted(categories.items(), key=lambda item: (item[0] is None, str(item[0]).casefold())):
+        category_key = _category_key(category)
+        if category is None:
+            prefix_groups: dict[str, list[dict[str, object]]] = defaultdict(list)
+            for row in category_rows:
+                prefix_groups[_search_prefix(row["product_name"])].append(row)
+            search_indexes = []
+            for prefix, group in sorted(prefix_groups.items()):
+                relative = f"index/{category_key}/search-{prefix}.json"
+                entries = [{key: row[key] for key in ("row_id", "product_name", "brand", "presentation")} | {"partition": row["_partition"]} for row in group]
+                _atomic_bytes(output_directory / relative, _json_bytes({"schema": INDEX_SCHEMA, "category": None, "search_prefix": prefix, "row_count": len(entries), "rows": entries}))
+                index_paths.append(relative)
+                search_indexes.append({"prefix": prefix, "path": relative, "row_count": len(entries)})
+            category_facets.append({"value": None, "label": "Sin categoría normalizada", "row_count": len(category_rows), "navigation": "search", "search_indexes": search_indexes})
+            continue
+        types: dict[str | None, list[dict[str, object]]] = defaultdict(list)
+        for row in category_rows:
+            types[row["product_type"] if isinstance(row["product_type"], str) else None].append(row)
+        type_facets = []
+        for product_type, group in sorted(types.items(), key=lambda item: (item[0] is None, str(item[0]).casefold())):
+            relative = f"index/{category_key}/{_category_key(product_type)}.json"
+            entries = [{key: row[key] for key in ("row_id", "product_name", "brand", "presentation")} | {"partition": row["_partition"]} for row in group]
+            _atomic_bytes(output_directory / relative, _json_bytes({"schema": INDEX_SCHEMA, "category": category, "product_type": product_type, "row_count": len(entries), "rows": entries}))
+            index_paths.append(relative)
+            type_facets.append({"value": product_type, "label": product_type or "Sin tipo normalizado", "row_count": len(entries), "index_path": relative})
+        category_facets.append({"value": category, "label": category, "row_count": len(category_rows), "navigation": "facets", "product_types": type_facets})
+    for row in rows:
+        row.pop("_partition", None)
     def covered(field: str) -> int:
         return sum(bool(row.get(field)) for row in rows)
     facets = {
@@ -383,15 +406,10 @@ def export_consumer_catalog(
             field: {"known": covered(field), "unknown": len(rows) - covered(field)}
             for field in ("category", "product_type", "brand", "presentation")
         },
-        "categories": [
-            {"value": category, "label": category or "Sin categoría normalizada", "row_count": len(category_rows)}
-            for category, category_rows in sorted(categories.items(), key=lambda item: (item[0] is None, str(item[0]).casefold()))
-        ],
+        "categories": category_facets,
     }
-    index = {"schema": INDEX_SCHEMA, "row_count": len(index_rows), "rows": index_rows}
     _atomic_bytes(output_directory / "facets-sps.json", _json_bytes(facets))
-    _atomic_bytes(output_directory / "index-sps.json", _json_bytes(index))
-    data_files = ["facets-sps.json", "index-sps.json", *partition_paths]
+    data_files = ["facets-sps.json", *index_paths, *partition_paths]
     metadata = [_file_metadata(output_directory, relative) for relative in data_files]
     offer_count = sum(len(row["offers"]) for row in rows)
     mode_counts = {
@@ -421,12 +439,12 @@ def export_consumer_catalog(
         "comparability_counts": mode_counts,
         "partition_count": len(partition_paths),
         "max_partition_rows": MAX_PARTITION_ROWS,
-        "initial_files": ["facets-sps.json", "index-sps.json"],
+        "initial_files": ["facets-sps.json"],
         "files": metadata,
         "initial_payload": {
-            "bytes": sum(item["bytes"] for item in metadata if item["path"] in {"facets-sps.json", "index-sps.json"}),
-            "gzip_bytes": sum(item["gzip_bytes"] for item in metadata if item["path"] in {"facets-sps.json", "index-sps.json"}),
-            "request_count": 3,
+            "bytes": next(item["bytes"] for item in metadata if item["path"] == "facets-sps.json"),
+            "gzip_bytes": next(item["gzip_bytes"] for item in metadata if item["path"] == "facets-sps.json"),
+            "request_count": 2,
         },
         "public_boundary": {
             "direct_turso_reads": 0,
