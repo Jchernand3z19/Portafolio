@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "b2c" / "app.js"
 CATALOG = ROOT / "b2c" / "catalog.js"
 EXPORTS = ROOT / "b2c" / "exports.js"
+SHARE = ROOT / "b2c" / "share.js"
+STATUS = ROOT / "b2c" / "status.js"
 HTML = ROOT / "b2c" / "index.html"
 CSS = ROOT / "b2c" / "styles.css"
 
@@ -20,7 +22,12 @@ def run_module(tmp_path: Path, source: Path, script: str) -> None:
     if node is None:
         pytest.skip("node_not_available_for_b2c_module_contract")
     module = tmp_path / f"{source.stem}.mjs"
-    module.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    source_text = source.read_text(encoding="utf-8")
+    if source in {SHARE, STATUS}:
+        catalog_module = tmp_path / "catalog.js"
+        catalog_module.write_text(CATALOG.read_text(encoding="utf-8"), encoding="utf-8")
+        module = tmp_path / source.name
+    module.write_text(source_text, encoding="utf-8")
     completed = subprocess.run(
         [node, "--input-type=module", "-e", script, module.as_uri()],
         check=False,
@@ -36,22 +43,30 @@ def test_b2c_static_contract_is_accessible_responsive_and_safe() -> None:
     js = APP.read_text(encoding="utf-8")
     catalog = CATALOG.read_text(encoding="utf-8")
     exports = EXPORTS.read_text(encoding="utf-8")
+    share = SHARE.read_text(encoding="utf-8")
+    status = STATUS.read_text(encoding="utf-8")
 
     for element_id in (
         "category-filter", "type-filter", "brand-filter", "presentation-filter",
         "product-search", "results", "batch-add", "update-confirmation",
         "cart-groups", "price-refresh", "basket-analysis", "export-csv", "export-pdf",
+        "share-whatsapp", "share-status", "dataset-status",
     ):
         assert f'id="{element_id}"' in html
     assert 'data-catalog-url="https://raw.githubusercontent.com/' in html
     assert 'type="module" src="app.js"' in html
+    assert 'type="module" src="status.js"' in html
+    assert 'type="module" src="share.js"' in html
+    assert "Esta página no vende productos ni procesa pagos" in html
     assert "Total estimado calculado con los precios públicos observados" in html
     assert "reported_regular_price" in js
     assert "historical_summary" in js
     assert "localStorage" in js
     assert 'input.type = "radio"' in js
     assert "Ningún escenario modifica tu lista" in html
-    combined = js + catalog + exports
+    assert "https://wa.me/?text=" in share
+    assert "America/Tegucigalpa" in status
+    combined = js + catalog + exports + share + status
     assert ".innerHTML" not in combined
     assert "eval(" not in combined
     assert "* 1.15" not in combined and "*1.15" not in combined
@@ -147,3 +162,47 @@ assert.ok(text.includes("Subtotal: L 189.00"));
 const match=text.match(/startxref\n(\d+)\n%%EOF/); assert.ok(match); assert.equal(text.slice(Number(match[1]),Number(match[1])+4),"xref");
 '''
     run_module(tmp_path, EXPORTS, script)
+
+
+def test_whatsapp_message_contains_planning_context_prices_and_warnings(tmp_path: Path) -> None:
+    script = r'''
+import assert from "node:assert/strict";
+const s = await import(process.argv[1]);
+const lines=[
+ {source_product_id:"w:1",supermarket_id:"walmart",location_id:"walmart_sps",product_name:"Leche",brand:"Sula",presentation:"1 L",quantity:2,unit_price_minor:3550,reported_regular_price_minor:4000,is_promotion:true,availability:"in_stock",observed_at:"2026-09-10T13:00:00Z",freshness_status:"FRESH",invalid:false},
+ {source_product_id:"c:1",supermarket_id:"la_colonia",location_id:"la_colonia_sps",product_name:"Arroz",brand:"Progreso",presentation:"1 lb",quantity:1,unit_price_minor:2000,reported_regular_price_minor:null,is_promotion:false,availability:"in_stock",observed_at:"2026-09-09T13:00:00Z",freshness_status:"STALE",invalid:false},
+];
+const message=s.buildWhatsAppMessage(lines,new Date("2026-09-10T15:30:00Z"));
+assert.ok(message.includes("*MI LISTA DE COMPRA*"));
+assert.ok(message.includes("San Pedro Sula"));
+assert.ok(message.includes("WALMART"));
+assert.ok(message.includes("2 × L 35.50 = L 71.00"));
+assert.ok(message.includes("🔥 Promoción · regular L 40.00"));
+assert.ok(message.includes("LA COLONIA"));
+assert.ok(message.includes("⚠️ Precio no actualizado recientemente"));
+assert.ok(message.includes("*TOTAL ESTIMADO: L 91.00*"));
+assert.ok(message.includes("Precios públicos observados. Pueden cambiar en tienda."));
+const url=s.whatsAppShareUrl(message);
+assert.ok(url.startsWith("https://wa.me/?text="));
+assert.equal(s.whatsAppShareUrl(""),null);
+'''
+    run_module(tmp_path, SHARE, script)
+
+
+def test_dataset_status_recomputes_freshness_from_manifest_date(tmp_path: Path) -> None:
+    script = r'''
+import assert from "node:assert/strict";
+const s = await import(process.argv[1]);
+const c = await import(new URL("./catalog.js", process.argv[1]).href);
+const scope=c.RETAILERS.map(({supermarket_id,location_id})=>({supermarket_id,location_id}));
+const base={schema:"rpi-consumer-catalog-manifest/v3",catalog_schema:"rpi-consumer-catalog/v3",scope,files:[{path:"facets-sps.json",sha256:"a".repeat(64),bytes:10}],initial_payload:{request_count:2}};
+let status=s.datasetStatus({...base,as_of:"2026-09-10T13:00:00Z"},new Date("2026-09-10T20:00:00Z"));
+assert.equal(status.state,"current");
+assert.ok(status.text.includes("Datos actualizados hoy"));
+status=s.datasetStatus({...base,as_of:"2026-09-09T13:00:00Z"},new Date("2026-09-10T20:00:00Z"));
+assert.equal(status.state,"stale");
+assert.ok(status.text.includes("Todavía no hay una actualización aceptada de hoy"));
+status=s.datasetStatus({...base,as_of:"not-a-date"},new Date("2026-09-10T20:00:00Z"));
+assert.equal(status.state,"invalid");
+'''
+    run_module(tmp_path, STATUS, script)
