@@ -2,8 +2,9 @@
 """Captura operativa del catálogo público SPS de Comisariato Los Andes.
 
 El comando es deliberadamente fail-closed: solo ejecuta tráfico live con las dos
-banderas explícitas, usa concurrencia 1, presupuesto duro de solicitudes, cero
-reintentos, conserva cada respuesta RAW con SHA-256 y exige reconciliación offline.
+banderas explícitas, usa concurrencia 1, presupuesto duro de solicitudes, conserva
+cada respuesta RAW con SHA-256 y permite como máximo un reintento por fallo de
+transporte antes de exigir reconciliación offline.
 """
 from __future__ import annotations
 
@@ -32,7 +33,8 @@ from precios_supermercados.scrapers.comisariato_los_andes import (
 )
 
 MAX_REQUESTS = 400
-MAX_RETRIES = 0
+MAX_RETRIES = 1
+MAX_TOTAL_RETRIES = 10
 DEFAULT_RETRIES = 0
 DEFAULT_DELAY_SECONDS = 1.0
 DEFAULT_TIMEOUT_SECONDS = 25.0
@@ -66,54 +68,66 @@ def _request_json(
     opener: Callable[..., Any] = urllib.request.urlopen,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> tuple[dict[str, Any] | list[Any], dict[str, object]]:
-    if max_retries != 0:
-        raise LiveCaptureError("retry_policy_unverified")
-    if int(state["requests"]) >= MAX_REQUESTS:
-        raise LiveCaptureError("request_budget_exhausted")
-    elapsed = time.monotonic() - float(state["last_request_at"])
-    if state["last_request_at"] and elapsed < delay_seconds:
-        sleeper(delay_seconds - elapsed)
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode(),
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "PreciosSupermercadosSPS/1.0 public-readonly",
-        },
-    )
-    observed_at = _now_z()
-    state["requests"] = int(state["requests"]) + 1
-    state["last_request_at"] = time.monotonic()
-    try:
-        with opener(request, timeout=timeout_seconds) as response:
-            status = int(response.status)
-            raw = response.read()
-    except urllib.error.HTTPError as exc:
-        raise LiveCaptureError(f"http_error:{int(exc.code)}:{output.name}") from exc
-    except (urllib.error.URLError, TimeoutError) as exc:
-        raise LiveCaptureError(f"network_error:{output.name}:{exc}") from exc
+    if max_retries not in {0, 1}:
+        raise LiveCaptureError("retry_policy_invalid")
 
-    if status not in {200, 201}:
-        raise LiveCaptureError(f"http_status:{status}:{output.name}")
-    output.write_bytes(raw)
-    try:
-        payload = json.loads(raw)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise LiveCaptureError(f"json_invalid:{output.name}") from exc
-    if not isinstance(payload, (dict, list)):
-        raise LiveCaptureError(f"json_shape_invalid:{output.name}")
-    return payload, {
-        "status": status,
-        "retries": 0,
-        "url": url,
-        "request_body": body,
-        "response_file": output.name,
-        "response_sha256": hashlib.sha256(raw).hexdigest(),
-        "response_bytes": len(raw),
-        "observed_at_utc": observed_at,
-    }
+    retries_used = 0
+    while True:
+        if int(state["attempts"]) >= MAX_REQUESTS:
+            raise LiveCaptureError("request_budget_exhausted")
+        elapsed = time.monotonic() - float(state["last_request_at"])
+        if state["last_request_at"] and elapsed < delay_seconds:
+            sleeper(delay_seconds - elapsed)
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode(),
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "PreciosSupermercadosSPS/1.0 public-readonly",
+            },
+        )
+        observed_at = _now_z()
+        state["attempts"] = int(state["attempts"]) + 1
+        state["last_request_at"] = time.monotonic()
+        try:
+            with opener(request, timeout=timeout_seconds) as response:
+                status = int(response.status)
+                raw = response.read()
+        except urllib.error.HTTPError as exc:
+            raise LiveCaptureError(f"http_error:{int(exc.code)}:{output.name}") from exc
+        except (urllib.error.URLError, TimeoutError) as exc:
+            if (
+                retries_used >= max_retries
+                or int(state["retries"]) >= MAX_TOTAL_RETRIES
+            ):
+                raise LiveCaptureError(f"network_error:{output.name}:{exc}") from exc
+            retries_used += 1
+            state["retries"] = int(state["retries"]) + 1
+            continue
+
+        if status not in {200, 201}:
+            raise LiveCaptureError(f"http_status:{status}:{output.name}")
+        output.write_bytes(raw)
+        try:
+            payload = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise LiveCaptureError(f"json_invalid:{output.name}") from exc
+        if not isinstance(payload, (dict, list)):
+            raise LiveCaptureError(f"json_shape_invalid:{output.name}")
+        state["requests"] = int(state["requests"]) + 1
+        return payload, {
+            "status": status,
+            "retries": 0,
+            "transport_retries": retries_used,
+            "url": url,
+            "request_body": body,
+            "response_file": output.name,
+            "response_sha256": hashlib.sha256(raw).hexdigest(),
+            "response_bytes": len(raw),
+            "observed_at_utc": observed_at,
+        }
 
 
 def capture_catalog(
@@ -129,13 +143,14 @@ def capture_catalog(
         raise LiveCaptureError("delay_below_operational_floor")
     if timeout_seconds <= 0 or timeout_seconds > 60:
         raise LiveCaptureError("timeout_invalid")
-    if max_retries != 0:
-        raise LiveCaptureError("retry_policy_unverified")
+    if max_retries not in {0, 1}:
+        raise LiveCaptureError("retry_policy_invalid")
 
     shutil.rmtree(raw_directory, ignore_errors=True)
     raw_directory.mkdir(parents=True, exist_ok=True)
     state: dict[str, float | int] = {
         "requests": 0,
+        "attempts": 0,
         "retries": 0,
         "last_request_at": 0.0,
     }
@@ -201,10 +216,11 @@ def capture_catalog(
         "location_two_code": LOCATION_TWO_CODE,
         "concurrency": 1,
         "max_requests": MAX_REQUESTS,
-        "max_retries": MAX_RETRIES,
+        "max_retries": max_retries,
         "delay_seconds": delay_seconds,
         "request_count": int(state["requests"]),
-        "retry_count": 0,
+        "retry_count": int(state["retries"]),
+        "transport_attempt_count": int(state["attempts"]),
         "store_evidence": store_record,
         "final_total_items": total,
         "final_recheck": final_record,
@@ -223,7 +239,8 @@ def capture_catalog(
     evidence = {
         "result": "success",
         "request_count": ledger["request_count"],
-        "retry_count": 0,
+        "retry_count": ledger["retry_count"],
+        "transport_attempt_count": ledger["transport_attempt_count"],
         "elapsed_seconds": ledger["elapsed_seconds"],
         "catalog_products_reported": snapshot["catalog_products_reported"],
         "unique_products_extracted": snapshot["unique_products_extracted"],
