@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 HANDOFF_SCHEMA = "precios-sps-daily-acquisition-handoff/v1"
-HANDOFF_FILE = ".acquisition-handoff.json"
+HANDOFF_FILE = "acquisition-handoff.json"
 ARTIFACT_PREFIX = "daily-acquisition"
 
 EXPECTED = {
