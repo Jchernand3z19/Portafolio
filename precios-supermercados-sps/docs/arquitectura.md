@@ -1,40 +1,41 @@
-# Arquitectura — Precios de Supermercados SPS
+# Arquitectura — Retail Price Intelligence / Precios de Supermercados SPS
 
-Este documento describe la arquitectura estable del producto. El estado operativo mutable —últimos runs, cifras, autorizaciones y blockers— vive en [`PROJECT_STATE.md`](PROJECT_STATE.md).
+Este documento describe la arquitectura estable. Cifras, últimos runs e incidentes vigentes viven en [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
-## Objetivo
-
-Operar una plataforma de precios de supermercados con un contrato común para múltiples fuentes, histórico por ubicación, homologación conservadora y una capa analítica/publicable que nunca tenga que rehacer scraping ni inventar equivalencias.
+## Vista general
 
 ```text
-sitios públicos
-      ↓
-extractores por fuente
-      ↓
-snapshots source-faithful
-      ↓
-validación + ubicación + completitud
-      ↓
+sitios públicos por fuente/ubicación
+        ↓
+extractores especializados
+        ↓
+snapshots source-faithful + evidencia
+        ↓
+validación de ubicación + completitud
+        ↓
 persistencia comercial común
-      ↓
-Turso / SQLite
-      ↓
-homologación descriptiva
-      ↓
-safe_comparator (fail-closed)
-      ↓
-price_analytics
-      ↓
-publication_dataset
-      ↓
-Power BI / portafolio / consumidores
+        ↓
+Turso / histórico compacto
+        ↓
+homologación derivada
+        ↓
+safe comparator + freshness
+        ↓
+Python analytics
+        ↓
+┌────────────────────────┬──────────────────────────┬───────────────────────────┐
+│ Business Mart v1       │ Consumer Mart v2         │ Consumer Catalog v3       │
+│ privado / B2B          │ público / comparación    │ público / navegación      │
+└───────────┬────────────┴─────────────┬────────────┴─────────────┬─────────────┘
+            ↓                          ↓                          ↓
+         Power BI              escenarios B2C          Compra Inteligente
 ```
 
-La base productiva es única para el proyecto. No existe una base ni una tabla de histórico independiente por supermercado.
+La base comercial es única. No existe una tabla o histórico independiente por supermercado que pueda divergir del estado compartido.
 
 ## Cobertura productiva
 
-La arquitectura soporta seis cadenas productivas integradas:
+La arquitectura integra seis cadenas:
 
 - La Colonia;
 - Supermercados Colonial;
@@ -43,310 +44,235 @@ La arquitectura soporta seis cadenas productivas integradas:
 - Comisariato Los Andes;
 - Paiz.
 
-Cada extractor conserva particularidades de su sitio, pero entrega un snapshot compatible con la misma frontera de persistencia comercial.
+Cada extractor conserva las particularidades de su fuente, pero todos cruzan la misma frontera de validación/persistencia.
 
 ## Principios
 
 1. La fuente manda; no se inventan datos.
-2. Identidad fuente, ubicación comercial y estado de precio son conceptos distintos.
-3. Un snapshot no se persiste si no demuestra completitud y ubicación bajo su contrato.
-4. Runs fallidos/rechazados no sustituyen el último estado comercial confiable.
-5. Todo run terminal aceptado queda trazable mediante `scrape_runs`.
-6. Una observación comercial idéntica no crea un periodo histórico redundante.
-7. Los precios se almacenan como enteros de unidad menor (`*_price_minor`).
-8. La homologación descriptiva no equivale a autorización para comparar precios.
-9. Marca + presentación nunca bastan para unir dos productos de supermercados distintos.
-10. Power BI y el portafolio consumen datos derivados; no ejecutan matching ni scraping.
-11. Workflows con secretos ejecutan exclusivamente código confiable de `main`.
-12. El tráfico live y las escrituras productivas requieren una autorización humana vigente para su alcance.
+2. Identidad fuente, ubicación y estado comercial son conceptos distintos.
+3. Un snapshot incompleto o sin ubicación demostrada no se persiste.
+4. Runs rechazados no sustituyen el último estado válido.
+5. Una observación idéntica no crea un periodo histórico redundante.
+6. Los precios persistidos usan minor units.
+7. Homologar no significa autorizar comparación.
+8. Marca + presentación nunca bastan para unir productos cross-retailer.
+9. `current_price` es el precio efectivo observado; `reported_regular_price` es sólo referencia.
+10. Power BI y la web consumen datos derivados; no ejecutan scraping ni matching.
+11. Comparaciones stale/ambiguas/incompletas fallan cerrado.
+12. Workflows con secretos ejecutan sólo código confiable de `main`.
 
-## Capa 1 — Ingesta por fuente
+# 1. Ingesta por fuente
 
-Cada supermercado tiene un extractor adaptado a su contrato público. Esa especialización queda confinada a la ingesta.
+Cada extractor read-only debe:
 
-Responsabilidades:
-
-- obtener datos read-only;
 - respetar budgets, delays, deadlines y reintentos acotados;
-- conservar evidencia/raw cuando el contrato lo requiere;
 - producir identidad fuente estable;
-- demostrar la ubicación/contexto comercial de la captura;
-- declarar completitud del catálogo;
+- conservar evidencia/raw cuando el contrato lo exige;
+- demostrar el contexto comercial de la captura;
+- declarar completitud;
 - no escribir directamente a la base productiva.
 
-Los extractores operativos viven en `scripts/` y reutilizan normalizadores/contratos de `src/precios_supermercados/`.
+Los extractores operativos viven en `scripts/` y reutilizan contratos/normalizadores en `src/precios_supermercados/`.
 
-## Capa 2 — Snapshot validado
+# 2. Snapshot validado
 
-El snapshot es la frontera entre scraping y persistencia.
-
-Un snapshot aceptable debe permitir verificar, según la fuente:
+El snapshot es la frontera entre adquisición y persistencia. Según la fuente debe permitir verificar:
 
 - `supermarket_id`;
 - `location_id`;
 - `catalog_complete`;
 - `location_verified_same_run`;
-- conteos declarados vs extraídos;
-- identidad fuente de productos/SKU;
-- precio/disponibilidad/promoción cuando existan;
-- procedencia de la ejecución.
+- conteos fuente vs extraídos;
+- identidad estable de producto/SKU;
+- precio, disponibilidad y promoción cuando existan;
+- procedencia/digest de ejecución.
 
-La persistencia vuelve a validar el snapshot. Un archivo presente en disco no es autoridad por sí mismo.
+La persistencia vuelve a validar el snapshot. Tener un archivo en disco no le concede autoridad.
 
-## Capa 3 — Persistencia comercial común
+# 3. Persistencia comercial
 
-### `supermarkets`
+## `supermarkets`
 
-Grain: una fila por cadena.
+Una fila por cadena.
 
-### `locations`
+## `locations`
 
-Grain: una fila por contexto comercial persistible.
+Una fila por contexto comercial persistible. La ciudad es atributo de la ubicación, no identidad de producto.
 
-La ciudad es un atributo de la ubicación; no forma parte de la identidad del producto fuente.
+## `products`
 
-### `products`
+Una identidad fuente estable dentro de cada supermercado, con descriptores disponibles: nombre, marca, presentación, categoría, GTIN/EAN y llaves fuente.
 
-Grain: una identidad fuente estable dentro de un supermercado.
+## `price_history`
 
-Incluye, cuando la fuente los provee:
-
-- nombre;
-- marca;
-- presentación;
-- categoría;
-- EAN/GTIN reportado;
-- IDs/keys fuente.
-
-La unicidad operativa se basa en el contrato de identidad de cada fuente, no en nombre + marca.
-
-### `price_history`
-
-Grain: un periodo comercial por producto + ubicación.
-
-Incluye:
+Un periodo comercial por producto + ubicación. Conserva:
 
 - `current_price_minor`;
-- `reported_regular_price_minor` cuando existe;
+- `reported_regular_price_minor`;
 - promoción;
 - disponibilidad;
 - moneda;
 - inicio/fin del periodo;
-- run que originó la observación.
+- run de procedencia.
 
-`valid_to_utc IS NULL` representa el estado actual. No se materializa otra tabla “current” que pueda divergir del histórico.
+`valid_to_utc IS NULL` representa el estado actual. No existe una segunda tabla current que pueda contradecir el histórico.
 
-### `scrape_runs`
+## `scrape_runs`
 
-Grain: una ejecución persistida por ubicación.
+Una ejecución persistida por ubicación con estado, conteos y digest del snapshot.
 
-Conserva, entre otros campos, identidad del run, estado, conteos y digest del snapshot. Permite verificar que el commit lógico corresponde exactamente al archivo aceptado.
+# 4. Actualización recurrente
 
-## Semántica de precio
-
-Se distinguen explícitamente:
+El workflow productivo común es:
 
 ```text
-current_price
-reported_regular_price
-historical_previous_price
+.github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml
 ```
 
-`reported_regular_price` es una referencia declarada por la tienda. No demuestra ahorro real.
-
-La reducción histórica real usa el `current_price` del periodo aceptado inmediatamente anterior. Si no hay baseline aceptado, la reducción no se inventa.
-
-## Actualización diaria
-
-Workflow confiable:
-
-`.github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml`
-
-Aunque conserva un nombre histórico, es el workflow productivo común de las seis cadenas.
-
-Secuencia conceptual:
+El nombre conserva historia del proyecto, pero hoy procesa las seis cadenas.
 
 ```text
-capturar cadenas de forma acotada
-        ↓
-validar todos los snapshots
-        ↓
-persistir estado comercial
-        ↓
-verificar run_id + digest + current state
-        ↓
-foreign_key_check + integridad + duplicados
-        ↓
-publicar evidencia
+capturar fuentes
+→ validar todos los snapshots
+→ si todos pasan, persistir
+→ verificar run_id + digest + estado actual
+→ verificar FKs / integridad / duplicados
+→ publicar evidencia
 ```
 
-El workflow corre secuencialmente y usa `concurrency` sin cancelación en progreso para no interrumpir una transacción operativa por una segunda ejecución.
+La compuerta es global y fail-closed: una fuente inválida evita persistencia parcial del ciclo.
 
-El schedule productivo vive en el YAML del workflow y se considera fuente de verdad para la hora recurrente.
+# 5. Homologación derivada
 
-## Operador confiable de ejecución manual
+`product_homologation_profiles` normaliza GTIN, nombre, marca, taxonomía, presentación y conflictos sin cambiar la verdad comercial fuente.
 
-`.github/workflows/precios-supermercados-sps-production-operator.yml` permite convertir una solicitud controlada ya fusionada en `main` en un `workflow_dispatch` del workflow productivo.
+El workflow de homologación corre después de una actualización productiva exitosa. Un refresh sin cambios puede ser un no-op verificable.
 
-Propiedades:
+# 6. Comparabilidad y freshness
 
-- observa sólo un archivo de solicitud fijo en `main`;
-- no recibe secretos de Turso;
-- valida esquema, operación y ventana de autorización;
-- no ejecuta head de PR;
-- sólo puede despachar un workflow productivo fijo sobre `main`.
+`safe_comparator.py` es la frontera que autoriza comparaciones cross-source.
 
-Esto separa la autoridad de iniciar una ejecución de las credenciales usadas durante la persistencia.
-
-## Homologación descriptiva
-
-Después de una actualización productiva exitosa, el workflow:
-
-`.github/workflows/precios-supermercados-sps-homologation-refresh.yml`
-
-recalcula `product_homologation_profiles` a partir de `products` ya persistidos.
-
-La homologación normaliza:
-
-- GTIN;
-- nombre;
-- marca;
-- taxonomía;
-- presentación estructurada;
-- tokens descriptivos;
-- conflictos y estado de revisión.
-
-Esta tabla es derivada. La verdad comercial original permanece en `products` y `price_history`.
-
-## Gate de comparación fail-closed
-
-`src/precios_supermercados/safe_comparator.py` es la única frontera que autoriza comparaciones directas cross-source.
-
-Estados:
+Estados principales:
 
 - `comparable`;
 - `review_required`;
 - `not_comparable`.
 
-Para ser `comparable`, dos registros deben tener identidad fuerte compartida y no presentar contradicciones de marca, tipo, presentación o descriptores comerciales.
+Una identidad fuerte puede habilitar comparación sólo si no existen contradicciones comerciales. El caso de regresión `Passion Jaguar != Passion Especial` permanece bloqueado aunque otros descriptores coincidan.
 
-Un GTIN compartido no obliga a comparar si el resto de la evidencia contradice la identidad comercial.
+Freshness se evalúa antes de ranking/PCI. Una fuente stale/unavailable puede conservar su último dato visible con aviso, pero no producir una recomendación competitiva nueva.
 
-Caso de regresión obligatorio:
+# 7. Analytics autoritativa en Python
+
+La lógica crítica vive antes de las interfaces:
+
+- precio actual/anterior y movimientos;
+- histórico y ventanas suficientes;
+- promoción declarada vs reducción histórica;
+- ranking, PCI, spread y cobertura;
+- canasta común y escenarios de compra;
+- freshness y estados fail-closed.
+
+No se imputa precio cero ni se usa precio regular como historia observada.
+
+# 8. Serving RPI vigente
+
+## Business Mart v1
+
+`rpi-business-mart/v1` es el contrato B2B privado. Incluye dimensiones y facts de comparación actual, histórico de precios, promociones, canasta, cobertura y freshness.
+
+Se genera con `scripts/exportar_rpi_marts.py` y alimenta los activos reproducibles de `powerbi/rpi/`.
+
+## Consumer Mart v2
+
+`rpi-consumer-mart/v2` es el contrato público analítico reducido. Contiene sólo identidades/ofertas autorizadas para comparación, historia resumida y escenarios B2C.
+
+## Consumer Catalog v3
+
+`rpi-consumer-catalog/v3` es el contrato público de navegación de gran volumen. Separa visibilidad de comparabilidad y usa:
 
 ```text
-Passion Jaguar != Passion Especial
+manifest + facets + demand-loaded indexes + bounded partitions
 ```
 
-aunque marca y presentación coincidan.
+Las particiones tienen máximo 250 filas y sus hashes/tamaños son verificables. El alcance público actual es cinco contextos SPS: La Colonia, Colonial, Walmart, PriceSmart y Comisariato Los Andes.
 
-Metodología: [`COMPARATOR-METHODOLOGY.md`](COMPARATOR-METHODOLOGY.md).
+El navegador no consulta Turso ni hace matching.
 
-## Capa analítica
+# 9. Publicación
 
-### `price_analytics.py`
+Cadena vigente:
 
-Calcula sobre grupos `comparable`:
+```text
+accepted commercial state
+→ homologation refresh
+→ exportación RPI read-only
+→ validación de schema/scope/hash/secretos
+→ artifact seguro
+→ sync atómico a portfolio-data
+```
 
-- precio actual por fuente/ubicación;
-- mejor precio;
-- máximo comparable;
-- ahorro absoluto y porcentual;
-- canasta común;
-- subcanastas con cantidades explícitas.
+Se publican Consumer Mart v2, Consumer Catalog v3 y la muestra del portafolio. Business Mart permanece privado.
 
-No imputa precios. Un producto agotado explícitamente o sin precio en alguna ubicación sale del denominador común.
+`precios-sps-publication/v1` y `precios-sps-static-bi-dataset/v1` se conservan como contratos legados/compatibilidad; no son la frontera RPI principal.
 
-Una canasta de cero productos no tiene supermercado ganador.
+# 10. Power BI
 
-### `buyer_profile_analytics.py`
-
-Aplica cantidades de un perfil únicamente al universo ya comparable. Si el perfil pide un producto fuera del universo común, falla cerrado.
-
-### `price_change_analytics.py`
-
-Compara ejecuciones sólo cuando el alcance es idéntico. Un delta de total de canasta se calcula sólo si ambos runs comparten exactamente el mismo universo no vacío.
-
-### `price_history_analytics.py`
-
-Resume series de una identidad canónica + supermercado + ubicación sin interpolar observaciones inexistentes.
-
-## Dataset de publicación
-
-`publication_dataset.py` proyecta la analítica a un contrato estable y sin autoridad operativa:
-
-`precios-sps-publication/v1`
-
-Tablas lógicas:
-
-- `scope`;
-- `offers`;
-- `products`;
-- `common_basket`;
-- `excluded_group_counts`.
-
-El exportador `scripts/exportar_modelo_analitico.py` materializa JSON/CSV desde SQLite read-only o Turso confiable. No hace scraping y no serializa URL/token de base de datos.
-
-Diccionario: [`PUBLICATION-DATA-DICTIONARY.md`](PUBLICATION-DATA-DICTIONARY.md).
-
-## Power BI
-
-Power BI es consumidor de la capa SERVE.
-
-No debe:
+Power BI consume el Business Mart y no debe:
 
 - resolver identidad;
 - inferir ubicación;
-- decidir si un run fue aceptado;
-- recalcular matching por nombre/marca/presentación;
-- acceder a secretos de scraping/Turso.
+- decidir aceptación de runs;
+- recalcular matching;
+- consultar Turso o sitios fuente;
+- redefinir PCI, freshness o historia crítica.
 
-Activos reproducibles: [`../powerbi/`](../powerbi/).
+Activos reproducibles: [`../powerbi/rpi/`](../powerbi/rpi/).
 Guía: [`BI-IMPLEMENTATION-GUIDE.md`](BI-IMPLEMENTATION-GUIDE.md).
 
-## Portafolio público
+# 11. Compra Inteligente
 
-El portafolio presenta:
+La web B2C consume únicamente archivos estáticos publicados y ofrece navegación, comparación segura, selección manual, cantidades, lista persistida, refresh explícito, escenarios de canasta, historial resumido y exportación CSV/PDF.
 
-- cobertura productiva verificada;
-- evidencia concreta de scraping;
-- hallazgos analíticos respaldados;
-- sólo comparaciones cross-source que superen el gate.
+Totales:
 
-La antigua muestra basada en “misma marca + misma presentación” está retirada. Producción consume desde `portfolio-data` una muestra generada por el contrato seguro; `portfolio/sample-data.json` permanece explícitamente vacío como fallback local fail-closed.
+```text
+unit_price = current_price
+line_total = unit_price * quantity
+```
 
-## Backends
+No se infieren impuestos, delivery, service fees o membership fees.
 
-### Productivo
+# 12. Backends
+
+Productivo:
 
 ```text
 Turso
 ```
 
-### Reproducibilidad/local
+Reproducibilidad/local:
 
 ```text
 SQLite
 ```
 
-Existen componentes históricos/experimentales para Google Sheets y BigQuery, pero no constituyen la ruta productiva principal actual.
+Google Sheets y BigQuery pueden existir en componentes históricos/experimentales, pero no son la ruta productiva principal vigente.
 
-## Seguridad
+# 13. Seguridad
 
 Controles estructurales:
 
-- secrets fuera de Git;
-- acciones externas pinneadas por SHA;
-- permisos mínimos por workflow/job;
-- checkout inmutable;
-- PR head sin secretos ni autoridad productiva;
+- secretos fuera de Git;
+- Actions externas pinneadas por SHA;
+- permisos mínimos;
+- checkout inmutable en workflows privilegiados;
+- PR head sin secretos/autoridad productiva;
 - budgets live explícitos;
-- validación fail-closed de snapshots;
-- integridad/FK/duplicados después de persistir;
-- workflows derivados sólo después de upstream exitoso confiable.
+- snapshot validation fail-closed;
+- FKs/integridad/duplicados verificados;
+- publicación pública sanitizada y atómica.
 
-La auditoría ejecutable de workflows vive en `tests/test_workflow_security_audit.py` y su módulo base.
+# Fuente de verdad operativa
 
-## Fuente de verdad operativa
-
-Este documento evita fijar cifras/run IDs que cambian diariamente. Consultar [`PROJECT_STATE.md`](PROJECT_STATE.md) para el último estado verificado y los reportes versionados en `reports/` para evidencia histórica.
+Este documento evita fijar cifras que cambian con cada ciclo. Consultar [`PROJECT_STATE.md`](PROJECT_STATE.md) para el último estado y `reports/` para evidencia histórica.
