@@ -1,184 +1,198 @@
-# Diccionario de los RPI Data Marts
+# Diccionario de datos RPI
 
-## Contratos y reconstrucción
+## Contratos vigentes
 
-El exportador read-only `scripts/exportar_rpi_marts.py` genera desde el estado
-persistido y el comparador seguro:
+El estado comercial aceptado se proyecta en tres contratos separados. Ninguno hace matching nuevo y todos se reconstruyen desde datos aceptados:
 
-- `rpi-business-mart/v1`: dataset privado para Power BI;
-- `rpi-consumer-mart/v2`: dataset público reducido para Compra Inteligente;
-- `rpi-marts-manifest/v1`: alcance, timestamp, schemas, conteos y SHA-256 de cada archivo.
+| Contrato | Acceso | Propósito |
+| --- | --- | --- |
+| `rpi-business-mart/v1` | privado | analítica B2B / Power BI |
+| `rpi-consumer-mart/v2` | público | comparación analítica segura y escenarios B2C |
+| `rpi-consumer-catalog/v3` | público | navegación escalable de Compra Inteligente |
 
-El grano de una oferta es `canonical_product_id + supermarket_id + location_id
-+ source_product_id`. Ningún mart hace matching. Ambos se reconstruyen desde el
-estado comercial aceptado y no escriben en Turso.
+Los manifests asociados son `rpi-marts-manifest/v1` y `rpi-consumer-catalog-manifest/v3`. Registran versión, alcance, timestamps y SHA-256 para validar los archivos derivados.
 
-La versión `v2` del Consumer Mart conserva el contrato actual y añade contexto
-histórico resumido calculado en Python desde los periodos compactos ya persistidos.
-No publica la serie histórica completa ni obliga al navegador a reconstruirla.
-El Business Mart sí conserva los periodos históricos del universo seguro para
-Power BI, sin publicar RAW ni ampliar la identidad aceptada.
+El grano de una oferta es la identidad exacta:
+
+```text
+canonical_product_id + supermarket_id + location_id + source_product_id
+```
+
+Los nombres, marcas y presentaciones sirven para describir/navegar; nunca autorizan equivalencias por sí solos.
 
 ## Metadatos compartidos
 
 | Campo | Semántica |
 | --- | --- |
-| `comparison_policy` | gate de identidad fuerte y consistencia comercial |
+| `comparison_policy` | política fail-closed que autorizó la comparación |
 | `comparison_status` | `COMPARABLE` o `INSUFFICIENT_FRESH_COMPARISON` |
 | `blocked_reasons` | motivos auditables que suprimen ranking/PCI |
 | `currency` | `HNL` |
 | `scope` | retailer + ubicación exacta |
 | `as_of` | instante UTC de evaluación |
-| `freshness_window_hours` | ventana de mercado configurada |
-| `source_freshness` | último run válido, observación, edad y estado por scope |
+| `freshness_window_hours` | ventana temporal permitida |
+| `source_freshness` | último run válido, edad y estado por scope |
 | `coverage` | comparables, precios válidos, exclusiones y porcentaje |
 
-Una fuente `STALE` conserva sus ofertas last-known-good visibles, pero los campos
-competitivos quedan nulos. `REJECTED` nunca se elige como último run válido.
+Una fuente `STALE` puede conservar su último precio válido visible como referencia, pero no puede producir ranking, PCI o recomendación competitiva nueva. Un run `REJECTED` nunca sustituye al last-known-good.
 
-## Business Mart
+# Business Mart v1
 
-### Dimensiones
+`rpi-business-mart/v1` es el contrato B2B privado y reproducible. El exportador read-only `scripts/exportar_rpi_marts.py` lo materializa en JSON y CSV sin modificar Turso.
 
-| Tabla | Grano | Clave |
-| --- | --- | --- |
-| `dim_product` | producto canónico seguro | `canonical_product_id` |
-| `dim_retailer` | cadena del scope | `supermarket_id` |
-| `dim_location` | contexto comercial | `supermarket_id + location_id` |
-| `dim_category` | categoría observada/normalizada presente | `category` |
-| `dim_brand` | marca fuente presente | `brand` |
+## Dimensiones
 
-Los hechos históricos conservan sus timestamps UTC (`period_start`, `as_of`) y
-se relacionan por las mismas dimensiones estables del universo seguro. No se
-crean relaciones por nombre, presentación ni similitud textual.
-
-### `fact_current_comparison`
-
-Una fila por oferta segura actual. Incluye identidad, descriptores, precio
-efectivo, referencia regular, promoción, disponibilidad, fechas, freshness y,
-cuando la ventana es comparable, rank, PCI, mercado mínimo/máximo/media/mediana
-y spread.
-
-Los importes JSON/CSV se serializan como decimal-texto con dos posiciones. PCI y
-porcentajes también son decimal-texto. `reported_regular_price` nunca sustituye
-`current_price`.
-
-### `fact_price_history`
-
-Una fila por periodo comercial realmente observado de cada oferta segura. Se
-materializa desde los periodos compactos persistidos y contiene:
-
-- `period_start`;
-- `current_price`;
-- `reported_regular_price` sólo como referencia;
-- `is_promotion`;
-- `previous_price`;
-- `change_abs` y `change_pct`;
-- `direction` (`initial`, `up`, `down`, `unchanged`);
-- `is_current`;
-- `source_last_successful_at` y `freshness_status`.
-
-No interpola días ausentes. Un cambio de promoción o referencia regular puede
-producir un nuevo periodo aun si el precio efectivo no cambia; en ese caso la
-dirección queda `unchanged`.
-
-### `fact_promotion_analysis`
-
-Una fila por oferta segura en el corte `as_of`. Mantiene separadas:
-
-- `source_reports_promotion`;
-- `historical_price_reduction`;
-- `source_discount_depth_pct` contra el regular declarado, cuando existe;
-- `current_vs_previous_pct`;
-- `current_vs_average_30d_pct` y `current_vs_average_90d_pct`;
-- `current_vs_minimum_90d_pct`;
-- `promotion_duration_days`, `promotion_event_count`, `promotion_share_pct`;
-- `historical_position`;
-- conteo real de observaciones y freshness.
-
-La clasificación histórica se calcula en Python y puede declarar
-`insufficient_history`; Power BI no reconstruye esa decisión.
-
-### `fact_basket_cost`
-
-Una fila por retailer/ubicación para exactamente el mismo universo común. Un
-universo vacío no produce ganador. La evolución de canastas manuales usa
-`shopping_analytics.py`, donde un faltante vuelve incompleto el total.
-
-### `fact_metric_coverage`
-
-Una fila por corte publicado con:
-
-- `comparable_count`;
-- `valid_price_count`;
-- `excluded_count`;
-- `coverage_pct`;
-- `as_of`;
-- `freshness_window_hours`.
-
-## Consumer Mart v2
-
-`products` contiene una fila por producto canónico y un arreglo `offers`. Cada
-oferta conserva:
-
-| Campo | Uso B2C |
+| Tabla | Grano / clave |
 | --- | --- |
-| `canonical_product_id` | identidad segura compartida |
-| `source_product_id` | oferta exacta elegida por el usuario |
-| `supermarket_id`, `location_id` | contexto comercial |
-| `category`, `product_type` | navegación y descripción |
-| `product_name`, `brand`, `variant`, `presentation` | búsqueda/presentación, nunca matching |
-| `current_price` | `unit_price` de Mi Compra |
-| `reported_regular_price` | referencia visual opcional |
-| `is_promotion` | declaración fuente |
-| `rank`, `is_best_price` | recomendación calculada en Python; queda nula/inactiva cuando comparar no es seguro |
-| `difference_vs_best_abs`, `difference_vs_best_pct` | diferencia contra el mínimo seguro; nula cuando comparar no es seguro |
-| `availability` | `in_stock` o `unknown` para ofertas publicadas |
-| `observed_at` | inicio observado del estado comercial persistido |
-| `last_successful_run`, `source_last_successful_at` | último corte fuente aceptado |
-| `data_age_hours`, `freshness_status` | frescura visible |
-| `historical_summary` | contexto histórico resumido calculado en Python |
+| `dim_product` | `canonical_product_id` |
+| `dim_retailer` | `supermarket_id` |
+| `dim_location` | `supermarket_id + location_id` |
+| `dim_category` | `category` |
+| `dim_brand` | `brand` |
 
-El mart público no contiene credenciales, URL de base, queue de revisión,
-payload RAW ni grupos inseguros. Los nombres sólo se renderizan como texto y no
-autorizan nuevas equivalencias.
+## `fact_current_comparison`
 
-Cada producto expone `recommended_source_product_ids`. Puede contener más de un
-ID cuando existe un empate real. Si la ventana no es comparable, la lista queda
-vacía y el frontend no debe inventar una recomendación.
+Una fila por oferta segura actual. Incluye identidad, descriptores, `current_price`, referencia regular, promoción, disponibilidad, timestamps y freshness. Cuando el mercado es comparable también expone ranking, PCI, mínimo/máximo/media/mediana de mercado y spread.
 
-### `historical_summary`
+`reported_regular_price` es sólo referencia y nunca reemplaza `current_price`.
 
-Se calcula únicamente para la misma `source_product_id + supermarket_id +
-location_id` ya autorizada por el universo seguro. El exportador lee sus periodos
-compactos una vez, no publica RAW y no hace matching histórico.
+## `fact_price_history`
+
+Una fila por periodo comercial realmente persistido de cada oferta segura. No es una serie diaria sintética y no interpola días ausentes.
 
 Campos principales:
 
-| Campo | Semántica |
+- `period_start`;
+- `current_price`;
+- `reported_regular_price`;
+- `is_promotion`;
+- `previous_price`;
+- `change_abs`, `change_pct`;
+- `direction`: `initial`, `up`, `down`, `unchanged`;
+- `is_current`;
+- `source_last_successful_at`, `freshness_status`.
+
+Un nuevo periodo puede existir por cambios de promoción/referencia aun si el precio efectivo no cambia; en ese caso `direction=unchanged`.
+
+## `fact_promotion_analysis`
+
+Una fila por oferta segura en el corte `as_of`. Mantiene separadas la promoción declarada y la reducción histórica observada.
+
+Incluye:
+
+- `source_reports_promotion`;
+- `historical_price_reduction`;
+- `source_discount_depth_pct`;
+- `current_vs_previous_pct`;
+- `current_vs_average_30d_pct`, `current_vs_average_90d_pct`;
+- `current_vs_minimum_90d_pct`;
+- `promotion_duration_days`;
+- `promotion_event_count`;
+- `promotion_share_pct`;
+- `historical_position`;
+- conteo de observaciones y freshness.
+
+La clasificación histórica se calcula en Python. Power BI no reconstruye esta decisión.
+
+## `fact_basket_cost`
+
+Una fila por retailer/ubicación para exactamente el mismo universo común. Un universo vacío no produce ganador. Una canasta con faltantes queda incompleta y no imputa cero.
+
+## `fact_metric_coverage`
+
+Una fila por corte con `comparable_count`, `valid_price_count`, `excluded_count`, `coverage_pct`, `as_of` y `freshness_window_hours`.
+
+# Consumer Mart v2
+
+`rpi-consumer-mart/v2` es el contrato público analítico reducido. Contiene únicamente productos autorizados por Python para el alcance comparable y el contexto necesario para búsqueda, historial resumido y Mi Compra.
+
+Cada oferta puede exponer:
+
+| Campo | Uso |
 | --- | --- |
-| `observation_count` | estados de precio positivo realmente observados |
-| `first_observed_at`, `last_observed_at` | límites reales de la serie disponible |
-| `observed_minimum`, `observed_maximum` | extremos de toda la serie observada disponible |
-| `previous_price` | precio efectivo del estado previo real, si existe |
-| `current_vs_previous_pct` | cambio porcentual contra el estado previo |
-| `days_since_last_change` | días observados desde el último cambio de precio |
-| `historical_position` | clasificación auditable de `promotion_analytics.py` |
-| `historical_price_reduction` | si el precio efectivo actual bajó contra el estado previo |
-| `source_discount_depth_pct` | descuento declarado vs regular reportado, sólo cuando existe |
-| `windows.30d`, `windows.90d` | media, mediana, mínimo, máximo y posición actual en ventanas completas |
+| `canonical_product_id` | identidad segura compartida |
+| `source_product_id` | oferta exacta |
+| `supermarket_id`, `location_id` | contexto comercial |
+| `category`, `product_type` | navegación/descripción |
+| `product_name`, `brand`, `variant`, `presentation` | presentación, nunca matching |
+| `current_price` | precio unitario efectivo |
+| `reported_regular_price` | referencia visual opcional |
+| `is_promotion` | declaración fuente; puede ser `null` si se desconoce |
+| `rank`, `is_best_price` | comparación calculada por Python |
+| `difference_vs_best_abs`, `difference_vs_best_pct` | diferencia contra el mínimo seguro |
+| `availability` | disponibilidad publicada |
+| `observed_at` | inicio del estado comercial observado |
+| `last_successful_run`, `source_last_successful_at` | procedencia del último corte aceptado |
+| `data_age_hours`, `freshness_status` | frescura visible |
+| `historical_summary` | resumen histórico calculado por Python |
 
-Cada ventana expone `status=available` sólo cuando existe un baseline real que
-cubre todo el periodo solicitado. Si no existe, usa `insufficient_history` y sus
-métricas quedan `null`; no se acorta la ventana, no se interpola y no se trata el
-precio regular declarado como historia observada.
+`recommended_source_product_ids` contiene sólo IDs autorizados como mejor precio; puede haber más de uno por empate. Si comparar no es seguro, queda vacío.
 
-`historical_position` puede ser `below_recent_average`, `near_recent_minimum`,
-`normal_range`, `above_recent_average`,
-`source_promotion_without_historical_reduction` o `insufficient_history`, según
-las reglas autoritativas de Python.
+## `historical_summary`
 
-## Contrato monetario B2C
+Se calcula para la misma oferta exacta; no hace matching histórico. Puede incluir:
+
+- `observation_count`;
+- `first_observed_at`, `last_observed_at`;
+- `observed_minimum`, `observed_maximum`;
+- `previous_price`;
+- `current_vs_previous_pct`;
+- `days_since_last_change`;
+- `historical_position`;
+- `historical_price_reduction`;
+- `source_discount_depth_pct`;
+- ventanas `30d` y `90d` con media, mediana, mínimo, máximo y posición actual.
+
+Una ventana sólo queda `available` si existe baseline real suficiente. Si no, usa `insufficient_history`; no se acorta ni interpola.
+
+# Consumer Catalog v3
+
+`rpi-consumer-catalog/v3` es la capa pública de **serving/navegación** de Compra Inteligente. Está separada del Consumer Mart v2 para permitir un catálogo mucho mayor sin debilitar la comparabilidad.
+
+El alcance vigente es exactamente cinco contextos SPS:
+
+- La Colonia SPS;
+- Colonial SPS;
+- Walmart SPS;
+- PriceSmart SPS;
+- Comisariato Los Andes SPS.
+
+Una fila puede ser:
+
+- `comparable`: tiene equivalencia segura para comparación relativa;
+- `single_source`: identidad segura presente en una sola fuente del grupo aplicable;
+- `individual`: oferta visible sin autorización para comparación cross-retailer.
+
+**Visible no significa comparable.** La UI puede mostrar productos individuales, pero sólo las filas autorizadas por Python reciben ranking/recomendación relativa.
+
+## Serving particionado
+
+La publicación contiene:
+
+```text
+manifest.json
+facets.json
+indexes/...
+partitions/...
+```
+
+- el arranque carga únicamente manifest + facetas;
+- los índices se cargan bajo demanda según la navegación;
+- las particiones tienen como máximo 250 filas;
+- cada archivo tiene tamaño y SHA-256 verificables;
+- el navegador valida el contrato antes de usar los datos;
+- no hay lecturas directas a Turso;
+- no hay matching en JavaScript.
+
+La partición física sigue los grupos de navegación para evitar fan-out innecesario. Categorías conocidas se organizan por tipo de producto y el fallback no clasificado usa prefijos normalizados.
+
+## Promoción y precio
+
+`is_promotion` puede ser `true`, `false` o `null`. `null` significa que la fuente no aporta evidencia suficiente; la UI no debe convertirlo a “no está en promoción”.
+
+`current_price` es el precio efectivo observado usado para comprar/calcular. `reported_regular_price` sólo es referencia y no entra en totales ni historia como si fuera una observación anterior.
+
+# Contrato monetario B2C
 
 ```text
 unit_price = current_price
@@ -187,14 +201,10 @@ retailer_subtotal = sum(line_total)
 grand_total = sum(retailer_subtotal)
 ```
 
-No se agrega ISV ni cargos de shipping, delivery, service o membership. Si una
-línea no tiene precio utilizable, su total y los totales que dependen de ella son
-nulos/incompletos; nunca cero.
+No se agrega ISV ni cargos de shipping, delivery, service o membership. Si una línea no tiene precio utilizable, su total y los totales dependientes quedan nulos/incompletos; nunca cero.
 
-## Archivos y atomicidad
+# Frontera pública y atomicidad
 
-El exportador escribe temporalmente y renombra cada JSON/CSV. El manifest se
-crea al final y registra SHA-256 de todos los archivos de datos, además de
-`business_schema` y `consumer_schema`. Los CSV conservan headers aun con universo
-vacío. La publicación externa debe validar schema, scope, hashes y ausencia de
-secretos antes de reemplazar el último artifact válido.
+Los artifacts públicos no contienen credenciales, URLs privadas de base de datos, RAW, cookies, tokens ni colas de revisión. La publicación valida schema, scope, hashes, tamaños y ausencia de secretos antes de reemplazar el último corte válido.
+
+Consumer Mart v2 y Consumer Catalog v3 se publican en `portfolio-data`. Business Mart v1 permanece privado dentro del artifact analítico para el flujo B2B.
