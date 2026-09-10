@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import gzip
 import json
 import sqlite3
 import sys
@@ -156,7 +157,7 @@ def test_exports_partitioned_visible_catalog_with_safe_comparability(tmp_path: P
         "contains_raw": False,
         "contains_review_queue": False,
     }
-    assert manifest["initial_payload"]["request_count"] == 3
+    assert manifest["initial_payload"]["request_count"] == 2
     assert manifest["partition_count"] >= 1
     assert all(item["bytes"] > 0 and item["gzip_bytes"] > 0 for item in manifest["files"])
 
@@ -179,19 +180,35 @@ def test_exports_partitioned_visible_catalog_with_safe_comparability(tmp_path: P
     assert "review_required" not in json.dumps(manifest) + json.dumps(rows)
 
 
-def test_facets_preserve_unknowns_and_index_points_to_hashed_partitions(tmp_path: Path) -> None:
+def test_facets_preserve_unknowns_and_type_indexes_point_to_partitions(tmp_path: Path) -> None:
     database = tmp_path / "source.sqlite"
     output = tmp_path / "public"
     build_db(database)
     manifest = export(database, output)
     facets = json.loads((output / "facets-sps.json").read_text())
-    index = json.loads((output / "index-sps.json").read_text())
-
     assert facets["schema"] == "rpi-consumer-facets/v3"
     assert facets["coverage"]["category"] == {"known": 5, "unknown": 1}
-    assert any(item == {"value": None, "label": "Sin categoría normalizada", "row_count": 1} for item in facets["categories"])
-    assert index["row_count"] == manifest["visible_rows"]
-    assert all((output / row["partition"]).is_file() for row in index["rows"])
+    unknown = next(item for item in facets["categories"] if item["value"] is None)
+    assert unknown["label"] == "Sin categoría normalizada"
+    assert unknown["navigation"] == "search"
+    paths = [entry["path"] for entry in unknown["search_indexes"]]
+    paths.extend(
+        product_type["index_path"]
+        for category in facets["categories"]
+        if category["navigation"] == "facets"
+        for product_type in category["product_types"]
+    )
+    indexes = [json.loads((output / path).read_text()) for path in paths]
+    assert sum(index["row_count"] for index in indexes) == manifest["visible_rows"]
+    assert all((output / row["partition"]).is_file() for index in indexes for row in index["rows"])
+    assert "index-sps.json" not in {item["path"] for item in manifest["files"]}
+    assert manifest["initial_files"] == ["facets-sps.json"]
+    facets_bytes = (output / "facets-sps.json").read_bytes()
+    assert manifest["initial_payload"] == {
+        "bytes": len(facets_bytes),
+        "gzip_bytes": len(gzip.compress(facets_bytes, mtime=0)),
+        "request_count": 2,
+    }
     hashes = {item["path"]: item["sha256"] for item in manifest["files"]}
     for relative, expected in hashes.items():
         assert MODULE.hashlib.sha256((output / relative).read_bytes()).hexdigest() == expected

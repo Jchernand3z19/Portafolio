@@ -212,7 +212,7 @@ jobs:
           }
           catalog_files = catalog_manifest.get('files')
           assert isinstance(catalog_files, list) and catalog_files
-          assert catalog_manifest['initial_payload']['request_count'] == 3
+          assert catalog_manifest['initial_payload']['request_count'] == 2
           for item in catalog_files:
               relative = Path(item['path'])
               assert not relative.is_absolute() and '..' not in relative.parts
