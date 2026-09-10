@@ -3,5 +3,8 @@
 from pathlib import Path
 import sys
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SRC))
+sys.path.insert(0, str(SCRIPTS))
