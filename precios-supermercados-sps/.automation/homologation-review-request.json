@@ -1,0 +1,7 @@
+{
+  "schema": "precios-sps-homologation-review-request/v1",
+  "action": "export_private_homologation_review",
+  "read_only": true,
+  "reason": "initial_production_review",
+  "sequence": 1
+}
