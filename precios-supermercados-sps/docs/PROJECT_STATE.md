@@ -54,7 +54,7 @@ El Consumer Mart v2 publicado en el mismo ciclo quedó `COMPARABLE`, con 92 prod
 
 ## Compra Inteligente
 
-La interfaz pública consume únicamente archivos estáticos publicados y valida tamaños/SHA-256. No consulta Turso y no hace matching en JavaScript.
+La interfaz pública consume únicamente archivos estáticos publicados y valida tamaños/SHA-256. No consulta Turso y no hace matching en JavaScript. Se presenta explícitamente como **planificador de compra**, no como tienda ni checkout.
 
 Está implementado:
 
@@ -67,9 +67,11 @@ Está implementado:
 - `Mi Compra` persistida localmente y agrupada por supermercado;
 - actualización explícita de precios sin sustitución silenciosa de retailer;
 - manejo visible de precios cambiados, faltantes o no disponibles;
+- indicador de fecha/estado del último corte público aceptado;
 - escenarios de canasta manual, por un solo supermercado y optimización por mejor precio seguro;
 - contexto histórico por oferta: precio anterior, 30/90 días, mínimos, máximos y posición histórica;
-- exportación local CSV y PDF.
+- exportación local CSV y PDF;
+- compartir la lista por WhatsApp con cantidades, precios, promociones, subtotales, total y advertencias aplicables.
 
 Contrato monetario:
 
@@ -96,6 +98,18 @@ grand_total = sum(retailer_subtotal)
 
 Los cambios de precio, PCI, ranking, deltas, freshness y semántica promocional/histórica se calculan en Python. Los activos reproducibles de `powerbi/rpi/` contienen Power Query, DAX, relaciones, tema y especificación de las nueve páginas. El repositorio **no fabrica ni versiona un `.pbix` simulado**: un PBIX final, si se desea como archivo binario de presentación, se construye en Power BI Desktop a partir de esos activos.
 
+## Homologación y revisión privada
+
+La homologación sigue siendo conservadora: GTIN/evidencia fuerte puede establecer identidad, mientras los matches por similitud quedan fuera de la comparación automática.
+
+Desde el PR **#460** existe una cola privada de revisión que puede materializar, bajo ejecución manual y read-only:
+
+- candidatos fuzzy `review_required` con ambos productos y score;
+- conflictos comerciales entre registros que comparten GTIN;
+- productos sin taxonomía/tipo normalizado suficiente.
+
+La cola no se publica a Compra Inteligente, no modifica precios ni perfiles por sí sola y no añade una lectura completa diaria de Turso.
+
 ## Operación recurrente
 
 El workflow `.github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml` corre diariamente a `17 11 * * *` (05:17 `America/Tegucigalpa`) y cubre seis cadenas / once contextos productivos demostrados:
@@ -113,9 +127,21 @@ La última corrida programada completamente verde fue el run `34368332245` del *
 
 El run programado `34492865834` del **2026-09-10** falló de forma segura durante la captura de Comisariato Los Andes por un timeout de transporte en `page-00200.json`. La compuerta global bloqueó la persistencia, por lo que ese intento no reemplazó el último estado comercial válido con datos parciales.
 
-El PR **#455** (`[RPI] Retry transient Los Andes timeouts safely`) fue fusionado el 2026-09-10. Los Andes ahora permite **un único reintento por solicitud sólo para errores transitorios de transporte**, con máximo diez reintentos acumulados y dentro del presupuesto existente de intentos. No se reintentan errores HTTP y las reglas de completitud/fail-closed no se relajaron.
+El PR **#455** (`[RPI] Retry transient Los Andes timeouts safely`) fue fusionado el 2026-09-10. Los Andes permite **un único reintento por solicitud sólo para errores transitorios de transporte**, con máximo diez reintentos acumulados y dentro del presupuesto existente de intentos. No se reintentan errores HTTP y las reglas de completitud/fail-closed no se relajaron.
 
-**Pendiente operativo único:** observar una siguiente ejecución programada con el ajuste #455 para confirmar el ciclo end-to-end en producción. No hace falta otro cambio de producto para esa comprobación y no se debe provocar scraping live adicional sólo para obtener evidencia.
+Los PR **#461** y **#462** completaron la recuperación operativa posterior al incidente:
+
+- la adquisición diaria se ejecuta de forma aislada por cadena, con `fail-fast` desactivado para permitir que las demás fuentes terminen aunque una falle;
+- cada cadena sólo entrega un handoff reutilizable después de superar sus validaciones de completitud/ubicación;
+- la persistencia global sigue siendo fail-closed y sólo comienza cuando existe un handoff aceptado de todas las cadenas;
+- los artifacts quedan ligados a `run_id` + `run_attempt`, por lo que una recuperación puede reutilizar las capturas válidas de intentos anteriores;
+- el operador revisa el run programado del mismo día a las **08:17** y **12:17** de Honduras;
+- sólo `failure`/`timed_out` son recuperables automáticamente y el límite es **tres intentos totales** (inicial + hasta dos recuperaciones);
+- la recuperación vuelve a ejecutar los jobs fallidos y sus dependencias, no crea un crawl programado nuevo si el run diario no existe.
+
+No se provocó scraping live adicional para probar estos cambios. La siguiente corrida programada será la primera evidencia productiva del nuevo esquema; hasta entonces, el último estado aceptado continúa siendo la fuente válida.
+
+Los correos de fallo de GitHub Actions son una preferencia de la cuenta del usuario y no una propiedad versionada del repositorio. Para recibirlos debe estar habilitada la entrega por email para Actions; puede limitarse a workflows fallidos.
 
 ## Autoridad live y binding SPS
 
@@ -161,4 +187,4 @@ La publicación pública incluye Consumer Mart v2, Consumer Catalog v3 y la mues
 
 ## Criterio de cierre del producto actual
 
-El producto funcional, los contratos B2B/B2C, Compra Inteligente, la publicación estática y los activos reproducibles de Power BI están implementados. Para declarar estable el ciclo operativo posterior al incidente del 10 de septiembre sólo falta comprobar una siguiente ejecución programada verde usando el ajuste #455.
+El producto funcional, los contratos B2B/B2C, Compra Inteligente, la publicación estática, la cola privada de homologación y los activos reproducibles de Power BI están implementados. El mecanismo de recuperación del corte diario también está implementado y validado por CI. La única evidencia operativa todavía no disponible es observar una siguiente ejecución programada real usando #455 + #461 + #462; no se debe provocar scraping adicional únicamente para producir esa evidencia.
