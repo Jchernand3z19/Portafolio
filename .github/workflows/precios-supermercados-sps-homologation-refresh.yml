@@ -51,11 +51,20 @@ jobs:
             --updated-at-utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             | tee run-artifacts/homologation/daily-refresh.json
 
+      - name: Generar cola privada de revisión
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python scripts/exportar_revision_homologacion.py \
+            --output run-artifacts/homologation/review-queue.json \
+            | tee run-artifacts/homologation/review-export.json
+
       - name: Publicar evidencia
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: product-homologation-refresh-${{ github.run_id }}
-          path: precios-supermercados-sps/run-artifacts/homologation/daily-refresh.json
+          path: precios-supermercados-sps/run-artifacts/homologation/
           if-no-files-found: warn
           retention-days: 14
