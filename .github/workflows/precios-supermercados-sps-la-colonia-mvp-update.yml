@@ -87,7 +87,7 @@ jobs:
             --live-read-only \
             --allow-full-catalog \
             --delay-seconds 1.0 \
-            --max-retries 0 \
+            --max-retries 1 \
             --output run-artifacts/los-andes/full-catalog.json \
             --raw-directory run-artifacts/los-andes/raw \
             --evidence-output run-artifacts/los-andes/evidence.json

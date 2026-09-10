@@ -19,10 +19,59 @@ def test_operational_capture_rejects_unsafe_budgets(tmp_path: Path) -> None:
     }
     with pytest.raises(runner.LiveCaptureError, match="delay_below_operational_floor"):
         runner.capture_catalog(**common, delay_seconds=0.49)
-    with pytest.raises(runner.LiveCaptureError, match="retry_policy_unverified"):
-        runner.capture_catalog(**common, max_retries=1)
+    with pytest.raises(runner.LiveCaptureError, match="retry_policy_invalid"):
+        runner.capture_catalog(**common, max_retries=2)
     with pytest.raises(runner.LiveCaptureError, match="timeout_invalid"):
         runner.capture_catalog(**common, timeout_seconds=61)
+
+
+def test_request_retries_one_transient_transport_failure(tmp_path: Path) -> None:
+    attempts = 0
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"ok":true}'
+
+    def fake_opener(request, *, timeout):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise TimeoutError("timed out")
+        return FakeResponse()
+
+    state: dict[str, float | int] = {
+        "requests": 0,
+        "attempts": 0,
+        "retries": 0,
+        "last_request_at": 0.0,
+    }
+    payload, record = runner._request_json(
+        url="https://example.invalid/catalog",
+        body={"scope": "test"},
+        output=tmp_path / "response.json",
+        state=state,
+        delay_seconds=0,
+        timeout_seconds=20,
+        max_retries=1,
+        opener=fake_opener,
+        sleeper=lambda _: None,
+    )
+
+    assert payload == {"ok": True}
+    assert attempts == 2
+    assert state["attempts"] == 2
+    assert state["requests"] == 1
+    assert state["retries"] == 1
+    assert record["retries"] == 0
+    assert record["transport_retries"] == 1
 
 
 def test_operational_capture_builds_complete_offsets_and_final_recheck(
@@ -30,8 +79,10 @@ def test_operational_capture_builds_complete_offsets_and_final_recheck(
 ) -> None:
     calls: list[tuple[str, str]] = []
 
-    def fake_request_json(*, url, body, output, **kwargs):
+    def fake_request_json(*, url, body, output, state, **kwargs):
         calls.append((url, output.name))
+        state["attempts"] = int(state["attempts"]) + 1
+        state["requests"] = int(state["requests"]) + 1
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text("{}", encoding="utf-8")
         if output.name == "store-evidence.json":
@@ -48,6 +99,7 @@ def test_operational_capture_builds_complete_offsets_and_final_recheck(
         return payload, {
             "status": 201,
             "retries": 0,
+            "transport_retries": 0,
             "url": url,
             "request_body": body,
             "response_file": output.name,
@@ -60,7 +112,9 @@ def test_operational_capture_builds_complete_offsets_and_final_recheck(
         ledger = json.loads((Path(directory) / "ledger.json").read_text(encoding="utf-8"))
         assert [page["skip"] for page in ledger["pages"]] == [0, 100, 200]
         assert ledger["final_recheck"]["skip"] == 0
+        assert ledger["request_count"] == 5
         assert ledger["retry_count"] == 0
+        assert ledger["transport_attempt_count"] == 5
         assert ledger["max_retries"] == 0
         return {
             "store_id": 1,
@@ -92,6 +146,7 @@ def test_operational_capture_builds_complete_offsets_and_final_recheck(
     ]
     assert evidence["catalog_products_reported"] == 205
     assert evidence["retry_count"] == 0
+    assert evidence["transport_attempt_count"] == 5
     assert (tmp_path / "snapshot.json").is_file()
     assert json.loads((tmp_path / "evidence.json").read_text())["result"] == "success"
 
@@ -99,7 +154,9 @@ def test_operational_capture_builds_complete_offsets_and_final_recheck(
 def test_operational_capture_stops_when_catalog_exceeds_hard_request_budget(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fake_request_json(*, url, body, output, **kwargs):
+    def fake_request_json(*, url, body, output, state, **kwargs):
+        state["attempts"] = int(state["attempts"]) + 1
+        state["requests"] = int(state["requests"]) + 1
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text("{}", encoding="utf-8")
         if output.name == "store-evidence.json":
@@ -115,6 +172,7 @@ def test_operational_capture_stops_when_catalog_exceeds_hard_request_budget(
         return payload, {
             "status": 201,
             "retries": 0,
+            "transport_retries": 0,
             "url": url,
             "request_body": body,
             "response_file": output.name,
