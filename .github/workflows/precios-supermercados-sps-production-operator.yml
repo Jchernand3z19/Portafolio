@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - precios-supermercados-sps/.automation/production-update-request.json
+  schedule:
+    - cron: "17 14 * * *" # 08:17 America/Tegucigalpa
+    - cron: "17 18 * * *" # 12:17 America/Tegucigalpa
 
 permissions:
   actions: write
@@ -105,3 +108,80 @@ jobs:
               ref: 'main',
               inputs: { live_read_only_authorized: 'true' },
             });
+
+  recover:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' && github.ref == 'refs/heads/main' && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reintentar sólo jobs fallidos del corte programado de hoy
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
+        with:
+          script: |
+            const workflowId = 'precios-supermercados-sps-la-colonia-mvp-update.yml';
+            const maxRunAttempt = 3;
+            const retryableConclusions = new Set(['failure', 'timed_out']);
+            const now = new Date();
+            const hondurasNow = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+            const localYear = hondurasNow.getUTCFullYear();
+            const localMonth = hondurasNow.getUTCMonth();
+            const localDay = hondurasNow.getUTCDate();
+            const dayStart = new Date(Date.UTC(localYear, localMonth, localDay, 6, 0, 0));
+            const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+            const response = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: workflowId,
+              branch: 'main',
+              event: 'schedule',
+              per_page: 20,
+            });
+            const todaysRuns = response.data.workflow_runs
+              .filter((run) => {
+                const created = new Date(run.created_at);
+                return created >= dayStart && created < dayEnd;
+              })
+              .sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
+
+            if (todaysRuns.length === 0) {
+              core.info('daily_recovery_no_scheduled_run_today');
+              return;
+            }
+
+            const run = todaysRuns[0];
+            core.info(JSON.stringify({
+              recovery_candidate_run_id: run.id,
+              status: run.status,
+              conclusion: run.conclusion,
+              run_attempt: run.run_attempt,
+              created_at: run.created_at,
+            }));
+
+            if (run.status !== 'completed') {
+              core.info('daily_recovery_run_still_active');
+              return;
+            }
+            if (run.conclusion === 'success') {
+              core.info('daily_recovery_not_needed');
+              return;
+            }
+            if (!retryableConclusions.has(run.conclusion)) {
+              core.info(`daily_recovery_conclusion_not_retryable:${run.conclusion}`);
+              return;
+            }
+            if (!Number.isInteger(run.run_attempt) || run.run_attempt < 1) {
+              core.setFailed('daily_recovery_run_attempt_invalid');
+              return;
+            }
+            if (run.run_attempt >= maxRunAttempt) {
+              core.info(`daily_recovery_attempt_limit_reached:${run.run_attempt}`);
+              return;
+            }
+
+            await github.rest.actions.reRunWorkflowFailedJobs({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: run.id,
+            });
+            core.info(`daily_recovery_rerun_requested:${run.id}:next_attempt=${run.run_attempt + 1}`);

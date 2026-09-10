@@ -34,7 +34,7 @@ base.EXPECTED_PERMISSIONS[base.PRODUCTION_OPERATOR_WORKFLOW] = {
     "actions": "write",
     "contents": "read",
 }
-base.EXPECTED_TRIGGERS[base.PRODUCTION_OPERATOR_WORKFLOW] = {"push"}
+base.EXPECTED_TRIGGERS[base.PRODUCTION_OPERATOR_WORKFLOW] = {"push", "schedule"}
 base.EXPECTED_PERMISSIONS[base.SAFE_ANALYTICS_WORKFLOW] = {"contents": "read"}
 base.EXPECTED_TRIGGERS[base.SAFE_ANALYTICS_WORKFLOW] = {
     "workflow_run", "workflow_dispatch", "push"
@@ -156,18 +156,30 @@ def test_production_operator_is_main_only_closed_and_least_privilege() -> None:
         "push": {
             "branches": ["main"],
             "paths": [base.PRODUCTION_UPDATE_REQUEST],
-        }
+        },
+        "schedule": [
+            {"cron": "17 14 * * *"},
+            {"cron": "17 18 * * *"},
+        ],
     }
     operator_jobs = base.jobs(workflow)
-    assert set(operator_jobs) == {"dispatch"}
+    assert set(operator_jobs) == {"dispatch", "recover"}
     dispatch = operator_jobs["dispatch"]
+    recover = operator_jobs["recover"]
     assert dispatch["if"] == (
         "${{ github.repository == 'Jchernand3z19/Portafolio' && "
         "github.ref == 'refs/heads/main' && github.event_name == 'push' }}"
     )
+    assert recover["if"] == (
+        "${{ github.repository == 'Jchernand3z19/Portafolio' && "
+        "github.ref == 'refs/heads/main' && github.event_name == 'schedule' }}"
+    )
     assert dispatch["timeout-minutes"] == "5"
+    assert recover["timeout-minutes"] == "5"
     assert "environment" not in dispatch
+    assert "environment" not in recover
     assert "permissions" not in dispatch
+    assert "permissions" not in recover
 
     raw = path.read_text(encoding="utf-8")
     assert base.PRODUCTION_UPDATE_REQUEST in raw
@@ -182,24 +194,42 @@ def test_production_operator_is_main_only_closed_and_least_privilege() -> None:
     assert "precios-supermercados-sps-la-colonia-mvp-update.yml" in raw
     assert "ref: 'main'" in raw
     assert "live_read_only_authorized: 'true'" in raw
+    assert "reRunWorkflowFailedJobs" in raw
+    assert "listWorkflowRuns" in raw
+    assert "const maxRunAttempt = 3" in raw
+    assert "retryableConclusions = new Set(['failure', 'timed_out'])" in raw
+    assert "event: 'schedule'" in raw
+    assert "branch: 'main'" in raw
+    assert "daily_recovery_no_scheduled_run_today" in raw
+    assert "daily_recovery_run_still_active" in raw
+    assert "daily_recovery_attempt_limit_reached" in raw
     assert "secrets." not in raw
     assert "vars." not in raw
     assert "pull_request:" not in raw
     assert "pull_request_target:" not in raw
     assert "issue_comment:" not in raw
-    assert "schedule:" not in raw
+    assert "schedule:" in raw
     assert "id-token" not in raw
 
     parsed = yaml.load(raw, Loader=yaml.BaseLoader)
-    checkout = next(
+    dispatch_checkouts = [
         step
         for step in parsed["jobs"]["dispatch"]["steps"]
         if str(step.get("uses", "")).startswith("actions/checkout@")
-    )
-    assert checkout["with"] == {
+    ]
+    recover_checkouts = [
+        step
+        for step in parsed["jobs"]["recover"]["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    ]
+    assert len(dispatch_checkouts) == 1
+    assert dispatch_checkouts[0]["with"] == {
         "ref": "${{ github.sha }}",
         "persist-credentials": "false",
     }
+    assert recover_checkouts == []
+    assert len(parsed["jobs"]["recover"]["steps"]) == 1
+    assert str(parsed["jobs"]["recover"]["steps"][0]["uses"]).startswith("actions/github-script@")
 
 
 def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> None:
