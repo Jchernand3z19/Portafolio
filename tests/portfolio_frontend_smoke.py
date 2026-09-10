@@ -153,9 +153,10 @@ def desktop_flow(browser: Browser) -> None:
     assert page.locator("#nav-links").get_by_text("Inicio", exact=True).count() == 1
     assert_project_order(page)
     card = page.locator("#proyectos .price-card")
-    assert "Monitoreo automatizado de precios" in card.locator("h3").inner_text()
-    assert "Web Scraping" in card.inner_text()
+    assert "Retail Price Intelligence para supermercados" in card.locator("h3").inner_text()
+    assert "Retail Price Intelligence" in card.inner_text()
     assert "Playwright" in card.inner_text()
+    assert card.locator('a[href="precios-supermercados-sps/b2c/"]').inner_text() == "Ver resultado"
     assert card.get_attribute("data-project-position") == "PROYECTO PRINCIPAL · 01"
     assert page.locator("#proyectos .mw-card").get_attribute("data-project-position") == "PROYECTO · 02"
     assert page.locator("#mw-view .mw-kicker").count() == 0
@@ -165,8 +166,8 @@ def desktop_flow(browser: Browser) -> None:
     assert page.locator("html").get_attribute("lang") == "en"
     assert page.locator("#nav-links").get_by_text("Home", exact=True).count() == 1
     assert page.evaluate("localStorage.getItem('portfolio.locale.v1')") == "en"
-    assert "Automated grocery price monitoring" in page.locator("#proyectos .price-card h3").inner_text()
-    assert "Web Scraping" in page.locator("#proyectos .price-card").inner_text()
+    assert "Retail Price Intelligence for grocery" in page.locator("#proyectos .price-card h3").inner_text()
+    assert "Retail Price Intelligence" in page.locator("#proyectos .price-card").inner_text()
     assert "World Cup 2026" in page.locator("#proyectos .mw-card h3").inner_text()
     assert page.locator("#proyectos .price-card").get_attribute("data-project-position") == "FEATURED PROJECT · 01"
     assert page.locator("#proyectos .mw-card").get_attribute("data-project-position") == "PROJECT · 02"
@@ -177,13 +178,14 @@ def desktop_flow(browser: Browser) -> None:
     opener.click()
     dialog = page.locator("#price-project-view")
     assert dialog.evaluate("element => element.open") is True
-    assert dialog.locator("#price-title").inner_text() == "Grocery prices collected from the web"
+    assert dialog.locator("#price-title").inner_text() == "Price intelligence for better shopping and decisions"
     assert "Web Scraping" in dialog.locator("#price-flow-title").locator("xpath=../..").inner_text()
     assert_price_evidence(dialog)
     assert_comparison_state(dialog)
     assert dialog.locator("#price-quality-title").count() == 0
     assert dialog.locator("#price-cap-title").count() == 1
     assert dialog.locator("#price-value-title").count() == 1
+    assert dialog.locator('a[href="precios-supermercados-sps/b2c/"]').inner_text() == "Use Smart Shopping"
     assert page.locator(":focus").get_attribute("data-price-close") is not None
     page.keyboard.press("Escape")
     assert dialog.evaluate("element => element.open") is False

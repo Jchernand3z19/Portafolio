@@ -16,29 +16,34 @@ function sortedRetailers(summary) {
 }
 
 export function buildCartCsv(summary) {
-  const rows = [[
-    "producto", "marca", "presentacion", "supermercado", "ubicacion", "cantidad",
-    "precio_unitario_hnl", "total_linea_hnl", "estado", "freshness", "observado_en", "comprado",
-  ]];
+  const rows = [["supermercado", "producto", "cantidad", "precio_unitario_hnl", "total_linea_hnl"]];
   for (const [retailer, group] of sortedRetailers(summary)) {
     for (const line of group.lines ?? []) {
       rows.push([
-        line.product_name,
-        line.brand ?? "",
-        line.presentation ?? "",
         retailer,
-        line.location_id ?? "",
+        productDisplayName(line),
         line.quantity,
         minorToDecimal(line.unit_price_minor),
         line.line_total_minor === null ? "" : minorToDecimal(line.line_total_minor),
-        line.invalid ? "NO_DISPONIBLE" : "DISPONIBLE",
-        line.freshness_status ?? "",
-        line.observed_at ?? "",
-        line.checked ? "SI" : "NO",
       ]);
     }
+    rows.push([retailer, "SUBTOTAL", "", "", group.incomplete ? "INCOMPLETO" : minorToDecimal(group.subtotal_minor)]);
   }
+  rows.push(["", "TOTAL GENERAL", "", "", summary.grand_total_minor === null ? "INCOMPLETO" : minorToDecimal(summary.grand_total_minor)]);
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
+}
+
+function normalized(value) {
+  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es");
+}
+
+function productDisplayName(line) {
+  const parts = [line.product_name];
+  const product = normalized(line.product_name);
+  for (const value of [line.brand, line.presentation]) {
+    if (value && !product.includes(normalized(value))) parts.push(value);
+  }
+  return parts.filter(Boolean).join(" - ");
 }
 
 function latin1Safe(value) {
@@ -100,7 +105,7 @@ function pdfLogicalLines(summary, generatedAt) {
   for (const [retailer, group] of sortedRetailers(summary)) {
     lines.push({text: String(retailer).replaceAll("_", " ").toLocaleUpperCase("es"), bold: true, size: 12});
     for (const line of group.lines ?? []) {
-      for (const part of wrapText([line.product_name, line.brand, line.presentation].filter(Boolean).join(" - "))) {
+      for (const part of wrapText(productDisplayName(line))) {
         lines.push({text: part, bold: true, size: 10});
       }
       const total = line.line_total_minor === null ? "INCOMPLETO" : `L ${minorToDecimal(line.line_total_minor)}`;

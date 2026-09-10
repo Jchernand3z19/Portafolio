@@ -3,7 +3,7 @@
     es: {
       featured: 'PROYECTO PRINCIPAL · 01',
       standard: 'PROYECTO · 02',
-      priceKind: 'WEB SCRAPING · DATOS REALES',
+      priceKind: 'RETAIL PRICE INTELLIGENCE',
       worldCupKind: 'ANÁLISIS PREDICTIVO · DASHBOARD REAL',
       explore: 'Explorar proyecto',
       result: 'Ver resultado',
@@ -12,7 +12,7 @@
     en: {
       featured: 'FEATURED PROJECT · 01',
       standard: 'PROJECT · 02',
-      priceKind: 'WEB SCRAPING · REAL DATA',
+      priceKind: 'RETAIL PRICE INTELLIGENCE',
       worldCupKind: 'PREDICTIVE ANALYSIS · LIVE DASHBOARD',
       explore: 'Explore project',
       result: 'View result',

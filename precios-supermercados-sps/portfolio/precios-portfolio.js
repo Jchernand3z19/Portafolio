@@ -1,6 +1,7 @@
 (() => {
   const PROJECT_ID = 'precios-supermercados';
   const REPO = 'https://github.com/Jchernand3z19/Portafolio/tree/main/precios-supermercados-sps';
+  const B2C_URL = 'precios-supermercados-sps/b2c/';
   const SOURCE_URL = 'https://comisariatolosandes.com/';
   const EVIDENCE_URL = 'https://github.com/Jchernand3z19/Portafolio/tree/main/precios-supermercados-sps/reports/comisariato-los-andes/2026-09-04-full';
   const CODE_URL = 'https://github.com/Jchernand3z19/Portafolio/tree/main/precios-supermercados-sps/src/precios_supermercados';
@@ -30,23 +31,24 @@
 
   const translations = {
     es: {
-      'card.badge': 'Web Scraping · proyecto principal',
+      'card.badge': 'Retail Price Intelligence · proyecto principal',
       'card.preview.sources': 'fuentes web',
       'card.preview.locations': 'ubicaciones monitoreadas',
       'card.preview.products': 'productos registrados',
       'card.preview.history': 'registros históricos',
-      'card.previewLabel': 'Abrir proyecto de web scraping y monitoreo de precios',
-      'card.title': 'Monitoreo automatizado de precios',
-      'card.body': 'Sistema de web scraping que obtiene precios y promociones directamente de sitios web públicos de supermercados, valida la información y conserva su evolución para análisis.',
+      'card.previewLabel': 'Abrir plataforma de inteligencia de precios minoristas',
+      'card.title': 'Retail Price Intelligence para supermercados',
+      'card.body': 'Plataforma que convierte precios públicos validados en comparaciones, histórico y una experiencia B2C para planificar compras por supermercado.',
       'card.open': 'Explorar proyecto',
+      'card.b2c': 'Ver resultado',
       'card.proof': 'Ver extracción comprobable',
       'card.repo': 'Ver código',
       'dialog.close': 'Cerrar',
       'dialog.back': 'Volver a proyectos',
-      'hero.kicker': 'Web Scraping · datos reales · automatización',
-      'hero.title': 'Precios de supermercados obtenidos desde la web',
-      'hero.question': 'De páginas públicas a datos comparables e históricos, sin revisar producto por producto de forma manual.',
-      'hero.body': 'El sistema visita fuentes web públicas, extrae catálogos y precios, valida cada captura y conserva el histórico. Así convierte información dispersa en una base útil para comparar, detectar promociones y analizar cambios.',
+      'hero.kicker': 'Retail Price Intelligence · datos reales · producto digital',
+      'hero.title': 'Inteligencia de precios para comprar y decidir mejor',
+      'hero.question': 'De catálogos públicos a comparaciones confiables, historia de precios y una lista de compra accionable.',
+      'hero.body': 'La plataforma integra adquisición, calidad, homologación y marts analíticos. Compra Inteligente lleva esa evidencia al consumidor sin exponer la base productiva ni inventar precios faltantes.',
       'hero.stageTitle': 'Escala actual',
       'hero.stageBody': '5 fuentes web integradas, 9 ubicaciones, 47K+ productos registrados y 90K+ periodos históricos de precio.',
       'flow.title': 'Cómo llegan los datos',
@@ -128,12 +130,12 @@
       'roadmap.03.status': 'Activo',
       'roadmap.03.title': 'Comparaciones verificadas',
       'roadmap.03.body': 'Ya existen comparaciones dentro de fuentes y una muestra cross-source curada.',
-      'roadmap.04.status': 'Siguiente',
-      'roadmap.04.title': 'Matching cross-source a escala',
-      'roadmap.04.body': 'Automatizar equivalencias confiables de marca, presentación e identidad.',
-      'roadmap.05.status': 'Siguiente',
-      'roadmap.05.title': 'Dashboard comparador',
-      'roadmap.05.body': 'Exponer históricos, diferencias y mejores precios de forma interactiva.',
+      'roadmap.04.status': 'Completado',
+      'roadmap.04.title': 'Compra Inteligente B2C',
+      'roadmap.04.body': 'Comparación por facetas, historial y lista de compra por supermercado.',
+      'roadmap.05.status': 'Activo',
+      'roadmap.05.title': 'Inteligencia comercial B2B',
+      'roadmap.05.body': 'Métricas y superficies analíticas para decisiones comerciales.',
       'tech.title': 'Tecnología detrás del proyecto',
       'tech.body': 'La implementación técnica queda al final para que primero se entienda el resultado.',
       'tech.scrape.title': 'Python · Playwright · Requests',
@@ -144,26 +146,28 @@
       'tech.actions.body': 'Automatización, evidencia y controles antes de integrar datos.',
       'tech.tests.title': 'Pruebas automatizadas',
       'tech.tests.body': 'Validan reglas de datos, persistencia y seguridad.',
-      'end.repo': 'Ver implementación en GitHub'
+      'end.repo': 'Ver implementación en GitHub',
+      'end.b2c': 'Usar Compra Inteligente'
     },
     en: {
-      'card.badge': 'Web Scraping · featured project',
+      'card.badge': 'Retail Price Intelligence · featured project',
       'card.preview.sources': 'web sources',
       'card.preview.locations': 'monitored locations',
       'card.preview.products': 'products recorded',
       'card.preview.history': 'historical records',
-      'card.previewLabel': 'Open web scraping and grocery price monitoring project',
-      'card.title': 'Automated grocery price monitoring',
-      'card.body': 'A web scraping system that collects prices and promotions directly from public grocery websites, validates the information, and preserves price history for analysis.',
+      'card.previewLabel': 'Open retail price intelligence platform',
+      'card.title': 'Retail Price Intelligence for grocery',
+      'card.body': 'A platform that turns validated public prices into comparisons, price history, and a B2C shopping-planning experience.',
       'card.open': 'Explore project',
+      'card.b2c': 'View result',
       'card.proof': 'View verifiable extraction',
       'card.repo': 'View code',
       'dialog.close': 'Close',
       'dialog.back': 'Back to projects',
-      'hero.kicker': 'Web Scraping · real data · automation',
-      'hero.title': 'Grocery prices collected from the web',
-      'hero.question': 'From public web pages to comparable historical data without checking products manually one by one.',
-      'hero.body': 'The system visits public web sources, extracts catalogs and prices, validates each capture, and preserves history. It turns scattered information into a dataset for comparisons, promotions, and price-change analysis.',
+      'hero.kicker': 'Retail Price Intelligence · real data · digital product',
+      'hero.title': 'Price intelligence for better shopping and decisions',
+      'hero.question': 'From public catalogs to trustworthy comparisons, price history, and an actionable shopping list.',
+      'hero.body': 'The platform integrates acquisition, quality, product resolution, and analytical marts. Smart Shopping brings that evidence to consumers without exposing the production database or inventing missing prices.',
       'hero.stageTitle': 'Current scale',
       'hero.stageBody': '5 integrated web sources, 9 locations, 47K+ products recorded, and 90K+ historical price periods.',
       'flow.title': 'How the data gets here',
@@ -245,12 +249,12 @@
       'roadmap.03.status': 'Active',
       'roadmap.03.title': 'Verified comparisons',
       'roadmap.03.body': 'Comparisons exist within sources plus a curated cross-source sample.',
-      'roadmap.04.status': 'Next',
-      'roadmap.04.title': 'Cross-source matching at scale',
-      'roadmap.04.body': 'Automate reliable equivalence using brand, presentation, and identity.',
-      'roadmap.05.status': 'Next',
-      'roadmap.05.title': 'Comparison dashboard',
-      'roadmap.05.body': 'Expose history, differences, and best prices interactively.',
+      'roadmap.04.status': 'Completed',
+      'roadmap.04.title': 'B2C Smart Shopping',
+      'roadmap.04.body': 'Faceted comparisons, history, and shopping lists grouped by retailer.',
+      'roadmap.05.status': 'Active',
+      'roadmap.05.title': 'B2B commercial intelligence',
+      'roadmap.05.body': 'Metrics and analytical surfaces for commercial decisions.',
       'tech.title': 'Technology behind the project',
       'tech.body': 'Technical implementation comes last so the outcome is clear first.',
       'tech.scrape.title': 'Python · Playwright · Requests',
@@ -261,7 +265,8 @@
       'tech.actions.body': 'Automation, evidence, and controls before data integration.',
       'tech.tests.title': 'Automated tests',
       'tech.tests.body': 'Protect data, persistence, and security rules.',
-      'end.repo': 'View implementation on GitHub'
+      'end.repo': 'View implementation on GitHub',
+      'end.b2c': 'Use Smart Shopping'
     }
   };
 
@@ -299,7 +304,7 @@
         <div class="price-card__content">
           <p class="price-card__badge">${t('card.badge')}</p>
           <div class="tags">
-            <span class="tag">Web Scraping</span>
+            <span class="tag">Retail Intelligence</span>
             <span class="tag">Python</span>
             <span class="tag">Playwright</span>
             <span class="tag">GitHub Actions</span>
@@ -308,7 +313,7 @@
           <p>${t('card.body')}</p>
           <div class="price-card__actions">
             <button class="text-link" data-price-open type="button">${t('card.open')}</button>
-            <a class="text-link" href="${EVIDENCE_URL}" target="_blank" rel="noopener noreferrer">${t('card.proof')}</a>
+            <a class="text-link" href="${B2C_URL}">${t('card.b2c')}</a>
             <a class="text-link text-link--muted" href="${REPO}" target="_blank" rel="noopener noreferrer">${t('card.repo')}</a>
           </div>
         </div>
@@ -480,8 +485,8 @@
               <article class="price-roadmap__item is-done"><b>01 · ${t('roadmap.01.status')}</b><strong>${t('roadmap.01.title')}</strong><span>${t('roadmap.01.body')}</span></article>
               <article class="price-roadmap__item is-active"><b>02 · ${t('roadmap.02.status')}</b><strong>${t('roadmap.02.title')}</strong><span>${t('roadmap.02.body')}</span></article>
               <article class="price-roadmap__item is-active"><b>03 · ${t('roadmap.03.status')}</b><strong>${t('roadmap.03.title')}</strong><span>${t('roadmap.03.body')}</span></article>
-              <article class="price-roadmap__item is-next"><b>04 · ${t('roadmap.04.status')}</b><strong>${t('roadmap.04.title')}</strong><span>${t('roadmap.04.body')}</span></article>
-              <article class="price-roadmap__item is-next"><b>05 · ${t('roadmap.05.status')}</b><strong>${t('roadmap.05.title')}</strong><span>${t('roadmap.05.body')}</span></article>
+              <article class="price-roadmap__item is-done"><b>04 · ${t('roadmap.04.status')}</b><strong>${t('roadmap.04.title')}</strong><span>${t('roadmap.04.body')}</span></article>
+              <article class="price-roadmap__item is-active"><b>05 · ${t('roadmap.05.status')}</b><strong>${t('roadmap.05.title')}</strong><span>${t('roadmap.05.body')}</span></article>
             </div>
           </section>
 
@@ -499,6 +504,7 @@
             </div>
             <div class="price-end-actions">
               <button class="price-back" data-price-close type="button">${t('dialog.back')}</button>
+              <a class="price-link" href="${B2C_URL}">${t('end.b2c')}</a>
               <a class="price-link" href="${REPO}" target="_blank" rel="noopener noreferrer">${t('end.repo')}</a>
             </div>
           </section>
