@@ -1,140 +1,95 @@
 # Retail Price Intelligence Platform — especificación de producto
 
-## Propósito y estado
+## Propósito
 
-Este documento define la evolución de Precios de Supermercados SPS hacia una
-plataforma RPI con una adquisición común y dos productos derivados:
+Precios de Supermercados SPS evolucionó a una plataforma **Retail Price Intelligence (RPI)** con una sola adquisición confiable y dos productos derivados:
 
-- **Retail Price Intelligence B2B**, servido mediante un Business Data Mart y
-  presentado en Power BI;
-- **Compra Inteligente B2C**, servido mediante un Consumer Data Mart público y
-  presentado en una web responsive mobile-first.
+- **Retail Price Intelligence B2B**, servido por `rpi-business-mart/v1` y preparado para Power BI;
+- **Compra Inteligente B2C**, servida por `rpi-consumer-mart/v2` para comparación analítica y `rpi-consumer-catalog/v3` para navegación pública escalable.
 
-GitHub y `PROJECT_STATE.md` conservan el estado ejecutado. Las secciones marcadas
-como objetivo no deben presentarse como funcionalidad productiva hasta que sus
-contratos, pruebas y publicación estén integrados.
+`PROJECT_STATE.md` describe el estado operativo vigente. Este documento define el contrato funcional del producto.
 
 ## Arquitectura autoritativa
 
 ```text
 supermercados
-  -> extracción única por fuente y ubicación autorizada
-  -> RAW + hashes + provenance
-  -> completeness específico de fuente
-  -> health signals
-  -> aceptación comercial / last-known-good
-  -> Turso: current implícito + periodos históricos compactos
-  -> homologación conservadora
-  -> comparabilidad + freshness
-  -> Python analytics
-       -> Business Data Mart -> Power BI B2B
-       -> Consumer Data Mart -> Compra Inteligente web
+  → extracción por fuente/ubicación autorizada
+  → RAW + hashes + provenance
+  → completeness específico de fuente
+  → health signals
+  → aceptación comercial / last-known-good
+  → Turso: estado actual + periodos históricos compactos
+  → homologación conservadora
+  → comparabilidad + freshness
+  → Python analytics
+       ├─→ Business Mart v1 → Power BI B2B
+       ├─→ Consumer Mart v2 → comparación/escenarios B2C
+       └─→ Consumer Catalog v3 → navegación pública → Compra Inteligente
 ```
 
-Los dos productos reutilizan el mismo estado comercial aceptado. Ningún refresh
-de BI o de la web ejecuta scraping y ninguna lógica de matching vive en DAX,
-Power Query o JavaScript.
+Los tres contratos reutilizan el mismo estado comercial aceptado. Ningún refresh de Power BI o de la web ejecuta scraping. No existe matching en DAX, Power Query o JavaScript.
 
 ## Calidad y último dato válido
 
 Completeness y health son decisiones distintas:
 
-- **completeness** es source-specific y demuestra páginas, particiones, binding,
-  membership, conteos y reconciliación necesarios para aceptar un catálogo;
-- **health** registra señales como volumen, precios, promociones, categorías,
-  disponibilidad, duración, requests y retries.
+- **completeness** demuestra páginas, particiones, binding, membership, conteos y reconciliación necesarios para aceptar un catálogo;
+- **health** registra señales operativas como volumen, precios, promociones, categorías, disponibilidad, duración, requests y retries.
 
-La capa compartida clasifica cada run como:
+Cada run se clasifica como:
 
-- `ACCEPTED`: completeness válido y sin alertas materiales;
-- `DEGRADED`: completeness válido con health warnings auditables;
-- `REJECTED`: completeness inválido, independientemente de las estadísticas.
+- `ACCEPTED`: completo y sin alertas materiales;
+- `DEGRADED`: completo con warnings auditables;
+- `REJECTED`: incompleto o inválido.
 
-Un run `REJECTED` no muta current/history ni sustituye el último run `ACCEPTED`
-o `DEGRADED`. No se crean filas sintéticas para cubrir ausencias. La variación
-estadística aislada sólo produce una señal de salud; no prueba incompletitud.
+Un run `REJECTED` no sustituye el último dato válido ni modifica current/history. La ausencia de una fila nunca se convierte automáticamente en precio cero ni en agotado.
 
-## Homologación y universo comparable
+## Homologación y comparabilidad
 
-La identidad automática cross-retailer exige un GTIN/EAN válido igual y ausencia
-de conflicto comercial. GTIN diferentes nunca se unen por similitud textual.
-Marca y presentación no bastan. Una variante contradictoria queda
-`not_comparable`; la regresión Passion Especial/Jaguar/Rayo de Sol permanece
-bloqueada sin evidencia fuerte adicional.
+La comparación cross-retailer exige identidad fuerte y consistencia comercial. GTIN/EAN válido común puede sostener una equivalencia si no existen contradicciones; nombres, marca y presentación por sí solos no bastan.
 
-Una métrica competitiva se calcula sobre el universo que cumple, a la vez:
+Una métrica competitiva sólo se calcula si existe:
 
 1. identidad fuerte y consistencia comercial;
-2. exactamente una oferta por retailer/ubicación del alcance;
-3. precio efectivo positivo;
+2. una oferta válida por retailer/ubicación requerida;
+3. `current_price > 0`;
 4. disponibilidad no explícitamente `out_of_stock`;
 5. fuentes dentro de la ventana temporal comparable.
 
-Cada salida competitiva debe declarar `comparable_count`, `valid_price_count`,
-`excluded_count`, `coverage_pct`, `as_of` y `freshness_window`.
+Toda salida competitiva declara cobertura, `as_of` y freshness. Empates reales se conservan.
 
 ## Freshness
 
-Cada fuente/ubicación analítica expone:
+Cada fuente/ubicación expone `observed_at`, último run aceptado, edad del dato y `freshness_status` (`FRESH`, `STALE`, `UNAVAILABLE`).
 
-- `observed_at`;
-- `last_successful_run`;
-- `data_age_hours`;
-- `freshness_status` (`FRESH`, `STALE`, `UNAVAILABLE`);
-- `as_of`;
-- `freshness_window_hours`.
+Si una fuente está stale/unavailable o las observaciones no son temporalmente compatibles, la comparación queda `INSUFFICIENT_FRESH_COMPARISON`. El último precio aceptado puede mostrarse con su estado, pero no genera ranking, PCI ni recomendación nueva.
 
-La ventana de mercado es configurable. Si una fuente está stale/unavailable o
-la separación entre timestamps supera la ventana, la comparación queda
-`INSUFFICIENT_FRESH_COMPARISON`; no se produce un ranking directo. B2B y B2C
-muestran la fecha real y nunca ocultan staleness.
+## Python como fuente de verdad analítica
 
-## Python analytics
+Python calcula las métricas compartidas antes de publicar:
 
-Python es la única fuente de verdad para las métricas compartidas.
+- precio actual/anterior y cambios absoluto/porcentual;
+- dirección y días desde último cambio;
+- mínimos, máximos, media, mediana, rango, frecuencia y volatilidad;
+- ventanas históricas con estado explícito `insufficient_history` cuando falta baseline;
+- promoción declarada separada de reducción histórica observada;
+- PCI, ranking, spread, cobertura y ganadores con empates;
+- escenarios de canasta y totales monetarios.
 
-### Precio actual y movimientos
+El precio regular declarado nunca sustituye una observación histórica real.
 
-- current/previous price;
-- cambio absoluto y porcentual;
-- dirección;
-- días desde el último cambio;
-- primer movimiento observado y `observed_response_lag`, sin afirmar causalidad.
+# Producto B2B — Business Mart / Power BI
 
-### Historia
+`rpi-business-mart/v1` es privado, derivado y reconstruible. Incluye:
 
-- mínimo, máximo, media, mediana y rango;
-- conteo/frecuencia de cambios, duración y volatilidad;
-- ventanas 7/30/60/90/365 días sólo con historia suficiente.
+- dimensiones de producto, retailer, ubicación, categoría y marca;
+- comparación actual;
+- periodos históricos reales;
+- análisis promocional;
+- canasta común;
+- cobertura y freshness.
 
-### Promociones
-
-`source_reports_promotion` y `historical_price_reduction` son señales separadas.
-Las clasificaciones permitidas incluyen `below_recent_average`,
-`near_recent_minimum`, `source_promotion_without_historical_reduction` e
-`insufficient_history`. El precio regular declarado no reemplaza la historia
-observada.
-
-### Competencia y PCI
-
-```text
-PCI = current_price / selected_market_reference * 100
-```
-
-La referencia puede ser mean, median, market minimum o un conjunto explícito de
-competidores. PCI se publica junto con cobertura, universo comparable, freshness
-y `as_of`. Se calculan además mínimo, máximo, media, mediana, spread, ganador y
-rank con desempates visibles.
-
-## Business Data Mart y Power BI B2B
-
-El mart es derivado y reconstruible; no cambia el histórico compacto de Turso.
-El modelo estrella materializa sólo grains necesarios:
-
-- dimensiones: fecha, producto, retailer, ubicación, categoría y marca;
-- hechos: precio diario, cambios, comparación actual, promoción y canasta.
-
-Power BI presenta, sin redefinir lógica crítica en DAX/Power Query:
+Las nueve superficies especificadas para Power BI son:
 
 1. Executive Market Overview;
 2. Competitive Pricing;
@@ -146,44 +101,53 @@ Power BI presenta, sin redefinir lógica crítica en DAX/Power Query:
 8. Assortment / Coverage;
 9. Opportunities & Alerts.
 
-Los assets reproducibles son preferibles a un PBIX opaco. La historia sólo se
-habilita cuando el contrato histórico publicado exista y esté probado.
+Los assets reproducibles están en `powerbi/rpi/`. DAX agrega/presenta; no redefine matching, PCI, freshness ni clasificación histórica. El repositorio no usa un `.pbix` opaco como fuente de verdad.
 
-## Consumer Data Mart
+# Producto B2C — Compra Inteligente
 
-El mart público contiene únicamente filas autorizadas por Python y los campos
-necesarios para búsqueda, comparación, historia resumida y lista de compra. No
-expone secretos, URLs privadas, colas de revisión ni catálogo productivo completo.
-La web no hace matching por nombre.
+## Consumer Mart v2
 
-Una oferta B2C conserva, cuando la fuente lo provee:
+`rpi-consumer-mart/v2` contiene el universo público analítico seguro para comparación y escenarios. Expone sólo identidades/ofertas autorizadas por Python, con precios, diferencias, recomendación, freshness e historia resumida.
 
-```text
-canonical_product_id, source_product_id, supermarket_id, location_id,
-category, product_type, product_name, brand, variant, presentation,
-current_price, reported_regular_price, is_promotion, availability,
-observed_at, freshness_status, historical_summary
-```
+No publica secretos, RAW, colas de revisión ni grupos ambiguos.
 
-La publicación navegable usa `rpi-consumer-catalog/v3` y se divide en manifest,
-facetas, índices de navegación y particiones de hasta 250 filas. El manifest
-declara hash y tamaño de cada archivo; el navegador valida ambos antes de usarlo.
-El alcance B2C es exactamente cinco contextos SPS: La Colonia, Colonial,
-Walmart, PriceSmart y Comisariato Los Andes. Una fila visible puede ser
-`comparable`, `single_source` o `individual`; sólo la primera, con ofertas
-`FRESH`, recibe ranking relativo.
+## Consumer Catalog v3
 
-## Compra Inteligente y Mi Compra
+`rpi-consumer-catalog/v3` es el contrato público de navegación de gran volumen. Está separado del Consumer Mart para que **visibilidad no implique comparabilidad**.
 
-La aplicación es una sola web accesible para teléfono, tablet y PC. El flujo
-principal es buscar, comparar ofertas seguras, elegir manualmente un retailer,
-agregar, continuar comprando y revisar la lista agrupada.
+Alcance vigente: cinco contextos SPS — La Colonia, Colonial, Walmart, PriceSmart y Comisariato Los Andes.
 
-Cada ítem guarda identidad, descripción, elección de retailer, cantidad,
-`unit_price`, metadatos comerciales, observación y freshness. La selección manual
-del usuario no cambia silenciosamente durante un refresh.
+Una fila puede ser:
 
-### Contrato monetario
+- `comparable`;
+- `single_source`;
+- `individual`.
+
+Sólo una identidad autorizada y suficientemente fresca puede recibir comparación relativa.
+
+El catálogo se sirve como manifest, facetas, índices bajo demanda y particiones de máximo 250 filas. Cada archivo tiene hash/tamaño verificable. El navegador no consulta Turso y no reconstruye identidades.
+
+`is_promotion=null` significa promoción desconocida; no debe mostrarse como `false`.
+
+## Flujo de Compra Inteligente
+
+La aplicación responsive permite:
+
+- navegación por facetas dependientes y búsqueda;
+- matriz de cinco supermercados en escritorio y tarjetas adaptativas en móvil;
+- selección manual exacta de oferta;
+- cantidades positivas;
+- alta por lote con confirmación de conflictos;
+- lista `Mi Compra` persistida en el dispositivo;
+- agrupación por supermercado;
+- actualización explícita de precios;
+- faltantes/no disponibles visibles sin sustitución silenciosa;
+- comparación de escenario manual, un solo supermercado y split optimizado seguro;
+- historial resumido por oferta;
+- exportación local CSV/PDF;
+- checklist comprado/pendiente.
+
+## Contrato monetario
 
 ```text
 unit_price = current_price
@@ -192,81 +156,56 @@ retailer_subtotal = sum(line_total)
 grand_total = sum(retailer_subtotal)
 ```
 
-Todos los cálculos críticos usan enteros minor units o `Decimal`, con redondeo
-explícito. `reported_regular_price` puede mostrarse como referencia, pero nunca
-infla el total. No se agrega 15%, 18% ni otro impuesto inferido. Shipping,
-delivery, service y membership fees no forman parte del precio del producto ni
-del total presencial del MVP.
+Los cálculos usan minor units/`Decimal`. `reported_regular_price` puede mostrarse como referencia, pero no entra al total. No se inventan ISV, impuestos, shipping, delivery, service ni membership fees.
 
-La UI muestra productos por supermercado, cantidades, precios unitarios,
-subtotales y `TOTAL ESTIMADO DE MI COMPRA`, con la nota:
+Si una línea no tiene precio utilizable, el total dependiente queda incompleto; nunca se imputa cero.
 
-> Total estimado calculado con los precios públicos observados en cada
-> supermercado. Los precios pueden cambiar en tienda.
+La nota de salida es:
 
-### Comportamiento local
+> Total estimado calculado con los precios públicos observados en cada supermercado. Los precios pueden cambiar en tienda.
 
-- cascada Categoría → Producto → Marca → Presentación y búsqueda secundaria;
-- matriz de cinco supermercados en escritorio y tarjetas por producto en móvil;
-- una selección nativa tipo radio por producto, con toda la celda accionable y
-  foco de teclado preservado;
-- preparación de varios productos y alta por lote, con conflictos que exigen
-  confirmación explícita;
-- cantidades positivas, edición, eliminación y checklist comprado/pendiente;
-- persistencia en el dispositivo sin cuentas;
-- al reabrir, detección de precios cambiados para la misma identidad y retailer;
-- actualización sólo por acción explícita;
-- ítems no disponibles se señalan, nunca se sustituyen;
-- exportación CSV y PDF con el mismo contrato monetario;
-- render seguro mediante DOM/text APIs, sin HTML no confiable.
+## Historial visible
 
-Cada oferta puede desplegar el último precio observado anterior, promedio de 30
-y 90 días, mínimo/máximo de 90 días y una posición humana (`mínimo de 90 días`,
-`debajo del promedio`, `en el promedio`, `sobre el promedio` o `historial
-insuficiente`). Estos valores los calcula Python desde periodos aceptados; la web
-no reconstruye series ni eleva el precio regular declarado a historia.
+Cada oferta puede mostrar, cuando existe evidencia suficiente:
 
-### Optimización
+- precio anterior;
+- promedio 30/90 días;
+- mínimo/máximo de ventana;
+- posición histórica humana;
+- reducción real observada y/o promoción declarada, siempre separadas.
 
-La opción automática compara selección manual, canasta completa por retailer y
-split de mínimo precio. Sólo una canasta con cobertura total compite como total
-completo. Los faltantes no cuestan cero. El resultado informa ahorro y cantidad
-de supermercados, sin modelar todavía viaje, tiempo o umbral mínimo.
+La web consume estas métricas ya calculadas; no reconstruye series.
 
-## Actualización derivada
+# Actualización derivada y publicación
 
 ```text
 accepted commercial update
-  -> homologation refresh
-  -> Python analytics refresh
-  -> Business Mart + Consumer Mart
-  -> publicación estática validada
+  → homologation refresh
+  → Python analytics
+  → Business Mart v1 + Consumer Mart v2 + Consumer Catalog v3
+  → validación de schema/scope/hash/secretos
+  → publicación atómica de los contratos públicos
 ```
 
-Un fallo conserva la publicación last-known-good. Los artifacts derivados llevan
-schema version, hashes, run/SHA fuente, `as_of`, conteos y política de aceptación.
+Un fallo conserva el último corte válido. Business Mart permanece privado; Consumer Mart y Consumer Catalog son las fronteras públicas B2C.
 
-## Seguridad y separación public/private
+# Seguridad y límites
 
-- Turso y los sitios fuente nunca se consultan desde el navegador;
-- ningún secreto o endpoint privilegiado llega a un artifact público;
-- el Consumer Mart es reducido y sanitizado;
-- material ambiguo o grupos inseguros permanecen fuera de la publicación;
-- `ABSENT`, `OUT_OF_STOCK` y `UNKNOWN` conservan significados distintos;
-- no se agregan fuentes, ciudades, login, pagos, ML o APIs públicas complejas en
-  este MVP.
+- Turso y los sitios fuente no se consultan desde el navegador.
+- Ningún secreto, cookie o endpoint privilegiado llega a artifacts públicos.
+- `ABSENT`, `OUT_OF_STOCK` y `UNKNOWN` son estados distintos.
+- No se fuerza matching para aumentar cobertura.
+- No se infiere ciudad cuando el contexto fuente no la demuestra.
+- Cuentas, pagos, forecasting, elasticidad y productos multi-tenant no forman parte del MVP actual.
 
-## Roadmap de madurez
+# Madurez del producto
 
-| Nivel | Resultado | Gate de salida |
-| --- | --- | --- |
-| 0 — Data Foundation | seis cadenas, once ubicaciones, RAW/provenance, persistencia e histórico | ciclo productivo y downstream verdes |
-| 1 — Analytics Foundation | quality, LKG, freshness, comparabilidad, historia, PCI y métricas | contratos deterministas y tests |
-| 2 — B2B MVP | Business Mart y modelo Power BI de nueve páginas | refresh reproducible y métricas visibles |
-| 3 — B2C MVP | Consumer Mart, búsqueda, Mi Compra, exportación y optimización | responsive/accessibility/security QA |
-| 4 — Advanced Market Intelligence | análisis posteriores validados por uso e historia | decisión posterior al MVP |
-| 5 — Commercial Product | multi-tenant/RLS/operación comercial | clientes y requisitos reales |
-| 6 — Advanced Models | forecasting/elasticidad/modelos avanzados | cobertura e historia suficientes |
-
-Los niveles 4–6 son direcciones de evaluación, no features comprometidas ni
-implementadas.
+| Nivel | Estado actual |
+| --- | --- |
+| Data Foundation | implementada: seis cadenas / once contextos productivos y histórico persistido |
+| Analytics Foundation | implementada: quality, LKG, freshness, historia, promociones, PCI y canastas |
+| B2B MVP | activos reproducibles de Business Mart + Power BI implementados |
+| B2C MVP | Compra Inteligente + Consumer Mart v2 + Consumer Catalog v3 implementados y publicados |
+| Advanced Market Intelligence | futuro, sujeto a historia/uso real |
+| Commercial Product | futuro, sujeto a clientes/requisitos reales |
+| Advanced Models | futuro, sujeto a cobertura e historia suficientes |
