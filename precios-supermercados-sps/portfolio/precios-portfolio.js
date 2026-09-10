@@ -16,32 +16,18 @@
     snapshotSha256: 'a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc'
   });
 
-  const BASIC_COMPARISON = Object.freeze([
-    Object.freeze({ product: 'Arroz blanco', brand: 'Progreso', presentation: '1 lb / 454 g', city: 'San Pedro Sula', losAndes: 16.90, colonial: 15.79 }),
-    Object.freeze({ product: 'Huevos', brand: 'Rica Yema', presentation: '15 und', city: 'San Pedro Sula', losAndes: 61.85, colonial: 60.79 }),
-    Object.freeze({ product: 'Harina de maíz', brand: 'Maseca', presentation: '4.5 lb', city: 'San Pedro Sula', losAndes: 93.50, colonial: 85.99 }),
-    Object.freeze({ product: 'Harina de trigo', brand: 'Gold Star', presentation: '5 lb', city: 'San Pedro Sula', losAndes: 74.50, colonial: 64.99 }),
-    Object.freeze({ product: 'Frijoles rojos volteados', brand: 'La Chula', presentation: '48 oz', city: 'San Pedro Sula', losAndes: 75.50, colonial: 63.39 }),
-    Object.freeze({ product: 'Pierna muslo de pollo', brand: 'Norteño', presentation: '1 lb', city: 'San Pedro Sula', losAndes: 32.90, colonial: 34.59 }),
-    Object.freeze({ product: 'Mantequilla crema', brand: 'Leyde', presentation: '1 lb', city: 'San Pedro Sula', losAndes: 50.50, colonial: 35.29 }),
-    Object.freeze({ product: 'Avena mosh', brand: 'Quaker', presentation: '600 g', city: 'San Pedro Sula', losAndes: 55.90, colonial: 49.49 }),
-    Object.freeze({ product: 'Pan molde', brand: 'Monarca', presentation: '540 g', city: 'San Pedro Sula', losAndes: 61.50, colonial: 58.99 }),
-    Object.freeze({ product: 'Café molido', brand: 'Passion', presentation: '1 lb', city: 'San Pedro Sula', losAndes: 299.50, colonial: 215.99 })
-  ]);
-
   const translations = {
     es: {
       'card.badge': 'Retail Price Intelligence · proyecto principal',
-      'card.preview.sources': 'fuentes web',
+      'card.preview.sources': 'supermercados',
       'card.preview.locations': 'ubicaciones monitoreadas',
       'card.preview.products': 'productos registrados',
       'card.preview.history': 'registros históricos',
       'card.previewLabel': 'Abrir plataforma de inteligencia de precios minoristas',
       'card.title': 'Retail Price Intelligence para supermercados',
-      'card.body': 'Plataforma que convierte precios públicos validados en comparaciones, histórico y una experiencia B2C para planificar compras por supermercado.',
+      'card.body': 'Plataforma que convierte precios públicos validados en comparaciones seguras, histórico y una experiencia B2C para planificar compras por supermercado.',
       'card.open': 'Explorar proyecto',
       'card.b2c': 'Ver resultado',
-      'card.proof': 'Ver extracción comprobable',
       'card.repo': 'Ver código',
       'dialog.close': 'Cerrar',
       'dialog.back': 'Volver a proyectos',
@@ -50,7 +36,7 @@
       'hero.question': 'De catálogos públicos a comparaciones confiables, historia de precios y una lista de compra accionable.',
       'hero.body': 'La plataforma integra adquisición, calidad, homologación y marts analíticos. Compra Inteligente lleva esa evidencia al consumidor sin exponer la base productiva ni inventar precios faltantes.',
       'hero.stageTitle': 'Escala actual',
-      'hero.stageBody': '5 fuentes web integradas, 9 ubicaciones, 47K+ productos registrados y 90K+ periodos históricos de precio.',
+      'hero.stageBody': '6 supermercados integrados, 11 ubicaciones, 58K+ productos registrados y 127K+ periodos históricos de precio.',
       'flow.title': 'Cómo llegan los datos',
       'flow.body': 'El recorrido completo deja claro que el proyecto no parte de un archivo preparado: empieza en sitios web públicos.',
       'flow.web.title': 'Sitios web',
@@ -62,10 +48,9 @@
       'flow.history.title': 'Histórico',
       'flow.history.body': 'El estado actual y las variaciones comerciales quedan conservados.',
       'flow.analysis.title': 'Análisis',
-      'flow.analysis.body': 'Los datos quedan listos para comparaciones, tendencias y dashboards.',
+      'flow.analysis.body': 'Los datos quedan listos para comparaciones seguras, tendencias y dashboards.',
       'proof.title': 'Extracción web comprobable',
       'proof.body': 'Una captura real aceptada permite seguir la evidencia desde la página pública consultada hasta el resultado guardado en GitHub.',
-      'proof.statusLabel': 'Estado',
       'proof.status': 'Captura aceptada',
       'proof.sourceLabel': 'Fuente web',
       'proof.dateLabel': 'Captura',
@@ -77,22 +62,21 @@
       'proof.evidenceAction': 'Ver evidencia en GitHub',
       'proof.codeAction': 'Ver código de extracción',
       'proof.note': 'Snapshot SHA-256: a1fe77e3…f09f9fc. No se publican cookies, credenciales ni el dataset productivo completo.',
-      'scale.title': 'Cobertura actual',
-      'scale.body': 'Cifras verificadas del estado integrado utilizado por el portafolio al 8 de septiembre de 2026.',
-      'scale.sources': 'fuentes integradas',
+      'scale.title': 'Cobertura productiva actual',
+      'scale.body': 'Seis cadenas y once contextos productivos demostrados; la cobertura de scraping permanece separada de la cobertura de comparación cross-source.',
+      'scale.sources': 'supermercados',
       'scale.locations': 'ubicaciones monitoreadas',
       'scale.products': 'productos registrados',
       'scale.history': 'registros históricos de precio',
-      'sample.title': '10 productos representativos de consumo básico',
-      'sample.body': 'Comparación pública y curada entre dos supermercados de San Pedro Sula. Cada fila usa la misma marca y la misma presentación para evitar comparaciones engañosas.',
-      'sample.product': 'Producto',
-      'sample.brand': 'Marca',
-      'sample.presentation': 'Presentación',
-      'sample.city': 'Ciudad',
-      'sample.losAndes': 'Comisariato Los Andes',
-      'sample.colonial': 'Supermercados Colonial',
+      'sample.title': 'Comparaciones cross-source con identidad fuerte',
+      'sample.body': 'La comparación pública se habilita sólo después de validar identidad fuerte y consistencia comercial. Marca y presentación nunca bastan por sí solas.',
+      'sample.product': 'Producto verificado',
+      'sample.gtin': 'GTIN',
+      'sample.laColonia': 'La Colonia · SPS',
+      'sample.walmart': 'Walmart · SPS',
       'sample.best': 'Mejor precio',
-      'sample.note': 'Los Andes: precios del snapshot aceptado el 4 sep 2026 a las 01:44 UTC. Colonial: precios visibles en su catálogo web público verificados el 4 sep 2026. Esta selección es representativa para demostrar la comparación; no se presenta como la canasta básica oficial de Honduras ni como precio en tiempo real.',
+      'sample.savings': 'Ahorro vs. mayor',
+      'sample.note': 'Fail-closed: la tabla permanece oculta hasta que el dataset público seguro supera schema, política, alcance e identidad. El navegador no crea equivalencias.',
       'cap.title': 'Qué demuestra este proyecto',
       'cap.body': 'La extracción es sólo el primer paso. El proyecto demuestra un flujo completo desde la web hasta datos listos para análisis.',
       'cap.scrape.title': 'Web Scraping',
@@ -100,11 +84,11 @@
       'cap.auto.title': 'Automatización',
       'cap.auto.body': 'Ejecuciones controladas con GitHub Actions y procesos repetibles.',
       'cap.match.title': 'Homologación de productos',
-      'cap.match.body': 'Marca y presentación se usan para evitar unir productos que no son equivalentes.',
+      'cap.match.body': 'La identidad fuerte y la coherencia comercial autorizan comparaciones; la similitud textual sólo puede apoyar revisión.',
       'cap.history.title': 'Análisis histórico',
       'cap.history.body': 'Cada estado aceptado alimenta un histórico útil para estudiar cambios de precio.',
       'insights.title': 'Qué ya permiten ver los datos',
-      'insights.body': 'Además de esta muestra cross-source curada, el sistema ya produce comparaciones masivas cuando la identidad del artículo está demostrada.',
+      'insights.body': 'Los hallazgos usan identidades demostradas. Las comparaciones entre cadenas quedan cerradas cuando la identidad comercial es ambigua.',
       'insights.one.value': '255',
       'insights.one.body': 'artículos presentaron diferencias comerciales entre dos tiendas de una misma cadena, dentro de 12,042 artículos comparables.',
       'insights.two.value': '115',
@@ -112,7 +96,7 @@
       'insights.three.value': '120',
       'insights.three.body': 'promociones fueron verificadas en la captura comprobable de 6,646 productos con precio.',
       'value.title': 'Por qué este proyecto importa',
-      'value.body': 'Convierte una tarea repetitiva de revisión web en una fuente estructurada para responder preguntas de negocio.',
+      'value.body': 'Convierte una tarea repetitiva de revisión web en una fuente estructurada para responder preguntas de negocio y apoyar compras.',
       'value.manual.title': 'Reduce trabajo manual',
       'value.manual.body': 'Centraliza miles de productos que de otra manera tendrían que revisarse uno por uno.',
       'value.changes.title': 'Hace visibles las diferencias',
@@ -120,22 +104,22 @@
       'value.history.title': 'Construye contexto',
       'value.history.body': 'El histórico permite pasar de “cuánto cuesta hoy” a entender cómo cambia un precio con el tiempo.',
       'roadmap.title': 'De scraping a inteligencia de precios',
-      'roadmap.body': 'La recolección, validación e histórico ya existen. Las siguientes capas amplían la comparación y la experiencia analítica.',
+      'roadmap.body': 'La adquisición, histórico, comparación segura y superficies B2B/B2C ya forman un producto integrado.',
       'roadmap.01.status': 'Completado',
       'roadmap.01.title': 'Extracción web',
-      'roadmap.01.body': 'Cinco fuentes integradas bajo una estructura común.',
+      'roadmap.01.body': 'Seis cadenas productivas integradas bajo una estructura común.',
       'roadmap.02.status': 'Activo',
       'roadmap.02.title': 'Historial de precios',
       'roadmap.02.body': 'Se conservan estados aceptados y cambios comerciales.',
       'roadmap.03.status': 'Activo',
       'roadmap.03.title': 'Comparaciones verificadas',
-      'roadmap.03.body': 'Ya existen comparaciones dentro de fuentes y una muestra cross-source curada.',
+      'roadmap.03.body': 'El gate fail-closed publica sólo equivalencias con identidad fuerte y consistencia comercial.',
       'roadmap.04.status': 'Completado',
       'roadmap.04.title': 'Compra Inteligente B2C',
       'roadmap.04.body': 'Comparación por facetas, historial y lista de compra por supermercado.',
       'roadmap.05.status': 'Activo',
       'roadmap.05.title': 'Inteligencia comercial B2B',
-      'roadmap.05.body': 'Métricas y superficies analíticas para decisiones comerciales.',
+      'roadmap.05.body': 'Business Mart y activos reproducibles para análisis en Power BI.',
       'tech.title': 'Tecnología detrás del proyecto',
       'tech.body': 'La implementación técnica queda al final para que primero se entienda el resultado.',
       'tech.scrape.title': 'Python · Playwright · Requests',
@@ -143,24 +127,23 @@
       'tech.storage.title': 'Turso / SQLite',
       'tech.storage.body': 'Estado actual, histórico y trazabilidad de ejecuciones.',
       'tech.actions.title': 'GitHub Actions',
-      'tech.actions.body': 'Automatización, evidencia y controles antes de integrar datos.',
+      'tech.actions.body': 'Automatización, evidencia y controles antes de integrar y publicar datos.',
       'tech.tests.title': 'Pruebas automatizadas',
-      'tech.tests.body': 'Validan reglas de datos, persistencia y seguridad.',
+      'tech.tests.body': 'Validan reglas de datos, persistencia, publicación y seguridad.',
       'end.repo': 'Ver implementación en GitHub',
       'end.b2c': 'Usar Compra Inteligente'
     },
     en: {
       'card.badge': 'Retail Price Intelligence · featured project',
-      'card.preview.sources': 'web sources',
+      'card.preview.sources': 'retail chains',
       'card.preview.locations': 'monitored locations',
       'card.preview.products': 'products recorded',
       'card.preview.history': 'historical records',
       'card.previewLabel': 'Open retail price intelligence platform',
       'card.title': 'Retail Price Intelligence for grocery',
-      'card.body': 'A platform that turns validated public prices into comparisons, price history, and a B2C shopping-planning experience.',
+      'card.body': 'A platform that turns validated public prices into safe comparisons, price history, and a B2C shopping-planning experience.',
       'card.open': 'Explore project',
       'card.b2c': 'View result',
-      'card.proof': 'View verifiable extraction',
       'card.repo': 'View code',
       'dialog.close': 'Close',
       'dialog.back': 'Back to projects',
@@ -169,7 +152,7 @@
       'hero.question': 'From public catalogs to trustworthy comparisons, price history, and an actionable shopping list.',
       'hero.body': 'The platform integrates acquisition, quality, product resolution, and analytical marts. Smart Shopping brings that evidence to consumers without exposing the production database or inventing missing prices.',
       'hero.stageTitle': 'Current scale',
-      'hero.stageBody': '5 integrated web sources, 9 locations, 47K+ products recorded, and 90K+ historical price periods.',
+      'hero.stageBody': '6 integrated retail chains, 11 locations, 58K+ products recorded, and 127K+ historical price periods.',
       'flow.title': 'How the data gets here',
       'flow.body': 'The full path makes it clear that the project does not begin with a prepared file: it starts on public websites.',
       'flow.web.title': 'Websites',
@@ -181,10 +164,9 @@
       'flow.history.title': 'History',
       'flow.history.body': 'Current state and commercial changes are preserved.',
       'flow.analysis.title': 'Analysis',
-      'flow.analysis.body': 'The data is ready for comparisons, trends, and dashboards.',
+      'flow.analysis.body': 'The data is ready for safe comparisons, trends, and dashboards.',
       'proof.title': 'Verifiable web extraction',
       'proof.body': 'A real accepted capture links the public page that was queried with the result preserved in GitHub.',
-      'proof.statusLabel': 'Status',
       'proof.status': 'Accepted capture',
       'proof.sourceLabel': 'Web source',
       'proof.dateLabel': 'Captured',
@@ -196,34 +178,33 @@
       'proof.evidenceAction': 'View evidence on GitHub',
       'proof.codeAction': 'View extraction code',
       'proof.note': 'Snapshot SHA-256: a1fe77e3…f09f9fc. Cookies, credentials, and the full production dataset are not published.',
-      'scale.title': 'Current coverage',
-      'scale.body': 'Verified figures from the integrated project state used by the portfolio as of September 8, 2026.',
-      'scale.sources': 'integrated sources',
+      'scale.title': 'Current production coverage',
+      'scale.body': 'Six chains and eleven demonstrated production contexts; scraping coverage remains separate from cross-source comparison coverage.',
+      'scale.sources': 'retail chains',
       'scale.locations': 'monitored locations',
       'scale.products': 'products recorded',
       'scale.history': 'historical price records',
-      'sample.title': '10 representative everyday products',
-      'sample.body': 'A curated public comparison between two San Pedro Sula retailers. Each row uses the same brand and presentation to avoid misleading comparisons.',
-      'sample.product': 'Product',
-      'sample.brand': 'Brand',
-      'sample.presentation': 'Presentation',
-      'sample.city': 'City',
-      'sample.losAndes': 'Comisariato Los Andes',
-      'sample.colonial': 'Supermercados Colonial',
+      'sample.title': 'Cross-source comparisons with strong identity',
+      'sample.body': 'Public comparison is enabled only after strong identity and commercial consistency are validated. Brand and presentation are never sufficient on their own.',
+      'sample.product': 'Verified product',
+      'sample.gtin': 'GTIN',
+      'sample.laColonia': 'La Colonia · SPS',
+      'sample.walmart': 'Walmart · SPS',
       'sample.best': 'Best price',
-      'sample.note': 'Los Andes: prices from the accepted snapshot captured Sep 4, 2026 at 01:44 UTC. Colonial: prices visible in its public web catalog and checked Sep 4, 2026. This is a representative comparison sample; it is not presented as Honduras’ official basic basket or as real-time pricing.',
+      'sample.savings': 'Savings vs. highest',
+      'sample.note': 'Fail-closed: the table remains hidden until the safe public dataset passes schema, policy, scope, and identity validation. The browser does not create equivalences.',
       'cap.title': 'What this project demonstrates',
       'cap.body': 'Extraction is only the first step. The project demonstrates an end-to-end path from the web to analysis-ready data.',
       'cap.scrape.title': 'Web Scraping',
       'cap.scrape.body': 'Automated extraction from real websites and public catalogs.',
       'cap.auto.title': 'Automation',
       'cap.auto.body': 'Controlled GitHub Actions runs and repeatable processes.',
-      'cap.match.title': 'Product matching',
-      'cap.match.body': 'Brand and presentation are used to avoid joining non-equivalent products.',
+      'cap.match.title': 'Product resolution',
+      'cap.match.body': 'Strong identity and commercial consistency authorize comparisons; textual similarity can only support review.',
       'cap.history.title': 'Historical analysis',
       'cap.history.body': 'Every accepted state contributes to history that can be used to study price changes.',
       'insights.title': 'What the data can already reveal',
-      'insights.body': 'Beyond this curated cross-source sample, the system already produces large comparisons when item identity is proven.',
+      'insights.body': 'Findings use proven identities. Cross-source comparisons remain closed whenever commercial identity is ambiguous.',
       'insights.one.value': '255',
       'insights.one.body': 'items showed commercial differences between two stores from the same chain, among 12,042 comparable items.',
       'insights.two.value': '115',
@@ -231,7 +212,7 @@
       'insights.three.value': '120',
       'insights.three.body': 'promotions were verified in the demonstrable capture containing 6,646 priced products.',
       'value.title': 'Why this project matters',
-      'value.body': 'It turns repetitive web checking into structured information that can answer business questions.',
+      'value.body': 'It turns repetitive web checking into structured information that can answer business questions and support shopping decisions.',
       'value.manual.title': 'Reduces manual work',
       'value.manual.body': 'Centralizes thousands of products that would otherwise need to be checked individually.',
       'value.changes.title': 'Makes differences visible',
@@ -239,22 +220,22 @@
       'value.history.title': 'Builds context',
       'value.history.body': 'History moves the question beyond “what does it cost today?” toward understanding change over time.',
       'roadmap.title': 'From scraping to price intelligence',
-      'roadmap.body': 'Collection, validation, and history already exist. The next layers expand matching and the analytical experience.',
+      'roadmap.body': 'Acquisition, history, safe comparison, and B2B/B2C surfaces now form one integrated product.',
       'roadmap.01.status': 'Completed',
       'roadmap.01.title': 'Web extraction',
-      'roadmap.01.body': 'Five sources integrated under one shared structure.',
+      'roadmap.01.body': 'Six production retail chains integrated under one shared structure.',
       'roadmap.02.status': 'Active',
       'roadmap.02.title': 'Price history',
       'roadmap.02.body': 'Accepted states and commercial changes are preserved.',
       'roadmap.03.status': 'Active',
       'roadmap.03.title': 'Verified comparisons',
-      'roadmap.03.body': 'Comparisons exist within sources plus a curated cross-source sample.',
+      'roadmap.03.body': 'The fail-closed gate publishes only equivalences with strong identity and commercial consistency.',
       'roadmap.04.status': 'Completed',
       'roadmap.04.title': 'B2C Smart Shopping',
       'roadmap.04.body': 'Faceted comparisons, history, and shopping lists grouped by retailer.',
       'roadmap.05.status': 'Active',
       'roadmap.05.title': 'B2B commercial intelligence',
-      'roadmap.05.body': 'Metrics and analytical surfaces for commercial decisions.',
+      'roadmap.05.body': 'Business Mart and reproducible assets for Power BI analysis.',
       'tech.title': 'Technology behind the project',
       'tech.body': 'Technical implementation comes last so the outcome is clear first.',
       'tech.scrape.title': 'Python · Playwright · Requests',
@@ -262,9 +243,9 @@
       'tech.storage.title': 'Turso / SQLite',
       'tech.storage.body': 'Current state, history, and execution traceability.',
       'tech.actions.title': 'GitHub Actions',
-      'tech.actions.body': 'Automation, evidence, and controls before data integration.',
+      'tech.actions.body': 'Automation, evidence, and controls before data integration and publication.',
       'tech.tests.title': 'Automated tests',
-      'tech.tests.body': 'Protect data, persistence, and security rules.',
+      'tech.tests.body': 'Protect data, persistence, publication, and security rules.',
       'end.repo': 'View implementation on GitHub',
       'end.b2c': 'Use Smart Shopping'
     }
@@ -279,26 +260,15 @@
     api.registerCatalog('prices', translations);
   }
 
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
-  }
-
-  function money(value) { return `L ${Number(value).toFixed(2)}`; }
-
   function card() {
     return `
       <article class="card project-card price-card fade-in is-visible">
         <button class="price-card__preview" data-price-open type="button" aria-label="${t('card.previewLabel')}">
           <span class="price-card__signal" aria-hidden="true">
-            <span><strong>5</strong><small>${t('card.preview.sources')}</small></span>
-            <span><strong>9</strong><small>${t('card.preview.locations')}</small></span>
-            <span><strong>47K+</strong><small>${t('card.preview.products')}</small></span>
-            <span><strong>90K+</strong><small>${t('card.preview.history')}</small></span>
+            <span><strong>6</strong><small>${t('card.preview.sources')}</small></span>
+            <span><strong>11</strong><small>${t('card.preview.locations')}</small></span>
+            <span><strong>58K+</strong><small>${t('card.preview.products')}</small></span>
+            <span><strong>127K+</strong><small>${t('card.preview.history')}</small></span>
           </span>
         </button>
         <div class="price-card__content">
@@ -318,24 +288,6 @@
           </div>
         </div>
       </article>`;
-  }
-
-  function comparisonRows() {
-    return BASIC_COMPARISON.map(row => {
-      const best = Math.min(row.losAndes, row.colonial);
-      const laBest = row.losAndes === best ? ' is-best' : '';
-      const coBest = row.colonial === best ? ' is-best' : '';
-      return `
-        <tr>
-          <td>${escapeHtml(row.product)}</td>
-          <td>${escapeHtml(row.brand)}</td>
-          <td>${escapeHtml(row.presentation)}</td>
-          <td>${escapeHtml(row.city)}</td>
-          <td class="price-number${laBest}">${money(row.losAndes)}</td>
-          <td class="price-number${coBest}">${money(row.colonial)}</td>
-          <td class="price-number price-best">${money(best)}</td>
-        </tr>`;
-    }).join('');
   }
 
   function view() {
@@ -405,10 +357,10 @@
               <p>${t('scale.body')}</p>
             </div>
             <div class="price-kpis">
-              <div class="price-kpi"><strong>5</strong><span>${t('scale.sources')}</span></div>
-              <div class="price-kpi"><strong>9</strong><span>${t('scale.locations')}</span></div>
-              <div class="price-kpi"><strong>47K+</strong><span>${t('scale.products')}</span></div>
-              <div class="price-kpi"><strong>90K+</strong><span>${t('scale.history')}</span></div>
+              <div class="price-kpi"><strong>6</strong><span>${t('scale.sources')}</span></div>
+              <div class="price-kpi"><strong>11</strong><span>${t('scale.locations')}</span></div>
+              <div class="price-kpi"><strong>58K+</strong><span>${t('scale.products')}</span></div>
+              <div class="price-kpi"><strong>127K+</strong><span>${t('scale.history')}</span></div>
             </div>
           </section>
 
@@ -418,21 +370,20 @@
               <h3 id="price-sample-title">${t('sample.title')}</h3>
               <p>${t('sample.body')}</p>
             </div>
-            <div class="price-table-wrap" tabindex="0" aria-label="${t('sample.title')}">
+            <div class="price-table-wrap" tabindex="0" aria-label="${t('sample.title')}" hidden aria-hidden="true">
               <table class="price-table">
                 <thead><tr>
                   <th>${t('sample.product')}</th>
-                  <th>${t('sample.brand')}</th>
-                  <th>${t('sample.presentation')}</th>
-                  <th>${t('sample.city')}</th>
-                  <th>${t('sample.losAndes')}</th>
-                  <th>${t('sample.colonial')}</th>
+                  <th>${t('sample.gtin')}</th>
+                  <th>${t('sample.laColonia')}</th>
+                  <th>${t('sample.walmart')}</th>
                   <th>${t('sample.best')}</th>
+                  <th>${t('sample.savings')}</th>
                 </tr></thead>
-                <tbody>${comparisonRows()}</tbody>
+                <tbody></tbody>
               </table>
             </div>
-            <p class="price-note">${t('sample.note')}</p>
+            <p class="price-note" data-comparison-safety="fail-closed">${t('sample.note')}</p>
           </section>
 
           <section class="price-section" aria-labelledby="price-cap-title">
