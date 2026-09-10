@@ -11,13 +11,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Sequence
 
 import exportar_consumer_catalog as base
-from exportar_modelo_analitico import ExportError, SQLiteBackend, TursoBackend, parse_scope
+from exportar_modelo_analitico import ExportError, SQLiteBackend, TursoBackend
 
 
 TGU_SCOPE = (
@@ -38,6 +38,31 @@ TGU_RETAILERS = (
 )
 FACETS_FILE = "facets-tgu.json"
 CITY = {"city": "Tegucigalpa", "country_code": "HN"}
+
+
+@dataclass(frozen=True, slots=True)
+class CityCatalogScope:
+    """Scope B2C por contexto exacto; una cadena puede tener varias sucursales."""
+
+    locations: tuple[tuple[str, str], ...]
+
+    def __post_init__(self) -> None:
+        if not self.locations:
+            raise ExportError("consumer_catalog_tgu_scope_empty")
+        normalized: list[tuple[str, str]] = []
+        for supermarket_id, location_id in self.locations:
+            supermarket = supermarket_id.strip() if isinstance(supermarket_id, str) else ""
+            location = location_id.strip() if isinstance(location_id, str) else ""
+            if not supermarket or not location:
+                raise ExportError("consumer_catalog_tgu_scope_context_invalid")
+            normalized.append((supermarket, location))
+        if len(set(normalized)) != len(normalized):
+            raise ExportError("consumer_catalog_tgu_scope_context_duplicate")
+        object.__setattr__(self, "locations", tuple(normalized))
+
+    @property
+    def supermarket_ids(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(supermarket_id for supermarket_id, _ in self.locations))
 
 
 def public_source_id(source_product_id: str, location_id: str) -> str:
@@ -192,7 +217,7 @@ def export_tgu_catalog(
     require_products: bool,
 ) -> dict[str, object]:
     _patch_base_for_tgu()
-    scope = parse_scope([f"{supermarket_id}={location_id}" for supermarket_id, location_id in TGU_SCOPE])
+    scope = CityCatalogScope(TGU_SCOPE)
     counts = _context_counts(backend, scope)
     if require_products and any(count <= 0 for count in counts.values()):
         missing = [f"{s}:{l}" for (s, l), count in counts.items() if count <= 0]
