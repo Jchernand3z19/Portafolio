@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import gzip
 import json
+import math
 import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
@@ -201,6 +202,11 @@ def test_facets_preserve_unknowns_and_type_indexes_point_to_partitions(tmp_path:
     indexes = [json.loads((output / path).read_text()) for path in paths]
     assert sum(index["row_count"] for index in indexes) == manifest["visible_rows"]
     assert all((output / row["partition"]).is_file() for index in indexes for row in index["rows"])
+    assert all(
+        len({row["partition"] for row in index["rows"]})
+        == math.ceil(index["row_count"] / MODULE.MAX_PARTITION_ROWS)
+        for index in indexes
+    )
     assert "index-sps.json" not in {item["path"] for item in manifest["files"]}
     assert manifest["initial_files"] == ["facets-sps.json"]
     facets_bytes = (output / "facets-sps.json").read_bytes()

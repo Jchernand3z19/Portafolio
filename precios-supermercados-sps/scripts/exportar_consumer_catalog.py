@@ -355,17 +355,23 @@ def export_consumer_catalog(
         categories[row["category"] if isinstance(row["category"], str) else None].append(row)
     partition_paths: list[str] = []
     for category, category_rows in sorted(categories.items(), key=lambda item: (item[0] is None, str(item[0]).casefold())):
-        slug = _category_key(category)
-        for number, start in enumerate(range(0, len(category_rows), MAX_PARTITION_ROWS), start=1):
-            chunk = category_rows[start : start + MAX_PARTITION_ROWS]
-            relative = f"catalog/{slug}/part-{number:03d}.json"
-            _atomic_bytes(
-                output_directory / relative,
-                _json_bytes({"schema": PARTITION_SCHEMA, "partition": relative, "row_count": len(chunk), "rows": chunk}),
-            )
-            partition_paths.append(relative)
-            for row in chunk:
-                row["_partition"] = relative
+        category_key = _category_key(category)
+        navigation_groups: dict[str | None, list[dict[str, object]]] = defaultdict(list)
+        for row in category_rows:
+            key = _search_prefix(row["product_name"]) if category is None else row["product_type"]
+            navigation_groups[key if isinstance(key, str) else None].append(row)
+        for navigation, group in sorted(navigation_groups.items(), key=lambda item: (item[0] is None, str(item[0]).casefold())):
+            navigation_key = f"search-{navigation}" if category is None else _category_key(navigation)
+            for number, start in enumerate(range(0, len(group), MAX_PARTITION_ROWS), start=1):
+                chunk = group[start : start + MAX_PARTITION_ROWS]
+                relative = f"catalog/{category_key}/{navigation_key}/part-{number:03d}.json"
+                _atomic_bytes(
+                    output_directory / relative,
+                    _json_bytes({"schema": PARTITION_SCHEMA, "partition": relative, "row_count": len(chunk), "rows": chunk}),
+                )
+                partition_paths.append(relative)
+                for row in chunk:
+                    row["_partition"] = relative
     index_paths: list[str] = []
     category_facets: list[dict[str, object]] = []
     for category, category_rows in sorted(categories.items(), key=lambda item: (item[0] is None, str(item[0]).casefold())):
