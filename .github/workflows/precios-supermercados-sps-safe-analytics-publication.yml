@@ -55,7 +55,10 @@ jobs:
           document = json.loads(path.read_text(encoding='utf-8'))
           expected_scope = [
               {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_sps'},
+              {'supermarket_id': 'colonial', 'location_id': 'colonial_sps'},
               {'supermarket_id': 'walmart', 'location_id': 'walmart_sps'},
+              {'supermarket_id': 'pricesmart', 'location_id': 'pricesmart_sps'},
+              {'supermarket_id': 'comisariato_los_andes', 'location_id': 'comisariato_los_andes_sps'},
           ]
           expected_keys = {
               'schema', 'action', 'scope', 'read_only', 'reason', 'sequence'
@@ -112,6 +115,21 @@ jobs:
             --require-products \
             | tee run-artifacts/analytics/rpi-la-colonia-walmart-sps-run.json
 
+      - name: Exportar catálogo público B2C de cinco supermercados SPS
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python scripts/exportar_consumer_catalog.py \
+            --turso \
+            --scope la_colonia=la_colonia_sps \
+            --scope colonial=colonial_sps \
+            --scope walmart=walmart_sps \
+            --scope pricesmart=pricesmart_sps \
+            --scope comisariato_los_andes=comisariato_los_andes_sps \
+            --output-directory run-artifacts/analytics/rpi-la-colonia-walmart-sps/consumer-v3 \
+            --require-products \
+            | tee run-artifacts/analytics/rpi-consumer-v3-run.json
+
       - name: Generar muestra segura para portafolio desde Consumer Mart
         working-directory: precios-supermercados-sps
         run: |
@@ -136,10 +154,19 @@ jobs:
           consumer = json.loads((root / 'consumer-mart.json').read_text(encoding='utf-8'))
           manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
           sample = json.loads((root / 'portfolio-sample.json').read_text(encoding='utf-8'))
+          catalog_root = root / 'consumer-v3'
+          catalog_manifest = json.loads((catalog_root / 'manifest.json').read_text(encoding='utf-8'))
           policy = 'fail_closed_strong_identity_and_commercial_consistency'
           expected_scope = [
               {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_sps'},
               {'supermarket_id': 'walmart', 'location_id': 'walmart_sps'},
+          ]
+          expected_catalog_scope = [
+              {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_sps'},
+              {'supermarket_id': 'colonial', 'location_id': 'colonial_sps'},
+              {'supermarket_id': 'walmart', 'location_id': 'walmart_sps'},
+              {'supermarket_id': 'pricesmart', 'location_id': 'pricesmart_sps'},
+              {'supermarket_id': 'comisariato_los_andes', 'location_id': 'comisariato_los_andes_sps'},
           ]
 
           assert business['schema'] == 'rpi-business-mart/v1'
@@ -165,6 +192,34 @@ jobs:
           assert 0 < sample['row_count'] <= min(10, manifest['safe_products'])
           assert sample.get('source_schema') == consumer['schema']
           assert sample.get('source_as_of') == consumer['as_of']
+
+          assert catalog_manifest['schema'] == 'rpi-consumer-catalog-manifest/v3'
+          assert catalog_manifest['catalog_schema'] == 'rpi-consumer-catalog/v3'
+          assert catalog_manifest['source_backend'] == 'turso'
+          assert catalog_manifest['scope'] == expected_catalog_scope
+          assert catalog_manifest['visible_rows'] > 0
+          assert catalog_manifest['source_offers'] >= catalog_manifest['visible_rows']
+          assert set(catalog_manifest['retailer_offer_counts']) == {
+              item['supermarket_id'] for item in expected_catalog_scope
+          }
+          assert all(count > 0 for count in catalog_manifest['retailer_offer_counts'].values())
+          assert catalog_manifest['partition_count'] > 0
+          assert catalog_manifest['public_boundary'] == {
+              'direct_turso_reads': 0,
+              'contains_business_mart': False,
+              'contains_raw': False,
+              'contains_review_queue': False,
+          }
+          catalog_files = catalog_manifest.get('files')
+          assert isinstance(catalog_files, list) and catalog_files
+          assert catalog_manifest['initial_payload']['request_count'] == 2
+          for item in catalog_files:
+              relative = Path(item['path'])
+              assert not relative.is_absolute() and '..' not in relative.parts
+              path = catalog_root / relative
+              assert path.is_file(), relative
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == item['sha256']
+              assert path.stat().st_size == item['bytes'] > 0
 
           hashes = manifest.get('files_sha256')
           assert isinstance(hashes, dict) and hashes
@@ -195,6 +250,11 @@ jobs:
               'portfolio_sample_rows': sample['row_count'],
               'business_fact_price_history_rows': len(business['facts']['fact_price_history']),
               'business_fact_promotion_rows': len(business['facts']['fact_promotion_analysis']),
+              'consumer_v3_visible_rows': catalog_manifest['visible_rows'],
+              'consumer_v3_source_offers': catalog_manifest['source_offers'],
+              'consumer_v3_partitions': catalog_manifest['partition_count'],
+              'consumer_v3_initial_bytes': catalog_manifest['initial_payload']['bytes'],
+              'consumer_v3_initial_gzip_bytes': catalog_manifest['initial_payload']['gzip_bytes'],
           }, sort_keys=True))
           PY
 
@@ -207,5 +267,6 @@ jobs:
             precios-supermercados-sps/run-artifacts/analytics/rpi-la-colonia-walmart-sps/
             precios-supermercados-sps/run-artifacts/analytics/rpi-la-colonia-walmart-sps-run.json
             precios-supermercados-sps/run-artifacts/analytics/rpi-la-colonia-walmart-sps-portfolio-run.json
+            precios-supermercados-sps/run-artifacts/analytics/rpi-consumer-v3-run.json
           if-no-files-found: warn
           retention-days: 30

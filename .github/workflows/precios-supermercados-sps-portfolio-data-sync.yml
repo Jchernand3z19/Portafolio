@@ -52,6 +52,13 @@ jobs:
               {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_sps'},
               {'supermarket_id': 'walmart', 'location_id': 'walmart_sps'},
           ]
+          expected_catalog_scope = [
+              {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_sps'},
+              {'supermarket_id': 'colonial', 'location_id': 'colonial_sps'},
+              {'supermarket_id': 'walmart', 'location_id': 'walmart_sps'},
+              {'supermarket_id': 'pricesmart', 'location_id': 'pricesmart_sps'},
+              {'supermarket_id': 'comisariato_los_andes', 'location_id': 'comisariato_los_andes_sps'},
+          ]
           policy = 'fail_closed_strong_identity_and_commercial_consistency'
 
           def only(filename: str, error_prefix: str) -> Path:
@@ -60,15 +67,32 @@ jobs:
                   raise SystemExit(f'{error_prefix}_cardinality_invalid:{len(matches)}')
               return matches[0]
 
+          def only_outside_v3(filename: str, error_prefix: str) -> Path:
+              matches = sorted(
+                  path for path in artifact_root.rglob(filename)
+                  if path.parent.name != 'consumer-v3'
+              )
+              if len(matches) != 1:
+                  raise SystemExit(f'{error_prefix}_cardinality_invalid:{len(matches)}')
+              return matches[0]
+
           consumer_path = only('consumer-mart.json', 'portfolio_sync_consumer')
           business_path = only('business-mart.json', 'portfolio_sync_business')
-          manifest_path = only('manifest.json', 'portfolio_sync_manifest')
+          manifest_path = only_outside_v3('manifest.json', 'portfolio_sync_manifest')
           sample_path = only('portfolio-sample.json', 'portfolio_sync_sample')
+          catalog_manifests = sorted(
+              path for path in artifact_root.rglob('manifest.json')
+              if path.parent.name == 'consumer-v3'
+          )
+          if len(catalog_manifests) != 1:
+              raise SystemExit(f'portfolio_sync_catalog_manifest_cardinality_invalid:{len(catalog_manifests)}')
+          catalog_manifest_path = catalog_manifests[0]
 
           consumer = json.loads(consumer_path.read_text(encoding='utf-8'))
           business = json.loads(business_path.read_text(encoding='utf-8'))
           manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
           sample = json.loads(sample_path.read_text(encoding='utf-8'))
+          catalog_manifest = json.loads(catalog_manifest_path.read_text(encoding='utf-8'))
 
           if consumer.get('schema') != 'rpi-consumer-mart/v2':
               raise SystemExit('portfolio_sync_consumer_schema_invalid')
@@ -80,6 +104,21 @@ jobs:
               raise SystemExit('portfolio_sync_sample_schema_invalid')
           if manifest.get('source_backend') != 'turso':
               raise SystemExit('portfolio_sync_backend_invalid')
+          if catalog_manifest.get('schema') != 'rpi-consumer-catalog-manifest/v3':
+              raise SystemExit('portfolio_sync_catalog_schema_invalid')
+          if catalog_manifest.get('catalog_schema') != 'rpi-consumer-catalog/v3':
+              raise SystemExit('portfolio_sync_catalog_contract_invalid')
+          if catalog_manifest.get('source_backend') != 'turso':
+              raise SystemExit('portfolio_sync_catalog_backend_invalid')
+          if catalog_manifest.get('scope') != expected_catalog_scope:
+              raise SystemExit('portfolio_sync_catalog_scope_invalid')
+          if catalog_manifest.get('public_boundary') != {
+              'direct_turso_reads': 0,
+              'contains_business_mart': False,
+              'contains_raw': False,
+              'contains_review_queue': False,
+          }:
+              raise SystemExit('portfolio_sync_catalog_boundary_invalid')
           if manifest.get('business_schema') != business['schema'] or manifest.get('consumer_schema') != consumer['schema']:
               raise SystemExit('portfolio_sync_schema_crosscheck_invalid')
 
@@ -141,6 +180,33 @@ jobs:
           if hashes.get('business-mart.json') != hashlib.sha256(business_path.read_bytes()).hexdigest():
               raise SystemExit('portfolio_sync_business_hash_mismatch')
 
+          catalog_root = catalog_manifest_path.parent
+          catalog_files = catalog_manifest.get('files')
+          if not isinstance(catalog_files, list) or not catalog_files:
+              raise SystemExit('portfolio_sync_catalog_files_invalid')
+          if catalog_manifest.get('visible_rows', 0) <= 0 or catalog_manifest.get('partition_count', 0) <= 0:
+              raise SystemExit('portfolio_sync_catalog_empty')
+          retailer_counts = catalog_manifest.get('retailer_offer_counts')
+          if (
+              not isinstance(retailer_counts, dict)
+              or set(retailer_counts) != {item['supermarket_id'] for item in expected_catalog_scope}
+              or any(type(count) is not int or count <= 0 for count in retailer_counts.values())
+          ):
+              raise SystemExit('portfolio_sync_catalog_retailer_coverage_invalid')
+          for item in catalog_files:
+              if not isinstance(item, dict):
+                  raise SystemExit('portfolio_sync_catalog_file_invalid')
+              relative = Path(str(item.get('path', '')))
+              if relative.is_absolute() or '..' in relative.parts:
+                  raise SystemExit('portfolio_sync_catalog_hash_path_invalid')
+              path = catalog_root / relative
+              if not path.is_file():
+                  raise SystemExit(f'portfolio_sync_catalog_file_missing:{relative}')
+              if hashlib.sha256(path.read_bytes()).hexdigest() != item.get('sha256'):
+                  raise SystemExit(f'portfolio_sync_catalog_hash_mismatch:{relative}')
+              if path.stat().st_size != item.get('bytes'):
+                  raise SystemExit(f'portfolio_sync_catalog_size_mismatch:{relative}')
+
           provenance = {
               'published_at_utc': os.environ['SOURCE_COMPLETED_AT'],
               'source_workflow_run_id': int(os.environ['SOURCE_RUN_ID']),
@@ -152,7 +218,12 @@ jobs:
               'consumer': consumer,
               'manifest': manifest,
               'sample': sample,
+              'catalog_manifest': catalog_manifest,
           }, ensure_ascii=False).casefold()
+          serialized += '\n'.join(
+              path.read_text(encoding='utf-8', errors='strict').casefold()
+              for path in catalog_root.rglob('*.json')
+          )
           for forbidden in ('turso_database_url', 'turso_auth_token', 'database_url', 'auth_token', 'libsql://'):
               if forbidden in serialized:
                   raise SystemExit(f'portfolio_sync_secret_material_detected:{forbidden}')
@@ -160,8 +231,12 @@ jobs:
           consumer_target = Path('/tmp/precios-sps-rpi-consumer-mart.json')
           manifest_target = Path('/tmp/precios-sps-rpi-manifest.json')
           sample_target = Path('/tmp/precios-sps-portfolio-sample.json')
+          catalog_target = Path('/tmp/precios-sps-rpi-v3')
           shutil.copyfile(consumer_path, consumer_target)
           shutil.copyfile(manifest_path, manifest_target)
+          if catalog_target.exists():
+              shutil.rmtree(catalog_target)
+          shutil.copytree(catalog_root, catalog_target)
           sample_target.write_text(
               json.dumps(sample, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
               encoding='utf-8',
@@ -172,80 +247,60 @@ jobs:
               'safe_offers': offer_count,
               'sample_rows': sample['row_count'],
               'source_workflow_run_id': provenance['source_workflow_run_id'],
+              'consumer_v3_visible_rows': catalog_manifest['visible_rows'],
+              'consumer_v3_source_offers': catalog_manifest['source_offers'],
+              'consumer_v3_partitions': catalog_manifest['partition_count'],
           }, sort_keys=True))
           PY
 
-      - name: Actualizar Consumer Mart y muestra en un solo commit
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v8.0.0
-        env:
-          CONSUMER_MART_PATH: /tmp/precios-sps-rpi-consumer-mart.json
-          RPI_MANIFEST_PATH: /tmp/precios-sps-rpi-manifest.json
-          PUBLIC_SAMPLE_PATH: /tmp/precios-sps-portfolio-sample.json
+      - name: Descargar rama de datos sin ejecutar su contenido
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          script: |
-            const fs = require('fs');
-            const dataBranch = 'portfolio-data';
-            const targets = [
-              {
-                sourcePath: process.env.CONSUMER_MART_PATH,
-                targetPath: 'precios-supermercados-sps/published/rpi/consumer-mart.json',
-              },
-              {
-                sourcePath: process.env.RPI_MANIFEST_PATH,
-                targetPath: 'precios-supermercados-sps/published/rpi/manifest.json',
-              },
-              {
-                sourcePath: process.env.PUBLIC_SAMPLE_PATH,
-                targetPath: 'precios-supermercados-sps/portfolio/sample-data.json',
-              },
-            ];
+          ref: portfolio-data
+          path: portfolio-data
+          fetch-depth: 1
 
-            const ref = await github.rest.git.getRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: `heads/${dataBranch}`,
-            });
-            const parentSha = ref.data.object.sha;
-            const parentCommit = await github.rest.git.getCommit({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: parentSha,
-            });
+      - name: Actualizar proyección pública en un solo commit y push
+        env:
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          repository="$GITHUB_WORKSPACE/portfolio-data"
+          published="$repository/precios-supermercados-sps/published/rpi"
+          sample="$repository/precios-supermercados-sps/portfolio/sample-data.json"
 
-            const tree = [];
-            for (const target of targets) {
-              const bytes = fs.readFileSync(target.sourcePath);
-              const blob = await github.rest.git.createBlob({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                content: bytes.toString('base64'),
-                encoding: 'base64',
-              });
-              tree.push({
-                path: target.targetPath,
-                mode: '100644',
-                type: 'blob',
-                sha: blob.data.sha,
-              });
-            }
+          python - <<'PY'
+          from pathlib import Path
+          import os
 
-            const newTree = await github.rest.git.createTree({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              base_tree: parentCommit.data.tree.sha,
-              tree,
-            });
-            const newCommit = await github.rest.git.createCommit({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              message: `data: publish RPI consumer mart from run ${context.payload.workflow_run.id}`,
-              tree: newTree.data.sha,
-              parents: [parentSha],
-            });
-            await github.rest.git.updateRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: `heads/${dataBranch}`,
-              sha: newCommit.data.sha,
-              force: false,
-            });
+          repository = Path(os.environ['GITHUB_WORKSPACE']) / 'portfolio-data'
+          targets = (
+              repository / 'precios-supermercados-sps/published/rpi',
+              repository / 'precios-supermercados-sps/portfolio',
+          )
+          for target in targets:
+              current = target
+              while current != repository:
+                  if current.is_symlink():
+                      raise SystemExit(f'portfolio_sync_symlink_boundary_invalid:{current.relative_to(repository)}')
+                  current = current.parent
+          PY
+
+          rm -rf "$published/v3"
+          mkdir -p "$published/v3" "$(dirname "$sample")"
+          cp /tmp/precios-sps-rpi-consumer-mart.json "$published/consumer-mart.json"
+          cp /tmp/precios-sps-rpi-manifest.json "$published/manifest.json"
+          cp /tmp/precios-sps-portfolio-sample.json "$sample"
+          cp -R /tmp/precios-sps-rpi-v3/. "$published/v3/"
+
+          git -C "$repository" config user.name "github-actions[bot]"
+          git -C "$repository" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$repository" add -A -- \
+            precios-supermercados-sps/published/rpi \
+            precios-supermercados-sps/portfolio/sample-data.json
+          if git -C "$repository" diff --cached --quiet; then
+            echo "portfolio_data_already_current=true"
+            exit 0
+          fi
+          git -C "$repository" commit -m "data: publish RPI consumer contracts from run $SOURCE_RUN_ID"
+          git -C "$repository" push origin HEAD:portfolio-data

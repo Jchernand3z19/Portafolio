@@ -99,7 +99,13 @@ def _checkout_identity_with_derived_workflows() -> None:
             assert checkout_steps == []
             continue
         if path.name == base.PORTFOLIO_DATA_SYNC_WORKFLOW:
-            assert checkout_steps == []
+            assert len(checkout_steps) == 1
+            assert checkout_steps[0]["uses"] == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+            assert checkout_steps[0]["with"] == {
+                "ref": "portfolio-data",
+                "path": "portfolio-data",
+                "fetch-depth": "1",
+            }
             continue
         if path.name == base.AUDIT_WORKFLOW:
             assert len(checkout_steps) == 1
@@ -241,6 +247,7 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     assert "bootstrap_rpi_consumer_publication" in raw
     assert "operator_requested_republication" in raw
     assert "scripts/exportar_rpi_marts.py" in raw
+    assert "scripts/exportar_consumer_catalog.py" in raw
     assert "scripts/exportar_modelo_analitico.py" not in raw
     assert "scripts/generar_descriptores_publicacion_segura.py" not in raw
     assert "scripts/generar_muestra_portafolio_segura.py" in raw
@@ -248,9 +255,13 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     assert "portfolio-sample.json" in raw
     assert "--scope la_colonia=la_colonia_sps" in raw
     assert "--scope walmart=walmart_sps" in raw
-    assert "--scope colonial=colonial_sps" not in raw
+    assert "--scope colonial=colonial_sps" in raw
+    assert "--scope pricesmart=pricesmart_sps" in raw
+    assert "--scope comisariato_los_andes=comisariato_los_andes_sps" in raw
     assert "rpi-business-mart/v1" in raw
     assert "rpi-consumer-mart/v2" in raw
+    assert "rpi-consumer-catalog-manifest/v3" in raw
+    assert "rpi-consumer-catalog/v3" in raw
     assert "rpi-marts-manifest/v1" in raw
     assert "precios-sps-safe-portfolio-sample/v1" in raw
     assert "business/fact_price_history.csv" in raw
@@ -286,11 +297,17 @@ def test_controlled_rpi_publication_request_is_closed_and_read_only() -> None:
         "action": "publish_safe_rpi",
         "scope": [
             {"supermarket_id": "la_colonia", "location_id": "la_colonia_sps"},
+            {"supermarket_id": "colonial", "location_id": "colonial_sps"},
             {"supermarket_id": "walmart", "location_id": "walmart_sps"},
+            {"supermarket_id": "pricesmart", "location_id": "pricesmart_sps"},
+            {
+                "supermarket_id": "comisariato_los_andes",
+                "location_id": "comisariato_los_andes_sps",
+            },
         ],
         "read_only": True,
-        "reason": "bootstrap_rpi_consumer_publication",
-        "sequence": 1,
+        "reason": "operator_requested_republication",
+        "sequence": 5,
     }
 
 
@@ -423,19 +440,24 @@ def test_portfolio_data_sync_reuses_safe_artifact_without_turso_reads() -> None:
     assert "safe-analytics-la-colonia-walmart-sps-${{ github.event.workflow_run.id }}" in raw
     assert "only('portfolio-sample.json', 'portfolio_sync_sample')" in raw
     assert "rpi-consumer-mart/v2" in raw
+    assert "rpi-consumer-catalog-manifest/v3" in raw
+    assert "rpi-consumer-catalog/v3" in raw
     assert "rpi-business-mart/v1" in raw
     assert "rpi-marts-manifest/v1" in raw
     assert "portfolio_sync_hash_mismatch" in raw
-    assert "precios-supermercados-sps/published/rpi/consumer-mart.json" in raw
-    assert "precios-supermercados-sps/published/rpi/manifest.json" in raw
+    assert 'published="$repository/precios-supermercados-sps/published/rpi"' in raw
+    assert '"$published/consumer-mart.json"' in raw
+    assert '"$published/manifest.json"' in raw
+    assert '"$published/v3/"' in raw
     assert "precios-supermercados-sps/published/rpi/business-mart.json" not in raw
     assert "precios-supermercados-sps/portfolio/sample-data.json" in raw
-    assert "const dataBranch = 'portfolio-data';" in raw
-    assert "createBlob" in raw
-    assert "createTree" in raw
-    assert "createCommit" in raw
-    assert "updateRef" in raw
-    assert "force: false" in raw
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in raw
+    assert "ref: portfolio-data" in raw
+    assert "portfolio_sync_symlink_boundary_invalid" in raw
+    assert 'rm -rf "$published/v3"' in raw
+    assert 'git -C "$repository" add -A --' in raw
+    assert 'git -C "$repository" push origin HEAD:portfolio-data' in raw
+    assert "createBlob" not in raw
     assert "createOrUpdateFileContents" not in raw
     assert "portfolio_sync_secret_material_detected" in raw
     assert "TURSO_DATABASE_URL: ${{ secrets." not in raw
@@ -443,7 +465,6 @@ def test_portfolio_data_sync_reuses_safe_artifact_without_turso_reads() -> None:
     assert "scripts/exportar_modelo_analitico.py" not in raw
     assert "scripts/generar_descriptores_publicacion_segura.py" not in raw
     assert "scripts/exportar_rpi_marts.py" not in raw
-    assert "actions/checkout@" not in raw
     assert "pull_request:" not in raw
     assert "pull_request_target:" not in raw
     assert "issue_comment:" not in raw

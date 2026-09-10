@@ -7,11 +7,23 @@
       "location_id": "la_colonia_sps"
     },
     {
+      "supermarket_id": "colonial",
+      "location_id": "colonial_sps"
+    },
+    {
       "supermarket_id": "walmart",
       "location_id": "walmart_sps"
+    },
+    {
+      "supermarket_id": "pricesmart",
+      "location_id": "pricesmart_sps"
+    },
+    {
+      "supermarket_id": "comisariato_los_andes",
+      "location_id": "comisariato_los_andes_sps"
     }
   ],
   "read_only": true,
-  "reason": "bootstrap_rpi_consumer_publication",
-  "sequence": 1
+  "reason": "operator_requested_republication",
+  "sequence": 5
 }
