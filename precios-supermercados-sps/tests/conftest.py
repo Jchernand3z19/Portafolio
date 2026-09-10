@@ -5,6 +5,5 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(SRC))
-sys.path.insert(0, str(SCRIPTS))
