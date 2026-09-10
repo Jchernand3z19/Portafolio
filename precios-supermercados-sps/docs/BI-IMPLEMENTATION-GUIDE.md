@@ -155,6 +155,15 @@ No incluir en PBIX/PBIP, parámetros, consultas o archivos públicos:
 https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/bi/la-colonia-walmart-sps/dataset.json
 ```
 
+Para reconstruir el modelo legado, el mapeo contractual original permanece explícito:
+
+- `Offers` ← `publication.offers`;
+- `Products` ← `publication.products`;
+- `CommonBasket` ← `publication.common_basket`;
+- `SourceDescriptors` ← `source_descriptors`.
+
+`SourceDescriptors[source_record_id]` se relaciona con las ofertas por la identidad fuente ya publicada; tampoco en este flujo legado se autoriza matching por texto.
+
 Esa ruta permanece disponible para el modelo legado, pero **no es el modelo RPI B2B principal actual**. El desarrollo nuevo debe usar `rpi-business-mart/v1` desde el artifact privado validado.
 
 ## Reproducibilidad y `.pbix`
