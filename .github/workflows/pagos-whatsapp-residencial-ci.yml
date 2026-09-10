@@ -40,17 +40,12 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Emit lockfile snapshot for one-time repository bootstrap
-        run: |
-          node - <<'NODE'
-          const fs = require('node:fs');
-          const encoded = Buffer.from(fs.readFileSync('package-lock.json')).toString('base64');
-          const size = 3000;
-          for (let i = 0; i < encoded.length; i += size) {
-            const index = String(i / size).padStart(4, '0');
-            console.log(`PAGOS_LOCK_${index}:${encoded.slice(i, i + size)}`);
-          }
-          NODE
+      - name: Upload lockfile bootstrap artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pagos-package-lock-bootstrap
+          path: pagos-whatsapp-residencial/package-lock.json
+          retention-days: 1
 
       - name: Lint
         run: npm run lint
