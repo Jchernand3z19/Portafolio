@@ -8,7 +8,10 @@
   <title>Compra Inteligente · RPI Honduras</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body data-catalog-url="https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/rpi/v3/manifest.json">
+<body
+  data-city-slug="san-pedro-sula"
+  data-city-name="San Pedro Sula"
+  data-catalog-url="https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/rpi/v3/manifest.json">
   <header class="app-header">
     <a class="brand" href="../../index.html" aria-label="Volver al portafolio">RPI</a>
     <nav aria-label="Secciones">
@@ -32,6 +35,7 @@
           <button id="clear-filters" class="text-button" type="button">Limpiar filtros</button>
         </div>
         <div class="filter-grid">
+          <label>Ciudad<select id="city-filter"><option value="san-pedro-sula">San Pedro Sula</option><option value="tegucigalpa">Tegucigalpa</option></select></label>
           <label>Categoría<select id="category-filter"><option value="">Elige una categoría</option></select></label>
           <label>Producto<select id="type-filter" disabled><option value="">Elige un producto</option></select></label>
           <label>Marca<select id="brand-filter" disabled><option value="">Todas</option></select></label>
@@ -43,7 +47,7 @@
       </div>
 
       <aside class="mini-cart" aria-labelledby="mini-cart-title">
-        <p class="eyebrow">MI LISTA</p>
+        <p class="eyebrow">MI LISTA · SAN PEDRO SULA</p>
         <h2 id="mini-cart-title">Resumen</h2>
         <p id="mini-cart-stats">0 productos · 0 unidades</p>
         <div id="mini-cart-retailers"></div>
@@ -71,7 +75,7 @@
 
     <section class="cart-panel" id="mi-compra" aria-labelledby="cart-title">
       <div class="section-heading">
-        <div><p class="eyebrow">MI LISTA</p><h2 id="cart-title">Lista por supermercado</h2></div>
+        <div><p class="eyebrow">MI LISTA · SAN PEDRO SULA</p><h2 id="cart-title">Lista por supermercado</h2></div>
         <p id="cart-stats">0 productos · 0 unidades · 0 supermercados · 0 incompletos</p>
       </div>
       <aside id="price-refresh" class="price-refresh" role="status" aria-live="polite" hidden>
@@ -105,5 +109,6 @@
   <script type="module" src="app.js"></script>
   <script type="module" src="status.js"></script>
   <script type="module" src="share.js"></script>
+  <script type="module" src="city-nav.js"></script>
 </body>
 </html>
