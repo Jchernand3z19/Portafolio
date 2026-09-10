@@ -1,6 +1,6 @@
 {
-  "schema": "precios-sps-rpi-publication-request/v1",
   "action": "publish_safe_rpi",
+  "schema": "precios-sps-rpi-publication-request/v1",
   "scope": [
     {
       "supermarket_id": "la_colonia",
@@ -25,5 +25,5 @@
   ],
   "read_only": true,
   "reason": "operator_requested_republication",
-  "sequence": 6
+  "sequence": 5
 }
