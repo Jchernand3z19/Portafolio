@@ -147,9 +147,15 @@ No incluir en PBIX/PBIP, parámetros, consultas o archivos públicos:
 - secretos de GitHub Actions;
 - RAW o colas de revisión.
 
-## Contrato legado
+## Contrato legado y compatibilidad
 
-`precios-sps-static-bi-dataset/v1` y la ruta histórica `published/bi/la-colonia-walmart-sps/dataset.json` se conservan como compatibilidad/evidencia de una fase anterior. **No son el modelo RPI B2B principal actual.**
+`precios-sps-static-bi-dataset/v1` y su refresh histórico se conservan como compatibilidad/evidencia de la fase anterior. La URL estable de ese dataset sigue siendo:
+
+```text
+https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/bi/la-colonia-walmart-sps/dataset.json
+```
+
+Esa ruta permanece disponible para el modelo legado, pero **no es el modelo RPI B2B principal actual**. El desarrollo nuevo debe usar `rpi-business-mart/v1` desde el artifact privado validado.
 
 ## Reproducibilidad y `.pbix`
 
