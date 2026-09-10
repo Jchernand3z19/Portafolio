@@ -115,7 +115,8 @@ function installShare() {
 
   button.addEventListener("click", () => {
     const lines = loadedCart(localStorage);
-    const message = buildWhatsAppMessage(lines);
+    const city = document.body?.dataset.cityName || "San Pedro Sula";
+    const message = buildWhatsAppMessage(lines, new Date(), city);
     const url = whatsAppShareUrl(message);
     if (!url) {
       status.textContent = "Agrega productos a tu lista antes de compartirla.";
