@@ -6,7 +6,7 @@ El alcance productivo demostrado incluye San Pedro Sula y Tegucigalpa. El produc
 
 ## Compra Inteligente
 
-La aplicación estática vive en [`b2c/`](b2c/) y consume únicamente datos publicados en `portfolio-data`. No consulta Turso ni sitios de supermercados desde el navegador y no hace matching en JavaScript.
+La aplicación estática vive en [`b2c/`](b2c/) y consume únicamente datos publicados en `portfolio-data`. No consulta Turso ni sitios de supermercados desde el navegador y no hace matching en JavaScript. Es un **planificador de compra**, no una tienda ni un checkout.
 
 Funciones actuales:
 
@@ -17,9 +17,11 @@ Funciones actuales:
 - `Mi Compra` persistida en el dispositivo;
 - lista agrupada por supermercado;
 - actualización explícita de precios sin sustitución silenciosa;
+- estado visible del último corte publicado;
 - escenarios de canasta manual, por retailer y split optimizado seguro;
 - historial resumido por oferta;
 - exportación CSV/PDF;
+- compartir la compra por WhatsApp con cantidades, precios, promociones, subtotales, total y advertencias;
 - diseño responsive para teléfono, tablet y escritorio.
 
 El Consumer Catalog v3 publicado el **2026-09-10** contiene como snapshot medido:
@@ -134,7 +136,11 @@ El workflow diario común cubre:
 - Comisariato Los Andes SPS;
 - Paiz en dos contextos TGU.
 
-La compuerta es fail-closed: si una captura no supera su contrato, no se persiste un ciclo parcial.
+Cada cadena se captura de forma aislada. Una cadena sólo deja un handoff reutilizable después de superar sus validaciones; la persistencia global continúa siendo fail-closed y exige handoffs aceptados de todas las cadenas.
+
+Si un run programado termina en fallo o timeout, el operador revisa automáticamente a las 08:17 y 12:17 de Honduras. Puede reejecutar únicamente los jobs fallidos y sus dependencias, reutilizando las capturas válidas de cadenas que ya terminaron bien. El límite es un intento inicial más hasta dos recuperaciones y nunca se crea un crawl nuevo cuando no existe un run programado del día.
+
+Los avisos por correo de fallos pertenecen a las preferencias de notificación de la cuenta de GitHub; no requieren guardar credenciales de correo en este repositorio.
 
 El estado operativo, último run y cualquier incidente vigente están únicamente en [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md).
 
