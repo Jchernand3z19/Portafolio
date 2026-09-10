@@ -102,6 +102,13 @@ def build_db(path: Path) -> None:
             ),
         )
         connection.executemany(
+            "INSERT INTO price_history VALUES(?,?,?,?,?,?,?,?,?)",
+            (
+                (1, "la_colonia", "la_colonia_sps", 1200, None, 0, "in_stock", "2026-05-01T10:00:00Z", "2026-08-20T10:00:00Z"),
+                (1, "la_colonia", "la_colonia_sps", 1100, None, 0, "in_stock", "2026-08-20T10:00:00Z", "2026-09-09T10:00:00Z"),
+            ),
+        )
+        connection.executemany(
             "INSERT INTO scrape_runs VALUES(?,?,?,?,?)",
             (
                 (f"{supermarket}-ok", supermarket, location, "2026-09-09T10:00:00Z", "success")
@@ -152,6 +159,7 @@ def test_exports_partitioned_visible_catalog_with_safe_comparability(tmp_path: P
         "individual": 3,
         "single_source": 1,
     }
+    assert manifest["offers_with_historical_summary"] == 7
     assert manifest["public_boundary"] == {
         "direct_turso_reads": 0,
         "contains_business_mart": False,
@@ -169,6 +177,14 @@ def test_exports_partitioned_visible_catalog_with_safe_comparability(tmp_path: P
     assert milk["offers"][0]["current_price"] == "10.00"
     assert milk["offers"][0]["reported_regular_price"] == "13.00"
     assert milk["offers"][0]["is_promotion"] is True
+    history = milk["offers"][0]["historical_summary"]
+    assert history["previous_price"] == "11.00"
+    assert history["historical_position"] == "historically_low"
+    assert history["windows"]["30d"] == {
+        "status": "available", "observation_count": 3,
+        "average": "11.00", "minimum": "10.00", "maximum": "12.00",
+    }
+    assert milk["offers"][1]["historical_summary"]["historical_position"] == "insufficient_history"
     coffee = next(row for row in rows if row["product_name"] == "Café clásico 500 g")
     assert coffee["offers"][0]["is_promotion"] is None
 

@@ -3,73 +3,93 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0d3b2e">
+  <meta name="theme-color" content="#123d31">
   <meta name="description" content="Compara precios públicos observados y arma Mi Compra por supermercado.">
-  <title>Compra Inteligente · Precios SPS</title>
+  <title>Compra Inteligente · RPI Honduras</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body data-mart-url="https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/rpi/consumer-mart.json">
+<body data-catalog-url="https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/rpi/v3/manifest.json">
   <header class="app-header">
     <a class="brand" href="../../index.html" aria-label="Volver al portafolio">RPI</a>
     <nav aria-label="Secciones">
-      <a href="#analyze">Analizar precios</a>
-      <a class="cart-link" href="#cart-panel">Mi Compra <span id="cart-count" aria-label="productos en Mi Compra">0</span></a>
+      <a href="#comparar">Comparar</a>
+      <a class="cart-link" href="#mi-compra">Mi Compra <span id="cart-count" aria-label="productos en Mi Compra">0</span></a>
     </nav>
   </header>
 
   <main>
-    <section class="hero" id="analyze">
+    <section class="hero" id="comparar">
       <p class="eyebrow">Retail Price Intelligence · San Pedro Sula</p>
       <h1>Compra Inteligente</h1>
-      <p>Busca un producto, compara ofertas seguras y elige tú mismo en qué supermercado comprarlo.</p>
-      <label class="search-box" for="product-search">
-        <span>Buscar producto</span>
-        <input id="product-search" type="search" inputmode="search" autocomplete="off" placeholder="Ej. leche Sula 1 L" aria-describedby="data-status">
-      </label>
-      <p id="data-status" class="data-status" role="status" aria-live="polite">Cargando precios públicos…</p>
+      <p>Filtra productos, compara sus precios públicos y prepara una compra presencial con el supermercado que tú elijas.</p>
     </section>
 
-    <section class="content-section" aria-labelledby="results-title">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">ANALIZAR PRECIOS</p>
-          <h2 id="results-title">Ofertas disponibles</h2>
+    <section class="workspace" aria-label="Filtros y resumen de compra">
+      <div class="filter-panel">
+        <div class="section-heading">
+          <div><p class="eyebrow">ENCUENTRA LO QUE NECESITAS</p><h2>Explora el catálogo</h2></div>
+          <button id="clear-filters" class="text-button" type="button">Limpiar filtros</button>
         </div>
-        <p>El ranking y el mejor precio vienen calculados desde Python. La web no rehace homologación ni matching.</p>
+        <div class="filter-grid">
+          <label>Categoría<select id="category-filter"><option value="">Elige una categoría</option></select></label>
+          <label>Producto<select id="type-filter" disabled><option value="">Elige un producto</option></select></label>
+          <label>Marca<select id="brand-filter" disabled><option value="">Todas</option></select></label>
+          <label>Presentación<select id="presentation-filter" disabled><option value="">Todas</option></select></label>
+          <label class="search-field">Búsqueda secundaria<input id="product-search" type="search" inputmode="search" autocomplete="off" placeholder="Ej. leche Sula 1 L" aria-describedby="data-status"></label>
+        </div>
+        <div id="active-filters" class="active-filters" aria-label="Filtros activos"></div>
+        <p id="data-status" class="data-status" role="status" aria-live="polite">Cargando publicación segura…</p>
       </div>
-      <div id="results" class="results" aria-live="polite">
-        <p class="empty-state">Escribe un producto, marca o presentación para comenzar.</p>
-      </div>
+
+      <aside class="mini-cart" aria-labelledby="mini-cart-title">
+        <p class="eyebrow">MI COMPRA</p>
+        <h2 id="mini-cart-title">Resumen</h2>
+        <p id="mini-cart-stats">0 productos · 0 unidades</p>
+        <div id="mini-cart-retailers"></div>
+        <strong id="mini-cart-total">Total L 0.00</strong>
+        <a class="primary-button" href="#mi-compra">Revisar Mi Compra</a>
+      </aside>
     </section>
 
-    <section class="content-section cart-panel" id="cart-panel" aria-labelledby="cart-title">
+    <section class="results-section" aria-labelledby="results-title">
       <div class="section-heading">
-        <div>
-          <p class="eyebrow">MI COMPRA</p>
-          <h2 id="cart-title">Tu selección</h2>
-        </div>
-        <p id="cart-stats">0 productos · 0 unidades · 0 supermercados · 0 incompletos · 0 stale</p>
+        <div><p class="eyebrow">COMPARACIÓN EXACTA</p><h2 id="results-title">Precios por supermercado</h2></div>
+        <p id="result-count">0 resultados</p>
+      </div>
+      <p class="section-note">El color sólo compara ofertas homologadas y vigentes. Elige un supermercado por producto; la cantidad se aplica una sola vez a la fila.</p>
+      <div id="results" class="results" aria-live="polite"><p class="empty-state">Selecciona una categoría para comenzar.</p></div>
+      <div id="batch-bar" class="batch-bar">
+        <span id="batch-status">Ningún producto preparado</span>
+        <button id="batch-add" class="primary-button" type="button" disabled>Agregar seleccionados a Mi Compra</button>
+      </div>
+      <aside id="update-confirmation" class="update-confirmation" role="alert" hidden>
+        <p id="update-message"></p>
+        <button id="confirm-updates" class="primary-button" type="button">Confirmar cambios</button>
+      </aside>
+    </section>
+
+    <section class="cart-panel" id="mi-compra" aria-labelledby="cart-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">MI COMPRA</p><h2 id="cart-title">Lista por supermercado</h2></div>
+        <p id="cart-stats">0 productos · 0 unidades · 0 supermercados · 0 incompletos</p>
       </div>
       <aside id="price-refresh" class="price-refresh" role="status" aria-live="polite" hidden>
         <p id="price-refresh-message"></p>
-        <button id="price-refresh-button" class="refresh-button" type="button">Actualizar precios</button>
-        <small>Se conserva exactamente el producto, supermercado y cantidad que elegiste. Una oferta faltante se marca; nunca se sustituye en silencio.</small>
+        <button id="price-refresh-button" class="secondary-button" type="button">Actualizar precios</button>
+        <small>Se conserva el mismo producto, supermercado y cantidad. Una oferta faltante se marca y nunca se sustituye en silencio.</small>
       </aside>
       <div id="cart-groups"></div>
       <section id="basket-analysis" class="basket-analysis" aria-labelledby="basket-analysis-title" hidden>
-        <div class="basket-analysis-head">
-          <div>
-            <p class="eyebrow">COMPARAR MI COMPRA</p>
-            <h3 id="basket-analysis-title">Escenarios de compra</h3>
-          </div>
-          <p>Compara tu selección con comprar todo en un supermercado o usar los mejores precios publicados por Python. Ningún escenario modifica tu lista.</p>
+        <div class="section-heading">
+          <div><p class="eyebrow">COMPARAR MI COMPRA</p><h3 id="basket-analysis-title">Escenarios de compra</h3></div>
+          <p>Ningún escenario modifica tu lista. Los datos incompletos permanecen visibles.</p>
         </div>
         <div id="basket-analysis-content" class="scenario-grid" aria-live="polite"></div>
       </section>
       <div class="cart-actions" aria-label="Exportar Mi Compra">
         <button id="export-csv" class="secondary-button" type="button" disabled>Descargar CSV</button>
         <button id="export-pdf" class="secondary-button" type="button" disabled>Descargar PDF</button>
-        <span id="export-status" class="export-status" role="status" aria-live="polite"></span>
+        <span id="export-status" role="status" aria-live="polite"></span>
       </div>
       <div class="cart-total-card">
         <strong id="cart-total">TOTAL ESTIMADO L 0.00</strong>
@@ -78,7 +98,7 @@
     </section>
   </main>
 
-  <a class="mobile-cart" href="#cart-panel" aria-label="Abrir Mi Compra">Mi Compra ↑</a>
+  <a class="mobile-cart" href="#mi-compra" aria-label="Abrir Mi Compra">Mi Compra · <span id="mobile-cart-count">0</span> ↑</a>
   <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -1,351 +1,15 @@
-const CART_KEY = "rpi-mi-compra/v1";
-const RESULT_LIMIT = 30;
+import {
+  RETAILERS, addNewLines, analyzeBasketOptions, cartIdentity, cartSummary, clearDependentFilters,
+  confirmLineUpdates, detectCartUpdates, facetsAreCompatible, filterIndexEntries,
+  formatHnl, humanFreshness, humanHistoricalPosition, indexPathForType, lineFromOffer, loadCart,
+  manifestIsCompatible, moneyToMinor, normalizeText, offerIsUsable, offersByRetailer,
+  partitionPaths, prepareBatch, quantityValue, reconcileDependentFilters, relativePriceState,
+  refreshCartPrices, saveCart, searchIndexForPrefix,
+} from "./catalog.js";
 
-export function moneyToMinor(value) {
-  if (typeof value !== "string" || !/^\d+(?:\.\d{1,2})?$/.test(value.trim())) return null;
-  const [whole, decimals = ""] = value.trim().split(".");
-  const minor = Number(whole) * 100 + Number((decimals + "00").slice(0, 2));
-  return Number.isSafeInteger(minor) && minor >= 0 ? minor : null;
-}
+export * from "./catalog.js";
 
-export function formatHnl(minor) {
-  if (!Number.isSafeInteger(minor)) return "—";
-  return `L ${(minor / 100).toLocaleString("es-HN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-}
-
-export function normalizeText(value) {
-  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
-}
-
-export function searchProducts(products, query, limit = RESULT_LIMIT) {
-  const terms = normalizeText(query).split(/\s+/).filter(Boolean);
-  if (!terms.length) return [];
-  const matches = [];
-  for (const product of products ?? []) {
-    const text = normalizeText((product.offers ?? []).flatMap((offer) => [
-      offer.product_name, offer.category, offer.product_type, offer.brand,
-      offer.variant, offer.presentation,
-    ]).filter(Boolean).join(" "));
-    if (terms.every((term) => text.includes(term))) matches.push(product);
-    if (matches.length >= limit) break;
-  }
-  return matches;
-}
-
-export function recommendedIds(product, comparisonStatus) {
-  if (comparisonStatus !== "COMPARABLE") return new Set();
-  return new Set((product.recommended_source_product_ids ?? []).filter((value) => typeof value === "string"));
-}
-
-export function exactMartOffer(mart, canonicalProductId, sourceProductId) {
-  const products = (mart?.products ?? []).filter((product) => product.canonical_product_id === canonicalProductId);
-  if (products.length !== 1) return null;
-  const offers = (products[0].offers ?? []).filter((offer) => offer.source_product_id === sourceProductId);
-  return offers.length === 1 ? {product: products[0], offer: offers[0]} : null;
-}
-
-function exactMartProduct(mart, canonicalProductId) {
-  const products = (mart?.products ?? []).filter((product) => product.canonical_product_id === canonicalProductId);
-  return products.length === 1 ? products[0] : null;
-}
-
-export function consumerMartContractIsCompatible(mart) {
-  if (mart?.schema !== "rpi-consumer-mart/v2" || !Array.isArray(mart.products)) return false;
-  const comparable = mart.comparison_status === "COMPARABLE";
-  for (const product of mart.products) {
-    if (!Array.isArray(product?.offers) || !Array.isArray(product?.recommended_source_product_ids)) return false;
-    const recommended = new Set(product.recommended_source_product_ids);
-    if (recommended.size !== product.recommended_source_product_ids.length) return false;
-    for (const offer of product.offers) {
-      const abs = offer?.difference_vs_best_abs;
-      const pct = offer?.difference_vs_best_pct;
-      if (comparable) {
-        if (moneyToMinor(abs) === null || typeof pct !== "string" || !/^\d+(?:\.\d{1,2})?$/.test(pct.trim())) return false;
-      } else if (abs !== null || pct !== null) {
-        return false;
-      }
-    }
-    if (comparable) {
-      if (!recommended.size) return false;
-      for (const sourceProductId of recommended) {
-        const matches = product.offers.filter((offer) => offer.source_product_id === sourceProductId);
-        if (
-          matches.length !== 1
-          || matches[0].is_best_price !== true
-          || matches[0].difference_vs_best_abs !== "0.00"
-          || matches[0].difference_vs_best_pct !== "0.00"
-        ) return false;
-      }
-    } else if (recommended.size) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function offerIsUsable(offer) {
-  const price = moneyToMinor(offer?.current_price);
-  return price !== null && price > 0 && offer.availability !== "out_of_stock" && offer.freshness_status !== "UNAVAILABLE";
-}
-
-export function lineFromOffer(product, offer, quantity = 1) {
-  const unitPriceMinor = moneyToMinor(offer.current_price);
-  if (!Number.isInteger(quantity) || quantity < 1 || unitPriceMinor === null || unitPriceMinor <= 0) return null;
-  return {
-    canonical_product_id: product.canonical_product_id,
-    source_product_id: offer.source_product_id,
-    supermarket_id: offer.supermarket_id,
-    location_id: offer.location_id,
-    category: offer.category ?? null,
-    product_type: offer.product_type ?? null,
-    product_name: offer.product_name,
-    brand: offer.brand ?? null,
-    variant: offer.variant ?? null,
-    presentation: offer.presentation ?? null,
-    quantity,
-    unit_price_minor: unitPriceMinor,
-    reported_regular_price_minor: moneyToMinor(offer.reported_regular_price),
-    is_promotion: offer.is_promotion === true,
-    availability: offer.availability,
-    observed_at: offer.observed_at,
-    freshness_status: offer.freshness_status,
-    checked: false,
-    invalid: !offerIsUsable(offer),
-  };
-}
-
-export function selectOffer(lines, incoming) {
-  const existing = lines.find((line) => line.canonical_product_id === incoming.canonical_product_id);
-  const replacement = existing ? {...incoming, quantity: existing.quantity, checked: existing.checked} : incoming;
-  return [...lines.filter((line) => line.canonical_product_id !== incoming.canonical_product_id), replacement];
-}
-
-export function detectCartUpdates(lines, mart) {
-  const updates = [];
-  for (const line of lines) {
-    const exact = exactMartOffer(mart, line.canonical_product_id, line.source_product_id);
-    if (!exact || exact.offer.supermarket_id !== line.supermarket_id || exact.offer.location_id !== line.location_id || !offerIsUsable(exact.offer)) {
-      if (!line.invalid) updates.push({source_product_id: line.source_product_id, status: "unavailable", previous_price_minor: line.unit_price_minor, current_price_minor: null});
-      continue;
-    }
-    const currentPriceMinor = moneyToMinor(exact.offer.current_price);
-    if (line.invalid) {
-      updates.push({source_product_id: line.source_product_id, status: "restored", previous_price_minor: line.unit_price_minor, current_price_minor: currentPriceMinor});
-    } else if (currentPriceMinor !== line.unit_price_minor) {
-      updates.push({source_product_id: line.source_product_id, status: "price_changed", previous_price_minor: line.unit_price_minor, current_price_minor: currentPriceMinor});
-    }
-  }
-  return updates;
-}
-
-export function refreshCartPrices(lines, mart) {
-  return lines.map((line) => {
-    const exact = exactMartOffer(mart, line.canonical_product_id, line.source_product_id);
-    if (!exact || exact.offer.supermarket_id !== line.supermarket_id || exact.offer.location_id !== line.location_id || !offerIsUsable(exact.offer)) {
-      return {...line, invalid: true, availability: "unavailable", freshness_status: exact?.offer?.freshness_status ?? "UNAVAILABLE"};
-    }
-    const refreshed = lineFromOffer(exact.product, exact.offer, line.quantity);
-    if (!refreshed) return {...line, invalid: true};
-    return {...refreshed, quantity: line.quantity, checked: line.checked, invalid: false};
-  });
-}
-
-export function cartSummary(lines) {
-  const retailers = new Map();
-  let units = 0;
-  let incomplete = 0;
-  let stale = 0;
-  let grandTotalMinor = 0;
-  for (const line of lines) {
-    units += Number.isInteger(line.quantity) ? line.quantity : 0;
-    if (line.freshness_status === "STALE") stale += 1;
-    const valid = !line.invalid && Number.isSafeInteger(line.unit_price_minor) && Number.isInteger(line.quantity) && line.quantity > 0;
-    const total = valid ? line.unit_price_minor * line.quantity : null;
-    if (total === null || !Number.isSafeInteger(total)) incomplete += 1;
-    else grandTotalMinor += total;
-    const group = retailers.get(line.supermarket_id) ?? {subtotal_minor: 0, incomplete: 0, lines: []};
-    if (total === null) group.incomplete += 1; else group.subtotal_minor += total;
-    group.lines.push({...line, line_total_minor: total});
-    retailers.set(line.supermarket_id, group);
-  }
-  return {products: lines.length, units, retailer_count: retailers.size, incomplete, stale, grand_total_minor: incomplete ? null : grandTotalMinor, retailers};
-}
-
-function safeScenarioLineTotal(offer, quantity) {
-  const price = moneyToMinor(offer?.current_price);
-  if (!offerIsUsable(offer) || price === null || !Number.isInteger(quantity) || quantity <= 0) return null;
-  const total = price * quantity;
-  return Number.isSafeInteger(total) ? total : null;
-}
-
-function savingsFromManual(manualTotal, scenarioTotal) {
-  if (!Number.isSafeInteger(manualTotal) || !Number.isSafeInteger(scenarioTotal)) return null;
-  const difference = manualTotal - scenarioTotal;
-  return Number.isSafeInteger(difference) ? difference : null;
-}
-
-export function analyzeBasketOptions(lines, mart) {
-  const manual = cartSummary(lines);
-  const empty = {status: "EMPTY", manual, single_retailer: [], optimized: null};
-  if (!lines.length) return empty;
-
-  const canonicalIds = lines.map((line) => line?.canonical_product_id);
-  if (
-    canonicalIds.some((value) => typeof value !== "string" || !value)
-    || new Set(canonicalIds).size !== canonicalIds.length
-    || lines.some((line) => !Number.isInteger(line?.quantity) || line.quantity <= 0)
-  ) {
-    return {status: "INVALID_CART", manual, single_retailer: [], optimized: null};
-  }
-  if (!consumerMartContractIsCompatible(mart)) {
-    return {status: "CONTRACT_INVALID", manual, single_retailer: [], optimized: null};
-  }
-  if (detectCartUpdates(lines, mart).length) {
-    return {status: "REFRESH_REQUIRED", manual, single_retailer: [], optimized: null};
-  }
-  if (mart.comparison_status !== "COMPARABLE") {
-    return {status: "COMPARISON_BLOCKED", manual, single_retailer: [], optimized: null};
-  }
-
-  const products = new Map();
-  for (const canonicalProductId of canonicalIds) {
-    const product = exactMartProduct(mart, canonicalProductId);
-    if (!product) return {status: "CONTRACT_INVALID", manual, single_retailer: [], optimized: null};
-    products.set(canonicalProductId, product);
-  }
-
-  const scopes = new Map();
-  for (const product of products.values()) {
-    for (const offer of product.offers) {
-      if (typeof offer.supermarket_id !== "string" || typeof offer.location_id !== "string") continue;
-      const key = `${offer.supermarket_id}\u0000${offer.location_id}`;
-      scopes.set(key, {supermarket_id: offer.supermarket_id, location_id: offer.location_id});
-    }
-  }
-
-  const singleRetailer = [];
-  for (const scope of scopes.values()) {
-    let covered = 0;
-    let totalMinor = 0;
-    let staleCount = 0;
-    for (const line of lines) {
-      const product = products.get(line.canonical_product_id);
-      const candidates = product.offers.filter((offer) => (
-        offer.supermarket_id === scope.supermarket_id && offer.location_id === scope.location_id
-      ));
-      if (candidates.length !== 1) continue;
-      const lineTotal = safeScenarioLineTotal(candidates[0], line.quantity);
-      if (lineTotal === null) continue;
-      covered += 1;
-      totalMinor += lineTotal;
-      if (!Number.isSafeInteger(totalMinor)) {
-        covered = -1;
-        break;
-      }
-      if (candidates[0].freshness_status === "STALE") staleCount += 1;
-    }
-    const complete = covered === lines.length;
-    singleRetailer.push({
-      supermarket_id: scope.supermarket_id,
-      location_id: scope.location_id,
-      requested_count: lines.length,
-      covered_count: Math.max(covered, 0),
-      missing_count: covered < 0 ? lines.length : lines.length - covered,
-      coverage_pct_minor: covered < 0 ? 0 : Math.floor((covered * 10000) / lines.length),
-      stale_count: staleCount,
-      status: complete ? "COMPLETE" : "INCOMPLETE",
-      total_minor: complete ? totalMinor : null,
-      savings_vs_manual_minor: complete ? savingsFromManual(manual.grand_total_minor, totalMinor) : null,
-    });
-  }
-  singleRetailer.sort((left, right) => {
-    if (left.status !== right.status) return left.status === "COMPLETE" ? -1 : 1;
-    if (left.status === "COMPLETE" && left.total_minor !== right.total_minor) return left.total_minor - right.total_minor;
-    if (left.covered_count !== right.covered_count) return right.covered_count - left.covered_count;
-    return `${left.supermarket_id}\u0000${left.location_id}`.localeCompare(`${right.supermarket_id}\u0000${right.location_id}`);
-  });
-
-  const selected = [];
-  const retailerKeys = new Set();
-  let optimizedTotalMinor = 0;
-  let optimizedMissing = 0;
-  let optimizedStale = 0;
-  let tieProductCount = 0;
-  for (const line of lines) {
-    const product = products.get(line.canonical_product_id);
-    const recs = recommendedIds(product, mart.comparison_status);
-    const candidates = [...recs].map((sourceProductId) => {
-      const matches = product.offers.filter((offer) => offer.source_product_id === sourceProductId);
-      return matches.length === 1 ? matches[0] : null;
-    }).filter(Boolean);
-    const candidatePrices = new Set(candidates.map((offer) => moneyToMinor(offer.current_price)));
-    const recommendationsValid = (
-      recs.size > 0
-      && candidates.length === recs.size
-      && candidates.every((offer) => (
-        offerIsUsable(offer)
-        && offer.is_best_price === true
-        && offer.difference_vs_best_abs === "0.00"
-        && offer.difference_vs_best_pct === "0.00"
-      ))
-      && candidatePrices.size === 1
-    );
-    if (!recommendationsValid) {
-      optimizedMissing += 1;
-      continue;
-    }
-    candidates.sort((left, right) => (
-      `${left.supermarket_id}\u0000${left.location_id}\u0000${left.source_product_id}`
-        .localeCompare(`${right.supermarket_id}\u0000${right.location_id}\u0000${right.source_product_id}`)
-    ));
-    const winner = candidates[0];
-    const lineTotal = safeScenarioLineTotal(winner, line.quantity);
-    if (lineTotal === null || !Number.isSafeInteger(optimizedTotalMinor + lineTotal)) {
-      optimizedMissing += 1;
-      continue;
-    }
-    optimizedTotalMinor += lineTotal;
-    retailerKeys.add(`${winner.supermarket_id}\u0000${winner.location_id}`);
-    if (winner.freshness_status === "STALE") optimizedStale += 1;
-    if (candidates.length > 1) tieProductCount += 1;
-    selected.push({
-      canonical_product_id: line.canonical_product_id,
-      source_product_id: winner.source_product_id,
-      supermarket_id: winner.supermarket_id,
-      location_id: winner.location_id,
-      quantity: line.quantity,
-      unit_price_minor: moneyToMinor(winner.current_price),
-      line_total_minor: lineTotal,
-      tie_count: candidates.length,
-      tied_source_product_ids: candidates.map((offer) => offer.source_product_id),
-    });
-  }
-  const optimizedComplete = optimizedMissing === 0 && selected.length === lines.length;
-  const optimized = {
-    status: optimizedComplete ? "COMPLETE" : "INCOMPLETE",
-    requested_count: lines.length,
-    covered_count: selected.length,
-    missing_count: optimizedMissing,
-    stale_count: optimizedStale,
-    retailer_count: retailerKeys.size,
-    tie_product_count: tieProductCount,
-    total_minor: optimizedComplete ? optimizedTotalMinor : null,
-    savings_vs_manual_minor: optimizedComplete ? savingsFromManual(manual.grand_total_minor, optimizedTotalMinor) : null,
-    selected,
-  };
-  return {status: "AVAILABLE", manual, single_retailer: singleRetailer, optimized};
-}
-
-export function loadCart(storage) {
-  try {
-    const parsed = JSON.parse(storage.getItem(CART_KEY) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((line) => line && typeof line.source_product_id === "string") : [];
-  } catch { return []; }
-}
-
-export function saveCart(storage, lines) {
-  storage.setItem(CART_KEY, JSON.stringify(lines));
-}
+const RESULT_PAGE_SIZE = 40;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -354,10 +18,19 @@ function el(tag, className, text) {
   return node;
 }
 
-function metric(label, value) {
-  const row = el("div", "metric");
-  row.append(el("span", "metric-label", label), el("strong", "metric-value", value));
-  return row;
+function option(value, label) {
+  const node = el("option", null, label);
+  node.value = value;
+  return node;
+}
+
+function productLabel(product) {
+  const parts = [product.product_name];
+  const normalized = normalizeText(product.product_name);
+  for (const value of [product.brand, product.presentation]) {
+    if (value && !normalized.includes(normalizeText(value))) parts.push(value);
+  }
+  return parts.filter(Boolean).join(" · ");
 }
 
 function downloadBlob(blob, filename) {
@@ -372,309 +45,330 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function scenarioSavings(value) {
-  if (!Number.isSafeInteger(value)) return "Ahorro vs tu selección: no calculable";
-  if (value > 0) return `Ahorro vs tu selección: ${formatHnl(value)}`;
-  if (value < 0) return `Cuesta ${formatHnl(-value)} más que tu selección`;
-  return "Mismo total que tu selección";
-}
-
-function scenarioCard(title, totalMinor, details = []) {
-  const card = el("article", "scenario-card");
-  card.append(el("h4", null, title));
-  card.append(el("strong", "scenario-total", totalMinor === null ? "Total incompleto" : formatHnl(totalMinor)));
-  for (const detail of details) card.append(el("p", "scenario-detail", detail));
-  return card;
+function stateLabel(value) {
+  return {best: "Mejor precio", intermediate: "Precio intermedio", highest: "Precio más alto", equivalent: "Mismo precio"}[value] ?? "Precio disponible";
 }
 
 function createApp() {
-  const state = {mart: null, cart: loadCart(localStorage)};
-  const search = document.querySelector("#product-search");
-  const results = document.querySelector("#results");
-  const status = document.querySelector("#data-status");
-  const cart = document.querySelector("#cart-groups");
-  const cartStats = document.querySelector("#cart-stats");
-  const cartTotal = document.querySelector("#cart-total");
-  const cartCount = document.querySelector("#cart-count");
-  const refreshBox = document.querySelector("#price-refresh");
-  const refreshMessage = document.querySelector("#price-refresh-message");
-  const refreshButton = document.querySelector("#price-refresh-button");
-  const exportCsvButton = document.querySelector("#export-csv");
-  const exportPdfButton = document.querySelector("#export-pdf");
-  const exportStatus = document.querySelector("#export-status");
-  const basketAnalysis = document.querySelector("#basket-analysis");
-  const basketAnalysisContent = document.querySelector("#basket-analysis-content");
+  const state = {
+    manifest: null, facets: null, baseUrl: null, files: new Map(), indexEntries: [],
+    rows: new Map(), visibleRows: [], partitions: new Map(), staging: new Map(),
+    pendingUpdates: [], cart: loadCart(localStorage), requestToken: 0,
+    displayLimit: RESULT_PAGE_SIZE, matchingCount: 0,
+    filter: {category: "", product_type: "", brand: "", presentation: "", query: ""},
+  };
+  const ui = Object.fromEntries([
+    "category-filter", "type-filter", "brand-filter", "presentation-filter", "product-search",
+    "clear-filters", "active-filters", "result-count", "data-status", "results", "batch-status",
+    "batch-add", "update-confirmation", "update-message", "confirm-updates", "cart-count",
+    "mobile-cart-count", "mini-cart-stats", "mini-cart-retailers", "mini-cart-total", "cart-stats",
+    "cart-groups", "cart-total", "price-refresh", "price-refresh-message", "price-refresh-button",
+    "export-csv", "export-pdf", "export-status", "basket-analysis", "basket-analysis-content",
+  ].map((id) => [id, document.getElementById(id)]));
 
-  function renderRefresh() {
-    if (!state.mart || !state.cart.length) {
-      refreshBox.hidden = true;
-      return;
-    }
-    const updates = detectCartUpdates(state.cart, state.mart);
-    if (!updates.length) {
-      refreshBox.hidden = true;
-      return;
-    }
-    const changed = updates.filter((item) => item.status === "price_changed").length;
-    const unavailable = updates.filter((item) => item.status === "unavailable").length;
-    const restored = updates.filter((item) => item.status === "restored").length;
-    const parts = [];
-    if (changed) parts.push(`${changed} ${changed === 1 ? "precio cambió" : "precios cambiaron"} desde que guardaste esta lista.`);
-    if (unavailable) parts.push(`${unavailable} ${unavailable === 1 ? "oferta ya no está disponible" : "ofertas ya no están disponibles"}.`);
-    if (restored) parts.push(`${restored} ${restored === 1 ? "oferta volvió a estar disponible" : "ofertas volvieron a estar disponibles"}.`);
-    refreshMessage.textContent = parts.join(" ");
-    refreshBox.hidden = false;
+  async function digestHex(bytes) {
+    const hash = await crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(hash)].map((value) => value.toString(16).padStart(2, "0")).join("");
   }
 
-  function renderBasketAnalysis() {
-    basketAnalysisContent.replaceChildren();
-    if (!state.mart || !state.cart.length) {
-      basketAnalysis.hidden = true;
-      return;
+  async function fetchJson(path, {manifest = false} = {}) {
+    const url = manifest ? path : new URL(path, state.baseUrl).href;
+    const response = await fetch(url, {cache: "no-store"});
+    if (!response.ok) throw new Error(`public_data_http_${response.status}`);
+    const bytes = await response.arrayBuffer();
+    if (!manifest) {
+      const expected = state.files.get(path);
+      if (!expected || bytes.byteLength !== expected.bytes || await digestHex(bytes) !== expected.sha256) throw new Error("public_data_integrity_invalid");
     }
-    basketAnalysis.hidden = false;
-    const analysis = analyzeBasketOptions(state.cart, state.mart);
-    const manual = analysis.manual;
-    basketAnalysisContent.append(scenarioCard(
-      "Tu selección actual",
-      manual.grand_total_minor,
-      [
-        `${manual.products - manual.incomplete}/${manual.products} productos con total utilizable`,
-        `${manual.retailer_count} supermercado${manual.retailer_count === 1 ? "" : "s"}`,
-        `${manual.stale} precio${manual.stale === 1 ? "" : "s"} stale`,
-      ],
-    ));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
 
-    if (analysis.status === "REFRESH_REQUIRED") {
-      basketAnalysisContent.append(el("p", "safety-note scenario-note", "Hay cambios de precio o disponibilidad pendientes. Usa “Actualizar precios” para comparar escenarios con el mismo corte; tu lista no se actualiza automáticamente."));
-      return;
-    }
-    if (analysis.status === "COMPARISON_BLOCKED") {
-      basketAnalysisContent.append(el("p", "safety-note scenario-note", "La comparación fresca es insuficiente. No se calculan alternativas entre supermercados ni una canasta optimizada."));
-      return;
-    }
-    if (analysis.status !== "AVAILABLE") {
-      basketAnalysisContent.append(el("p", "safety-note scenario-note", "No hay un contrato seguro suficiente para comparar esta lista."));
-      return;
-    }
+  function categoryRecord() {
+    const value = state.filter.category === "__unknown__" ? null : state.filter.category;
+    return state.facets?.categories.find((category) => category.value === value) ?? null;
+  }
 
-    if (analysis.optimized) {
-      const optimized = analysis.optimized;
-      const details = [
-        `${optimized.covered_count}/${optimized.requested_count} productos cubiertos`,
-        optimized.status === "COMPLETE"
-          ? `Requiere visitar ${optimized.retailer_count} supermercado${optimized.retailer_count === 1 ? "" : "s"}`
-          : `${optimized.missing_count} producto${optimized.missing_count === 1 ? "" : "s"} sin recomendación segura`,
-        scenarioSavings(optimized.savings_vs_manual_minor),
-      ];
-      if (optimized.tie_product_count) details.push(`${optimized.tie_product_count} producto${optimized.tie_product_count === 1 ? "" : "s"} con empate de mejor precio; se usa una elección determinista sólo para estimar.`);
-      const card = scenarioCard("Mejor precio por producto", optimized.total_minor, details);
-      card.classList.add("optimized-scenario");
-      basketAnalysisContent.append(card);
-    }
+  function fillSelect(select, values, selected, firstLabel, labeler = (value) => value ?? "Sin normalizar") {
+    select.replaceChildren(option("", firstLabel));
+    for (const value of values) select.append(option(value ?? "__unknown__", labeler(value)));
+    select.value = selected;
+  }
 
-    for (const option of analysis.single_retailer) {
-      const coverage = `${option.covered_count}/${option.requested_count} productos (${(option.coverage_pct_minor / 100).toFixed(2)}%)`;
-      const details = [coverage];
-      if (option.status === "COMPLETE") details.push(scenarioSavings(option.savings_vs_manual_minor));
-      else details.push(`${option.missing_count} producto${option.missing_count === 1 ? "" : "s"} faltante${option.missing_count === 1 ? "" : "s"}; no se imputa cero.`);
-      if (option.stale_count) details.push(`${option.stale_count} precio${option.stale_count === 1 ? "" : "s"} stale`);
-      basketAnalysisContent.append(scenarioCard(
-        `Todo en ${option.supermarket_id.replaceAll("_", " ")}`,
-        option.total_minor,
-        details,
-      ));
+  function renderFilters() {
+    const categories = state.facets?.categories ?? [];
+    fillSelect(ui["category-filter"], categories.map((item) => item.value), state.filter.category, "Elige una categoría", (value) => categories.find((item) => item.value === value)?.label);
+    const category = categoryRecord();
+    const types = category?.navigation === "facets" ? category.product_types.map((item) => item.value) : [];
+    fillSelect(ui["type-filter"], types, state.filter.product_type, category?.navigation === "search" ? "Usa la búsqueda" : "Elige un producto");
+    ui["type-filter"].disabled = !category || category.navigation === "search";
+    const reconciled = reconcileDependentFilters(state.indexEntries, state.filter);
+    state.filter = reconciled.filter;
+    fillSelect(ui["brand-filter"], reconciled.options.brands, state.filter.brand, "Todas", (value) => value ?? "Sin marca normalizada");
+    fillSelect(ui["presentation-filter"], reconciled.options.presentations, state.filter.presentation, "Todas", (value) => value ?? "Sin presentación normalizada");
+    ui["brand-filter"].disabled = !state.indexEntries.length;
+    ui["presentation-filter"].disabled = !state.indexEntries.length;
+    ui["product-search"].value = state.filter.query;
+    const chips = [];
+    for (const [field, label] of [["category", "Categoría"], ["product_type", "Producto"], ["brand", "Marca"], ["presentation", "Presentación"]]) {
+      if (!state.filter[field]) continue;
+      const chip = el("button", "chip", `${state.filter[field] === "__unknown__" ? "Sin normalizar" : state.filter[field]} ×`);
+      chip.type = "button";
+      chip.setAttribute("aria-label", `Quitar filtro ${label}`);
+      chip.addEventListener("click", () => { void changeFilter(field, ""); });
+      chips.push(chip);
+    }
+    ui["active-filters"].replaceChildren(...chips);
+  }
+
+  async function loadIndex() {
+    const category = categoryRecord();
+    let path = null;
+    if (category?.navigation === "facets" && state.filter.product_type) path = indexPathForType(category, state.filter.product_type === "__unknown__" ? null : state.filter.product_type);
+    if (category?.navigation === "search") path = searchIndexForPrefix(category, state.filter.query)?.path ?? null;
+    if (!path) { state.indexEntries = []; return; }
+    const index = await fetchJson(path);
+    if (index?.schema !== "rpi-consumer-index/v3" || !Array.isArray(index.rows)) throw new Error("catalog_index_invalid");
+    state.indexEntries = index.rows;
+  }
+
+  async function loadPartitions(paths) {
+    await Promise.all(paths.map(async (path) => {
+      if (state.partitions.has(path)) return;
+      const partition = await fetchJson(path);
+      if (partition?.schema !== "rpi-consumer-catalog-partition/v3" || partition.partition !== path || !Array.isArray(partition.rows)) throw new Error("catalog_partition_invalid");
+      state.partitions.set(path, partition.rows);
+      for (const row of partition.rows) state.rows.set(row.row_id, {...row, _partition: path});
+    }));
+  }
+
+  async function refreshResults() {
+    const token = ++state.requestToken;
+    renderFilters();
+    const matches = filterIndexEntries(state.indexEntries, state.filter);
+    state.matchingCount = matches.length;
+    const entries = matches.slice(0, state.displayLimit);
+    if (!entries.length) { state.visibleRows = []; renderMatrix(); return; }
+    ui["data-status"].textContent = "Cargando precios del filtro…";
+    await loadPartitions(partitionPaths(entries));
+    if (token !== state.requestToken) return;
+    const ids = new Set(entries.map((entry) => entry.row_id));
+    state.visibleRows = [...state.rows.values()].filter((row) => ids.has(row.row_id));
+    renderMatrix();
+    ui["data-status"].textContent = `${state.visibleRows.length} resultados cargados desde la publicación verificada.`;
+  }
+
+  async function changeFilter(field, value) {
+    state.filter = clearDependentFilters(state.filter, field, value);
+    state.displayLimit = RESULT_PAGE_SIZE;
+    if (field === "query") state.filter.query = value;
+    if (["category", "product_type"].includes(field)) state.staging.clear();
+    try {
+      if (["category", "product_type", "query"].includes(field)) await loadIndex();
+      await refreshResults();
+    } catch (error) {
+      ui["data-status"].dataset.error = error instanceof Error ? error.message : "unknown_error";
+      ui["data-status"].textContent = "No fue posible cargar este grupo. Tu compra permanece guardada.";
     }
   }
 
-  function persist() {
-    saveCart(localStorage, state.cart);
-    renderCart();
-    renderRefresh();
-    renderBasketAnalysis();
+  function quantityControl(row, staged) {
+    const wrap = el("div", "quantity-control");
+    const minus = el("button", null, "−"), input = el("input", "quantity-input"), plus = el("button", null, "+");
+    minus.type = plus.type = "button";
+    input.type = "number"; input.min = "1"; input.max = "999"; input.inputMode = "numeric"; input.value = String(staged.quantity);
+    input.setAttribute("aria-label", `Cantidad de ${row.product_name}`);
+    minus.setAttribute("aria-label", `Reducir cantidad de ${row.product_name}`);
+    plus.setAttribute("aria-label", `Aumentar cantidad de ${row.product_name}`);
+    const update = (value) => { staged.quantity = quantityValue(value, staged.quantity); input.value = String(staged.quantity); minus.disabled = staged.quantity <= 1; renderBatchBar(); };
+    minus.addEventListener("click", () => update(staged.quantity - 1));
+    plus.addEventListener("click", () => update(staged.quantity + 1));
+    input.addEventListener("change", () => update(input.value));
+    minus.disabled = staged.quantity <= 1;
+    wrap.append(minus, input, plus);
+    return wrap;
+  }
+
+  function historyDetails(offer) {
+    const history = offer.historical_summary;
+    if (!history) return null;
+    const details = el("details", "price-history");
+    details.append(el("summary", null, humanHistoricalPosition(history.historical_position)));
+    const grid = el("div", "history-grid");
+    for (const [label, value] of [
+      ["Anterior", history.previous_price], ["Promedio 30d", history.windows?.["30d"]?.average],
+      ["Promedio 90d", history.windows?.["90d"]?.average], ["Mínimo 90d", history.windows?.["90d"]?.minimum],
+      ["Máximo 90d", history.windows?.["90d"]?.maximum],
+    ]) {
+      const item = el("span"); item.append(el("small", null, label), el("strong", null, value ? formatHnl(moneyToMinor(value)) : "Sin historia suficiente")); grid.append(item);
+    }
+    details.append(grid);
+    return details;
+  }
+
+  function priceChoice(row, retailer, offer, staged) {
+    if (!offer) return el("span", "missing-price", "—");
+    const price = moneyToMinor(offer.current_price);
+    if (!offerIsUsable(offer) || price === null) return el("span", "missing-price", "—");
+    const priceState = relativePriceState(row, offer);
+    const selected = staged.source_product_id === offer.source_product_id;
+    const wrap = el("div", "price-offer");
+    const label = el("label", `price-choice price-${priceState}${selected ? " is-selected" : ""}`);
+    const input = el("input", "choice-input");
+    input.type = "radio"; input.name = `retailer-${row.row_id}`; input.value = offer.source_product_id; input.checked = selected;
+    input.setAttribute("aria-label", `Seleccionar ${retailer.name} para ${row.product_name}, precio ${formatHnl(price)}, ${stateLabel(priceState)}`);
+    label.append(input, el("strong", null, formatHnl(price)), el("small", null, stateLabel(priceState)));
+    const regular = moneyToMinor(offer.reported_regular_price);
+    if (regular !== null) label.append(el("del", null, formatHnl(regular)));
+    if (offer.is_promotion === true) label.append(el("span", "promo", "Promoción"));
+    label.title = humanFreshness(offer.freshness_status);
+    input.addEventListener("change", () => {
+      staged.source_product_id = offer.source_product_id;
+      renderMatrix();
+      const renderedRow = [...ui.results.querySelectorAll("tbody tr")].find((item) => item.dataset.productId === row.row_id);
+      renderedRow?.querySelector(".choice-input:checked")?.focus();
+    });
+    wrap.append(label);
+    const history = historyDetails(offer);
+    if (history) wrap.append(history);
+    return wrap;
+  }
+
+  function renderMatrix() {
+    const results = ui.results;
+    results.replaceChildren();
+    ui["result-count"].textContent = state.matchingCount > state.visibleRows.length ? `${state.visibleRows.length} de ${state.matchingCount} resultados` : `${state.visibleRows.length} resultado${state.visibleRows.length === 1 ? "" : "s"}`;
+    if (!state.visibleRows.length) {
+      const category = categoryRecord();
+      const text = category?.navigation === "search" && normalizeText(state.filter.query).length < 2 ? "Esta categoría no tiene normalización suficiente. Escribe al menos dos letras en la búsqueda secundaria." : "No hay productos que cumplan exactamente estos filtros.";
+      results.append(el("p", "empty-state", text)); renderBatchBar(); return;
+    }
+    const table = el("table", "comparison-matrix");
+    const caption = el("caption", "sr-only", "Comparación de precios por producto y supermercado");
+    const thead = el("thead"), head = el("tr");
+    for (const label of ["Producto", "Marca", "Presentación", "Cantidad", ...RETAILERS.map((item) => item.name)]) head.append(el("th", null, label));
+    thead.append(head); const tbody = el("tbody");
+    for (const row of state.visibleRows) {
+      const staged = state.staging.get(row.row_id) ?? {quantity: 1, source_product_id: null, partition: row._partition};
+      state.staging.set(row.row_id, staged);
+      const tr = el("tr"); tr.dataset.productId = row.row_id;
+      const product = el("th", "product-cell"); product.scope = "row"; product.append(el("strong", null, row.product_name), el("small", null, row.comparability === "comparable" ? "Comparación disponible" : "Oferta individual"));
+      tr.append(product, el("td", "attribute-cell", row.brand ?? "Sin normalizar"), el("td", "attribute-cell", row.presentation ?? "Sin normalizar"));
+      const quantity = el("td", "quantity-cell"); quantity.dataset.label = "Cantidad"; quantity.append(quantityControl(row, staged)); tr.append(quantity);
+      const offers = offersByRetailer(row);
+      for (const retailer of RETAILERS) { const cell = el("td", "price-cell"); cell.dataset.label = retailer.name; cell.append(priceChoice(row, retailer, offers.get(retailer.supermarket_id), staged)); tr.append(cell); }
+      tbody.append(tr);
+    }
+    table.append(caption, thead, tbody); results.append(table);
+    if (state.matchingCount > state.visibleRows.length) {
+      const more = el("button", "secondary-button load-more", `Mostrar ${Math.min(RESULT_PAGE_SIZE, state.matchingCount - state.visibleRows.length)} más`);
+      more.type = "button"; more.addEventListener("click", () => { state.displayLimit += RESULT_PAGE_SIZE; void refreshResults(); }); results.append(more);
+    }
+    renderBatchBar();
+  }
+
+  function preparedRows() { return state.visibleRows.filter((row) => state.staging.get(row.row_id)?.source_product_id); }
+
+  function renderBatchBar() {
+    const count = preparedRows().length;
+    ui["batch-status"].textContent = count ? `${count} producto${count === 1 ? "" : "s"} preparado${count === 1 ? "" : "s"}` : "Ningún producto preparado";
+    ui["batch-add"].disabled = count === 0;
+    ui["batch-add"].textContent = count ? `Agregar ${count} producto${count === 1 ? "" : "s"} a Mi Compra` : "Agregar seleccionados a Mi Compra";
+  }
+
+  function persistCart() { saveCart(localStorage, state.cart); renderCart(); renderRefresh(); renderBasketAnalysis(); }
+
+  function renderMiniCart(summary) {
+    ui["cart-count"].textContent = ui["mobile-cart-count"].textContent = String(summary.products);
+    ui["mini-cart-stats"].textContent = `${summary.products} productos · ${summary.units} unidades`;
+    ui["mini-cart-retailers"].replaceChildren(...RETAILERS.filter((item) => summary.retailers.has(item.supermarket_id)).map((item) => { const group = summary.retailers.get(item.supermarket_id); const row = el("div", "mini-cart-row"); row.append(el("span", null, item.name), el("strong", null, group.incomplete ? "Incompleto" : formatHnl(group.subtotal_minor))); return row; }));
+    ui["mini-cart-total"].textContent = summary.grand_total_minor === null ? "Total incompleto" : `Total ${formatHnl(summary.grand_total_minor)}`;
+  }
+
+  function cartQuantity(line, saved) {
+    const wrap = el("div", "quantity-control compact"); const minus = el("button", null, "−"), input = el("input", "quantity-input"), plus = el("button", null, "+");
+    minus.type = plus.type = "button"; input.type = "number"; input.min = "1"; input.max = "999"; input.value = String(line.quantity); input.setAttribute("aria-label", `Cantidad de ${line.product_name}`);
+    const update = (value) => { saved.quantity = quantityValue(value, saved.quantity); persistCart(); };
+    minus.addEventListener("click", () => update(saved.quantity - 1)); plus.addEventListener("click", () => update(saved.quantity + 1)); input.addEventListener("change", () => update(input.value)); wrap.append(minus, input, plus); return wrap;
+  }
+
+  function retailerPicker(line, saved) {
+    const row = state.rows.get(cartIdentity(line)); if (!row) return null;
+    const select = el("select", "retailer-picker"); select.setAttribute("aria-label", `Cambiar supermercado de ${line.product_name}`);
+    for (const retailer of RETAILERS) { const offer = offersByRetailer(row).get(retailer.supermarket_id); if (offerIsUsable(offer)) select.append(option(offer.source_product_id, `${retailer.name} · ${formatHnl(moneyToMinor(offer.current_price))}`)); }
+    select.value = line.source_product_id;
+    select.addEventListener("change", () => { const offer = row.offers.find((item) => item.source_product_id === select.value); const replacement = lineFromOffer(row, offer, saved.quantity, row._partition); if (replacement) Object.assign(saved, replacement, {checked: saved.checked}); persistCart(); });
+    return select;
   }
 
   function renderCart() {
-    cart.replaceChildren();
-    const summary = cartSummary(state.cart);
-    cartCount.textContent = String(summary.products);
-    cartStats.textContent = `${summary.products} productos · ${summary.units} unidades · ${summary.retailer_count} supermercados · ${summary.incomplete} incompletos · ${summary.stale} stale`;
-    cartTotal.textContent = summary.grand_total_minor === null ? "Total incompleto" : `TOTAL ESTIMADO ${formatHnl(summary.grand_total_minor)}`;
-    exportCsvButton.disabled = summary.products === 0;
-    exportPdfButton.disabled = summary.products === 0;
-    if (!summary.products) {
-      exportStatus.textContent = "";
-      cart.append(el("p", "empty-state", "Tu lista está vacía. Busca un producto y elige dónde comprarlo."));
-      return;
-    }
-    for (const [retailer, group] of [...summary.retailers].sort(([a], [b]) => a.localeCompare(b))) {
-      const section = el("section", "retailer-group");
-      section.append(el("h3", null, retailer.replaceAll("_", " ").toLocaleUpperCase("es")));
+    const summary = cartSummary(state.cart); renderMiniCart(summary); ui["cart-groups"].replaceChildren();
+    ui["cart-stats"].textContent = `${summary.products} productos · ${summary.units} unidades · ${summary.retailer_count} supermercados · ${summary.incomplete} incompletos`;
+    ui["cart-total"].textContent = summary.grand_total_minor === null ? "TOTAL ESTIMADO INCOMPLETO" : `TOTAL ESTIMADO ${formatHnl(summary.grand_total_minor)}`;
+    ui["export-csv"].disabled = ui["export-pdf"].disabled = summary.products === 0;
+    if (!summary.products) { ui["cart-groups"].append(el("p", "empty-state", "Tu compra está vacía.")); return; }
+    for (const retailer of RETAILERS) {
+      const group = summary.retailers.get(retailer.supermarket_id); if (!group) continue;
+      const section = el("section", "retailer-group"); section.append(el("h3", null, retailer.name));
+      const table = el("table", "cart-table"), thead = el("thead"), head = el("tr"); for (const label of ["Producto", "Cantidad", "Precio unitario", "Total"]) head.append(el("th", null, label)); thead.append(head); const body = el("tbody");
       for (const line of group.lines) {
-        const stateLine = state.cart.find((item) => item.source_product_id === line.source_product_id);
-        if (!stateLine) continue;
-        const item = el("article", `cart-line${line.checked ? " is-checked" : ""}${line.invalid ? " is-invalid" : ""}`);
-        const check = el("button", "check-button", line.checked ? "☑" : "☐");
-        check.type = "button";
-        check.setAttribute("aria-label", line.checked ? "Marcar pendiente" : "Marcar comprado");
-        check.addEventListener("click", () => { stateLine.checked = !stateLine.checked; persist(); });
-        const info = el("div", "cart-line-info");
-        info.append(el("strong", null, line.product_name), el("span", "muted", [line.brand, line.presentation].filter(Boolean).join(" · ")));
-        const price = line.line_total_minor === null ? `Último precio guardado ${formatHnl(line.unit_price_minor)} · total incompleto` : `${line.quantity} × ${formatHnl(line.unit_price_minor)} = ${formatHnl(line.line_total_minor)}`;
-        info.append(el("span", "line-price", price));
-        if (line.invalid) info.append(el("span", "danger-text", "Oferta no disponible. No se sustituyó por otro supermercado."));
-        else if (line.freshness_status === "STALE") info.append(el("span", "warning", "Precio stale"));
-        const controls = el("div", "quantity-controls");
-        const minus = el("button", null, "−");
-        const quantity = el("input", "quantity-input");
-        const plus = el("button", null, "+");
-        const remove = el("button", "danger-link", "Eliminar");
-        minus.type = plus.type = remove.type = "button";
-        quantity.type = "number";
-        quantity.min = "1";
-        quantity.max = "999";
-        quantity.inputMode = "numeric";
-        quantity.value = String(line.quantity);
-        quantity.setAttribute("aria-label", `Cantidad de ${line.product_name}`);
-        minus.disabled = line.quantity <= 1;
-        minus.addEventListener("click", () => { stateLine.quantity -= 1; persist(); });
-        quantity.addEventListener("change", () => {
-          const value = Number(quantity.value);
-          if (Number.isInteger(value) && value >= 1 && value <= 999) stateLine.quantity = value;
-          else quantity.value = String(stateLine.quantity);
-          persist();
-        });
-        plus.addEventListener("click", () => { if (stateLine.quantity < 999) stateLine.quantity += 1; persist(); });
-        remove.addEventListener("click", () => { state.cart = state.cart.filter((x) => x.source_product_id !== line.source_product_id); persist(); });
-        controls.append(minus, quantity, plus, remove);
-        item.append(check, info, controls);
-        section.append(item);
+        const saved = state.cart.find((item) => cartIdentity(item) === cartIdentity(line)); if (!saved) continue;
+        const tr = el("tr", `${line.checked ? "is-checked" : ""} ${line.invalid ? "is-invalid" : ""}`); const product = el("th", "cart-product"); product.scope = "row";
+        const check = el("button", "check-button", line.checked ? "☑" : "☐"); check.type = "button"; check.setAttribute("aria-label", line.checked ? `Marcar pendiente ${line.product_name}` : `Marcar comprado ${line.product_name}`); check.addEventListener("click", () => { saved.checked = !saved.checked; persistCart(); });
+        const info = el("div"); info.append(el("strong", null, productLabel(line))); const picker = retailerPicker(line, saved); if (picker) info.append(picker);
+        if (line.invalid) info.append(el("small", "danger-text", "Oferta no disponible; no fue sustituida.")); else if (line.freshness_status === "STALE") info.append(el("small", "warning", "Precio no actualizado recientemente."));
+        const remove = el("button", "text-button danger-text", "Eliminar"); remove.type = "button"; remove.addEventListener("click", () => { state.cart = state.cart.filter((item) => cartIdentity(item) !== cartIdentity(line)); persistCart(); });
+        product.append(check, info, remove); tr.append(product); const quantity = el("td"); quantity.dataset.label = "Cantidad"; quantity.append(cartQuantity(line, saved)); tr.append(quantity);
+        const unit = el("td", null, formatHnl(line.unit_price_minor)); unit.dataset.label = "Precio unitario"; tr.append(unit); const total = el("td", "line-total", line.line_total_minor === null ? "Incompleto" : formatHnl(line.line_total_minor)); total.dataset.label = "Total"; tr.append(total); body.append(tr);
       }
-      section.append(el("div", "retailer-subtotal", group.incomplete ? "Subtotal incompleto" : `Subtotal ${formatHnl(group.subtotal_minor)}`));
-      cart.append(section);
+      table.append(thead, body); section.append(table, el("div", "retailer-subtotal", group.incomplete ? `Subtotal ${retailer.name}: incompleto` : `Subtotal ${retailer.name}: ${formatHnl(group.subtotal_minor)}`)); ui["cart-groups"].append(section);
     }
   }
 
-  function renderResults() {
-    results.replaceChildren();
-    if (!state.mart) return;
-    const products = searchProducts(state.mart.products, search.value);
-    if (!search.value.trim()) {
-      results.append(el("p", "empty-state", "Escribe un producto, marca o presentación para comenzar."));
-      return;
-    }
-    if (!products.length) {
-      results.append(el("p", "empty-state", "No encontré productos seguros con esa búsqueda."));
-      return;
-    }
-    for (const product of products) {
-      const offers = product.offers ?? [];
-      if (!offers.length) continue;
-      const first = offers[0];
-      const card = el("article", "product-card");
-      const head = el("div", "product-head");
-      head.append(el("h2", null, first.product_name));
-      head.append(el("p", "muted", [first.category, first.product_type, first.brand, first.variant, first.presentation].filter(Boolean).join(" · ")));
-      card.append(head);
-      const recs = recommendedIds(product, state.mart.comparison_status);
-      if (state.mart.comparison_status !== "COMPARABLE") card.append(el("p", "safety-note", "Comparación fresca insuficiente: no se recomienda un mejor precio."));
-      const offerGrid = el("div", "offer-grid");
-      for (const offer of offers) {
-        const offerCard = el("div", `offer-card${recs.has(offer.source_product_id) ? " best-offer" : ""}`);
-        const title = el("div", "offer-title");
-        title.append(el("strong", null, offer.supermarket_id.replaceAll("_", " ")));
-        if (recs.has(offer.source_product_id)) title.append(el("span", "best-badge", "Mejor precio"));
-        offerCard.append(title, el("div", "offer-price", formatHnl(moneyToMinor(offer.current_price))));
-        if (offer.reported_regular_price) offerCard.append(el("div", "regular-price", `Regular declarado ${formatHnl(moneyToMinor(offer.reported_regular_price))}`));
-        if (offer.is_promotion) offerCard.append(el("span", "promo-badge", "Promoción reportada"));
-        offerCard.append(metric("Freshness", offer.freshness_status), metric("Observado", offer.observed_at ?? "—"));
-        if (offer.rank !== null && offer.rank !== undefined) offerCard.append(metric("Ranking", `#${offer.rank}`));
-        if (offer.difference_vs_best_abs !== null && offer.difference_vs_best_pct !== null) {
-          const deltaMinor = moneyToMinor(offer.difference_vs_best_abs);
-          const prefix = offer.is_best_price ? "" : "+";
-          offerCard.append(metric("Vs mejor precio", `${prefix}${formatHnl(deltaMinor)} · ${prefix}${offer.difference_vs_best_pct}%`));
-        }
-        const history = offer.historical_summary;
-        if (history) {
-          const w30 = history.windows?.["30d"], w90 = history.windows?.["90d"];
-          offerCard.append(metric("Promedio 30d", w30?.status === "available" ? formatHnl(moneyToMinor(w30.average)) : "Historial insuficiente"));
-          if (w30?.status === "available") {
-            offerCard.append(metric("Mínimo 30d", formatHnl(moneyToMinor(w30.minimum))));
-            offerCard.append(metric("Máximo 30d", formatHnl(moneyToMinor(w30.maximum))));
-          }
-          offerCard.append(metric("Promedio 90d", w90?.status === "available" ? formatHnl(moneyToMinor(w90.average)) : "Historial insuficiente"));
-          offerCard.append(metric("Posición histórica", history.historical_position ?? "insufficient_history"));
-        }
-        const add = el("button", "primary-button", "Agregar aquí");
-        add.type = "button";
-        add.addEventListener("click", () => {
-          const line = lineFromOffer(product, offer);
-          if (!line) return;
-          state.cart = selectOffer(state.cart, line);
-          persist();
-          document.querySelector("#cart-panel").scrollIntoView({behavior: "smooth", block: "start"});
-        });
-        offerCard.append(add);
-        offerGrid.append(offerCard);
-      }
-      card.append(offerGrid);
-      results.append(card);
-    }
+  async function ensureCartRows() {
+    const savedPaths = [...new Set(state.cart.map((line) => line.catalog_partition).filter(Boolean))];
+    await loadPartitions(savedPaths.filter((path) => state.files.has(path)));
+  }
+
+  function renderRefresh() {
+    const updates = detectCartUpdates(state.cart, state.rows); ui["price-refresh"].hidden = !updates.length; if (!updates.length) return; const parts = [];
+    for (const [status, singular, plural] of [["price_changed", "precio cambió", "precios cambiaron"], ["unavailable", "oferta ya no está disponible", "ofertas ya no están disponibles"], ["restored", "oferta volvió a estar disponible", "ofertas volvieron a estar disponibles"]]) { const count = updates.filter((item) => item.status === status).length; if (count) parts.push(`${count} ${count === 1 ? singular : plural}.`); }
+    ui["price-refresh-message"].textContent = parts.join(" ");
+  }
+
+  function scenarioCard(title, total, details) { const card = el("article", "scenario-card"); card.append(el("h4", null, title), el("strong", null, total === null ? "Total incompleto" : formatHnl(total))); for (const detail of details) card.append(el("p", null, detail)); return card; }
+
+  function renderBasketAnalysis() {
+    const panel = ui["basket-analysis"], content = ui["basket-analysis-content"]; content.replaceChildren(); panel.hidden = !state.cart.length; if (!state.cart.length) return;
+    const analysis = analyzeBasketOptions(state.cart, state.rows);
+    if (analysis.status === "REFRESH_REQUIRED") { content.append(el("p", "empty-state", "Actualiza primero los precios para comparar escenarios con el mismo corte.")); return; }
+    if (analysis.status === "COMPARISON_BLOCKED") { content.append(el("p", "empty-state", "Los precios guardados no están suficientemente recientes para comparar escenarios.")); return; }
+    if (analysis.status !== "AVAILABLE") { content.append(el("p", "empty-state", "Carga los productos guardados para comparar escenarios seguros.")); return; }
+    const optimized = analysis.optimized; content.append(scenarioCard("Mejor precio por producto", optimized.total_minor, [`${optimized.covered_count}/${optimized.requested_count} productos cubiertos`, optimized.status === "COMPLETE" ? `Requiere visitar ${optimized.retailer_count} supermercado${optimized.retailer_count === 1 ? "" : "s"}` : `${optimized.missing_count} sin comparación segura; no se imputa cero`, Number.isSafeInteger(optimized.savings_vs_manual_minor) ? `Diferencia frente a tu selección: ${formatHnl(optimized.savings_vs_manual_minor)}` : "Diferencia no calculable"]));
+    for (const scenario of analysis.single_retailer) content.append(scenarioCard(`Todo en ${scenario.name}`, scenario.total_minor, [`${scenario.covered_count}/${scenario.requested_count} productos cubiertos`, scenario.status === "COMPLETE" ? "Canasta completa" : `${scenario.missing_count} faltante${scenario.missing_count === 1 ? "" : "s"}; no se imputa cero`]));
   }
 
   async function exportCart(kind) {
-    if (!state.cart.length) return;
-    exportStatus.textContent = `Preparando ${kind.toUpperCase()}…`;
-    try {
-      const exportsModule = await import("./exports.js");
-      const summary = cartSummary(state.cart);
-      const generatedAt = new Date();
-      const date = generatedAt.toISOString().slice(0, 10);
-      if (kind === "csv") {
-        const csv = exportsModule.buildCartCsv(summary);
-        downloadBlob(new Blob([csv], {type: "text/csv;charset=utf-8"}), `mi-compra-${date}.csv`);
-      } else {
-        const pdf = exportsModule.buildCartPdf(summary, generatedAt);
-        downloadBlob(new Blob([pdf], {type: "application/pdf"}), `mi-compra-${date}.pdf`);
-      }
-      exportStatus.textContent = `${kind.toUpperCase()} generado desde tu lista local.`;
-    } catch {
-      exportStatus.textContent = `No fue posible generar ${kind.toUpperCase()}.`;
-    }
+    if (!state.cart.length) return; ui["export-status"].textContent = `Preparando ${kind.toUpperCase()}…`;
+    try { const module = await import("./exports.js"), summary = cartSummary(state.cart), date = new Date().toISOString().slice(0, 10); const content = kind === "csv" ? module.buildCartCsv(summary) : module.buildCartPdf(summary, new Date()); downloadBlob(new Blob([content], {type: kind === "csv" ? "text/csv;charset=utf-8" : "application/pdf"}), `mi-compra-${date}.${kind}`); ui["export-status"].textContent = `${kind.toUpperCase()} generado desde tu lista local.`; } catch { ui["export-status"].textContent = `No fue posible generar ${kind.toUpperCase()}.`; }
   }
 
-  exportCsvButton.addEventListener("click", () => { void exportCart("csv"); });
-  exportPdfButton.addEventListener("click", () => { void exportCart("pdf"); });
-  refreshButton.addEventListener("click", () => {
-    if (!state.mart) return;
-    state.cart = refreshCartPrices(state.cart, state.mart);
-    persist();
-  });
+  ui["category-filter"].addEventListener("change", () => { void changeFilter("category", ui["category-filter"].value); });
+  ui["type-filter"].addEventListener("change", () => { void changeFilter("product_type", ui["type-filter"].value); });
+  ui["brand-filter"].addEventListener("change", () => { void changeFilter("brand", ui["brand-filter"].value); });
+  ui["presentation-filter"].addEventListener("change", () => { void changeFilter("presentation", ui["presentation-filter"].value); });
+  let searchTimer; ui["product-search"].addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { void changeFilter("query", ui["product-search"].value); }, 180); });
+  ui["clear-filters"].addEventListener("click", () => { state.filter = {category: "", product_type: "", brand: "", presentation: "", query: ""}; state.indexEntries = []; state.visibleRows = []; state.matchingCount = 0; state.displayLimit = RESULT_PAGE_SIZE; state.staging.clear(); renderFilters(); renderMatrix(); });
+  ui["batch-add"].addEventListener("click", () => { const batch = prepareBatch(state.cart, state.visibleRows, state.staging); state.cart = addNewLines(state.cart, batch.additions); state.pendingUpdates = batch.conflicts; ui["update-confirmation"].hidden = !batch.conflicts.length; ui["update-message"].textContent = batch.conflicts.length ? `${batch.conflicts.length} producto${batch.conflicts.length === 1 ? " ya está" : "s ya están"} en Mi Compra. Confirma para cambiar cantidad o supermercado.` : ""; for (const line of [...batch.additions, ...batch.unchanged]) state.staging.delete(line.row_id); persistCart(); renderMatrix(); });
+  ui["confirm-updates"].addEventListener("click", () => { state.cart = confirmLineUpdates(state.cart, state.pendingUpdates); for (const line of state.pendingUpdates) state.staging.delete(line.row_id); state.pendingUpdates = []; ui["update-confirmation"].hidden = true; persistCart(); renderMatrix(); });
+  ui["price-refresh-button"].addEventListener("click", async () => { await ensureCartRows(); state.cart = refreshCartPrices(state.cart, state.rows); persistCart(); });
+  ui["export-csv"].addEventListener("click", () => { void exportCart("csv"); }); ui["export-pdf"].addEventListener("click", () => { void exportCart("pdf"); });
 
-  async function loadMart() {
-    const url = globalThis.RPI_CONSUMER_MART_URL || document.body.dataset.martUrl;
-    try {
-      const response = await fetch(url, {cache: "no-store"});
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const mart = await response.json();
-      if (!consumerMartContractIsCompatible(mart)) throw new Error("Contrato no compatible");
-      state.mart = mart;
-      status.textContent = `${mart.product_count} productos seguros · corte ${mart.as_of} · ${mart.comparison_status}`;
-      renderResults();
-      renderRefresh();
-      renderBasketAnalysis();
-    } catch (error) {
-      status.textContent = "Datos no disponibles. Se conserva tu lista local.";
-      results.replaceChildren(el("p", "safety-note", `No fue posible cargar precios públicos: ${error.message}`));
-      refreshBox.hidden = true;
-      basketAnalysis.hidden = true;
-    }
+  async function start() {
+    renderCart(); const manifestUrl = globalThis.RPI_CONSUMER_CATALOG_URL || document.body.dataset.catalogUrl;
+    try { const started = performance.now(); state.manifest = await fetchJson(manifestUrl, {manifest: true}); if (!manifestIsCompatible(state.manifest)) throw new Error("catalog_manifest_invalid"); state.baseUrl = new URL(".", manifestUrl); state.files = new Map(state.manifest.files.map((item) => [item.path, item])); state.facets = await fetchJson("facets-sps.json"); if (!facetsAreCompatible(state.facets, state.manifest)) throw new Error("catalog_facets_invalid"); renderFilters(); await ensureCartRows(); renderCart(); renderRefresh(); renderBasketAnalysis(); ui["data-status"].textContent = `${state.manifest.visible_rows.toLocaleString("es-HN")} productos visibles · 5 supermercados · ${Math.round(performance.now() - started)} ms de carga inicial.`; }
+    catch (error) { ui["data-status"].dataset.error = error instanceof Error ? error.message : "unknown_error"; ui["data-status"].textContent = "No fue posible verificar el catálogo. Tu compra local permanece disponible."; }
   }
-
-  search.addEventListener("input", renderResults);
-  renderCart();
-  renderBasketAnalysis();
-  loadMart();
+  void start();
 }
 
 if (typeof document !== "undefined") createApp();

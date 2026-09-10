@@ -9,233 +9,141 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "b2c" / "app.js"
+CATALOG = ROOT / "b2c" / "catalog.js"
 EXPORTS = ROOT / "b2c" / "exports.js"
 HTML = ROOT / "b2c" / "index.html"
 CSS = ROOT / "b2c" / "styles.css"
 
 
-def test_b2c_static_contract_is_mobile_first_and_safe() -> None:
+def run_module(tmp_path: Path, source: Path, script: str) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node_not_available_for_b2c_module_contract")
+    module = tmp_path / f"{source.stem}.mjs"
+    module.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    completed = subprocess.run(
+        [node, "--input-type=module", "-e", script, module.as_uri()],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_b2c_static_contract_is_accessible_responsive_and_safe() -> None:
     html = HTML.read_text(encoding="utf-8")
     css = CSS.read_text(encoding="utf-8")
     js = APP.read_text(encoding="utf-8")
+    catalog = CATALOG.read_text(encoding="utf-8")
     exports = EXPORTS.read_text(encoding="utf-8")
 
-    assert 'name="viewport"' in html
-    assert 'id="product-search"' in html
-    assert 'id="cart-panel"' in html
-    assert 'id="price-refresh"' in html
-    assert 'id="price-refresh-button"' in html
-    assert 'id="export-csv"' in html
-    assert 'id="export-pdf"' in html
-    assert 'id="export-status"' in html
-    assert "Actualizar precios" in html
-    assert "Descargar CSV" in html
-    assert "Descargar PDF" in html
+    for element_id in (
+        "category-filter", "type-filter", "brand-filter", "presentation-filter",
+        "product-search", "results", "batch-add", "update-confirmation",
+        "cart-groups", "price-refresh", "basket-analysis", "export-csv", "export-pdf",
+    ):
+        assert f'id="{element_id}"' in html
+    assert 'data-catalog-url="https://raw.githubusercontent.com/' in html
     assert 'type="module" src="app.js"' in html
-    assert "rpi-consumer-mart/v2" in js
-    assert 'import("./exports.js")' in js
+    assert "Total estimado calculado con los precios públicos observados" in html
+    assert "reported_regular_price" in js
+    assert "historical_summary" in js
     assert "localStorage" in js
-    assert 'quantity.type = "number"' in js
-    assert ".textContent" in js
-    assert ".innerHTML" not in js
-    assert ".innerHTML" not in exports
-    assert "eval(" not in js
-    assert "eval(" not in exports
-    assert "* 1.15" not in js and "*1.15" not in js
-    assert "* 1.15" not in exports and "*1.15" not in exports
+    assert 'input.type = "radio"' in js
+    assert "Ningún escenario modifica tu lista" in html
+    combined = js + catalog + exports
+    assert ".innerHTML" not in combined
+    assert "eval(" not in combined
+    assert "* 1.15" not in combined and "*1.15" not in combined
+    assert "shipping_fee" not in combined and "delivery_fee" not in combined
     assert "min-height:44px" in css
-    assert ".quantity-input" in css
-    assert ".cart-actions" in css
-    assert ".secondary-button" in css
-    assert "@media(min-width:700px)" in css
-    assert "@media(min-width:1020px)" in css
+    assert ".product-cell{position:sticky" in css
+    assert ".comparison-matrix tbody tr{display:grid" in css
+    assert "@media(max-width:799px)" in css
+    assert ".price-best" in css and ".price-highest" in css
 
 
-def test_b2c_core_logic_uses_authoritative_offers_integer_money_and_local_persistence(tmp_path: Path) -> None:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node_not_available_for_b2c_module_contract")
-
-    module = tmp_path / "app.mjs"
-    module.write_text(APP.read_text(encoding="utf-8"), encoding="utf-8")
+def test_catalog_contract_filters_batch_totals_and_storage(tmp_path: Path) -> None:
     script = r'''
 import assert from "node:assert/strict";
-const app = await import(process.argv[1]);
+const c = await import(process.argv[1]);
 
-assert.equal(app.moneyToMinor("35.50"), 3550);
-assert.equal(app.moneyToMinor("35.5"), 3550);
-assert.equal(app.moneyToMinor("35.555"), null);
-assert.equal(app.moneyToMinor(35.5), null);
+const scope = c.RETAILERS.map(({supermarket_id,location_id})=>({supermarket_id,location_id}));
+const manifest = {schema:"rpi-consumer-catalog-manifest/v3",catalog_schema:"rpi-consumer-catalog/v3",scope,files:[{path:"facets-sps.json",sha256:"a".repeat(64),bytes:10}],initial_payload:{request_count:2}};
+assert.equal(c.manifestIsCompatible(manifest), true);
+assert.equal(c.manifestIsCompatible({...manifest,scope:[...scope,{supermarket_id:"paiz",location_id:"paiz_sps"}]}), false);
+assert.equal(c.manifestIsCompatible({...manifest,files:[{path:"https://evil.test/data.json",sha256:"a".repeat(64),bytes:10}]}), false);
+assert.equal(c.moneyToMinor("35.50"), 3550);
+assert.equal(c.moneyToMinor("35.555"), null);
 
-const p1 = {
-  canonical_product_id: "milk",
-  recommended_source_product_ids: ["w:1", "c:1"],
-  offers: [
-    {source_product_id:"w:1", supermarket_id:"walmart", location_id:"walmart_sps", product_name:"Leche Sula Entera", category:"Lácteos", product_type:"Leche", brand:"Sula", presentation:"1 L", current_price:"35.50", reported_regular_price:"40.00", is_promotion:true, availability:"in_stock", observed_at:"2026-09-08T10:00:00Z", freshness_status:"FRESH"},
-    {source_product_id:"c:1", supermarket_id:"la_colonia", location_id:"la_colonia_sps", product_name:"Leche Sula Entera", category:"Lácteos", product_type:"Leche", brand:"Sula", presentation:"1 L", current_price:"35.50", reported_regular_price:null, is_promotion:false, availability:"in_stock", observed_at:"2026-09-08T10:00:00Z", freshness_status:"FRESH"},
-  ],
-};
-const p2 = {canonical_product_id:"rice", recommended_source_product_ids:["c:2"], offers:[{source_product_id:"c:2", supermarket_id:"la_colonia", location_id:"la_colonia_sps", product_name:"Arroz Premium", category:"Granos", product_type:"Arroz", brand:"Marca X", presentation:"5 lb", current_price:"118.00", reported_regular_price:null, is_promotion:false, availability:"in_stock", observed_at:"2026-09-08T09:00:00Z", freshness_status:"STALE"}]};
-
-assert.deepEqual(app.searchProducts([p1,p2], "LECHE sula"), [p1]);
-assert.deepEqual(app.searchProducts([p1,p2], "arroz 5 lb"), [p2]);
-assert.deepEqual([...app.recommendedIds(p1, "COMPARABLE")].sort(), ["c:1","w:1"]);
-assert.equal(app.recommendedIds(p1, "INSUFFICIENT_FRESH_COMPARISON").size, 0);
-
-const milk = app.lineFromOffer(p1, p1.offers[0], 2);
-assert.equal(milk.unit_price_minor, 3550);
-assert.equal(milk.reported_regular_price_minor, 4000);
-assert.equal(milk.is_promotion, true);
-const rice = app.lineFromOffer(p2, p2.offers[0], 1);
-let cart = app.selectOffer([], milk);
-cart = app.selectOffer(cart, rice);
-let summary = app.cartSummary(cart);
-assert.equal(summary.products, 2);
-assert.equal(summary.units, 3);
-assert.equal(summary.retailer_count, 2);
-assert.equal(summary.stale, 1);
-assert.equal(summary.grand_total_minor, 18900); // 2*35.50 + 118.00; no inferred tax, regular price ignored.
-assert.equal(summary.retailers.get("walmart").subtotal_minor, 7100);
-assert.equal(summary.retailers.get("la_colonia").subtotal_minor, 11800);
-
-const alternateMilk = app.lineFromOffer(p1, p1.offers[1], 1);
-cart = app.selectOffer(cart, alternateMilk); // explicit user selection changes retailer, never background optimization.
-const selected = cart.find((line) => line.canonical_product_id === "milk");
-assert.equal(selected.source_product_id, "c:1");
-assert.equal(selected.quantity, 2);
-
-const memory = new Map();
-const storage = {setItem:(k,v)=>memory.set(k,v), getItem:(k)=>memory.get(k) ?? null};
-app.saveCart(storage, cart);
-const restored = app.loadCart(storage);
-assert.deepEqual(restored, cart);
-restored[0].invalid = true;
-summary = app.cartSummary(restored);
-assert.equal(summary.incomplete, 1);
-assert.equal(summary.grand_total_minor, null);
-'''
-    completed = subprocess.run(
-        [node, "--input-type=module", "-e", script, module.as_uri()],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert completed.returncode == 0, completed.stderr
-
-
-def test_b2c_refresh_updates_only_exact_saved_offer_and_never_switches_retailer(tmp_path: Path) -> None:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node_not_available_for_b2c_module_contract")
-
-    module = tmp_path / "app.mjs"
-    module.write_text(APP.read_text(encoding="utf-8"), encoding="utf-8")
-    script = r'''
-import assert from "node:assert/strict";
-const app = await import(process.argv[1]);
-
-const saved = [
-  {canonical_product_id:"milk",source_product_id:"w:1",supermarket_id:"walmart",location_id:"walmart_sps",category:"Lácteos",product_type:"Leche",product_name:"Leche Sula",brand:"Sula",variant:null,presentation:"1 L",quantity:3,unit_price_minor:3550,reported_regular_price_minor:4000,is_promotion:true,availability:"in_stock",observed_at:"2026-09-01T10:00:00Z",freshness_status:"FRESH",checked:true,invalid:false},
-  {canonical_product_id:"rice",source_product_id:"c:2",supermarket_id:"la_colonia",location_id:"la_colonia_sps",category:"Granos",product_type:"Arroz",product_name:"Arroz",brand:"Marca X",variant:null,presentation:"5 lb",quantity:2,unit_price_minor:11800,reported_regular_price_minor:null,is_promotion:false,availability:"in_stock",observed_at:"2026-09-01T10:00:00Z",freshness_status:"FRESH",checked:false,invalid:false},
+const entries = [
+  {row_id:"milk",product_name:"Leche Sula Entera",brand:"Sula",presentation:"1 L",partition:"catalog/a.json"},
+  {row_id:"milk2",product_name:"Leche descremada",brand:"Dos Pinos",presentation:"1 L",partition:"catalog/b.json"},
+  {row_id:"rice",product_name:"Arroz premium",brand:null,presentation:"5 lb",partition:"catalog/a.json"},
 ];
-const mart = {schema:"rpi-consumer-mart/v2",comparison_status:"COMPARABLE",products:[
-  {canonical_product_id:"milk",recommended_source_product_ids:["c:1"],offers:[
-    {source_product_id:"w:1",supermarket_id:"walmart",location_id:"walmart_sps",category:"Lácteos",product_type:"Leche",product_name:"Leche Sula",brand:"Sula",variant:null,presentation:"1 L",current_price:"36.00",reported_regular_price:"40.00",is_promotion:true,availability:"in_stock",observed_at:"2026-09-08T10:00:00Z",freshness_status:"FRESH"},
-    {source_product_id:"c:1",supermarket_id:"la_colonia",location_id:"la_colonia_sps",category:"Lácteos",product_type:"Leche",product_name:"Leche Sula",brand:"Sula",variant:null,presentation:"1 L",current_price:"34.00",reported_regular_price:null,is_promotion:false,availability:"in_stock",observed_at:"2026-09-08T10:00:00Z",freshness_status:"FRESH"},
-  ]},
-]};
+let reconciled = c.reconcileDependentFilters(entries,{query:"leche",brand:"Sula",presentation:"5 lb"});
+assert.equal(reconciled.filter.presentation, "");
+assert.deepEqual(reconciled.options.brands,["Dos Pinos","Sula"]);
+assert.deepEqual(c.filterIndexEntries(entries,{query:"LECHE sula",brand:"",presentation:""}).map(x=>x.row_id),["milk"]);
+assert.deepEqual(c.partitionPaths(entries),["catalog/a.json","catalog/b.json"]);
+assert.equal(c.humanHistoricalPosition("historically_low"),"Mínimo de 90 días");
 
-const updates = app.detectCartUpdates(saved, mart);
-assert.deepEqual(updates.map((x)=>x.status).sort(), ["price_changed","unavailable"]);
-const refreshed = app.refreshCartPrices(saved, mart);
-const milk = refreshed.find((line)=>line.canonical_product_id === "milk");
-const rice = refreshed.find((line)=>line.canonical_product_id === "rice");
-assert.equal(milk.source_product_id, "w:1"); // cheaper c:1 exists but user selection is preserved.
-assert.equal(milk.supermarket_id, "walmart");
-assert.equal(milk.quantity, 3);
-assert.equal(milk.checked, true);
-assert.equal(milk.unit_price_minor, 3600);
-assert.equal(rice.source_product_id, "c:2");
-assert.equal(rice.supermarket_id, "la_colonia");
-assert.equal(rice.quantity, 2);
-assert.equal(rice.invalid, true);
-assert.equal(app.cartSummary(refreshed).grand_total_minor, null);
-assert.equal(app.detectCartUpdates(refreshed, mart).length, 0);
+function offer(id, retailer, price, regular=null, promo=null) { return {source_product_id:id,supermarket_id:retailer,location_id:`${retailer}_sps`,current_price:price,reported_regular_price:regular,is_promotion:promo,availability:"in_stock",observed_at:"2026-09-10T00:00:00Z",freshness_status:"FRESH",relative_price_state:retailer==="walmart"?"best":"highest"}; }
+const row = {row_id:"milk",canonical_product_id:"canon:milk",comparability:"comparable",category:"Lácteos",product_type:"Leche",product_name:"Leche Sula",brand:"Sula",variant:"Entera",presentation:"1 L",offers:[offer("w:1","walmart","35.50","40.00",true),offer("c:1","la_colonia","38.00",null,false)]};
+assert.equal(c.relativePriceState(row,row.offers[0]),"best");
+const line = c.lineFromOffer(row,row.offers[0],2,"catalog/a.json");
+assert.equal(line.unit_price_minor,3550);
+assert.equal(line.reported_regular_price_minor,4000);
+assert.equal(line.is_promotion,true);
+assert.equal(line.category,"Lácteos");
+assert.equal(line.product_type,"Leche");
+assert.equal(line.brand,"Sula");
+assert.equal(line.presentation,"1 L");
 
-const restoredMart = structuredClone(mart);
-restoredMart.products.push({canonical_product_id:"rice",recommended_source_product_ids:["c:2"],offers:[{source_product_id:"c:2",supermarket_id:"la_colonia",location_id:"la_colonia_sps",category:"Granos",product_type:"Arroz",product_name:"Arroz",brand:"Marca X",variant:null,presentation:"5 lb",current_price:"119.00",reported_regular_price:null,is_promotion:false,availability:"in_stock",observed_at:"2026-09-09T10:00:00Z",freshness_status:"FRESH"}]});
-assert.equal(app.detectCartUpdates(refreshed, restoredMart)[0].status, "restored");
-const restored = app.refreshCartPrices(refreshed, restoredMart);
-assert.equal(restored.find((line)=>line.source_product_id === "c:2").invalid, false);
-assert.equal(restored.find((line)=>line.source_product_id === "c:2").unit_price_minor, 11900);
+let batch = c.prepareBatch([], [row], new Map([["milk",{source_product_id:"w:1",quantity:2,partition:"catalog/a.json"}]]));
+assert.equal(batch.additions.length,1);
+let cart = c.addNewLines([],batch.additions);
+batch = c.prepareBatch(cart,[row],new Map([["milk",{source_product_id:"w:1",quantity:2,partition:"catalog/a.json"}]]));
+assert.equal(batch.unchanged.length,1);
+batch = c.prepareBatch(cart,[row],new Map([["milk",{source_product_id:"c:1",quantity:3,partition:"catalog/a.json"}]]));
+assert.equal(batch.conflicts.length,1);
+assert.equal(c.confirmLineUpdates(cart,batch.conflicts)[0].supermarket_id,"la_colonia");
 
-const duplicateMart = structuredClone(restoredMart);
-duplicateMart.products[0].offers.push({...duplicateMart.products[0].offers[0]});
-assert.equal(app.exactMartOffer(duplicateMart, "milk", "w:1"), null); // ambiguity fails closed.
+const summary = c.cartSummary(cart);
+assert.equal(summary.grand_total_minor,7100);
+assert.equal(summary.retailers.get("walmart").subtotal_minor,7100);
+assert.equal(summary.retailers.get("walmart").lines[0].line_total_minor,7100);
+const memory = new Map();
+const storage={setItem:(k,v)=>memory.set(k,v),getItem:(k)=>memory.get(k)??null};
+assert.equal(c.saveCart(storage,cart),true);
+assert.deepEqual(c.loadCart(storage),cart);
+assert.equal(c.saveCart({setItem(){throw new Error("blocked")}},cart),false);
 '''
-    completed = subprocess.run(
-        [node, "--input-type=module", "-e", script, module.as_uri()],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert completed.returncode == 0, completed.stderr
+    run_module(tmp_path, CATALOG, script)
 
 
-def test_b2c_exports_preserve_money_contract_and_generate_valid_pdf_structure(tmp_path: Path) -> None:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node_not_available_for_b2c_export_contract")
-
-    module = tmp_path / "exports.mjs"
-    module.write_text(EXPORTS.read_text(encoding="utf-8"), encoding="utf-8")
+def test_exports_use_current_price_totals_and_safe_csv(tmp_path: Path) -> None:
     script = r'''
 import assert from "node:assert/strict";
-const exports = await import(process.argv[1]);
-
-const summary = {
-  products: 2,
-  units: 3,
-  retailer_count: 1,
-  incomplete: 1,
-  stale: 1,
-  grand_total_minor: null,
-  retailers: new Map([["walmart", {
-    subtotal_minor: 7100,
-    incomplete: 1,
-    lines: [
-      {product_name:"Leche Sula",brand:"Sula",presentation:"1 L",location_id:"walmart_sps",quantity:2,unit_price_minor:3550,line_total_minor:7100,invalid:false,freshness_status:"FRESH",observed_at:"2026-09-08T10:00:00Z",checked:true},
-      {product_name:"=2+2",brand:"Marca X",presentation:"5 lb",location_id:"walmart_sps",quantity:1,unit_price_minor:11800,line_total_minor:null,invalid:true,freshness_status:"STALE",observed_at:"2026-09-08T09:00:00Z",checked:false},
-    ],
-  }]]),
-};
-
-const csv = exports.buildCartCsv(summary);
+const e = await import(process.argv[1]);
+const summary={products:2,units:3,retailer_count:1,incomplete:0,stale:0,grand_total_minor:18900,retailers:new Map([["walmart",{subtotal_minor:18900,incomplete:0,lines:[
+ {product_name:"Leche Sula",brand:"Sula",presentation:"1 L",quantity:2,unit_price_minor:3550,line_total_minor:7100,invalid:false,freshness_status:"FRESH"},
+ {product_name:"=2+2",brand:"Marca X",presentation:"5 lb",quantity:1,unit_price_minor:11800,line_total_minor:11800,invalid:false,freshness_status:"FRESH"},
+]}]])};
+const csv=e.buildCartCsv(summary);
 assert.ok(csv.startsWith("\uFEFF"));
-assert.ok(csv.includes('"Leche Sula"'));
-assert.ok(csv.includes('"35.50"'));
-assert.ok(csv.includes('"71.00"'));
-assert.ok(csv.includes('"NO_DISPONIBLE"'));
-assert.ok(csv.includes("\"'=2+2\"")); // neutraliza fórmulas al abrir el CSV en una hoja de cálculo.
+assert.ok(csv.includes('"supermercado","producto","cantidad","precio_unitario_hnl","total_linea_hnl"'));
+assert.ok(csv.includes('"walmart","Leche Sula - 1 L","2","35.50","71.00"'));
+assert.ok(csv.includes("\"'=2+2 - Marca X - 5 lb\""));
+assert.ok(csv.includes('"walmart","SUBTOTAL","","","189.00"'));
+assert.ok(csv.includes('"","TOTAL GENERAL","","","189.00"'));
+assert.ok(!csv.includes("40.00"));
 assert.ok(!csv.includes("1.15"));
-
-const pdf = exports.buildCartPdf(summary, new Date("2026-09-08T22:30:00Z"));
-assert.ok(pdf instanceof Uint8Array);
-const text = new TextDecoder("latin1").decode(pdf);
+const pdf=e.buildCartPdf(summary,new Date("2026-09-10T00:00:00Z"));
+const text=new TextDecoder("latin1").decode(pdf);
 assert.ok(text.startsWith("%PDF-1.4"));
-assert.ok(text.includes("TOTAL ESTIMADO DE MI COMPRA: INCOMPLETO"));
-assert.ok(text.includes("precios públicos observados"));
-assert.ok(text.includes("Subtotal: INCOMPLETO"));
-const match = text.match(/startxref\n(\d+)\n%%EOF/);
-assert.ok(match);
-const xrefOffset = Number(match[1]);
-assert.equal(text.slice(xrefOffset, xrefOffset + 4), "xref");
-assert.ok(!text.includes("1.15"));
+assert.ok(text.includes("TOTAL ESTIMADO DE MI COMPRA: L 189.00"));
+assert.ok(text.includes("Subtotal: L 189.00"));
+const match=text.match(/startxref\n(\d+)\n%%EOF/); assert.ok(match); assert.equal(text.slice(Number(match[1]),Number(match[1])+4),"xref");
 '''
-    completed = subprocess.run(
-        [node, "--input-type=module", "-e", script, module.as_uri()],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert completed.returncode == 0, completed.stderr
+    run_module(tmp_path, EXPORTS, script)

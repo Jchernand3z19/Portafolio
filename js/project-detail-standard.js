@@ -2,14 +2,14 @@
   const COPY = {
     es: {
       projects: 'Proyectos',
-      priceMeta: 'PROYECTO PRINCIPAL · 01 · WEB SCRAPING · DATOS REALES',
+      priceMeta: 'PROYECTO PRINCIPAL · 01 · RETAIL PRICE INTELLIGENCE',
       mundialMeta: 'PROYECTO · 02 · ANÁLISIS PREDICTIVO · DASHBOARD REAL',
       viewResult: 'Ver resultado',
       viewCode: 'Ver código'
     },
     en: {
       projects: 'Projects',
-      priceMeta: 'FEATURED PROJECT · 01 · WEB SCRAPING · REAL DATA',
+      priceMeta: 'FEATURED PROJECT · 01 · RETAIL PRICE INTELLIGENCE',
       mundialMeta: 'PROJECT · 02 · PREDICTIVE ANALYSIS · LIVE DASHBOARD',
       viewResult: 'View result',
       viewCode: 'View code'

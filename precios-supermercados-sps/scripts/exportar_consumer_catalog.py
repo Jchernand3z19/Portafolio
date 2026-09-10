@@ -22,6 +22,11 @@ from exportar_modelo_analitico import (  # noqa: E402
 )
 from exportar_rpi_marts import _parse_utc, fetch_freshness  # noqa: E402
 from precios_supermercados.price_analytics import ComparisonScope  # noqa: E402
+from precios_supermercados.price_history_analytics import (  # noqa: E402
+    HistoricalPriceObservation,
+    summarize_price_series,
+    summarize_price_windows,
+)
 from precios_supermercados.product_homologation_persistence import (  # noqa: E402
     NORMALIZATION_VERSION,
 )
@@ -40,6 +45,17 @@ RETAILER_NAMES = {
     "comisariato_los_andes": "Los Andes",
 }
 PUBLIC_COMPARABILITY = {"comparable", "single_source", "individual"}
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalPoint:
+    source_product_id: str
+    supermarket_id: str
+    location_id: str
+    observed_at: datetime
+    current_price_minor: int
+
+
 @dataclass(frozen=True, slots=True)
 class VisibleOffer:
     source_product_id: str
@@ -188,6 +204,131 @@ def fetch_visible_offers(
         if len(rows) < 2000:
             break
     return tuple(result)
+
+
+def fetch_historical_points(
+    backend: QueryBackend,
+    scope: ComparisonScope,
+    *,
+    as_of_utc: datetime,
+) -> dict[tuple[str, str], tuple[HistoricalPoint, ...]]:
+    """Lee periodos con precio mediante keyset pagination, sin queries por producto."""
+    predicate, scope_args = _scope_predicate(scope)
+    as_of_text = as_of_utc.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    cursor_product, cursor_location, cursor_observed = -1, "", ""
+    grouped: dict[tuple[str, str], list[HistoricalPoint]] = defaultdict(list)
+    seen: set[tuple[int, str, str]] = set()
+    while True:
+        rows = backend.query(
+            f"""
+            SELECT h.product_id,h.supermarket_id,h.location_id,h.current_price_minor,h.valid_from_utc
+            FROM price_history AS h
+            WHERE ({predicate})
+              AND current_price_minor IS NOT NULL
+              AND current_price_minor > 0
+              AND julianday(valid_from_utc)<=julianday(?)
+              AND (
+                product_id>?
+                OR (product_id=? AND location_id>?)
+                OR (product_id=? AND location_id=? AND valid_from_utc>?)
+              )
+            ORDER BY product_id,location_id,valid_from_utc
+            LIMIT 5000
+            """,
+            (
+                *scope_args,
+                as_of_text,
+                cursor_product,
+                cursor_product,
+                cursor_location,
+                cursor_product,
+                cursor_location,
+                cursor_observed,
+            ),
+        )
+        if not rows:
+            break
+        for product_id, supermarket_id, location_id, current_price, observed_at in rows:
+            if (
+                type(product_id) is not int
+                or not isinstance(supermarket_id, str)
+                or not isinstance(location_id, str)
+                or type(current_price) is not int
+                or current_price <= 0
+            ):
+                raise ExportError("consumer_catalog_history_invalid")
+            observed = _parse_utc(observed_at, "consumer_catalog_history_timestamp_invalid")
+            identity = (product_id, location_id, observed.isoformat())
+            if identity in seen:
+                raise ExportError("consumer_catalog_history_duplicate")
+            seen.add(identity)
+            source_id = f"{supermarket_id}:{product_id}"
+            grouped[(source_id, location_id)].append(
+                HistoricalPoint(source_id, supermarket_id, location_id, observed, current_price)
+            )
+        cursor_product = int(rows[-1][0])
+        cursor_location = str(rows[-1][2])
+        cursor_observed = str(rows[-1][4])
+        if len(rows) < 5000:
+            break
+    return {key: tuple(value) for key, value in grouped.items()}
+
+
+def _historical_summary(
+    offer: VisibleOffer,
+    history: Sequence[HistoricalPoint],
+    *,
+    as_of_utc: datetime,
+) -> dict[str, object] | None:
+    if offer.current_price_minor is None or offer.current_price_minor <= 0 or not history:
+        return None
+    observations = tuple(
+        HistoricalPriceObservation(
+            point.source_product_id,
+            point.supermarket_id,
+            point.location_id,
+            point.observed_at,
+            point.current_price_minor,
+        )
+        for point in history
+    )
+    if observations[-1].price_minor != offer.current_price_minor:
+        return None
+    series = summarize_price_series(observations)
+    windows = {
+        item.window_days: item
+        for item in summarize_price_windows(observations, as_of_utc=as_of_utc, windows=(30, 90))
+    }
+
+    def window_payload(days: int) -> dict[str, object]:
+        window = windows[days]
+        return {
+            "status": "available" if window.sufficient_history else "insufficient_history",
+            "observation_count": window.observation_count,
+            "average": _money(window.mean_price_minor),
+            "minimum": _money(window.minimum_price_minor),
+            "maximum": _money(window.maximum_price_minor),
+        }
+
+    window_90 = windows[90]
+    position = "insufficient_history"
+    if window_90.sufficient_history:
+        if window_90.current_price_minor == window_90.minimum_price_minor:
+            position = "historically_low"
+        elif window_90.current_vs_average_pct is not None and window_90.current_vs_average_pct < 0:
+            position = "below_recent_average"
+        elif window_90.current_vs_average_pct is not None and window_90.current_vs_average_pct > 0:
+            position = "above_recent_average"
+        else:
+            position = "normal_range"
+    return {
+        "observation_count": series.observation_count,
+        "previous_price": _money(observations[-2].price_minor) if len(observations) > 1 else None,
+        "observed_minimum": _money(series.minimum_price_minor),
+        "observed_maximum": _money(series.maximum_price_minor),
+        "historical_position": position,
+        "windows": {"30d": window_payload(30), "90d": window_payload(90)},
+    }
 def _row_id(prefix: str, value: str) -> str:
     return f"{prefix}-{hashlib.sha256(value.encode('utf-8')).hexdigest()[:24]}"
 def _category_key(value: str | None) -> str:
@@ -261,7 +402,11 @@ def _representative(group: Sequence[VisibleOffer]) -> VisibleOffer:
 def build_rows(
     offers: Iterable[VisibleOffer],
     freshness_by_scope: dict[tuple[str, str], str],
+    history_by_offer: dict[tuple[str, str], tuple[HistoricalPoint, ...]] | None = None,
+    *,
+    as_of_utc: datetime | None = None,
 ) -> list[dict[str, object]]:
+    history_by_offer = history_by_offer or {}
     rows: list[dict[str, object]] = []
     for mode, group in _identity_groups(offers):
         representative = _representative(group)
@@ -283,6 +428,11 @@ def build_rows(
                     "observed_at": offer.observed_at,
                     "freshness_status": freshness,
                     "relative_price_state": states[offer.source_product_id],
+                    "historical_summary": _historical_summary(
+                        offer,
+                        history_by_offer.get((offer.source_product_id, offer.location_id), ()),
+                        as_of_utc=as_of_utc or _parse_utc(offer.observed_at, "consumer_catalog_offer_timestamp_invalid"),
+                    ),
                 }
             )
         category = representative.category
@@ -348,7 +498,13 @@ def export_consumer_catalog(
     freshness_by_scope = {
         (item.source_id, item.location_id): item.freshness_status.value for item in freshness
     }
-    rows = build_rows(offers, freshness_by_scope)
+    history = fetch_historical_points(backend, scope, as_of_utc=as_of_utc)
+    rows = build_rows(
+        offers,
+        freshness_by_scope,
+        history,
+        as_of_utc=as_of_utc,
+    )
     output_directory.mkdir(parents=True, exist_ok=True)
     categories: dict[str | None, list[dict[str, object]]] = defaultdict(list)
     for row in rows:
@@ -441,6 +597,11 @@ def export_consumer_catalog(
         "comparison_policy": "persisted_ready_identity_without_retailer_collision_and_fresh_prices",
         "visible_rows": len(rows),
         "source_offers": offer_count,
+        "offers_with_historical_summary": sum(
+            offer["historical_summary"] is not None
+            for row in rows
+            for offer in row["offers"]
+        ),
         "retailer_offer_counts": retailer_offer_counts,
         "comparability_counts": mode_counts,
         "partition_count": len(partition_paths),

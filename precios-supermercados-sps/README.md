@@ -21,6 +21,16 @@ La versión pública muestra:
 - evidencia analítica intra-cadena reproducible cuando la identidad del artículo está demostrada;
 - la política fail-closed que impide publicar comparaciones cross-source basadas sólo en marca y presentación.
 
+### Compra Inteligente B2C
+
+La aplicación estática vive en [`b2c/`](b2c/) y consume el catálogo público
+particionado v3 desde la rama `portfolio-data`. Permite navegar el catálogo SPS,
+comparar las cinco cadenas aceptadas, elegir un supermercado por producto y
+mantener una lista local agrupada con cantidades, subtotales y total estimado.
+También muestra resumen histórico cuando existe y exporta la selección a CSV o
+PDF. El navegador no accede a Turso, no descarga el dataset completo al inicio y
+no agrega impuestos ni cargos inferidos.
+
 Cifras públicas verificadas al **8 de septiembre de 2026**:
 
 - 6 supermercados / cadenas productivas integradas.

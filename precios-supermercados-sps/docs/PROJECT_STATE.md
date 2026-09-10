@@ -2,7 +2,34 @@
 
 GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad técnica. Este archivo resume el estado **vigente** del proyecto. El snapshot histórico anterior al cierre de Los Andes y Paiz se conserva en [`PROJECT_STATE_HISTORY_2026-09-02.md`](PROJECT_STATE_HISTORY_2026-09-02.md).
 
-## Estado vigente — 2026-09-08
+## Estado vigente — 2026-09-10
+
+Compra Inteligente B2C usa el catálogo público particionado
+`rpi-consumer-catalog/v3`. El último artifact seguro verificado, del run
+[`34420997377`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34420997377),
+contiene **44,042 filas visibles, 46,680 ofertas, 2,638 filas comparables,
+11,846 single-source y 29,558 ofertas individuales** para el alcance SPS exacto:
+La Colonia, Colonial, Walmart, PriceSmart y Comisariato Los Andes. El payload
+inicial medido es 37,796 bytes sin comprimir, 4,957 bytes gzip y dos requests
+(manifest + facetas). Visibilidad y comparabilidad permanecen separadas.
+
+La interfaz vNext consume manifest, facetas, índices y particiones con SHA-256;
+no consulta Turso ni ejecuta matching en JavaScript. Incluye filtros dependientes,
+matriz de cinco supermercados, tarjetas responsive, selección manual por radio,
+cantidades por producto, alta por lote con confirmación de conflictos, lista
+local agrupada, refresh exacto, checklist, exportación CSV/PDF y escenarios de
+canasta fail-closed. El exportador Python agrega resumen histórico por oferta con
+precio anterior, ventanas 30/90 días, mínimos/máximos y posición humana. `Mi
+Compra` calcula exclusivamente con `current_price`; el precio regular, impuestos
+inferidos y cargos de checkout no alteran los totales.
+
+Los PR [#446](https://github.com/Jchernand3z19/Portafolio/pull/446) a
+[#450](https://github.com/Jchernand3z19/Portafolio/pull/450) dejaron integrado el
+catálogo v3, la semántica nullable de promoción, el payload inicial reducido, la
+navegación alineada con particiones y el sync atómico escalable de
+`portfolio-data`. La ejecución productiva que regenere la publicación con el
+nuevo resumen histórico permanece pendiente de autorización humana exacta; no
+se reutiliza una autorización temporal anterior.
 
 El proyecto mantiene seis cadenas productivas y once ubicaciones demostradas:
 

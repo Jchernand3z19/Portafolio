@@ -165,6 +165,14 @@ current_price, reported_regular_price, is_promotion, availability,
 observed_at, freshness_status, historical_summary
 ```
 
+La publicación navegable usa `rpi-consumer-catalog/v3` y se divide en manifest,
+facetas, índices de navegación y particiones de hasta 250 filas. El manifest
+declara hash y tamaño de cada archivo; el navegador valida ambos antes de usarlo.
+El alcance B2C es exactamente cinco contextos SPS: La Colonia, Colonial,
+Walmart, PriceSmart y Comisariato Los Andes. Una fila visible puede ser
+`comparable`, `single_source` o `individual`; sólo la primera, con ofertas
+`FRESH`, recibe ranking relativo.
+
 ## Compra Inteligente y Mi Compra
 
 La aplicación es una sola web accesible para teléfono, tablet y PC. El flujo
@@ -198,6 +206,12 @@ subtotales y `TOTAL ESTIMADO DE MI COMPRA`, con la nota:
 
 ### Comportamiento local
 
+- cascada Categoría → Producto → Marca → Presentación y búsqueda secundaria;
+- matriz de cinco supermercados en escritorio y tarjetas por producto en móvil;
+- una selección nativa tipo radio por producto, con toda la celda accionable y
+  foco de teclado preservado;
+- preparación de varios productos y alta por lote, con conflictos que exigen
+  confirmación explícita;
 - cantidades positivas, edición, eliminación y checklist comprado/pendiente;
 - persistencia en el dispositivo sin cuentas;
 - al reabrir, detección de precios cambiados para la misma identidad y retailer;
@@ -205,6 +219,12 @@ subtotales y `TOTAL ESTIMADO DE MI COMPRA`, con la nota:
 - ítems no disponibles se señalan, nunca se sustituyen;
 - exportación CSV y PDF con el mismo contrato monetario;
 - render seguro mediante DOM/text APIs, sin HTML no confiable.
+
+Cada oferta puede desplegar el último precio observado anterior, promedio de 30
+y 90 días, mínimo/máximo de 90 días y una posición humana (`mínimo de 90 días`,
+`debajo del promedio`, `en el promedio`, `sobre el promedio` o `historial
+insuficiente`). Estos valores los calcula Python desde periodos aceptados; la web
+no reconstruye series ni eleva el precio regular declarado a historia.
 
 ### Optimización
 
