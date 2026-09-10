@@ -59,6 +59,14 @@ jobs:
               {'supermarket_id': 'pricesmart', 'location_id': 'pricesmart_sps'},
               {'supermarket_id': 'comisariato_los_andes', 'location_id': 'comisariato_los_andes_sps'},
           ]
+          expected_tgu_scope = [
+              {'supermarket_id': 'la_colonia', 'location_id': 'la_colonia_tgu'},
+              {'supermarket_id': 'walmart', 'location_id': 'walmart_tgu_ffaa'},
+              {'supermarket_id': 'walmart', 'location_id': 'walmart_tgu_el_sauce'},
+              {'supermarket_id': 'pricesmart', 'location_id': 'pricesmart_tgu'},
+              {'supermarket_id': 'paiz', 'location_id': 'paiz_tgu_multiplaza'},
+              {'supermarket_id': 'paiz', 'location_id': 'paiz_tgu_proceres'},
+          ]
           policy = 'fail_closed_strong_identity_and_commercial_consistency'
 
           def only(filename: str, error_prefix: str) -> Path:
@@ -67,10 +75,10 @@ jobs:
                   raise SystemExit(f'{error_prefix}_cardinality_invalid:{len(matches)}')
               return matches[0]
 
-          def only_outside_v3(filename: str, error_prefix: str) -> Path:
+          def only_outside_catalogs(filename: str, error_prefix: str) -> Path:
               matches = sorted(
                   path for path in artifact_root.rglob(filename)
-                  if path.parent.name != 'consumer-v3'
+                  if path.parent.name not in {'consumer-v3', 'consumer-v3-tgu'}
               )
               if len(matches) != 1:
                   raise SystemExit(f'{error_prefix}_cardinality_invalid:{len(matches)}')
@@ -78,21 +86,29 @@ jobs:
 
           consumer_path = only('consumer-mart.json', 'portfolio_sync_consumer')
           business_path = only('business-mart.json', 'portfolio_sync_business')
-          manifest_path = only_outside_v3('manifest.json', 'portfolio_sync_manifest')
+          manifest_path = only_outside_catalogs('manifest.json', 'portfolio_sync_manifest')
           sample_path = only('portfolio-sample.json', 'portfolio_sync_sample')
           catalog_manifests = sorted(
               path for path in artifact_root.rglob('manifest.json')
               if path.parent.name == 'consumer-v3'
           )
+          tgu_catalog_manifests = sorted(
+              path for path in artifact_root.rglob('manifest.json')
+              if path.parent.name == 'consumer-v3-tgu'
+          )
           if len(catalog_manifests) != 1:
               raise SystemExit(f'portfolio_sync_catalog_manifest_cardinality_invalid:{len(catalog_manifests)}')
+          if len(tgu_catalog_manifests) != 1:
+              raise SystemExit(f'portfolio_sync_tgu_catalog_manifest_cardinality_invalid:{len(tgu_catalog_manifests)}')
           catalog_manifest_path = catalog_manifests[0]
+          tgu_manifest_path = tgu_catalog_manifests[0]
 
           consumer = json.loads(consumer_path.read_text(encoding='utf-8'))
           business = json.loads(business_path.read_text(encoding='utf-8'))
           manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
           sample = json.loads(sample_path.read_text(encoding='utf-8'))
           catalog_manifest = json.loads(catalog_manifest_path.read_text(encoding='utf-8'))
+          tgu_manifest = json.loads(tgu_manifest_path.read_text(encoding='utf-8'))
 
           if consumer.get('schema') != 'rpi-consumer-mart/v2':
               raise SystemExit('portfolio_sync_consumer_schema_invalid')
@@ -104,21 +120,40 @@ jobs:
               raise SystemExit('portfolio_sync_sample_schema_invalid')
           if manifest.get('source_backend') != 'turso':
               raise SystemExit('portfolio_sync_backend_invalid')
-          if catalog_manifest.get('schema') != 'rpi-consumer-catalog-manifest/v3':
-              raise SystemExit('portfolio_sync_catalog_schema_invalid')
-          if catalog_manifest.get('catalog_schema') != 'rpi-consumer-catalog/v3':
-              raise SystemExit('portfolio_sync_catalog_contract_invalid')
-          if catalog_manifest.get('source_backend') != 'turso':
-              raise SystemExit('portfolio_sync_catalog_backend_invalid')
-          if catalog_manifest.get('scope') != expected_catalog_scope:
-              raise SystemExit('portfolio_sync_catalog_scope_invalid')
-          if catalog_manifest.get('public_boundary') != {
-              'direct_turso_reads': 0,
-              'contains_business_mart': False,
-              'contains_raw': False,
-              'contains_review_queue': False,
-          }:
-              raise SystemExit('portfolio_sync_catalog_boundary_invalid')
+          for current, expected, label in (
+              (catalog_manifest, expected_catalog_scope, 'catalog'),
+              (tgu_manifest, expected_tgu_scope, 'tgu_catalog'),
+          ):
+              if current.get('schema') != 'rpi-consumer-catalog-manifest/v3':
+                  raise SystemExit(f'portfolio_sync_{label}_schema_invalid')
+              if current.get('catalog_schema') != 'rpi-consumer-catalog/v3':
+                  raise SystemExit(f'portfolio_sync_{label}_contract_invalid')
+              if current.get('source_backend') != 'turso':
+                  raise SystemExit(f'portfolio_sync_{label}_backend_invalid')
+              if current.get('scope') != expected:
+                  raise SystemExit(f'portfolio_sync_{label}_scope_invalid')
+              if current.get('public_boundary') != {
+                  'direct_turso_reads': 0,
+                  'contains_business_mart': False,
+                  'contains_raw': False,
+                  'contains_review_queue': False,
+              }:
+                  raise SystemExit(f'portfolio_sync_{label}_boundary_invalid')
+          if tgu_manifest.get('location') != {'city': 'Tegucigalpa', 'country_code': 'HN'}:
+              raise SystemExit('portfolio_sync_tgu_city_invalid')
+          if tgu_manifest.get('initial_files') != ['facets-tgu.json']:
+              raise SystemExit('portfolio_sync_tgu_facets_contract_invalid')
+          context_counts = tgu_manifest.get('context_offer_counts')
+          if (
+              not isinstance(context_counts, list)
+              or len(context_counts) != len(expected_tgu_scope)
+              or [
+                  {'supermarket_id': item.get('supermarket_id'), 'location_id': item.get('location_id')}
+                  for item in context_counts
+              ] != expected_tgu_scope
+              or any(type(item.get('offer_count')) is not int or item['offer_count'] <= 0 for item in context_counts)
+          ):
+              raise SystemExit('portfolio_sync_tgu_context_coverage_invalid')
           if manifest.get('business_schema') != business['schema'] or manifest.get('consumer_schema') != consumer['schema']:
               raise SystemExit('portfolio_sync_schema_crosscheck_invalid')
 
@@ -180,12 +215,31 @@ jobs:
           if hashes.get('business-mart.json') != hashlib.sha256(business_path.read_bytes()).hexdigest():
               raise SystemExit('portfolio_sync_business_hash_mismatch')
 
+          def validate_catalog_files(public_root: Path, public_manifest: dict, prefix: str) -> None:
+              files = public_manifest.get('files')
+              if not isinstance(files, list) or not files:
+                  raise SystemExit(f'{prefix}_files_invalid')
+              if public_manifest.get('visible_rows', 0) <= 0 or public_manifest.get('partition_count', 0) <= 0:
+                  raise SystemExit(f'{prefix}_empty')
+              for item in files:
+                  if not isinstance(item, dict):
+                      raise SystemExit(f'{prefix}_file_invalid')
+                  relative = Path(str(item.get('path', '')))
+                  if relative.is_absolute() or '..' in relative.parts:
+                      raise SystemExit(f'{prefix}_hash_path_invalid')
+                  path = public_root / relative
+                  if not path.is_file():
+                      raise SystemExit(f'{prefix}_file_missing:{relative}')
+                  if hashlib.sha256(path.read_bytes()).hexdigest() != item.get('sha256'):
+                      raise SystemExit(f'{prefix}_hash_mismatch:{relative}')
+                  if path.stat().st_size != item.get('bytes'):
+                      raise SystemExit(f'{prefix}_size_mismatch:{relative}')
+
           catalog_root = catalog_manifest_path.parent
-          catalog_files = catalog_manifest.get('files')
-          if not isinstance(catalog_files, list) or not catalog_files:
-              raise SystemExit('portfolio_sync_catalog_files_invalid')
-          if catalog_manifest.get('visible_rows', 0) <= 0 or catalog_manifest.get('partition_count', 0) <= 0:
-              raise SystemExit('portfolio_sync_catalog_empty')
+          tgu_root = tgu_manifest_path.parent
+          validate_catalog_files(catalog_root, catalog_manifest, 'portfolio_sync_catalog')
+          validate_catalog_files(tgu_root, tgu_manifest, 'portfolio_sync_tgu_catalog')
+
           retailer_counts = catalog_manifest.get('retailer_offer_counts')
           if (
               not isinstance(retailer_counts, dict)
@@ -193,19 +247,6 @@ jobs:
               or any(type(count) is not int or count <= 0 for count in retailer_counts.values())
           ):
               raise SystemExit('portfolio_sync_catalog_retailer_coverage_invalid')
-          for item in catalog_files:
-              if not isinstance(item, dict):
-                  raise SystemExit('portfolio_sync_catalog_file_invalid')
-              relative = Path(str(item.get('path', '')))
-              if relative.is_absolute() or '..' in relative.parts:
-                  raise SystemExit('portfolio_sync_catalog_hash_path_invalid')
-              path = catalog_root / relative
-              if not path.is_file():
-                  raise SystemExit(f'portfolio_sync_catalog_file_missing:{relative}')
-              if hashlib.sha256(path.read_bytes()).hexdigest() != item.get('sha256'):
-                  raise SystemExit(f'portfolio_sync_catalog_hash_mismatch:{relative}')
-              if path.stat().st_size != item.get('bytes'):
-                  raise SystemExit(f'portfolio_sync_catalog_size_mismatch:{relative}')
 
           provenance = {
               'published_at_utc': os.environ['SOURCE_COMPLETED_AT'],
@@ -219,10 +260,12 @@ jobs:
               'manifest': manifest,
               'sample': sample,
               'catalog_manifest': catalog_manifest,
+              'tgu_manifest': tgu_manifest,
           }, ensure_ascii=False).casefold()
           serialized += '\n'.join(
               path.read_text(encoding='utf-8', errors='strict').casefold()
-              for path in catalog_root.rglob('*.json')
+              for root in (catalog_root, tgu_root)
+              for path in root.rglob('*.json')
           )
           for forbidden in ('turso_database_url', 'turso_auth_token', 'database_url', 'auth_token', 'libsql://'):
               if forbidden in serialized:
@@ -237,6 +280,33 @@ jobs:
           if catalog_target.exists():
               shutil.rmtree(catalog_target)
           shutil.copytree(catalog_root, catalog_target)
+          tgu_target = catalog_target / 'cities' / 'tegucigalpa'
+          tgu_target.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copytree(tgu_root, tgu_target)
+          city_index = {
+              'schema': 'rpi-consumer-city-index/v1',
+              'default_city': 'san-pedro-sula',
+              'cities': [
+                  {
+                      'slug': 'san-pedro-sula',
+                      'name': 'San Pedro Sula',
+                      'country_code': 'HN',
+                      'manifest': 'manifest.json',
+                      'store_count': len(expected_catalog_scope),
+                  },
+                  {
+                      'slug': 'tegucigalpa',
+                      'name': 'Tegucigalpa',
+                      'country_code': 'HN',
+                      'manifest': 'cities/tegucigalpa/manifest.json',
+                      'store_count': len(expected_tgu_scope),
+                  },
+              ],
+          }
+          (catalog_target / 'cities.json').write_text(
+              json.dumps(city_index, ensure_ascii=False, separators=(',', ':'), sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
           sample_target.write_text(
               json.dumps(sample, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
               encoding='utf-8',
@@ -250,6 +320,9 @@ jobs:
               'consumer_v3_visible_rows': catalog_manifest['visible_rows'],
               'consumer_v3_source_offers': catalog_manifest['source_offers'],
               'consumer_v3_partitions': catalog_manifest['partition_count'],
+              'consumer_v3_tgu_visible_rows': tgu_manifest['visible_rows'],
+              'consumer_v3_tgu_source_offers': tgu_manifest['source_offers'],
+              'consumer_v3_tgu_partitions': tgu_manifest['partition_count'],
           }, sort_keys=True))
           PY
 
