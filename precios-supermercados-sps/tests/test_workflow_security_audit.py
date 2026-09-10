@@ -99,7 +99,13 @@ def _checkout_identity_with_derived_workflows() -> None:
             assert checkout_steps == []
             continue
         if path.name == base.PORTFOLIO_DATA_SYNC_WORKFLOW:
-            assert checkout_steps == []
+            assert len(checkout_steps) == 1
+            assert checkout_steps[0]["uses"] == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+            assert checkout_steps[0]["with"] == {
+                "ref": "portfolio-data",
+                "path": "portfolio-data",
+                "fetch-depth": "1",
+            }
             continue
         if path.name == base.AUDIT_WORKFLOW:
             assert len(checkout_steps) == 1
@@ -439,18 +445,19 @@ def test_portfolio_data_sync_reuses_safe_artifact_without_turso_reads() -> None:
     assert "rpi-business-mart/v1" in raw
     assert "rpi-marts-manifest/v1" in raw
     assert "portfolio_sync_hash_mismatch" in raw
-    assert "precios-supermercados-sps/published/rpi/consumer-mart.json" in raw
-    assert "precios-supermercados-sps/published/rpi/manifest.json" in raw
-    assert "precios-supermercados-sps/published/rpi/v3/" in raw
+    assert 'published="$repository/precios-supermercados-sps/published/rpi"' in raw
+    assert '"$published/consumer-mart.json"' in raw
+    assert '"$published/manifest.json"' in raw
+    assert '"$published/v3/"' in raw
     assert "precios-supermercados-sps/published/rpi/business-mart.json" not in raw
     assert "precios-supermercados-sps/portfolio/sample-data.json" in raw
-    assert "const dataBranch = 'portfolio-data';" in raw
-    assert "createBlob" in raw
-    assert "createTree" in raw
-    assert "createCommit" in raw
-    assert "updateRef" in raw
-    assert "force: false" in raw
-    assert "sha: null" in raw
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in raw
+    assert "ref: portfolio-data" in raw
+    assert "portfolio_sync_symlink_boundary_invalid" in raw
+    assert 'rm -rf "$published/v3"' in raw
+    assert 'git -C "$repository" add -A --' in raw
+    assert 'git -C "$repository" push origin HEAD:portfolio-data' in raw
+    assert "createBlob" not in raw
     assert "createOrUpdateFileContents" not in raw
     assert "portfolio_sync_secret_material_detected" in raw
     assert "TURSO_DATABASE_URL: ${{ secrets." not in raw
@@ -458,7 +465,6 @@ def test_portfolio_data_sync_reuses_safe_artifact_without_turso_reads() -> None:
     assert "scripts/exportar_modelo_analitico.py" not in raw
     assert "scripts/generar_descriptores_publicacion_segura.py" not in raw
     assert "scripts/exportar_rpi_marts.py" not in raw
-    assert "actions/checkout@" not in raw
     assert "pull_request:" not in raw
     assert "pull_request_target:" not in raw
     assert "issue_comment:" not in raw
