@@ -7,6 +7,8 @@ Precios de Supermercados SPS evolucionó a una plataforma **Retail Price Intelli
 - **Retail Price Intelligence B2B**, servido por `rpi-business-mart/v1` y preparado para Power BI;
 - **Compra Inteligente B2C**, servida por `rpi-consumer-mart/v2` para comparación analítica y `rpi-consumer-catalog/v3` para navegación pública escalable.
 
+Compra Inteligente es un **planificador de compra** basado en precios públicos observados. No es una tienda, no procesa pagos y no representa un checkout de los supermercados.
+
 `PROJECT_STATE.md` describe el estado operativo vigente. Este documento define el contrato funcional del producto.
 
 ## Arquitectura autoritativa
@@ -44,6 +46,14 @@ Cada run se clasifica como:
 
 Un run `REJECTED` no sustituye el último dato válido ni modifica current/history. La ausencia de una fila nunca se convierte automáticamente en precio cero ni en agotado.
 
+## Resiliencia del corte diario
+
+La adquisición productiva diaria está separada por cadena. Cada cadena sólo produce un handoff reutilizable después de superar sus validaciones específicas de ubicación y completitud. La persistencia sigue siendo global y fail-closed: no comienza hasta que todas las cadenas requeridas tienen un handoff aceptado.
+
+Los handoffs quedan ligados al `run_id` y `run_attempt`. Si el run programado termina en `failure` o `timed_out`, las ventanas de recuperación pueden volver a ejecutar los jobs fallidos y sus dependencias, conservando los resultados aceptados de cadenas que ya terminaron bien. El límite operativo es un intento inicial más hasta dos recuperaciones.
+
+Una recuperación no crea un crawl nuevo si no existe el run programado del día y no convierte un resultado parcial en estado comercial aceptado.
+
 ## Homologación y comparabilidad
 
 La comparación cross-retailer exige identidad fuerte y consistencia comercial. GTIN/EAN válido común puede sostener una equivalencia si no existen contradicciones; nombres, marca y presentación por sí solos no bastan.
@@ -57,6 +67,8 @@ Una métrica competitiva sólo se calcula si existe:
 5. fuentes dentro de la ventana temporal comparable.
 
 Toda salida competitiva declara cobertura, `as_of` y freshness. Empates reales se conservan.
+
+Los candidatos por similitud, conflictos comerciales con un mismo GTIN y gaps de taxonomía pueden materializarse en una cola privada de revisión humana. Esa cola no autoriza comparación por sí sola y no forma parte de la publicación B2C.
 
 ## Freshness
 
@@ -142,9 +154,11 @@ La aplicación responsive permite:
 - agrupación por supermercado;
 - actualización explícita de precios;
 - faltantes/no disponibles visibles sin sustitución silenciosa;
+- estado visible del último corte público aceptado;
 - comparación de escenario manual, un solo supermercado y split optimizado seguro;
 - historial resumido por oferta;
 - exportación local CSV/PDF;
+- compartir `Mi Compra` por WhatsApp con cantidades, precios, promociones, subtotales, total y advertencias aplicables;
 - checklist comprado/pendiente.
 
 ## Contrato monetario
