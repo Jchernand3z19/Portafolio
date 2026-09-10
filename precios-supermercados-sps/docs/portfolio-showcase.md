@@ -1,169 +1,184 @@
 # Presentación del proyecto en el portafolio
 
-Este documento define qué información de `precios-supermercados-sps` se muestra públicamente, de dónde sale y qué límites de interpretación deben respetarse.
+Este documento define cómo presentar públicamente `precios-supermercados-sps` sin reducirlo a “un scraper” ni exagerar lo que los datos permiten afirmar.
 
-## Prioridad de presentación
+## Identidad del proyecto
 
-Desde el 4 de septiembre de 2026, **Precios de Supermercados** es el proyecto principal del portafolio y comunica explícitamente la capacidad de **Web Scraping**. **Mundial 2026** permanece como segundo proyecto independiente.
+Nombre recomendado:
 
-Orden público:
+**Retail Price Intelligence — Compra Inteligente**
 
-1. Precios de Supermercados — Web Scraping, automatización e inteligencia de precios.
-2. Mundial 2026.
+Descripción corta:
 
-## Cifras públicas verificadas
+> Plataforma de inteligencia de precios que captura, valida e historiza catálogos públicos de supermercados y los transforma en comparación segura, análisis histórico y una experiencia de compra para San Pedro Sula.
 
-El portafolio debe reflejar el último estado productivo confirmado en `PROJECT_STATE.md`. Hasta que una ejecución más reciente termine y sea verificada, el corte público vigente es:
+El **web scraping** sigue siendo una capacidad técnica importante y demostrable, pero es la capa de adquisición, no el producto completo.
 
-| Métrica | Valor exacto de soporte | Valor mostrado |
-| --- | ---: | ---: |
-| Supermercados / cadenas productivas | 6 | 6 |
-| Ubicaciones monitoreadas | 11 | 11 |
-| Productos registrados | 58,114 | 58K+ |
-| Periodos históricos de precio | 127,980 | 127K+ |
-| Ciudades con cobertura integrada | 2 | 2 |
+## Producto público actual
 
-### Cobertura por supermercado
+Compra Inteligente permite navegar precios publicados para cinco contextos SPS:
 
-| Supermercado | Ubicaciones con datos productivos aceptados |
-| --- | --- |
-| La Colonia | SPS, Tegucigalpa |
-| Supermercados Colonial | SPS |
-| Walmart | SPS, TGU FFAA, TGU El Sauce |
-| PriceSmart | SPS 6603, Florencia 6602 |
-| Comisariato Los Andes | SPS |
-| Paiz | TGU Multiplaza, TGU Próceres |
+- La Colonia;
+- Supermercados Colonial;
+- Walmart;
+- PriceSmart;
+- Comisariato Los Andes.
 
-La interfaz muestra las seis cadenas. La cobertura de scraping **no equivale** a cobertura de comparación cross-source.
+La publicación Consumer Catalog v3 verificada el **2026-09-10** contiene, como snapshot medido y no como cifra permanente:
 
-## Extracción web comprobable
+| Métrica | Valor observado |
+| --- | ---: |
+| Filas visibles | 44,042 |
+| Ofertas fuente | 46,680 |
+| Filas comparables | 2,638 |
+| `single_source` | 11,846 |
+| Ofertas individuales | 29,558 |
+| Particiones públicas | 484 |
+| Máximo por partición | 250 filas |
+| Ofertas con resumen histórico | 45,420 |
 
-La interfaz mantiene una prueba pública concreta de que el proyecto obtiene datos desde una web real.
+El payload inicial del catálogo medido en ese corte es 37,796 bytes sin comprimir / 4,957 bytes gzip y dos requests iniciales. Los índices/particiones se cargan bajo demanda.
 
-Captura aceptada de **Comisariato Los Andes**:
+## Qué puede hacer el usuario
 
-- sitio público: <https://comisariatolosandes.com/>;
-- ciudad: San Pedro Sula;
-- captura: `2026-09-04T01:44:35.172709Z`;
-- productos con precio: `6,646`;
-- promociones detectadas: `120`;
-- artifact de GitHub Actions: `9920279680`;
-- snapshot SHA-256: `a1fe77e3c3132c96c01f7cd792084d47ae25fbb09e3eb69fb67b230d5f09f9fc`;
-- evidencia versionada: [`../reports/comisariato-los-andes/2026-09-04-full/`](../reports/comisariato-los-andes/2026-09-04-full/README.md);
-- metadatos públicos reducidos: [`../portfolio/scraping-proof.json`](../portfolio/scraping-proof.json).
+- filtrar por categoría, producto, marca y presentación;
+- buscar productos;
+- revisar una matriz de cinco supermercados;
+- elegir manualmente la oferta exacta que quiere comprar;
+- indicar cantidades;
+- agregar varios productos por lote;
+- conservar `Mi Compra` en el dispositivo;
+- ver la lista agrupada por supermercado;
+- detectar cambios de precio y actualizarlos sólo de forma explícita;
+- ver faltantes/no disponibles sin sustitución silenciosa;
+- comparar su selección con escenarios de un solo supermercado o split optimizado seguro;
+- consultar contexto histórico por oferta;
+- exportar la compra a CSV/PDF.
 
-La página enlaza tres niveles de comprobación: fuente web, evidencia aceptada y código. No publica credenciales, cookies ni el dataset productivo completo.
+## Historia y promociones
 
-## Comparación cross-source: política pública
+Cuando existe evidencia suficiente, cada oferta puede mostrar:
 
-La comparación directa de precios entre supermercados es fail-closed.
+- precio observado anterior;
+- promedio 30/90 días;
+- mínimo/máximo de ventana;
+- posición histórica;
+- promoción declarada por la fuente;
+- reducción histórica observada.
 
-La antigua muestra de 10 productos entre Comisariato Los Andes y Supermercados Colonial se retiró porque la regla utilizada —**misma marca + misma presentación/cantidad**— no demuestra que dos registros sean el mismo producto comercial. En particular, `Passion Jaguar` y `Passion Especial` no deben transformarse en una comparación automática sólo porque comparten marca y presentación.
+Promoción declarada y reducción real histórica son señales distintas. `reported_regular_price` es referencia y no se convierte en un precio histórico inventado.
 
-Por tanto:
+## Comparación segura
 
-- la rama `portfolio-data` publica 10 filas seleccionadas de 92 productos que superaron el gate seguro entre La Colonia SPS y Walmart SPS;
-- [`../portfolio/sample-data.json`](../portfolio/sample-data.json) permanece vacío como fallback local fail-closed, mientras producción consume el archivo versionado de `portfolio-data`;
-- una fila que no supera el gate no muestra “mejor precio” y no se interpreta como precio cero, empate ni ausencia del supermercado;
-- una coincidencia textual puede servir como candidato de revisión, pero no como autorización analítica.
+La cobertura visible no equivale a cobertura comparable.
 
-La política que autoriza una comparación exige identidad fuerte y coherencia de marca, tipo, presentación y descriptores comerciales. El detalle está en [`COMPARATOR-METHODOLOGY.md`](COMPARATOR-METHODOLOGY.md).
+Una oferta puede mostrarse como `individual` o `single_source` aunque no exista evidencia suficiente para compararla cross-retailer. Sólo Python autoriza equivalencias y recomendaciones; la web no hace matching por nombre, marca o presentación.
 
-El contrato público derivado es [`PUBLICATION-DATA-DICTIONARY.md`](PUBLICATION-DATA-DICTIONARY.md). Los consumidores —incluido Power BI— no vuelven a reconstruir matching por nombre, marca o presentación.
+Reglas públicas:
 
-## Evidencia analítica segura que sí puede mostrarse
+- no afirmar equivalencia por marca + presentación;
+- no mostrar ranking/“mejor precio” si la comparación está bloqueada;
+- conservar empates reales;
+- no convertir ausencia en precio cero;
+- no esconder staleness;
+- no presentar una canasta incompleta como total completo.
 
-La publicación cross-source vigente contiene 92 productos y 184 ofertas con identidad fuerte y precio utilizable en ambas ubicaciones del alcance. La muestra pública expone 10 filas, conserva GTIN canónico y descriptores fuente, y fue sincronizada por el run `34250590641` desde el artifact analítico `10065801433`.
+Metodología: [`COMPARATOR-METHODOLOGY.md`](COMPARATOR-METHODOLOGY.md).
 
-El portafolio también puede mostrar hallazgos reproducibles donde la identidad ya está demostrada dentro de una misma cadena.
-
-### Walmart TGU
-
-La comparación exhaustiva de FFAA y El Sauce usa identidad `walmart + item_id + source_key`, no matching por nombre o EAN. Evidencia: [`../reports/walmart/2026-08-31-full/TGU-COMPARISON.md`](../reports/walmart/2026-08-31-full/TGU-COMPARISON.md).
-
-Resultados respaldados:
-
-- 12,867 identidades compartidas;
-- 12,042 artículos con efectivo, regular y promoción conocidos en ambos contextos;
-- 11,787 iguales en los tres campos comerciales;
-- 255 con al menos una diferencia comercial;
-- 218 con diferente `current_price`.
-
-Estas cifras son evidencia intra-cadena; no se presentan como matching entre supermercados diferentes.
-
-### PriceSmart
-
-Puede mantenerse el hallazgo versionado de `115` artículos con diferencia de precio actual entre dos clubes dentro del universo documentado de `5,129` productos con precio en ambos, siempre que la interfaz conserve su procedencia intra-cadena y el corte histórico correspondiente.
-
-### Comisariato Los Andes
-
-La captura pública demostrable registra `120` promociones dentro de `6,646` productos con precio.
-
-## Qué debe comunicar la interfaz
-
-Lectura principal:
+## Contrato de Mi Compra
 
 ```text
-Sitios web
-   ↓
-Web Scraping
-   ↓
-Validación
-   ↓
-Histórico
-   ↓
-Homologación
-   ↓
-Gate seguro de comparación
-   ↓
-Analítica / publicación
+unit_price = current_price
+line_total = unit_price * quantity
+retailer_subtotal = sum(line_total)
+grand_total = sum(retailer_subtotal)
 ```
 
-La tarjeta y el detalle usan explícitamente `Web Scraping`, `Python`, `Playwright` y `GitHub Actions` para que la habilidad sea visible.
+No se infieren impuestos, ISV, delivery, service fees o membership fees. Los precios pueden cambiar en tienda.
 
-La sección de cobertura productiva muestra todas las cadenas antes de cualquier resultado analítico. Una sección de comparación vacía debe explicar que el bloqueo es una decisión de calidad de datos, no ocultar la ausencia con una tabla dudosa.
+## Evidencia técnica
+
+La plataforma conserva seis cadenas / once contextos productivos en el pipeline recurrente general, mientras el producto B2C público está deliberadamente limitado a cinco contextos SPS.
+
+El portafolio puede enlazar:
+
+1. la experiencia Compra Inteligente;
+2. el código del proyecto;
+3. evidencia versionada de captura y validación;
+4. documentación de metodología.
+
+La prueba histórica de Comisariato Los Andes permanece válida como evidencia de adquisición web, pero no debe dominar la narrativa del producto.
+
+## Producto B2B
+
+El proyecto también demuestra una capa **Retail Price Intelligence B2B** mediante `rpi-business-mart/v1` y activos reproducibles de Power BI.
+
+El Business Mart incluye:
+
+- comparación actual;
+- histórico de precios;
+- promociones;
+- canastas;
+- cobertura;
+- freshness.
+
+Power BI consume estas métricas ya calculadas por Python; no reconstruye matching ni reglas críticas en DAX.
+
+## Narrativa recomendada
+
+```text
+Catálogos públicos
+  ↓
+Captura automatizada
+  ↓
+Validación / último dato válido
+  ↓
+Histórico
+  ↓
+Homologación conservadora
+  ↓
+Inteligencia de precios en Python
+  ↓
+Business Mart + Consumer Mart/Catalog
+  ↓
+Power BI + Compra Inteligente
+```
+
+El valor a comunicar es la transformación completa de información pública dispersa en un producto de datos confiable y utilizable.
 
 ## Capacidades demostradas
 
-- **Web Scraping:** extracción automatizada desde sitios web y catálogos públicos.
-- **Automatización:** workflows reproducibles y controlados.
-- **Homologación conservadora:** identidad fuerte + reglas de coherencia, no marca/presentación como sustituto de identidad.
-- **Histórico:** periodos comerciales aceptados y trazables.
-- **Analítica:** mejores precios, canastas, variabilidad y cambios sólo sobre universo comparable.
-- **Publicación BI:** JSON/CSV derivados sin secretos y con denominadores explícitos.
+- Web scraping multi-fuente.
+- Automatización con GitHub Actions.
+- Persistencia e histórico de precios.
+- Control de calidad fail-closed y last-known-good.
+- Homologación conservadora de productos.
+- Analítica competitiva e histórica.
+- Diseño de data marts B2B/B2C.
+- Power BI reproducible.
+- Aplicación web responsive con estado local y exportaciones.
+- Publicación estática validada por hashes y sin secretos.
 
-## Reglas de comunicación
+## Reglas para el portafolio
 
-1. Mostrar primero problema, evidencia y valor; dejar almacenamiento al final.
-2. Decir `Web Scraping` explícitamente cuando esté respaldado.
-3. Enlazar fuente, evidencia y código.
-4. Mostrar todas las cadenas con datos aceptados en cobertura.
-5. No afirmar equivalencia cross-source por marca + presentación.
-6. No mostrar `best_price` para grupos `review_required` o `not_comparable`.
-7. Un universo comparable vacío no tiene supermercado ganador.
-8. Reconocer empates reales como empates, no forzar un único ganador visual.
-9. No presentar productos seleccionados como canasta básica oficial.
-10. No presentar precios históricos como tiempo real.
-11. No cargar dataset productivo completo, secretos, cookies, tokens o RAW sensible en el navegador.
-12. No presentar funcionalidades futuras como terminadas.
-13. Toda cifra nueva debe provenir de una ejecución aceptada e integrada; un PR abierto o una captura rechazada no actualiza el estado público.
+1. Presentar primero el producto y el valor, luego la tecnología.
+2. Usar `Retail Price Intelligence` / `Compra Inteligente` como identidad principal.
+3. Mostrar web scraping como capacidad, no como límite del proyecto.
+4. Cualquier cifra debe incluir o derivar de un corte aceptado; las cifras anteriores son el snapshot publicado del 2026-09-10.
+5. Distinguir “visible” de “comparable”.
+6. No inventar ahorro, impuestos, tiempo real ni disponibilidad.
+7. No publicar secretos, RAW, cookies, tokens o colas de revisión.
+8. No presentar funciones futuras como terminadas.
+9. Si el último ciclo productivo falla, conservar el último corte válido en vez de reemplazarlo con datos parciales.
 
-## Power BI
+## Archivos coordinados
 
-La implementación reproducible se documenta en [`BI-IMPLEMENTATION-GUIDE.md`](BI-IMPLEMENTATION-GUIDE.md) y los activos versionables viven en [`../powerbi/`](../powerbi/).
-
-Power BI consume datos que ya pasaron el gate. DAX/Power Query no deben convertirse en una segunda implementación del matching.
-
-## Actualización coordinada
-
-Cuando cambie una cifra, evidencia o comparación pública, revisar conjuntamente:
+Cuando cambie el producto público, revisar conjuntamente:
 
 - `docs/PROJECT_STATE.md`;
-- `portfolio/scraping-proof.json`;
-- `portfolio/sample-data.json`;
-- `portfolio/precios-portfolio.js` y adaptadores de estado;
-- este documento;
+- `docs/RPI-PRODUCT-SPEC.md`;
+- `docs/RPI-DATA-MART-DICTIONARY.md`;
+- `portfolio/`;
+- `b2c/`;
 - README del proyecto;
-- README raíz cuando cambie el alcance público.
-
-No se actualiza una cifra pública hasta que la ejecución correspondiente sea terminal, aceptada y comprobada.
+- README raíz si cambia la descripción pública.

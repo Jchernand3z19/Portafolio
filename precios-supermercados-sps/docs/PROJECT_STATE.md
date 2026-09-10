@@ -1,269 +1,164 @@
-# Estado actual — Precios de Supermercados SPS
+# Estado actual — Retail Price Intelligence / Precios de Supermercados SPS
 
-GitHub `main`, Pull Requests, Actions, artifacts y Turso son la fuente de verdad técnica. Este archivo resume el estado **vigente** del proyecto. El snapshot histórico anterior al cierre de Los Andes y Paiz se conserva en [`PROJECT_STATE_HISTORY_2026-09-02.md`](PROJECT_STATE_HISTORY_2026-09-02.md).
+GitHub `main`, GitHub Actions, los artifacts productivos, Turso y la rama `portfolio-data` son la fuente de verdad técnica. Este archivo contiene únicamente el estado **vigente**; los hitos e incidentes anteriores se conservan en los snapshots y documentos históricos del proyecto.
 
-## Estado vigente — 2026-09-10
+## Checkpoint vigente — 2026-09-10
 
-Compra Inteligente B2C usa el catálogo público particionado
-`rpi-consumer-catalog/v3`. El último artifact seguro verificado, del run
-[`34420997377`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34420997377),
-contiene **44,042 filas visibles, 46,680 ofertas, 2,638 filas comparables,
-11,846 single-source y 29,558 ofertas individuales** para el alcance SPS exacto:
-La Colonia, Colonial, Walmart, PriceSmart y Comisariato Los Andes. El payload
-inicial medido es 37,796 bytes sin comprimir, 4,957 bytes gzip y dos requests
-(manifest + facetas). Visibilidad y comparabilidad permanecen separadas.
+El producto está operativo como **Retail Price Intelligence (RPI)** con dos superficies principales:
 
-La interfaz vNext consume manifest, facetas, índices y particiones con SHA-256;
-no consulta Turso ni ejecuta matching en JavaScript. Incluye filtros dependientes,
-matriz de cinco supermercados, tarjetas responsive, selección manual por radio,
-cantidades por producto, alta por lote con confirmación de conflictos, lista
-local agrupada, refresh exacto, checklist, exportación CSV/PDF y escenarios de
-canasta fail-closed. El exportador Python agrega resumen histórico por oferta con
-precio anterior, ventanas 30/90 días, mínimos/máximos y posición humana. `Mi
-Compra` calcula exclusivamente con `current_price`; el precio regular, impuestos
-inferidos y cargos de checkout no alteran los totales.
+- **Compra Inteligente B2C**, una experiencia web responsive para navegar precios públicos, comparar ofertas seguras y organizar una compra;
+- **Business Mart B2B**, un contrato analítico reproducible para Power BI con comparación actual, histórico de precios, promociones, cobertura y freshness.
 
-Los PR [#446](https://github.com/Jchernand3z19/Portafolio/pull/446) a
-[#450](https://github.com/Jchernand3z19/Portafolio/pull/450) dejaron integrado el
-catálogo v3, la semántica nullable de promoción, el payload inicial reducido, la
-navegación alineada con particiones y el sync atómico escalable de
-`portfolio-data`. La ejecución productiva que regenere la publicación con el
-nuevo resumen histórico permanece pendiente de autorización humana exacta; no
-se reutiliza una autorización temporal anterior.
+La adquisición, normalización, histórico y homologación siguen siendo una sola base compartida. La lógica monetaria y de comparabilidad autoritativa permanece en Python; ni Power BI ni el navegador crean equivalencias nuevas.
 
-El proyecto mantiene seis cadenas productivas y once ubicaciones demostradas:
+## Contratos vigentes
 
-| Cadena | Ubicaciones productivas demostradas |
+| Contrato | Estado | Uso |
+| --- | --- | --- |
+| `rpi-business-mart/v1` | vigente, privado | Power BI / analítica B2B |
+| `rpi-consumer-mart/v2` | vigente, público | comparación analítica segura y escenarios B2C |
+| `rpi-consumer-catalog/v3` | vigente, público | navegación escalable de Compra Inteligente |
+| `rpi-marts-manifest/v1` | vigente | integridad, schemas, scope y SHA-256 |
+| `rpi-consumer-catalog-manifest/v3` | vigente | integridad y serving del catálogo particionado |
+
+Los contratos `precios-sps-publication/v1` y `precios-sps-static-bi-dataset/v1` se conservan por compatibilidad/historial, pero ya no son la arquitectura RPI principal.
+
+## Publicación B2C verificada
+
+La publicación posterior al PR #451 está materializada en `portfolio-data`. El Consumer Catalog v3 publicado el **2026-09-10** declara:
+
+- `as_of = 2026-09-10T16:21:00.121554Z`;
+- **44,042 filas visibles**;
+- **46,680 ofertas fuente**;
+- 2,638 filas comparables;
+- 11,846 filas `single_source`;
+- 29,558 filas individuales;
+- 484 particiones, con máximo de 250 filas por partición;
+- 45,420 ofertas con resumen histórico;
+- payload inicial de 37,796 bytes sin comprimir / 4,957 bytes gzip;
+- dos requests iniciales: manifest + facetas.
+
+El alcance público B2C es exactamente:
+
+| Cadena | Contexto SPS |
+| --- | --- |
+| La Colonia | `la_colonia_sps` |
+| Colonial | `colonial_sps` |
+| Walmart | `walmart_sps` |
+| PriceSmart | `pricesmart_sps` |
+| Comisariato Los Andes | `comisariato_los_andes_sps` |
+
+Las cinco fuentes figuraban `FRESH` en ese corte. La publicación separa **visibilidad** de **comparabilidad**: un producto puede mostrarse individualmente aunque no exista evidencia suficiente para compararlo con otra cadena.
+
+El Consumer Mart v2 publicado en el mismo ciclo quedó `COMPARABLE`, con 92 productos en el universo analítico seguro de La Colonia SPS + Walmart SPS y política `fail_closed_strong_identity_and_commercial_consistency`.
+
+## Compra Inteligente
+
+La interfaz pública consume únicamente archivos estáticos publicados y valida tamaños/SHA-256. No consulta Turso y no hace matching en JavaScript.
+
+Está implementado:
+
+- navegación por facetas dependientes;
+- matriz de cinco supermercados SPS;
+- búsqueda y tarjetas responsive;
+- selección manual de oferta exacta;
+- cantidades por producto;
+- alta por lote con confirmación de conflictos;
+- `Mi Compra` persistida localmente y agrupada por supermercado;
+- actualización explícita de precios sin sustitución silenciosa de retailer;
+- manejo visible de precios cambiados, faltantes o no disponibles;
+- escenarios de canasta manual, por un solo supermercado y optimización por mejor precio seguro;
+- contexto histórico por oferta: precio anterior, 30/90 días, mínimos, máximos y posición histórica;
+- exportación local CSV y PDF.
+
+Contrato monetario:
+
+```text
+unit_price = current_price
+line_total = unit_price * quantity
+retailer_subtotal = sum(line_total)
+grand_total = sum(retailer_subtotal)
+```
+
+`reported_regular_price` es sólo referencia. No se inventan ISV, impuestos, delivery, service fees, membership fees ni otros cargos de checkout. Si una línea no tiene precio utilizable, los totales dependientes quedan incompletos; nunca se imputa cero.
+
+## Business Mart y Power BI
+
+`rpi-business-mart/v1` incluye:
+
+- dimensiones de producto, retailer, ubicación, categoría y marca;
+- `fact_current_comparison`;
+- `fact_price_history` sobre periodos comerciales realmente persistidos;
+- `fact_promotion_analysis`;
+- `fact_basket_cost`;
+- `fact_metric_coverage`;
+- `source_freshness`.
+
+Los cambios de precio, PCI, ranking, deltas, freshness y semántica promocional/histórica se calculan en Python. Los activos reproducibles de `powerbi/rpi/` contienen Power Query, DAX, relaciones, tema y especificación de las nueve páginas. El repositorio **no fabrica ni versiona un `.pbix` simulado**: un PBIX final, si se desea como archivo binario de presentación, se construye en Power BI Desktop a partir de esos activos.
+
+## Operación recurrente
+
+El workflow `.github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml` corre diariamente a `17 11 * * *` (05:17 `America/Tegucigalpa`) y cubre seis cadenas / once contextos productivos demostrados:
+
+| Cadena | Ubicaciones/contextos productivos |
 | --- | --- |
 | La Colonia | SPS, Tegucigalpa |
 | Colonial | SPS |
 | Walmart | SPS, TGU FFAA, TGU El Sauce |
-| PriceSmart | SPS 6603, Florencia 6602 |
+| PriceSmart | SPS 6603, TGU Florencia 6602 |
 | Comisariato Los Andes | SPS |
 | Paiz | TGU Multiplaza, TGU Próceres |
 
-El ciclo productivo completo más reciente dejó **6 supermercados, 11 ubicaciones, 58,114 productos, 127,980 periodos de `price_history` y 463 `scrape_runs`**. La verificación posterior confirmó cero periodos actuales duplicados, cero violaciones de claves foráneas y `PRAGMA integrity_check = ok`.
+La última corrida programada completamente verde fue el run `34368332245` del **2026-09-09**.
 
-La evolución de producto vigente está definida en
-[`RPI-PRODUCT-SPEC.md`](RPI-PRODUCT-SPEC.md): una sola adquisición y estado
-comercial confiable alimentan Retail Price Intelligence B2B (Power BI) y Compra
-Inteligente B2C (web responsive). La primera frontera compartida ya está
-versionada en `analytics_quality.py`: mantiene completeness separado de health,
-clasifica `ACCEPTED/DEGRADED/REJECTED`, selecciona last-known-good y bloquea
-comparaciones con fuentes stale, unavailable o temporalmente incompatibles. Su
-integración a los marts/publicación sigue siendo incremental. La capa Python
-`competitive_analytics.py` ya calcula PCI configurable (mean, median o mínimo),
-rank, spread y cobertura sólo cuando la ventana de mercado es comparable. El
-dataset público vigente aún conserva el contrato v1 descrito abajo y por eso no
-expone todavía esas nuevas métricas.
+El run programado `34492865834` del **2026-09-10** falló de forma segura durante la captura de Comisariato Los Andes por un timeout de transporte en `page-00200.json`. La compuerta global bloqueó la persistencia, por lo que ese intento no reemplazó el último estado comercial válido con datos parciales.
 
-El módulo histórico conserva observaciones reales sin interpolación y ya deriva
-mediana, duración observada, frecuencia de cambios, volatilidad y días desde el
-último cambio. Las ventanas 7/30/60/90/365 días exigen una observación baseline
-anterior al inicio solicitado; cuando no existe, devuelven
-`insufficient_history` en vez de acortar silenciosamente el periodo.
+El PR **#455** (`[RPI] Retry transient Los Andes timeouts safely`) fue fusionado el 2026-09-10. Los Andes ahora permite **un único reintento por solicitud sólo para errores transitorios de transporte**, con máximo diez reintentos acumulados y dentro del presupuesto existente de intentos. No se reintentan errores HTTP y las reglas de completitud/fail-closed no se relajaron.
 
-`promotion_analytics.py` mantiene separadas la promoción declarada por la fuente
-y la reducción contra el precio efectivo observado anteriormente. Calcula
-profundidad declarada, duración, frecuencia, share, comparación contra promedios
-30/90 días y mínimo 90 días, y devuelve estados auditables; nunca eleva
-`reported_regular_price` a evidencia histórica.
+**Pendiente operativo único:** observar una siguiente ejecución programada con el ajuste #455 para confirmar el ciclo end-to-end en producción. No hace falta otro cambio de producto para esa comprobación y no se debe provocar scraping live adicional sólo para obtener evidencia.
 
-`shopping_analytics.py` fija el contrato monetario B2C antes de la UI:
-`unit_price=current_price`, cantidades enteras positivas, líneas y subtotales en
-minor units, selección manual inmutable y optimización separada. Una canasta con
-un ítem no disponible queda `INCOMPLETE` y su total es `null`; no imputa cero,
-no usa el precio regular y no admite impuestos o cargos de checkout dentro de
-la oferta.
+## Autoridad live y binding SPS
 
-`rpi_data_marts.py` proyecta la misma salida segura a contratos separados
-`rpi-business-mart/v1` y `rpi-consumer-mart/v1`. Ambos comparten scope, freshness
-y cobertura; el mart privado conserva hechos competitivos y el público sólo los
-descriptores/ofertas necesarios. Si la ventana está bloqueada, el último precio
-válido sigue visible con su staleness, mientras `rank`, PCI y métricas de mercado
-quedan nulos.
+La evidencia histórica o una autorización temporal consumida **no se interpreta como autorización abierta**. Cualquier nueva observación live fuera de los workflows productivos ya autorizados por su ejecución recurrente **requiere autorización humana explícita vigente** para ese alcance.
 
-El exportador offline/read-only `scripts/exportar_rpi_marts.py` materializa ambos
-contratos en JSON y el Business Mart en CSV, escribe de forma atómica y registra
-SHA-256 por archivo. Consulta el último `scrape_runs.run_status='success'` por
-scope y excluye runs rechazados de last-known-good. La publicación automática de
-estos nuevos artifacts aún no sustituye la publicación v1 vigente.
-
-`powerbi/rpi/` contiene el modelo B2B reproducible sobre
-`rpi-business-mart/v1`: una sola consulta local, dimensiones/hechos, relaciones,
-medidas freshness-aware, tema reutilizado y especificación de las nueve páginas.
-No incluye un PBIX simulado. Price Movements y la reducción histórica promocional
-mantienen estados vacíos explícitos hasta que el mart publique esos facts.
-
-No se inventan ubicaciones cuando la fuente no las demuestra. Paiz no tiene un contexto selector SPS aceptado; sus dos contextos demostrados siguen siendo Multiplaza y Próceres en Tegucigalpa. PriceSmart El Sauce 6604 permanece excluido. Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
-
-## Operación recurrente vigente
-
-El workflow `.github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml` corre a `17 11 * * *`, equivalente a **05:17 America/Tegucigalpa**, y actualmente incluye las seis cadenas productivas:
-
-1. La Colonia SPS.
-2. La Colonia TGU.
-3. Comisariato Los Andes SPS.
-4. Paiz Multiplaza TGU y Próceres TGU.
-5. Colonial SPS.
-6. Walmart SPS, TGU FFAA y TGU El Sauce.
-7. PriceSmart SPS 6603 y TGU Florencia 6602.
-
-El workflow es **fail-closed**: todas las descargas pueden terminar y publicar evidencia, pero ninguna persistencia ocurre si una sola fuente no supera sus validaciones de completitud, identidad y cobertura.
-
-## Última corrida productiva completa — PASS
-
-Workflow: [`La Colonia - Actualización MVP`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34242670410)
-
-Run ID: `34242670410`
-
-Evento: `workflow_dispatch`
-
-Commit ejecutado: `22a9bd6df01f98442ba50bfe8e539f0f331bb43c`
-
-Resultado final: **success**.
-
-Las seis cadenas terminaron con código de salida `0` y la compuerta global aceptó los once snapshots antes de cualquier escritura:
-
-| Ubicación | Productos fuente | SKU procesados | SKU con precio |
-| --- | ---: | ---: | ---: |
-| La Colonia SPS | 9,473 | 9,475 | 9,475 |
-| La Colonia TGU | 9,504 | 9,506 | 9,506 |
-| Comisariato Los Andes SPS | 6,688 | 6,688 | 6,688 |
-| Colonial SPS | 9,232 | 9,238 | 9,238 |
-| Walmart SPS | 14,114 | 14,119 | 13,733 |
-| Walmart TGU FFAA | 14,655 | 14,660 | 14,119 |
-| Walmart TGU El Sauce | 14,511 | 14,516 | 13,965 |
-| PriceSmart SPS 6603 | 2,785 | 6,103 | 5,430 |
-| PriceSmart TGU Florencia 6602 | 2,785 | 6,103 | 5,273 |
-| Paiz TGU Multiplaza | 8,856 | 8,860 | 8,605 |
-| Paiz TGU Próceres | 8,595 | 8,599 | 8,356 |
-
-El preflight Turso clasificó los once `run_id` como `new`. Cada transacción persistió el snapshot completo y el postflight encontró los once runs con estado `success`, SHA fuente exacto y alcance correcto. El estado actual quedó en:
-
-| Ubicación | Periodos actuales abiertos |
-| --- | ---: |
-| La Colonia SPS | 9,521 |
-| La Colonia TGU | 9,550 |
-| Comisariato Los Andes SPS | 6,724 |
-| Colonial SPS | 9,239 |
-| Walmart SPS | 14,772 |
-| Walmart TGU FFAA | 15,267 |
-| Walmart TGU El Sauce | 15,137 |
-| PriceSmart SPS 6603 | 6,261 |
-| PriceSmart TGU Florencia 6602 | 6,261 |
-| Paiz TGU Multiplaza | 9,007 |
-| Paiz TGU Próceres | 8,782 |
-
-Los Andes conserva observaciones previas con disponibilidad `unknown`; por eso su estado actual puede ser un superset del snapshot sin interpretar ausencias como `out_of_stock`. El postflight exige alcance exacto, run/SHA exactos, cero duplicados y un conteo abierto no menor que el snapshot.
-
-La evidencia durable está en el artifact `supermercados-mvp-34242670410`, ID `10065247638`, tamaño `74,492,002` bytes y digest `sha256:6d3b1ea69c13bbf6e6f66cc9ef71a144be473d00bb7b4d8774a5afba07c33894`. Expira el `2026-09-22T16:07:37Z`.
-
-Una ejecución programada que GitHub había dejado en espera comenzó al liberarse la concurrencia. Se canceló como duplicada en el run `34242996370` durante la primera captura SPS; la compuerta, Turso y todos los pasos de persistencia quedaron `skipped`.
-
-## Homologación productiva
-
-La capa `product_homologation_profiles` continúa siendo derivada y separada del histórico comercial. El backfill y el refresh diferencial son fail-closed, comparan `profile_hash` + `normalization_version`, escriben sólo deltas reales y convierten una recalculación sin cambios en un no-op verificable.
-
-El run [`34249578797`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34249578797) procesó los 58,114 productos posteriores al ciclo: insertó 1,335 perfiles, actualizó 1,011 y dejó 55,768 sin cambio. No modificó `products`, `price_history` ni `scrape_runs`; confirmó cero periodos actuales duplicados, cero FKs inválidas e integridad correcta.
-
-Después del ajuste operativo de publicación, el run [`34250440140`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34250440140) repitió el refresh sobre el SHA final `7ae45f1dc39032180c82df10a1bb77e58451995a` y demostró un no-op real: 58,114 perfiles sin cambio, cero inserts, cero updates y sin staging escrito.
-
-Después de una ejecución exitosa de `La Colonia - Actualización MVP` sobre `main`, `.github/workflows/precios-supermercados-sps-homologation-refresh.yml` debe procesar el commit exacto de la corrida fuente antes de permitir la publicación analítica segura.
-
-## Publicación analítica segura y portafolio
-
-La analítica pública sigue una política estricta:
+El entrypoint manual de binding de ubicación permanece cerrado por defecto y no tiene autorizaciones activas:
 
 ```text
-fail_closed_strong_identity_and_commercial_consistency
-```
-
-El alcance público comparativo vigente está limitado a **La Colonia SPS + Walmart SPS** y sólo publica equivalencias con identidad fuerte y consistencia comercial. No se fuerzan matches para aumentar el número de comparaciones.
-
-PR #399 incorporó la muestra web estática en la rama dedicada `portfolio-data`.
-
-PR [#401](https://github.com/Jchernand3z19/Portafolio/pull/401), merge commit `21c3471bf8ad4ebfd1c290a3ae5dbe9b15b50ad7`, extendió esa sincronización para que portafolio y Power BI reutilicen **el mismo artifact de analítica segura**, sin nuevas consultas a Turso. El flujo valida schemas, policy, scope, conteos, identidades y ausencia de secretos antes de publicar.
-
-La publicación final [`34250535657`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34250535657) produjo 92 productos comparables, 184 ofertas, una canasta común de 92 productos y una muestra pública de 10 filas. Conservó la política `fail_closed_strong_identity_and_commercial_consistency` y el alcance exacto La Colonia SPS + Walmart SPS. Su artifact `10065801433` tiene digest `sha256:b894e7bd28cb0291549ed51f6d54e5a3eb11926ad306e0687629e45cbb12b6ff`.
-
-La sincronización [`34250590641`](https://github.com/Jchernand3z19/Portafolio/actions/runs/34250590641) terminó `success` y publicó ambos consumidores desde ese mismo artifact. `sample-data.json` y `dataset.json` declaran `source_workflow_run_id=34250535657` y `source_head_sha=7ae45f1dc39032180c82df10a1bb77e58451995a`; sus SHA-256 descargados son, respectivamente, `2fd11c6c94c6e08b75367ac54ecb70ab049b1eb5ee787ad83a07d70a7a5dffc0` y `d076531f2769192d57b4e99b1c3d6b291d0ae2b9626adf80f94b8e259e261f99`.
-
-El dataset BI estable se publica en:
-
-```text
-https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/bi/la-colonia-walmart-sps/dataset.json
-```
-
-Su schema es:
-
-```text
-precios-sps-static-bi-dataset/v1
-```
-
-La muestra del portafolio se publica en:
-
-```text
-https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/portfolio/sample-data.json
-```
-
-Las visitas a la página y los refreshes de Power BI consumen archivos estáticos y agregan **0 lecturas adicionales a Turso**.
-
-## Power BI reproducible
-
-PR [#402](https://github.com/Jchernand3z19/Portafolio/pull/402), merge commit `d719c6f577d3a4b638399194a08a82a8d68b41f4`, dejó versionados los activos Power Query/DAX del modelo estático.
-
-Sólo `powerbi/queries/StaticDataset.pq` realiza una llamada Web. Las tablas derivadas `Offers`, `Products`, `CommonBasket`, `Scope`, `SourceDescriptors` y `RefreshMetadata` reutilizan esa carga en memoria y no consultan Turso.
-
-Las relaciones se construyen con IDs estables y `scope_key`, nunca con matching textual de nombre, marca o presentación. Las medidas DAX son fail-closed y devuelven vacío cuando no existe universo comparable suficiente.
-
-PR [#403](https://github.com/Jchernand3z19/Portafolio/pull/403), merge commit `027e9a1eae69a3e918a45de0cb63ae970984abfd`, cerró la especificación semántica reproducible del dashboard: grano de tablas, claves funcionales, relaciones unidireccionales, fuente Web única y prohibición de simular histórico mientras no exista un contrato público histórico probado.
-
-El dashboard actual debe limitarse al snapshot seguro publicado. Páginas de cambios/histórico permanecen fuera del alcance hasta que exista un dataset histórico público, versionado y validado explícitamente.
-
-## CI y seguridad recientes
-
-Los cambios de publicación y modelo BI se integraron mediante PRs separados y suites de CI verdes antes del merge. Entre las verificaciones ya demostradas están:
-
-- PR #401: publicación estática BI sin nuevas lecturas Turso;
-- PR #402: activos Power Query/DAX reproducibles y tests de seguridad;
-- PR #403: contrato semántico del modelo Power BI.
-- PR #418: postflight estricto compatible con el superset observado de Los Andes.
-- PR #419: solicitud productiva one-shot dentro de la ventana autorizada; suite completa verde.
-- PR #420: creación explícita del directorio de salida de analítica antes de `tee`; 35 pruebas locales de seguridad/guard y suite completa verde.
-
-Se mantienen acciones fijadas por SHA, checkout inmutable donde corresponde, permisos mínimos y ausencia de secretos Turso en los workflows de publicación estática y consumo BI.
-
-## Seguridad y autoridad live
-
-El fingerprint productivo canónico de la región SPS de La Colonia se conserva para contratos offline/fallback:
-
-```text
-SPS_REGION_FINGERPRINT = d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
 ACTIVE_AUTHORIZATION_IDS = []
 ```
 
-`ACTIVE_AUTHORIZATION_IDS` registra únicamente autorizaciones puntuales one-shot; no representa ni revoca la operación recurrente expresamente autorizada. Las autorizaciones temporales one-shot conservadas en la evidencia histórica siguen siendo hechos auditables, pero **no se interpreta como autorización abierta** ninguna autorización temporal ya consumida o vencida.
+El fingerprint canónico de la evidencia de región SPS que debe seguir coincidiendo con el contrato productivo es:
 
-Las autorizaciones one-shot se consideran válidas únicamente dentro de su ventana explícita. Un schedule configurado no amplía por sí solo la autoridad live a nuevas cadenas, ubicaciones o fuentes. Cualquier tráfico live fuera del alcance ya autorizado requiere autorización humana explícita vigente.
+```text
+d7732eccc99c8530a6d29cce4244920e65e85c1d5492facb05469dc3589cb8b7
+```
 
-## Siguiente trabajo obligatorio
+Ese fingerprint demuestra continuidad de la evidencia técnica de binding; no concede por sí mismo autoridad para iniciar tráfico live.
 
-El incidente de adquisición y la cadena downstream están cerrados. El siguiente ciclo programado debe conservar las mismas invariantes: una sola corrida activa, adquisición global antes de persistir, once preflights `new`, postflight exacto, homologación idempotente y publicación estática desde un único artifact seguro.
+## Cadena de publicación vigente
 
-No hay un blocker técnico activo que justifique otro crawl manual. Ante una falla futura, revisar primero el log y artifact del run exacto y reproducir offline antes de modificar el colector.
+Tras una actualización aceptada:
 
-## Fronteras actuales
+```text
+captura validada
+→ Turso / histórico aceptado
+→ refresh de homologación derivada
+→ exportación RPI read-only
+→ validación de schemas, scope, hashes y secretos
+→ publicación atómica en portfolio-data
+→ Compra Inteligente consume sólo archivos estáticos
+```
 
-- Seis cadenas y once ubicaciones tienen contratos productivos demostrados y la última corrida conjunta está verde.
-- El ciclo end-to-end quedó validado hasta `portfolio-data`; el alcance comparativo público sigue limitado a La Colonia SPS + Walmart SPS.
-- La homologación es derivada; nunca debe contaminar o reescribir el histórico comercial.
-- Un estado `review_required` no equivale a match confirmado.
-- Disponibilidad no se convierte en inventario exacto.
-- Precio ausente no se inventa como cero, regular ni promoción.
-- El portafolio y Power BI consumen publicación estática segura; no deben conectarse directamente a Turso.
-- Histórico público para Power BI permanece pendiente de un contrato explícito y probado.
+La publicación pública incluye Consumer Mart v2, Consumer Catalog v3 y la muestra de portafolio. **Business Mart permanece privado** dentro del artifact analítico y no se copia al namespace público.
 
-## Metodología reusable
+## Límites vigentes
 
-Las reglas reutilizables que siguen vigentes son: evidencia durable antes de replay, hashes antes de reutilización, recaptura sólo de particiones demostrablemente faltantes, validación global antes de persistencia, no-op real cuando no hay deltas y publicación derivada desde un único artifact seguro para evitar lecturas duplicadas y divergencia entre consumidores.
+- Paiz no tiene un contexto SPS aceptado; sus contextos demostrados son Multiplaza y Próceres en Tegucigalpa.
+- PriceSmart El Sauce 6604 permanece excluido.
+- Maxi Despensa y Despensa Familiar continúan en **NO-GO TEMPORAL PARA PRICE TRACKING WEB**.
+- Un dato `STALE`, `UNAVAILABLE`, ambiguo o sin suficiente cobertura no puede producir ranking/PCI/recomendación competitiva nueva.
+- Los documentos históricos de incidentes se preservan tal como fueron emitidos; este archivo es el único resumen mutable del estado presente.
+
+## Criterio de cierre del producto actual
+
+El producto funcional, los contratos B2B/B2C, Compra Inteligente, la publicación estática y los activos reproducibles de Power BI están implementados. Para declarar estable el ciclo operativo posterior al incidente del 10 de septiembre sólo falta comprobar una siguiente ejecución programada verde usando el ajuste #455.

@@ -1,95 +1,117 @@
-# Diccionario del dataset de publicación
+# Diccionario de publicación — estado vigente y contratos legados
 
-Contrato actual: `precios-sps-publication/v1`.
+## Estado actual
 
-El dataset se deriva únicamente de `AnalyticsResult`; por lo tanto sólo contiene productos que superaron el comparador fail-closed. No incluye credenciales, URLs de base de datos, tokens ni secretos operativos.
+La arquitectura RPI vigente ya no usa un único contrato de publicación para todos los consumidores.
+
+| Contrato | Estado | Frontera |
+| --- | --- | --- |
+| `rpi-business-mart/v1` | vigente | privado, B2B / Power BI |
+| `rpi-consumer-mart/v2` | vigente | público, comparación analítica B2C |
+| `rpi-consumer-catalog/v3` | vigente | público, navegación de Compra Inteligente |
+| `precios-sps-publication/v1` | legado | compatibilidad / evidencia histórica |
+| `precios-sps-static-bi-dataset/v1` | legado | compatibilidad BI de fase anterior |
+
+La publicación pública RPI se materializa en la rama `portfolio-data` bajo:
+
+```text
+precios-supermercados-sps/published/rpi/consumer-mart.json
+precios-supermercados-sps/published/rpi/manifest.json
+precios-supermercados-sps/published/rpi/v3/...
+```
+
+Business Mart **no se copia al namespace público**. Permanece dentro del artifact analítico validado para el flujo B2B.
+
+Antes de reemplazar un corte público, el sync verifica schema, scope, hashes, tamaños, frontera pública y ausencia de material secreto. La sustitución del namespace v3 es atómica; un fallo conserva el último corte válido.
+
+Para la definición detallada de los contratos actuales, consultar `RPI-DATA-MART-DICTIONARY.md`.
+
+---
+
+# Contrato legado `precios-sps-publication/v1`
+
+Esta sección se conserva porque artifacts y documentación histórica todavía pueden referenciar este contrato. No debe presentarse como la arquitectura RPI principal.
+
+El dataset se deriva únicamente del comparador seguro y sólo contiene productos que superaron el gate fail-closed. No incluye credenciales, URLs privadas de base de datos, tokens ni secretos operativos.
 
 ## Metadatos raíz
 
 | Campo | Tipo | Definición |
 | --- | --- | --- |
-| `schema` | texto | Versión del contrato de publicación. |
-| `comparison_policy` | texto | Política que autorizó las comparaciones. |
-| `currency` | texto | Moneda de los importes publicados. Actualmente HNL. |
-| `scope` | lista | Parejas explícitas `supermarket_id` + `location_id` que forman el alcance. |
-| `offers` | lista | Precios actuales de productos comparables. |
-| `products` | lista | Resumen de comparación por producto canónico. |
-| `common_basket` | lista | Total de la misma canasta por supermercado. |
-| `excluded_group_counts` | objeto | Conteos agregados por motivo de exclusión; nunca publica el precio del grupo bloqueado. |
+| `schema` | texto | versión del contrato |
+| `comparison_policy` | texto | política que autorizó las comparaciones |
+| `currency` | texto | moneda; HNL |
+| `scope` | lista | pares explícitos `supermarket_id + location_id` |
+| `offers` | lista | precios actuales comparables |
+| `products` | lista | resumen de comparación por producto canónico |
+| `common_basket` | lista | total del mismo denominador por supermercado |
+| `excluded_group_counts` | objeto | exclusiones agregadas sin exponer precios bloqueados |
 
 ## `scope`
 
+Una comparación nunca mezcla dos ubicaciones de la misma cadena dentro del mismo alcance.
+
 | Campo | Tipo | Definición |
 | --- | --- | --- |
-| `supermarket_id` | texto | Identificador estable del supermercado. |
-| `location_id` | texto | Ubicación exacta usada para obtener el precio. |
-
-Una comparación nunca mezcla dos ubicaciones de la misma cadena dentro del mismo alcance.
+| `supermarket_id` | texto | identificador estable de la cadena |
+| `location_id` | texto | contexto exacto del precio |
 
 ## `offers`
 
 | Campo | Tipo | Definición |
 | --- | --- | --- |
-| `canonical_product_id` | texto | Identidad canónica derivada de GTIN validado. |
-| `canonical_gtin` | texto | GTIN normalizado usado como identidad fuerte. |
-| `supermarket_id` | texto | Cadena del precio observado. |
-| `location_id` | texto | Tienda/club/sucursal exacta. |
-| `source_record_id` | texto | Identidad trazable del registro fuente dentro del modelo analítico. |
-| `current_price` | decimal serializado como texto | Precio actual observado en HNL, con dos decimales. |
-| `is_best_price` | booleano | Indica si el precio coincide con el mínimo del producto dentro del alcance. |
+| `canonical_product_id` | texto | identidad canónica segura |
+| `canonical_gtin` | texto | GTIN usado como identidad fuerte |
+| `supermarket_id` | texto | cadena |
+| `location_id` | texto | contexto exacto |
+| `source_record_id` | texto | identidad trazable del registro fuente |
+| `current_price` | decimal-texto | precio efectivo observado en HNL |
+| `is_best_price` | booleano | coincide con el mínimo del producto en el alcance |
 
-Los importes monetarios se serializan como texto decimal para no introducir redondeos binarios en JSON.
+Los importes se serializan como decimal-texto para evitar redondeos binarios.
 
 ## `products`
 
 | Campo | Tipo | Definición |
 | --- | --- | --- |
-| `canonical_product_id` | texto | Producto canónico. |
-| `canonical_gtin` | texto | GTIN canónico. |
-| `best_supermarket_id` | texto | Supermercado seleccionado de forma determinista entre los mínimos. |
-| `best_location_id` | texto | Ubicación asociada a ese mínimo determinista. |
-| `best_price` | decimal-texto | Precio mínimo. |
-| `highest_price` | decimal-texto | Precio máximo del mismo producto y alcance. |
-| `savings_vs_highest` | decimal-texto | Diferencia entre máximo y mínimo. |
-| `savings_vs_highest_pct` | decimal-texto | `savings_vs_highest / highest_price * 100`. |
-| `supermarket_count` | entero | Número de supermercados con oferta comparable incluida. |
+| `canonical_product_id` | texto | producto canónico |
+| `canonical_gtin` | texto | GTIN canónico |
+| `best_supermarket_id` | texto | desempate determinista interno entre mínimos |
+| `best_location_id` | texto | ubicación del mínimo determinista |
+| `best_price` | decimal-texto | precio mínimo |
+| `highest_price` | decimal-texto | precio máximo |
+| `savings_vs_highest` | decimal-texto | diferencia máximo - mínimo |
+| `savings_vs_highest_pct` | decimal-texto | diferencia relativa porcentual |
+| `supermarket_count` | entero | número de supermercados incluidos |
 
-El campo de supermercado “best” no debe interpretarse como ganador global fuera del alcance definido.
+El campo singular `best_supermarket_id` no elimina empates reales y no debe interpretarse como ganador global fuera del scope.
 
 ## `common_basket`
 
-Cada fila representa el total de exactamente el mismo conjunto de productos en un supermercado.
+Cada fila representa exactamente el mismo conjunto comparable en un supermercado.
 
 | Campo | Tipo | Definición |
 | --- | --- | --- |
-| `supermarket_id` | texto | Supermercado. |
-| `location_id` | texto | Ubicación usada. |
-| `total` | decimal-texto | Suma de los precios actuales del denominador común. |
-| `is_cheapest` | booleano | Indica el total mínimo del alcance. |
-| `product_count` | entero | Número de unidades/productos según la canasta evaluada. En la canasta común base equivale al número de productos canónicos. |
-| `denominator_definition` | texto | Regla exacta que define qué productos entraron al total. |
+| `supermarket_id` | texto | supermercado |
+| `location_id` | texto | ubicación |
+| `total` | decimal-texto | suma de precios actuales del denominador común |
+| `is_cheapest` | booleano | coincide con el mínimo del alcance |
+| `product_count` | entero | cantidad de productos/unidades evaluadas |
+| `denominator_definition` | texto | regla exacta del denominador |
 
-Denominador base:
-
-`products_comparable_and_priced_in_every_supermarket_in_scope`
-
-Para subcanastas con cantidades explícitas:
-
-`explicit_quantities_drawn_only_from_current_common_comparable_universe`
+Ausencia no equivale a cero. Si falta precio válido en una ubicación requerida, el producto sale del denominador común o la canasta queda incompleta según el contrato aplicado.
 
 ## Exclusiones
 
-`excluded_group_counts` permite medir por qué una comparación no se publicó sin exponer precios que podrían inducir a una equivalencia falsa. Entre los motivos posibles están:
+Motivos agregados posibles incluyen:
 
 - `review_required`;
 - `not_comparable`;
 - `scope_membership_incomplete_or_ambiguous`;
 - `price_missing_in_scope`.
 
-## Semántica de ausencia
+Estos conteos permiten explicar pérdida de cobertura sin publicar comparaciones inseguras.
 
-Ausencia no equivale a cero. Un producto sin precio válido en cualquiera de las ubicaciones del alcance sale de la canasta común. El motor no imputa, promedia ni copia precios de otra tienda.
+## Consumo legado en BI
 
-## Consumo en BI
-
-Power BI debe importar `offers`, `products`, `common_basket` y `scope` como tablas separadas. Las métricas de ahorro deben usar los campos publicados o reproducir exactamente las fórmulas documentadas; no se debe volver a hacer matching por nombre, marca o presentación dentro de DAX/Power Query.
+Los consumidores que todavía lean este contrato deben usar IDs estables y los campos publicados. No deben rehacer matching por nombre, marca o presentación dentro de DAX o Power Query.
