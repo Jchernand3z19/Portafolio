@@ -1,0 +1,94 @@
+name: Precios SPS - Generar revisión privada de homologación
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "precios-supermercados-sps/.automation/homologation-review-request.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: precios-sps-private-homologation-review
+  cancel-in-progress: false
+
+jobs:
+  review:
+    if: ${{ github.repository == 'Jchernand3z19/Portafolio' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: ${{ github.workspace }}/precios-supermercados-sps/src
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - name: Descargar revisión inmutable
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validar solicitud controlada
+        if: ${{ github.event_name == 'push' }}
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('.automation/homologation-review-request.json')
+          document = json.loads(path.read_text(encoding='utf-8'))
+          expected_keys = {'schema', 'action', 'read_only', 'reason', 'sequence'}
+          if set(document) != expected_keys:
+              raise SystemExit('homologation_review_request_closed_set_mismatch')
+          if document.get('schema') != 'precios-sps-homologation-review-request/v1':
+              raise SystemExit('homologation_review_request_schema_invalid')
+          if document.get('action') != 'export_private_homologation_review':
+              raise SystemExit('homologation_review_request_action_invalid')
+          if document.get('read_only') is not True:
+              raise SystemExit('homologation_review_request_read_only_required')
+          if document.get('reason') not in {'initial_production_review', 'operator_requested_review'}:
+              raise SystemExit('homologation_review_request_reason_invalid')
+          if type(document.get('sequence')) is not int or document['sequence'] < 1:
+              raise SystemExit('homologation_review_request_sequence_invalid')
+          print(json.dumps({
+              'schema': document['schema'],
+              'read_only': document['read_only'],
+              'sequence': document['sequence'],
+          }, sort_keys=True))
+          PY
+
+      - name: Configurar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: precios-supermercados-sps/requirements.txt
+
+      - name: Instalar dependencias verificadas
+        run: |
+          set -euo pipefail
+          python -m pip install -r precios-supermercados-sps/requirements.txt
+          python -m pip check
+
+      - name: Generar cola privada desde Turso sin scraping
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          mkdir -p run-artifacts/homologation-review
+          python scripts/exportar_revision_homologacion.py \
+            --output run-artifacts/homologation-review/review-queue.json \
+            | tee run-artifacts/homologation-review/review-export.json
+
+      - name: Publicar únicamente evidencia privada
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
+        with:
+          name: private-homologation-review-${{ github.run_id }}
+          path: precios-supermercados-sps/run-artifacts/homologation-review/
+          if-no-files-found: warn
+          retention-days: 14
