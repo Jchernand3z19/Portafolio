@@ -8,32 +8,28 @@ El sitio funciona en **español e inglés**, con español como idioma predetermi
 
 ## Organización del repositorio
 
-`Portafolio` es el único repositorio público y funciona como un monorepositorio: cada proyecto completo vive en una carpeta propia en la raíz.
+`Portafolio` es un monorepositorio: cada proyecto completo vive en una carpeta propia de la raíz y `.github/workflows/` concentra las automatizaciones reconocidas por GitHub.
 
 ```text
 Portafolio/
-├── .github/workflows/          # Entradas de GitHub Actions
-├── css/                        # Estilos compartidos del sitio
-├── js/                         # Lógica compartida, i18n y registro de proyectos
-├── docs/                       # Reglas generales del repositorio
-├── precios-supermercados-sps/  # Web scraping, monitoreo e inteligencia de precios
-├── mundial-2026/               # Proyecto Mundial 2026 completo
-├── index.html                  # Página principal de GitHub Pages
-├── script.js                   # Cargador de js/main.js
-├── PROJECT_TEMPLATE.md         # Plantilla para proyectos futuros
-├── README.md
-└── .gitignore
+├── .github/workflows/
+├── css/
+├── js/
+├── docs/
+├── precios-supermercados-sps/  # Retail Price Intelligence / Compra Inteligente
+├── pagos-whatsapp-residencial/ # proyecto PAGOS
+├── mundial-2026/
+├── index.html
+├── script.js
+├── PROJECT_TEMPLATE.md
+└── README.md
 ```
-
-La única excepción a la regla de encapsulación es `.github/workflows/`: GitHub solo reconoce workflows ejecutables desde esa ubicación. Cada archivo debe indicar claramente el proyecto al que pertenece y trabajar dentro de su carpeta.
 
 ## Monorepo Project Registry
 
-El contrato operativo está en [`.github/project-scopes.yml`](.github/project-scopes.yml).
-El número o la antigüedad de un PR no determina su proyecto; el registry y sus
-changed paths sí.
-La auditoría de workflows, outputs y secretos se documenta en
-[`docs/MONOREPO-GOVERNANCE.md`](docs/MONOREPO-GOVERNANCE.md).
+El contrato operativo está en [`.github/project-scopes.yml`](.github/project-scopes.yml). El número o antigüedad de un PR no determina su proyecto; lo hacen el registry y las rutas modificadas.
+
+La auditoría de workflows, outputs y secretos está en [`docs/MONOREPO-GOVERNANCE.md`](docs/MONOREPO-GOVERNANCE.md).
 
 | Project ID | Project root | PR prefix | Branch prefix |
 | --- | --- | --- | --- |
@@ -42,37 +38,47 @@ La auditoría de workflows, outputs y secretos se documenta en
 | MUNDIAL | `mundial-2026/` | `[MUNDIAL]` | `mundial/` |
 | SHARED | `/` (gobernanza e integraciones declaradas) | `[MONOREPO]` | `monorepo/` |
 
-El registry puede reservar un project root antes de su primera integración a
-`main`. La infraestructura shared no permite mezclar features de project roots
-distintos.
+La infraestructura shared no permite mezclar features de project roots distintos.
 
-## Proyectos publicados
+# Proyectos publicados
 
-### 1. Monitoreo automatizado de precios — Web Scraping
+## 1. Retail Price Intelligence — Compra Inteligente
 
-Proyecto principal del portafolio. Obtiene precios y promociones desde sitios web públicos de supermercados, valida las capturas, estructura los datos y conserva su histórico para análisis.
+Proyecto principal de inteligencia de precios. Captura catálogos públicos de supermercados, valida cada ejecución, conserva histórico, homologa productos de forma conservadora y publica productos de datos B2B/B2C.
 
-Estado público verificado al **8 de septiembre de 2026**:
+### Compra Inteligente
 
-- **6 supermercados / cadenas productivas integradas**.
-- **11 ubicaciones monitoreadas**.
-- **58K+ productos registrados** (`58,114` en el corte verificado).
-- **127K+ registros históricos de precio** (`127,980` en el corte verificado).
-- Cobertura actual en **San Pedro Sula y Tegucigalpa**.
-- Cadenas con datos aceptados: **La Colonia, Supermercados Colonial, Walmart, PriceSmart, Comisariato Los Andes y Paiz**.
-- Evidencia pública de una captura aceptada con **6,646 productos con precio** y **120 promociones**.
-- Comparador cross-source **fail-closed**: una fila sólo puede entrar a ahorro, mejor precio o canasta cuando existe identidad fuerte y coherencia comercial; marca + presentación por sí solas no autorizan una equivalencia.
-- Analítica intra-cadena respaldada por evidencia, como la comparación completa de Walmart TGU con `12,042` artículos comercialmente comparables y `255` con al menos una diferencia comercial.
+La experiencia pública B2C permite navegar precios de **La Colonia, Supermercados Colonial, Walmart, PriceSmart y Comisariato Los Andes en SPS**, seleccionar ofertas exactas, construir `Mi Compra`, revisar historia de precios y exportar la lista.
 
-El detalle del sitio enlaza la **página de origen**, la **evidencia versionada en GitHub** y el **código de extracción** para que la capacidad de web scraping sea comprobable y no sólo declarativa.
+El Consumer Catalog v3 publicado el **10 de septiembre de 2026** contiene como snapshot verificado:
 
-**Carpeta completa:** [`precios-supermercados-sps/`](precios-supermercados-sps/)
+- **44,042 filas visibles**;
+- **46,680 ofertas fuente**;
+- 2,638 filas comparables;
+- 45,420 ofertas con resumen histórico;
+- 484 particiones de máximo 250 filas.
 
-**Procedencia de la presentación:** [`precios-supermercados-sps/docs/portfolio-showcase.md`](precios-supermercados-sps/docs/portfolio-showcase.md)
+La aplicación separa visibilidad de comparabilidad: mostrar un producto no significa afirmar que es equivalente a otro. El matching y las recomendaciones se autorizan en Python bajo una política fail-closed; la web no une productos por nombre, marca o presentación.
+
+### Retail Price Intelligence B2B
+
+El proyecto también genera `rpi-business-mart/v1`, con comparación actual, histórico, promociones, canastas, cobertura y freshness. Los activos reproducibles de Power BI están versionados dentro del proyecto.
+
+### Cobertura operativa
+
+El pipeline recurrente general integra **6 cadenas y 11 contextos productivos** en San Pedro Sula y Tegucigalpa: La Colonia, Supermercados Colonial, Walmart, PriceSmart, Comisariato Los Andes y Paiz.
+
+El web scraping es una capacidad técnica demostrada de la plataforma, pero el producto final abarca adquisición, calidad, histórico, homologación, analítica, data marts, publicación y experiencia B2C.
+
+**Proyecto:** [`precios-supermercados-sps/`](precios-supermercados-sps/)
+
+**Estado vigente:** [`precios-supermercados-sps/docs/PROJECT_STATE.md`](precios-supermercados-sps/docs/PROJECT_STATE.md)
+
+**Presentación pública:** [`precios-supermercados-sps/docs/portfolio-showcase.md`](precios-supermercados-sps/docs/portfolio-showcase.md)
 
 **Metodología del comparador:** [`precios-supermercados-sps/docs/COMPARATOR-METHODOLOGY.md`](precios-supermercados-sps/docs/COMPARATOR-METHODOLOGY.md)
 
-### 2. Mundial 2026: análisis histórico y predicción
+## 2. Mundial 2026: análisis histórico y predicción
 
 Proyecto de datos que integra información histórica, calendario, ranking y resultados recientes para generar análisis, predicciones y una aplicación web interactiva.
 
@@ -82,18 +88,8 @@ Proyecto de datos que integra información histórica, calendario, ranking y res
 
 ## Regla para proyectos futuros
 
-Cada proyecto nuevo debe crearse como otra carpeta al mismo nivel:
+Cada proyecto nuevo debe crearse como otra carpeta al mismo nivel. Dentro de su root deben vivir README, código, dependencias, documentación, pruebas, datos publicables y recursos visuales propios.
 
-```text
-Portafolio/
-├── precios-supermercados-sps/
-├── mundial-2026/
-├── automatizacion-reportes/
-└── nombre-del-proyecto/
-```
+No se crean tarjetas ficticias ni carpetas vacías. Un proyecto se publica cuando existe contenido real y la presentación pública puede vincularse con evidencia verificable.
 
-Dentro de su carpeta deben quedar el README, código, dependencias, documentación, pruebas, datos publicables y los recursos visuales utilizados para presentarlo en el portafolio.
-
-No se deben crear tarjetas ficticias ni carpetas vacías. Solo se publica un proyecto cuando exista contenido real y la presentación pública pueda vincularse con evidencia verificable del repositorio.
-
-Consulta [`PROJECT_TEMPLATE.md`](PROJECT_TEMPLATE.md) y [`docs/ESTRUCTURA_REPOSITORIO.md`](docs/ESTRUCTURA_REPOSITORIO.md).
+Consultar [`PROJECT_TEMPLATE.md`](PROJECT_TEMPLATE.md) y [`docs/ESTRUCTURA_REPOSITORIO.md`](docs/ESTRUCTURA_REPOSITORIO.md).
