@@ -1,30 +1,32 @@
 # Modelo común de datos y almacenamiento
 
-Este documento describe el modelo físico productivo actual y las capas derivadas de homologación/publicación. El estado operativo mutable vive en [`PROJECT_STATE.md`](PROJECT_STATE.md).
+Este documento describe el modelo físico productivo y las capas derivadas RPI. El estado mutable vive en [`PROJECT_STATE.md`](PROJECT_STATE.md).
 
-## 1. Backend productivo
+## Backend
 
-El backend persistente principal es **Turso/libSQL**, con SQLite como equivalente local/reproducible. Componentes históricos de BigQuery y Google Sheets permanecen en el repositorio, pero no definen la ruta productiva vigente.
+- **Productivo:** Turso/libSQL.
+- **Local/reproducible:** SQLite.
+- Google Sheets y BigQuery permanecen sólo como componentes históricos/experimentales; no son la ruta productiva vigente.
 
-La base es única para todas las cadenas y ubicaciones.
+La base comercial es única para todas las cadenas y ubicaciones.
 
-## 2. Identidades
+# Identidades
 
 ```text
-supermarket_id    = cadena
-location_id       = ubicación/contexto comercial demostrado
-source_key        = identidad estable entregada por la fuente
-product_id        = PK interna de un producto fuente persistido
-canonical_gtin    = GTIN validado/canonizado cuando existe
-canonical_product_id = identidad derivada fuerte usada por homologación
-scrape_run_id     = ejecución persistida
+supermarket_id       = cadena
+location_id          = contexto comercial demostrado
+source_key           = identidad estable entregada por la fuente
+product_id           = PK interna de producto fuente
+canonical_gtin       = GTIN validado/canonizado cuando existe
+canonical_product_id = identidad fuerte derivada para homologación/comparación
+scrape_run_id        = ejecución persistida
 ```
 
-Precio, promoción, disponibilidad y timestamps no forman parte de la identidad estable del producto.
+Precio, promoción, disponibilidad y timestamps no forman parte de IDs estables.
 
-`canonical_product_id` no sustituye `product_id`: una identidad canónica puede agrupar perfiles de varios supermercados únicamente cuando la evidencia lo permite.
+`canonical_product_id` no sustituye `product_id`: sólo puede agrupar fuentes cuando la evidencia lo permite.
 
-## 3. Relaciones físicas principales
+# Modelo físico principal
 
 ```text
 supermarkets 1 ─── N locations
@@ -32,57 +34,24 @@ supermarkets 1 ─── N products
 products     1 ─── N price_history
 locations    1 ─── N price_history
 scrape_runs  1 ─── N periodos originados/confirmados
-products     1 ─── 0..1 product_homologation_profiles   # derivada
+products     1 ─── 0..1 product_homologation_profiles
 ```
 
-La ciudad pertenece a `locations`. Un producto fuente puede observarse en varias ubicaciones sin duplicar su identidad descriptiva.
-
-## 4. `supermarkets`
+## `supermarkets`
 
 **Grain:** una fila por cadena.
 
-Responsabilidad: catálogo de retailers y atributos mínimos de identidad. No contiene precios ni reglas específicas de scraping.
+## `locations`
 
-## 5. `locations`
+**Grain:** una fila por ubicación/contexto comercial persistible. La ciudad es atributo de la ubicación, no identidad del producto.
 
-**Grain:** una fila por ubicación/contexto comercial persistible.
+## `products`
 
-Responsabilidad:
+**Grain:** una identidad fuente estable dentro de un supermercado.
 
-- relación con `supermarket_id`;
-- ciudad/contexto;
-- identidad fuente de la tienda/club cuando existe;
-- alcance operativo.
+Puede conservar nombre, marca, presentación, categoría, GTIN/EAN y llaves fuente. El nombre no es clave y marca + presentación no forman una clave cross-source.
 
-La existencia de una fila no implica que un run concreto haya demostrado esa ubicación. Esa evidencia pertenece al snapshot/run.
-
-## 6. `products`
-
-**Grain:** una identidad fuente estable de producto dentro de un supermercado.
-
-Campos relevantes del contrato productivo incluyen:
-
-```text
-product_id
-supermarket_id
-source_key_type
-source_key
-source_sku / IDs fuente disponibles
-name
-brand
-presentation
-category
-ean / referencia equivalente cuando la fuente la provee
-```
-
-Reglas:
-
-- no contiene ciudad ni precio;
-- el nombre no es una clave;
-- marca + presentación no forman una clave cross-source;
-- atributos descriptivos pueden actualizarse sin reemplazar la identidad estable del producto fuente.
-
-## 7. `price_history`
+## `price_history`
 
 **Grain:** un periodo comercial por `product_id + location_id`.
 
@@ -94,7 +63,7 @@ supermarket_id
 location_id
 current_price_minor
 reported_regular_price_minor
-is_promotion / promotion evidence
+is_promotion
 availability
 currency
 valid_from_utc
@@ -102,88 +71,51 @@ valid_to_utc
 scrape_run_id
 ```
 
-### Estado actual
+`valid_to_utc IS NULL` representa el estado vigente. No existe una segunda tabla current que pueda divergir del histórico.
 
-```text
-valid_to_utc IS NULL
-```
+Si un nuevo estado aceptado es idéntico, el periodo permanece abierto. Si cambia un atributo comercial relevante, se cierra y abre un nuevo periodo. No se generan snapshots diarios redundantes.
 
-representa el periodo vigente. No existe necesidad de una segunda tabla `current` que pueda divergir del histórico.
-
-### Regla de cambio
-
-Si el nuevo estado comercial aceptado es igual al periodo abierto, el periodo permanece abierto. Si cambia precio, promoción, disponibilidad u otro atributo comercial relevante, se cierra el periodo anterior y se abre uno nuevo.
-
-Por ello `price_history` no es una copia diaria redundante.
-
-## 8. Precio
-
-Los importes persistidos se almacenan como enteros de unidad menor.
-
-```text
-current_price_minor
-reported_regular_price_minor
-```
-
-`reported_regular_price_minor` es una referencia declarada por la fuente. No se usa automáticamente como “precio anterior” ni como prueba de ahorro real.
-
-Para análisis histórico:
-
-```text
-historical_previous_price = current_price del periodo aceptado inmediatamente anterior
-```
-
-Si ese periodo no existe, no se inventa baseline.
-
-## 9. Disponibilidad
-
-Ausencia de evidencia no se convierte en `out_of_stock`.
-
-Estados fuente normalizados pueden incluir, según el contrato:
-
-```text
-in_stock
-out_of_stock
-unknown
-```
-
-La capa analítica considera un precio explícitamente `out_of_stock` como no utilizable para una canasta actual, aunque permanezca un valor de precio en el registro.
-
-## 10. `scrape_runs`
+## `scrape_runs`
 
 **Grain:** una ejecución persistida por supermercado/ubicación.
 
-Responsabilidades:
+Conserva ID de run, scope, estado terminal, conteos, timestamps y digest del snapshot aceptado. El postflight comprueba que run y SHA correspondan a la evidencia persistida.
 
-- identidad del run;
-- `supermarket_id`;
-- `location_id`;
-- estado terminal;
-- conteos de catálogo/SKU;
-- digest del snapshot aceptado;
-- timestamps/metadata necesarios para auditoría.
+# Precio y ausencia
 
-El postflight productivo verifica que los `scrape_run_id` esperados existan con conteos y SHA-256 correspondientes al snapshot que se persistió.
+Se distinguen:
 
-## 11. Integridad productiva
+```text
+current_price
+reported_regular_price
+historical_previous_price
+```
 
-Después de persistir se comprueban, según el flujo:
+- `current_price` es el precio efectivo observado.
+- `reported_regular_price` es referencia declarada por la tienda.
+- `historical_previous_price` proviene del `current_price` de un periodo aceptado anterior.
+
+Sin baseline real no se inventa ahorro.
+
+Ausencia de evidencia no equivale a `out_of_stock` ni a precio cero. Los estados de disponibilidad se conservan explícitamente.
+
+# Integridad
+
+Después de persistir se verifican, según el flujo:
 
 - `PRAGMA integrity_check`;
-- `pragma_foreign_key_check`;
-- ausencia de periodos actuales duplicados por producto/ubicación;
-- presencia de los run IDs exactos;
-- reconciliación de conteos de estado actual con snapshots aceptados.
+- foreign keys;
+- ausencia de periodos actuales duplicados;
+- presencia de run IDs exactos;
+- reconciliación de conteos con snapshots aceptados.
 
-Un `HTTP 200` del backend no sustituye estas verificaciones.
+Un HTTP 200 del backend no sustituye estas verificaciones.
 
-## 12. `product_homologation_profiles`
+# Homologación derivada
 
-Tabla **derivada** de `products`. No es la fuente de verdad del producto original.
+`product_homologation_profiles` es una proyección reconstruible de `products`; no altera la fuente comercial.
 
-**Grain:** un perfil por `product_id`.
-
-Contrato actual:
+Puede contener:
 
 ```text
 product_id
@@ -208,181 +140,105 @@ profile_hash
 updated_at_utc
 ```
 
-### Presentación
+`comparison_status` descriptivo no autoriza por sí solo una comparación. La autorización final pertenece al comparador seguro sobre el grupo completo.
 
-La presentación se estructura para poder distinguir, por ejemplo:
+# Identidad cross-source
 
-- masa;
-- volumen;
-- conteo;
-- multipack;
-- conflicto/ambigüedad.
+Un GTIN sólo es fuerte cuando su formato/check digit es válido y la normalización es determinista. Sin identidad fuerte, el registro puede permanecer visible/revisable pero no entra automáticamente en ahorro o canasta.
 
-No se reduce un multipack ambiguo a una cantidad arbitraria.
-
-### `comparison_status`
-
-El perfil puede describir estados como `ready`, `review_required`, `single_source` o `unmapped`, pero este campo **no autoriza por sí solo** una comparación de precio. La autorización final pertenece a `safe_comparator` y evalúa el grupo completo.
-
-## 13. Identidad cross-source
-
-Un GTIN sólo se considera fuerte cuando:
-
-- tiene longitud GTIN válida;
-- supera check digit;
-- se canoniza de forma determinista.
-
-Sin identidad fuerte, el sistema puede conservar un candidato para revisión, pero no lo usa automáticamente en ahorro/canasta.
-
-Incluso con el mismo GTIN, contradicciones comerciales pueden producir `not_comparable`.
+Incluso con GTIN común, contradicciones de marca, tipo, presentación o variante pueden bloquear la comparación.
 
 Regresión explícita:
 
 ```text
-Passion Jaguar 1 lb
-!=
-Passion Especial 1 lb
+Passion Jaguar 1 lb != Passion Especial 1 lb
 ```
 
-Marca y presentación iguales no son suficientes.
+# Capa analítica
 
-## 14. Capa de comparación segura
+La analítica consume únicamente grupos autorizados y estado comercial aceptado.
 
-`safe_comparator.py` no crea una tabla física adicional obligatoria. Produce decisiones deterministas derivadas de perfiles homologados:
+Conceptos principales:
 
-```text
-comparable
-review_required
-not_comparable
-```
-
-Los consumidores analíticos sólo usan `comparable`.
-
-Razones de bloqueo incluyen, entre otras:
-
-- `strong_identity_missing`;
-- `brand_identity_conflict`;
-- `product_type_conflict`;
-- `presentation_conflict`;
-- `presentation_evidence_conflict`;
-- `commercial_identity_conflict`.
-
-## 15. Modelo analítico actual
-
-`CurrentPriceObservation` proyecta el estado vigente mínimo necesario para analítica:
-
-```text
-source_record_id
-supermarket_id
-location_id
-price_minor
-availability
-```
-
-`ComparisonScope` exige exactamente una ubicación explícita por supermercado incluido.
-
-### Producto comparable
-
-`ProductComparison` agrupa sólo ofertas seguras de un `canonical_product_id` y calcula:
-
-- mínimo actual;
-- máximo actual;
-- ahorro absoluto contra el máximo;
-- ahorro porcentual;
-- todos los precios del alcance.
-
-### Canasta común
-
-`BasketComparison` usa el mismo universo en todas las cadenas del alcance:
-
-```text
-products_comparable_and_priced_in_every_supermarket_in_scope
-```
+- observación actual por oferta;
+- comparación por producto canónico;
+- mercado comparable con una ubicación explícita por retailer;
+- canastas con denominador común;
+- historial por oferta exacta;
+- promoción declarada vs reducción histórica;
+- freshness y cobertura.
 
 Un faltante no se imputa. Un universo vacío no tiene ganador.
 
-## 16. Dataset de publicación
+# Contratos RPI derivados
 
-Contrato:
+## `rpi-business-mart/v1`
 
-```text
-precios-sps-publication/v1
-```
+Contrato B2B privado. Incluye:
 
-Estructura raíz:
+- `dim_product`;
+- `dim_retailer`;
+- `dim_location`;
+- `dim_category`;
+- `dim_brand`;
+- `fact_current_comparison`;
+- `fact_price_history`;
+- `fact_promotion_analysis`;
+- `fact_basket_cost`;
+- `fact_metric_coverage`;
+- `source_freshness`.
 
-```text
-schema
-comparison_policy
-currency
-scope
-offers
-products
-common_basket
-excluded_group_counts
-```
+Los periodos de `fact_price_history` son estados comerciales reales, no una serie diaria sintética.
 
-### `offers`
+## `rpi-consumer-mart/v2`
 
-Una fila por producto canónico + supermercado + ubicación publicada.
+Contrato público analítico reducido. Publica sólo identidades/ofertas autorizadas para comparación segura, deltas, recomendaciones, freshness e historia resumida.
 
-### `products`
+## `rpi-consumer-catalog/v3`
 
-Una fila por producto canónico con mínimo, máximo y ahorro.
+Contrato público de navegación para Compra Inteligente. Separa visibilidad de comparabilidad y permite publicar filas `comparable`, `single_source` o `individual` sin convertirlas automáticamente en equivalencias cross-retailer.
 
-### `common_basket`
+Se distribuye como manifest, facetas, índices demand-loaded y particiones de máximo 250 filas.
 
-Una fila por supermercado con el total del mismo denominador.
+# Exportación RPI
 
-### `excluded_group_counts`
+`scripts/exportar_rpi_marts.py` lee el estado confiable de forma read-only y genera los marts, CSVs B2B y manifests con SHA-256.
 
-Sólo conteos agregados de grupos bloqueados; no publica precios que puedan inducir una equivalencia falsa.
+La exportación no hace scraping ni escribe Turso.
 
-Diccionario completo: [`PUBLICATION-DATA-DICTIONARY.md`](PUBLICATION-DATA-DICTIONARY.md).
+Los contratos históricos `precios-sps-publication/v1` y `precios-sps-static-bi-dataset/v1`, junto con `scripts/exportar_modelo_analitico.py`, permanecen para compatibilidad/evidencia de etapas anteriores; no representan el serving RPI principal actual.
 
-## 17. Exportación
+# Consumidores
 
-`scripts/exportar_modelo_analitico.py` puede leer:
+## Power BI
 
-```text
-SQLite en modo read-only
-Turso usando credenciales del entorno confiable
-```
+Consume Business Mart v1 mediante los activos de `powerbi/rpi/`. No resuelve identidad, no hace matching textual y no consulta Turso.
 
-y genera:
+## Compra Inteligente
 
-```text
-publication.json
-offers.csv
-products.csv
-common-basket.csv
-excluded-groups.csv
-manifest.json
-```
+Consume Consumer Catalog v3 para navegación y Consumer Mart v2 para la frontera analítica aplicable. El navegador no crea identidades ni recomendaciones por sí mismo.
 
-El manifest contiene el backend lógico y conteos, pero nunca la URL ni el token de Turso.
+# Frontera public/private
 
-## 18. Consumidores
+Público:
 
-Power BI y el portafolio consumen el dataset publicado. No deben volver a inferir:
+- Consumer Mart v2;
+- Consumer Catalog v3;
+- muestra de portafolio.
 
-- identidad;
-- ubicación;
-- aceptación del run;
-- matching por nombre;
-- equivalencia por marca/presentación.
+Privado:
 
-La lógica crítica se mantiene una sola vez en Python y está cubierta por tests.
+- Business Mart v1;
+- RAW;
+- colas/revisión interna;
+- secretos/credenciales.
 
-## 19. Evolución de esquema
+La publicación valida schemas, scope, hashes, tamaños y secretos y reemplaza el último corte público de forma atómica.
 
-Las migraciones se mantienen explícitas y fail-closed. Un persistidor que requiere un esquema nuevo verifica su presencia antes de modificar estado comercial.
-
-La tabla derivada de homologación puede reconstruirse desde `products`, por lo que su refresh no modifica la fuente comercial original.
-
-## 20. Fuente de verdad
+# Fuente de verdad
 
 - arquitectura: [`arquitectura.md`](arquitectura.md);
 - estado operativo: [`PROJECT_STATE.md`](PROJECT_STATE.md);
-- metodología de comparación: [`COMPARATOR-METHODOLOGY.md`](COMPARATOR-METHODOLOGY.md);
-- contrato BI/publicación: [`PUBLICATION-DATA-DICTIONARY.md`](PUBLICATION-DATA-DICTIONARY.md).
+- producto: [`RPI-PRODUCT-SPEC.md`](RPI-PRODUCT-SPEC.md);
+- marts/catalog: [`RPI-DATA-MART-DICTIONARY.md`](RPI-DATA-MART-DICTIONARY.md);
+- metodología: [`COMPARATOR-METHODOLOGY.md`](COMPARATOR-METHODOLOGY.md).
