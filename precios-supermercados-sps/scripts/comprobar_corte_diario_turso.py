@@ -11,7 +11,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -50,9 +50,6 @@ def parse_utc(value: str) -> datetime:
 def honduras_day_window(now_utc: datetime) -> tuple[datetime, datetime, str]:
     local = now_utc.astimezone(HN_ZONE)
     start_local = local.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_local = start_local.replace(day=start_local.day)  # keep type explicit before timedelta
-    from datetime import timedelta
-
     end_local = start_local + timedelta(days=1)
     return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc), start_local.date().isoformat()
 
