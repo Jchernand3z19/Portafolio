@@ -22,7 +22,9 @@ def offer(
     dimension: str | None,
     total: str | None,
     status: str = "confirmed",
-    product_type: str = "Huevo",
+    product_type: str | None = "Huevo",
+    category: str | None = "Alimentos",
+    availability: str = "in_stock",
 ) -> object:
     return MODULE.VisibleOffer(
         source_product_id="colonial:1",
@@ -34,10 +36,10 @@ def offer(
         current_price_minor=10000,
         reported_regular_price_minor=None,
         is_promotion=False,
-        availability="in_stock",
+        availability=availability,
         observed_at="2026-09-10T12:00:00Z",
         canonical_product_id=None,
-        category="Alimentos",
+        category=category,
         product_type=product_type,
         presentation_dimension=dimension,
         presentation_total_base=total,
@@ -105,6 +107,45 @@ def test_shell_egg_pack_is_normalized_as_count() -> None:
     assert rows[0]["brand"] == "Nutri Yema"
     assert rows[0]["presentation"] == "60 unidades"
     assert rows[0]["variant"] == "Grande"
+
+
+def test_egg_beaters_placeholder_is_recovered_into_consumer_egg_taxonomy() -> None:
+    item = offer(
+        name="EGG Beaters Wht 16 oz",
+        brand="RMS",
+        presentation=None,
+        dimension=None,
+        total=None,
+        status="missing",
+        product_type=None,
+        category=None,
+    )
+    rows = MODULE.build_rows(
+        (item,),
+        {("colonial", "colonial_sps"): "FRESH"},
+    )
+    assert len(rows) == 1
+    assert rows[0]["brand"] == "Egg Beaters"
+    assert rows[0]["category"] == "Alimentos"
+    assert rows[0]["product_type"] == "Huevo"
+    assert rows[0]["presentation"] == "16 oz"
+    assert rows[0]["offers"][0]["current_price"] == "100.00"
+
+
+def test_out_of_stock_only_row_is_not_visible_in_compra_inteligente() -> None:
+    item = offer(
+        name="Claras De Huevo Egg Beaters 16 Oz",
+        brand="Egg Beaters",
+        presentation="16 Oz",
+        dimension="ounce",
+        total="16",
+        availability="out_of_stock",
+    )
+    rows = MODULE.build_rows(
+        (item,),
+        {("colonial", "colonial_sps"): "FRESH"},
+    )
+    assert rows == []
 
 
 def test_placeholder_brand_is_recovered_only_from_explicit_alias() -> None:
