@@ -108,6 +108,7 @@ def test_brand_case_and_accent_aliases_are_canonical() -> None:
         "MARKETSIDE": "Marketside",
         "GREAT VALUE": "Great Value",
         "HELLMANN'S": "Hellmann's",
+        "Hellmanns": "Hellmann's",
     }
     for raw, expected in pairs.items():
         assert MODULE.canonical_brand(raw, f"Producto {raw}") == expected
@@ -150,3 +151,14 @@ def test_non_shell_egg_names_do_not_trigger_grade_override() -> None:
         presentation_total_base="1774",
         presentation_status="confirmed",
     ) == "1774 ml"
+
+
+def test_common_unmodeled_unit_is_normalized_without_becoming_unknown() -> None:
+    assert MODULE.canonical_presentation(
+        source_presentation="1 Gl",
+        product_name="Mayonesa Country Best 1 Gl",
+        product_type="Mayonesa",
+        presentation_dimension=None,
+        presentation_total_base=None,
+        presentation_status="missing",
+    ) == "1 gal"
