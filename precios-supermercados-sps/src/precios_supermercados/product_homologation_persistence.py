@@ -13,9 +13,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Iterable
 
-from .product_homologation import SourceProductRecord, homologate_products
+from .product_homologation import SourceProductRecord
+from .product_identity_v2 import IDENTITY_NORMALIZATION_VERSION, homologate_products_v2
 
-NORMALIZATION_VERSION = "product-homologation-v1"
+NORMALIZATION_VERSION = IDENTITY_NORMALIZATION_VERSION
 TABLE_NAME = "product_homologation_profiles"
 COMPARISON_STATUSES = frozenset({"ready", "review_required", "single_source", "unmapped"})
 
@@ -115,7 +116,7 @@ def build_homologation_rows(
     if not isinstance(normalization_version, str) or not normalization_version.strip():
         raise ProductHomologationPersistenceError("normalization_version_invalid")
 
-    result = homologate_products(record for _, record in entries)
+    result = homologate_products_v2(record for _, record in entries)
     profile_by_source = {profile.record.source_record_id: profile for profile in result.profiles}
     group_by_source: dict[str, tuple[str, tuple[str, ...]]] = {}
     for group in result.exact_gtin_groups:
