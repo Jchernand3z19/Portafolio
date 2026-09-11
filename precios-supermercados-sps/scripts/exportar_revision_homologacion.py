@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Exporta una cola privada de revisión de homologación desde Turso.
+"""Exporta una cola privada y explicable de revisión de identidad desde Turso.
 
-No modifica perfiles, precios ni ejecuciones y no consulta supermercados. Está
-pensado para ejecución manual: lee `products` una sola vez, ejecuta el mismo motor
-de homologación y materializa los casos que requieren trabajo humano o nuevas
-reglas. El artefacto nunca forma parte del serving B2C público.
+No modifica perfiles, precios ni ejecuciones y no consulta supermercados. Lee
+``products`` una vez, ejecuta identidad v2 y materializa candidatos/conflictos.
+El artefacto nunca forma parte del serving B2C público.
 """
 from __future__ import annotations
 
@@ -26,12 +25,30 @@ from precios_supermercados.product_homologation import (  # noqa: E402
     HomologationResult,
     ProductProfile,
     SourceProductRecord,
-    homologate_products,
+    normalize_brand,
+)
+from precios_supermercados.product_identity_v2 import (  # noqa: E402
+    IDENTITY_NORMALIZATION_VERSION,
+    audit_identity_quality,
+    canonical_egg_size,
+    explain_candidate,
+    homologate_products_v2,
 )
 
-SCHEMA = "precios-sps-homologation-review/v1"
+SCHEMA = "precios-sps-homologation-review/v2"
 DEFAULT_CANDIDATE_LIMIT = 5000
 DEFAULT_GAP_LIMIT = 5000
+
+
+def _brand_evidence(profile: ProductProfile) -> str:
+    source = normalize_brand(profile.record.source_brand)
+    if source is not None and source == profile.normalized_brand:
+        return "source"
+    if source is None and profile.normalized_brand is not None:
+        return "name_known_brand"
+    if source is not None and profile.normalized_brand != source:
+        return "source_conflict"
+    return "missing"
 
 
 def _product_payload(profile: ProductProfile) -> dict[str, object]:
@@ -45,15 +62,19 @@ def _product_payload(profile: ProductProfile) -> dict[str, object]:
         "source_presentation": record.source_presentation,
         "source_category": record.source_category,
         "barcode": record.barcode,
-        "normalized_brand": profile.normalized_brand,
+        "canonical_brand": profile.normalized_brand,
+        "brand_evidence": _brand_evidence(profile),
         "canonical_gtin": profile.canonical_gtin,
         "category": profile.taxonomy.category,
         "subcategory": profile.taxonomy.subcategory,
         "product_type": profile.taxonomy.product_type,
+        "taxonomy_rule_id": profile.taxonomy.rule_id,
+        "egg_size": canonical_egg_size(record, profile.taxonomy),
         "presentation_status": profile.presentation_status,
         "presentation_dimension": None if presentation is None else presentation.dimension,
         "presentation_total_base": None if presentation is None else format(presentation.total_base.normalize(), "f"),
         "presentation_pack_count": None if presentation is None else presentation.pack_count,
+        "matching_tokens": list(profile.matching_tokens),
     }
 
 
@@ -72,59 +93,72 @@ def build_review_queue(
     for candidate in result.candidates[:candidate_limit]:
         left = profiles[candidate.left_source_record_id]
         right = profiles[candidate.right_source_record_id]
-        candidates.append({
-            "left": _product_payload(left),
-            "right": _product_payload(right),
-            "score": format(candidate.score, "f"),
-            "reason": candidate.reason,
-            "recommended_action": "human_review",
-            "allowed_decisions": ["same_product", "different_products", "pending"],
-        })
+        evidence = explain_candidate(left, right)
+        candidates.append(
+            {
+                "left": _product_payload(left),
+                "right": _product_payload(right),
+                "candidate_ranking_score": format(candidate.score, "f"),
+                "score_semantics": "review_queue_ranking_only_not_probability",
+                "decision_state": evidence.decision_state,
+                "matching_signals": list(evidence.matching_signals),
+                "conflict_signals": list(evidence.conflict_signals),
+                "reason": candidate.reason,
+                "recommended_action": "human_review",
+                "allowed_decisions": ["same_product", "different_products", "pending"],
+            }
+        )
 
     exact_conflicts = []
     for group in result.exact_gtin_groups:
         if group.comparison_status != "review_required":
             continue
-        exact_conflicts.append({
-            "canonical_gtin": group.canonical_gtin,
-            "canonical_product_id": group.canonical_product_id,
-            "conflict_reasons": list(group.conflict_reasons),
-            "products": [_product_payload(profiles[source_id]) for source_id in group.source_record_ids],
-            "recommended_action": "verify_same_gtin_commercial_consistency",
-        })
+        exact_conflicts.append(
+            {
+                "canonical_gtin": group.canonical_gtin,
+                "canonical_product_id": group.canonical_product_id,
+                "conflict_reasons": list(group.conflict_reasons),
+                "products": [_product_payload(profiles[source_id]) for source_id in group.source_record_ids],
+                "recommended_action": "verify_same_gtin_commercial_consistency",
+            }
+        )
 
-    gaps = [
-        profile
-        for profile in result.profiles
-        if profile.taxonomy.product_type is None
-    ]
+    gaps = [profile for profile in result.profiles if profile.taxonomy.product_type is None]
     gap_sample = [_product_payload(profile) for profile in gaps[:taxonomy_gap_limit]]
 
     without_gtin = sum(profile.canonical_gtin is None for profile in result.profiles)
     with_gtin = len(result.profiles) - without_gtin
     ready_groups = sum(group.comparison_status == "ready" for group in result.exact_gtin_groups)
     review_groups = len(result.exact_gtin_groups) - ready_groups
+    quality = audit_identity_quality(result)
+    summary = {
+        **result.summary,
+        **quality,
+        "normalization_version": IDENTITY_NORMALIZATION_VERSION,
+        "with_valid_gtin": with_gtin,
+        "without_valid_gtin": without_gtin,
+        "exact_gtin_groups_ready": ready_groups,
+        "exact_gtin_groups_needing_review": review_groups,
+        "review_candidates_total": len(result.candidates),
+        "taxonomy_gaps_total": len(gaps),
+    }
+    candidate_section = {
+        "total": len(result.candidates),
+        "included": len(candidates),
+        "truncated": len(candidates) < len(result.candidates),
+        "rows": candidates,
+    }
     return {
         "schema": SCHEMA,
         "generated_at_utc": generated_at_utc,
+        "normalization_version": IDENTITY_NORMALIZATION_VERSION,
         "private_review_artifact": True,
         "public_serving_allowed": False,
-        "decision_policy": "candidates_never_become_comparable_without_strong_identity_or_explicit_accepted_evidence",
-        "summary": {
-            **result.summary,
-            "with_valid_gtin": with_gtin,
-            "without_valid_gtin": without_gtin,
-            "exact_gtin_groups_ready": ready_groups,
-            "exact_gtin_groups_needing_review": review_groups,
-            "fuzzy_review_candidates_total": len(result.candidates),
-            "taxonomy_gaps_total": len(gaps),
-        },
-        "fuzzy_candidates": {
-            "total": len(result.candidates),
-            "included": len(candidates),
-            "truncated": len(candidates) < len(result.candidates),
-            "rows": candidates,
-        },
+        "decision_policy": "candidate_generation_is_broad_but_identity_confirmation_remains_fail_closed",
+        "summary": summary,
+        "review_candidates": candidate_section,
+        # Compatibilidad aditiva con consumidores privados v1.
+        "fuzzy_candidates": candidate_section,
         "exact_gtin_conflicts": {
             "total": len(exact_conflicts),
             "rows": exact_conflicts,
@@ -147,7 +181,7 @@ def export_review(
     taxonomy_gap_limit: int = DEFAULT_GAP_LIMIT,
 ) -> dict[str, object]:
     records = tuple(record for _, record in products)
-    result = homologate_products(records, candidate_threshold=Decimal("0.72"))
+    result = homologate_products_v2(records, candidate_threshold=Decimal("0.72"))
     document = build_review_queue(
         result,
         generated_at_utc=generated_at_utc,
@@ -156,7 +190,10 @@ def export_review(
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp")
-    temporary.write_text(json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
     temporary.replace(output)
     return document
 
@@ -183,13 +220,19 @@ def main() -> int:
         candidate_limit=args.candidate_limit,
         taxonomy_gap_limit=args.taxonomy_gap_limit,
     )
-    print(json.dumps({
-        "schema": document["schema"],
-        "output": str(args.output),
-        "summary": document["summary"],
-        "fuzzy_candidates_included": document["fuzzy_candidates"]["included"],
-        "taxonomy_gaps_included": document["taxonomy_gaps"]["included"],
-    }, ensure_ascii=False, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "schema": document["schema"],
+                "output": str(args.output),
+                "summary": document["summary"],
+                "review_candidates_included": document["review_candidates"]["included"],
+                "taxonomy_gaps_included": document["taxonomy_gaps"]["included"],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
     return 0
 
 
