@@ -2,7 +2,7 @@
 
 Esta capa es sólo de presentación/consumo. No cambia identidad canónica, matching,
 precios ni el histórico persistido. Las inferencias de marca se limitan a aliases
-explícitos cuando la fuente trae placeholders conocidos.
+explícitos presentes en el nombre del producto.
 """
 from __future__ import annotations
 
@@ -28,9 +28,11 @@ _GENERIC_BRAND_KEYS = frozenset(
 )
 
 # Alias explícitos: además de fijar capitalización, permiten recuperar la marca
-# desde el nombre cuando la fuente sólo expone RMS/Marca COMANDES.
+# desde el nombre cuando la fuente sólo expone placeholders conocidos o cuando
+# una etiqueta fuente contradice una única marca reconocible escrita en el nombre.
 _BRAND_CANONICAL = {
     "bonovo": "Bonovo",
+    "don cristobal": "Don Cristobal",
     "el ranchero": "El Ranchero",
     "gallina feliz": "Gallina Feliz",
     "great value": "Great Value",
@@ -52,6 +54,7 @@ _BRAND_CANONICAL = {
 }
 
 _COUNT_UNIT_PATTERN = r"(?:u|uni|un|und|unds|unid|unids|ud|uds|unidad|unidades)"
+_EGG_COUNT_UNIT_PATTERN = rf"(?:{_COUNT_UNIT_PATTERN}|pack|packs|paquete|paquetes)"
 _COUNT_RE = re.compile(
     rf"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>{_COUNT_UNIT_PATTERN})(?!\w)",
     re.IGNORECASE,
@@ -73,7 +76,7 @@ _GALLON_RE = re.compile(
     re.IGNORECASE,
 )
 _EGG_COUNT_RE = re.compile(
-    rf"(?<!\w)(?P<count>\d{{1,3}})\s*(?:p|m|g|l|xl|jumbo)?\s*{_COUNT_UNIT_PATTERN}(?!\w)",
+    rf"(?<!\w)(?P<count>\d{{1,3}})\s*(?:p|m|g|l|xl|jumbo)?\s*{_EGG_COUNT_UNIT_PATTERN}(?!\w)",
     re.IGNORECASE,
 )
 
@@ -125,24 +128,28 @@ def _smart_brand_case(value: str) -> str:
     return value
 
 
+def _brand_from_name(product_name: object) -> str | None:
+    """Acepta sólo una marca conocida no ambigua escrita en el nombre."""
+    name = _fold(product_name) or ""
+    matches = {
+        display
+        for alias, display in _BRAND_CANONICAL.items()
+        if re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", name)
+    }
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
 def canonical_brand(raw_brand: object, product_name: object) -> str | None:
-    """Devuelve marca pública estable; nunca publica placeholders de fuente."""
+    """Devuelve marca pública estable sin publicar placeholders o conflictos obvios."""
     raw = _clean(raw_brand)
     key = _fold(raw)
+    name_brand = _brand_from_name(product_name)
     if key is not None and key not in _GENERIC_BRAND_KEYS:
-        return _BRAND_CANONICAL.get(key, _smart_brand_case(raw))
-
-    name = _fold(product_name) or ""
-    matches: list[tuple[int, int, str]] = []
-    for alias, display in _BRAND_CANONICAL.items():
-        if re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", name):
-            matches.append((len(alias.split()), len(alias), display))
-    if not matches:
-        return None
-    matches.sort(reverse=True)
-    best_specificity = matches[0][:2]
-    best = {display for words, length, display in matches if (words, length) == best_specificity}
-    return next(iter(best)) if len(best) == 1 else None
+        raw_brand_display = _BRAND_CANONICAL.get(key, _smart_brand_case(raw))
+        if name_brand is not None and name_brand != raw_brand_display:
+            return name_brand
+        return raw_brand_display
+    return name_brand
 
 
 def _is_shell_egg(product_name: object, product_type: object) -> bool:
