@@ -1,14 +1,29 @@
 {
-    "schema": "precios-sps-rpi-publication-request/v1",
-    "action": "publish_safe_rpi",
-    "scope": [
-        {"supermarket_id": "la_colonia", "location_id": "la_colonia_sps"},
-        {"supermarket_id": "colonial", "location_id": "colonial_sps"},
-        {"supermarket_id": "walmart", "location_id": "walmart_sps"},
-        {"supermarket_id": "pricesmart", "location_id": "pricesmart_sps"},
-        {"supermarket_id": "comisariato_los_andes", "location_id": "comisariato_los_andes_sps"}
-    ],
-    "read_only": true,
-    "reason": "operator_requested_republication",
-    "sequence": 5
+  "schema": "precios-sps-rpi-publication-request/v1",
+  "action": "publish_safe_rpi",
+  "scope": [
+    {
+      "supermarket_id": "la_colonia",
+      "location_id": "la_colonia_sps"
+    },
+    {
+      "supermarket_id": "colonial",
+      "location_id": "colonial_sps"
+    },
+    {
+      "supermarket_id": "walmart",
+      "location_id": "walmart_sps"
+    },
+    {
+      "supermarket_id": "pricesmart",
+      "location_id": "pricesmart_sps"
+    },
+    {
+      "supermarket_id": "comisariato_los_andes",
+      "location_id": "comisariato_los_andes_sps"
+    }
+  ],
+  "read_only": true,
+  "reason": "operator_requested_republication",
+  "sequence": 5
 }

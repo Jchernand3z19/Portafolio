@@ -71,9 +71,9 @@ def test_tgu_same_chain_branches_do_not_create_cross_retailer_comparison() -> No
     walmart_ffaa = offer("w:1", "walmart", "walmart_tgu_ffaa")
     walmart_sauce = offer("w:1", "walmart", "walmart_tgu_el_sauce")
     groups = TGU.identity_groups_exact_context((walmart_ffaa, walmart_sauce))
-    assert len(groups) == 1
-    assert groups[0][0] == "single_source"
-    assert {item.location_id for item in groups[0][1]} == {"walmart_tgu_ffaa", "walmart_tgu_el_sauce"}
+    assert len(groups) == 2
+    assert all(mode == "individual" for mode, _ in groups)
+    assert {group[0].location_id for _, group in groups} == {"walmart_tgu_ffaa", "walmart_tgu_el_sauce"}
 
     la_colonia = offer("lc:1", "la_colonia", "la_colonia_tgu")
     groups = TGU.identity_groups_exact_context((walmart_ffaa, walmart_sauce, la_colonia))
@@ -90,11 +90,23 @@ def test_tgu_public_offer_identity_includes_exact_location() -> None:
     )
 
 
-def test_tgu_duplicate_offer_in_same_exact_context_fails_closed() -> None:
+def test_tgu_duplicate_offer_in_same_exact_context_degrades_to_individual_rows() -> None:
     first = offer("w:1", "walmart", "walmart_tgu_ffaa")
     duplicate = offer("w:2", "walmart", "walmart_tgu_ffaa")
-    with pytest.raises(TGU.ExportError, match="consumer_catalog_tgu_context_collision"):
-        TGU.identity_groups_exact_context((first, duplicate))
+    groups = TGU.identity_groups_exact_context((first, duplicate))
+    assert len(groups) == 2
+    assert all(mode == "individual" and len(group) == 1 for mode, group in groups)
+    assert {group[0].source_product_id for _, group in groups} == {"w:1", "w:2"}
+
+
+def test_tgu_ambiguous_context_blocks_entire_canonical_group_from_comparison() -> None:
+    first = offer("w:1", "walmart", "walmart_tgu_ffaa")
+    duplicate = offer("w:2", "walmart", "walmart_tgu_ffaa")
+    other_chain = offer("lc:1", "la_colonia", "la_colonia_tgu")
+    groups = TGU.identity_groups_exact_context((first, duplicate, other_chain))
+    assert len(groups) == 3
+    assert all(mode == "individual" and len(group) == 1 for mode, group in groups)
+    assert {group[0].source_product_id for _, group in groups} == {"w:1", "w:2", "lc:1"}
 
 
 def test_tgu_frontend_contract_keeps_cities_and_carts_separate(tmp_path: Path) -> None:
