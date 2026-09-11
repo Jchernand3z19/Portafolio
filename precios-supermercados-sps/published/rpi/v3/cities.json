@@ -1,0 +1,1 @@
+{"cities":[{"country_code":"HN","manifest":"manifest.json","name":"San Pedro Sula","slug":"san-pedro-sula","store_count":5},{"country_code":"HN","manifest":"cities/tegucigalpa/manifest.json","name":"Tegucigalpa","slug":"tegucigalpa","store_count":6}],"default_city":"san-pedro-sula","schema":"rpi-consumer-city-index/v1"}
