@@ -73,11 +73,13 @@ def public_source_id(source_product_id: str, location_id: str) -> str:
 def identity_groups_exact_context(
     offers: Iterable[base.VisibleOffer],
 ) -> list[tuple[str, list[base.VisibleOffer]]]:
-    """Agrupa por identidad canónica sin confundir sucursal con cadena.
+    """Agrupa sólo identidades fuertes sin ambigüedad dentro de una sucursal.
 
-    Dos sucursales de una misma cadena no bastan para declarar comparación
-    cross-retailer. Sí pueden coexistir dentro de una identidad comparable cuando
-    además existe al menos otra cadena con la misma identidad fuerte.
+    Una identidad canónica sólo se publica como comparable cuando participa más
+    de una cadena y existe exactamente una oferta fuente por contexto físico. Si
+    una sucursal aporta dos filas a la misma identidad, no se elige ni se fusiona
+    ninguna: todo el grupo se degrada a filas individuales, igual que el contrato
+    SPS degrada las colisiones por supermercado.
     """
     values = tuple(offers)
     candidates: dict[str, list[base.VisibleOffer]] = {}
@@ -90,11 +92,13 @@ def identity_groups_exact_context(
 
     groups: list[tuple[str, list[base.VisibleOffer]]] = []
     for grouped in candidates.values():
+        contexts = [(offer.supermarket_id, offer.location_id) for offer in grouped]
         chains = {offer.supermarket_id for offer in grouped}
-        contexts = {(offer.supermarket_id, offer.location_id) for offer in grouped}
-        if len(contexts) != len(grouped):
-            raise ExportError("consumer_catalog_tgu_context_collision")
-        groups.append(("comparable" if len(chains) >= 2 else "single_source", grouped))
+        unambiguous_contexts = len(contexts) == len(set(contexts))
+        if len(grouped) >= 2 and len(chains) >= 2 and unambiguous_contexts:
+            groups.append(("comparable", grouped))
+        else:
+            individual.extend(grouped)
 
     groups.extend(
         (
