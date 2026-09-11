@@ -1,4 +1,4 @@
-# Instrucciones para agentes — Precios de Supermercados SPS
+# Instrucciones para agentes — Retail Price Intelligence
 
 ## PROJECT / PULL REQUEST SCOPE CONTRACT
 
@@ -9,129 +9,95 @@ PR_TITLE_PREFIX=[RPI]
 FUTURE_BRANCH_PREFIX=rpi/
 ```
 
-RPI es dueño de su project root y de los workflows enumerados en
-`/.github/project-scopes.yml`. Un cambio RPI puede tocar la integración compartida
-del portafolio sólo junto con un cambio RPI que la justifique. No puede tocar
-PAGOS, MUNDIAL ni usar paths shared como bypass. Cambiar gobernanza, el registry o
-este contrato requiere un PR `[MONOREPO]` separado.
+RPI es dueño de `precios-supermercados-sps/**` y de los workflows RPI registrados
+en `/.github/project-scopes.yml`. Un cambio RPI puede tocar una integración compartida
+sólo cuando el cambio RPI la necesita y el registry lo permite. No puede tocar
+PAGOS ni MUNDIAL ni usar paths compartidos como bypass.
+
+Este archivo es gobernanza del monorepo. Cambiarlo, cambiar el registry o cambiar
+las fronteras de proyecto requiere un PR `[MONOREPO]` separado.
 
 ## Fuente de verdad
 
 - Repositorio: `Jchernand3z19/Portafolio`.
 - Proyecto: `precios-supermercados-sps/`.
-- GitHub `main`, PRs, Actions y artifacts mandan sobre recuerdos o prompts antiguos.
-- `docs/PROJECT_STATE.md` describe el estado operativo vigente.
-- Antes de modificar: auditar `main`, PRs abiertos, CI y buscar si la solución ya existe.
+- GitHub `main`, PRs, Actions, artifacts, Turso y `portfolio-data` mandan sobre
+  prompts, recuerdos y snapshots antiguos.
+- `docs/PROJECT_STATE.md` describe el estado operativo mutable.
+- `docs/RPI-PRODUCT-SPEC.md` define el contrato funcional del producto.
+- Antes de modificar: auditar `main`, PRs abiertos, CI, artifacts y buscar si la
+  capacidad ya existe.
 
-# Fase activa — PriceSmart completo en producción
+## Fase activa — operar y cerrar el producto RPI
 
-Maxi Despensa y Despensa Familiar permanecen **NO-GO TEMPORAL PARA PRICE
-TRACKING WEB**. No reabrir esas cadenas sin una fuente digital pública nueva y
-una instrucción explícita.
+La adquisición de nuevas cadenas está cerrada. No buscar ni integrar un séptimo
+supermercado salvo instrucción explícita posterior.
 
-PriceSmart Honduras quedó completo para SPS club 6603 y Florencia club 6602. El
-Sauce 6604 permanece excluido. `reports/pricesmart/2026-09-02-complete/` demuestra
-26 raíces, 24 no vacías, 2,766 productos y 6,078 SKU únicos por club. El full
-restante consumió 50 POST HTTP 200, cero retries; Alimentos se reutilizó sin
-recrawl. Los dos clubes conservan contexto separado por 115 diferencias reales de
-precio entre SKU cotizados en ambos.
-
-El delta offline contra el estado productivo Alimentos es, por ubicación: 1,127
-estados sin cambio y 4,951 ofertas SKU nuevas, agrupadas en 1,642 productos fuente
-y 3,309 variantes adicionales. No hay cambios comerciales previos, cambios sólo
-de metadata ni ausencias. La persistencia offline, replay, aislamiento, FK e
-integridad pasaron sobre las cinco tablas.
-
-El delta quedó persistido en Turso: 4,951 periodos nuevos por ubicación y 1,127
-estados previos sin cambio; cero cierres. PriceSmart termina con 6,078 estados
-actuales por ubicación, 12,156 en total, y los periodos originales de Alimentos
-siguen abiertos. No hay trabajo PriceSmart pendiente. No recrawlear, no consultar
-El Sauce, no crear recurrencia y no interpretar ausencia como `out_of_stock`.
-
-# Referencia — cierre inicial de La Colonia sin sobreingeniería
-
-El objetivo de aquella fase fue una sola cadena:
+El producto actual es:
 
 ```text
-La Colonia
-├── la_colonia_sps
-└── la_colonia_tgu
-
-persistencia = Turso / precios-supermercados
-histórico = cambios comerciales
-operación = ejecución diaria
+fuentes públicas aceptadas
+→ captura especializada por retailer/ubicación
+→ validación de completitud + health
+→ last-known-good / histórico compacto en Turso
+→ homologación conservadora
+→ comparabilidad + freshness
+→ Python analytics
+   ├─ Business Mart v1 → Power BI B2B
+   ├─ Consumer Mart v2 → comparación/escenarios
+   └─ Consumer Catalog v3 → Compra Inteligente B2C
 ```
 
-Las restricciones de aquella fase fueron:
+La prioridad es mantener la operación diaria, calidad/homologación, publicación
+segura y las superficies B2B/B2C. No volver a una fase de “un supermercado a la
+vez” salvo mantenimiento de una fuente ya productiva.
 
-- no iniciar supermercado #2;
-- no construir Dashboard/Dash/Plotly;
-- no activar BigQuery ni Google Sheets;
-- no construir Cloudflare, microservicios, APIs públicas ni arquitectura multi-cloud;
-- no crear abstracciones para necesidades futuras;
-- no limpiar deuda que no bloquee el MVP;
-- no convertir una operación one-shot en un subsistema.
+## Cobertura productiva
 
-En la fase activa, mantener cerrado Maxi/DF y avanzar PriceSmart sólo dentro del
-gate autorizado. Probe, full, Turso y recurrencia son permisos separados.
-No modificar scrapers, parsers ni fixtures de La Colonia, Colonial o Walmart salvo
-bug compartido demostrado que bloquee el trabajo; no refactorizar por estética.
+La operación vigente cubre seis cadenas y once contextos demostrados:
 
-## Definición del MVP
+- La Colonia: SPS + Tegucigalpa;
+- Colonial: SPS;
+- Walmart: SPS + TGU FFAA + TGU El Sauce;
+- PriceSmart: SPS 6603 + TGU Florencia 6602;
+- Comisariato Los Andes: SPS;
+- Paiz: TGU Multiplaza + TGU Próceres.
 
-La Colonia queda cerrada cuando exista evidencia de:
+Límites vigentes:
 
-1. SPS completo, con precios y disponibilidad básica correcta.
-2. TGU con binding propio, catálogo completo, precios y disponibilidad demostrable.
-3. Una única base `precios-supermercados` con SPS y TGU diferenciados por `location_id`.
-4. Histórico que no duplica periodos si el estado no cambia y sí abre uno nuevo ante cambio real.
-5. `scrape_runs` por ejecución aceptada, replay idempotente y run inválido sin corrupción.
-6. La carga vieja de prueba en Turso descartada y sustituida por SPS + TGU válidos.
-7. Al menos 2–3 ejecuciones reales consecutivas válidas.
-8. Ejecución diaria preparada; activar recurrencia live requiere autorización humana explícita.
-9. CI verde y `PROJECT_STATE.md` actualizado.
+- Paiz no tiene contexto SPS aceptado;
+- PriceSmart El Sauce 6604 permanece excluido;
+- Maxi Despensa y Despensa Familiar siguen **NO-GO TEMPORAL PARA PRICE TRACKING
+  WEB** y no deben reabrirse sin una nueva fuente pública demostrada y una
+  instrucción explícita.
 
-No forman parte de este MVP:
+Los conteos exactos de productos, periodos, runs y filas públicas cambian con la
+operación y deben leerse de `PROJECT_STATE.md`, artifacts o Turso; no fijarlos aquí.
 
-- Dashboard;
-- otros supermercados;
-- inventario exacto;
-- normalización perfecta;
-- BigQuery;
-- Google Sheets.
+## Arquitectura y responsabilidades
 
-## Gate obligatorio de simplicidad
+- **Turso/libSQL** = verdad comercial e histórica persistida.
+- **Python** = verdad analítica, homologación, comparabilidad, rankings, historia,
+  freshness y métricas compartidas.
+- **Business Mart v1** = contrato privado B2B reproducible.
+- **Consumer Mart v2** = contrato público de comparación analítica segura.
+- **Consumer Catalog v3** = contrato público, particionado y escalable para
+  navegación B2C.
+- **Power BI** = presentación/consumo B2B; no decide identidad nueva.
+- **Compra Inteligente** = web responsive; no hace scraping, no consulta Turso y
+  no hace matching en JavaScript.
 
-Antes de crear archivo de producción, módulo, clase, adapter, workflow, tabla, dependencia o servicio:
+No duplicar lógica crítica en DAX, Power Query o frontend.
 
-1. ¿Cuál es el blocker exacto?
-2. ¿Existe ya una función/capacidad que lo resuelva?
-3. ¿Puede resolverse con una operación puntual?
-4. ¿Cuál es el cambio más pequeño correcto?
-5. ¿Qué fallo real observado justifica la complejidad?
+## Persistencia y estado comercial
 
-Orden preferido:
+La identidad fuente base es:
 
 ```text
-capacidad existente
-> operación one-shot
-> función/módulo existente
-> cambio específico pequeño
-> abstracción nueva
-> infraestructura nueva
+supermarket_id + source_key_type + source_key
 ```
 
-Para un solo blocker:
-
-- más de 3 archivos de producción nuevos -> rediseñar;
-- más de 500 líneas netas nuevas -> rediseñar;
-- workflow nuevo para una tarea one-shot -> rediseñar;
-- dependencia externa cuando `sqlite3`/stdlib basta -> rediseñar;
-- abstracción con un solo consumidor -> evitarla.
-
-## Persistencia mínima
-
-La base única usa exactamente cinco tablas mientras resuelvan el MVP:
+Las tablas comerciales base siguen siendo:
 
 ```text
 supermarkets
@@ -141,38 +107,8 @@ price_history
 scrape_runs
 ```
 
-No crear una base o tabla por ciudad.
-
-Identidad fuente:
-
-```text
-supermarket_id + source_key_type + source_key
-```
-
-El estado comercial pertenece a producto + ubicación.
-
-Estado actual:
-
-```text
-price_history.valid_to_utc IS NULL
-```
-
-Cada ejecución aceptada registra `scrape_runs`.
-
-Para cada producto + ubicación:
-
-```text
-mismo estado
--> no crear historia
-
-estado cambió
--> cerrar periodo actual
--> abrir periodo nuevo
-
-producto nuevo
--> insertar producto
--> abrir primer periodo
-```
+La homologación derivada usa `product_homologation_profiles`; recalcular perfiles,
+taxonomía o normalización no debe crear periodos comerciales falsos.
 
 Estado comercial mínimo:
 
@@ -183,23 +119,35 @@ is_promotion
 availability
 ```
 
-Un snapshot incompleto/rechazado no modifica el último estado aceptado.
-
-## Precio
+Semántica:
 
 ```text
 current_price          = precio efectivo observado
-reported_regular_price = precio regular/tachado declarado por la fuente
+reported_regular_price = precio normal/tachado declarado por la fuente
 previous_price         = current_price del periodo histórico aceptado anterior
 ```
 
-`reported_regular_price` no sustituye a `previous_price`.
+`reported_regular_price` nunca sustituye historia real.
 
-SQLite/Turso puede almacenar precios en centavos enteros.
+Para producto + ubicación:
 
-## Disponibilidad
+```text
+mismo estado comercial
+→ no abrir historia nueva
 
-Estados mínimos:
+estado cambió
+→ cerrar periodo actual
+→ abrir periodo nuevo
+
+producto nuevo
+→ crear producto
+→ abrir primer periodo
+```
+
+Cada ejecución aceptada registra `scrape_runs`. Un snapshot incompleto/rechazado no
+modifica el last-known-good.
+
+Disponibilidad:
 
 ```text
 in_stock
@@ -207,96 +155,262 @@ out_of_stock
 unknown
 ```
 
-`availability` es útil para el MVP.
+Ausencia del catálogo no implica `out_of_stock` salvo evidencia específica de la
+fuente.
 
-`available_quantity` es opcional y no bloquea el MVP.
+## Turso y coste
 
-No inferir `unknown -> out_of_stock` sin evidencia de la fuente.
+Turso ya tuvo un incidente de lecturas excesivas. No reintroducir N+1, N×N,
+correlaciones sobre staging completo ni verificaciones globales repetidas.
 
-## Evidencia SPS vigente
-
-Usar como referencia operativa el artifact válido más reciente documentado en
-`docs/PROJECT_STATE.md`, no el snapshot antiguo de 9,439 SKU.
-
-No retroceder a datos viejos sólo porque ya estén cargados en Turso.
-
-## TGU
-
-TGU reutiliza el scraper operativo de SPS con su propia selección de ciudad.
-
-No atribuir TGU a `la_colonia_sps`.
-
-Un fallo parcial de TGU no convierte el run global en exitoso y sus datos parciales
-no se persisten como estado aceptado.
-
-## Turso
-
-Base:
+Principio obligatorio:
 
 ```text
-precios-supermercados
+READ NECESSARY SCOPE
+→ COMPARE ONCE
+→ COMPUTE DELTA
+→ WRITE CHANGES ONLY
+→ VERIFY AFFECTED SCOPE
 ```
 
-La carga vieja conocida es una carga de prueba descartable.
+Las publicaciones analíticas son read-only respecto a Turso.
 
-No reemplazarla hasta tener:
+## Homologación y comparabilidad
+
+**Visibilidad de catálogo no equivale a comparabilidad cross-retailer.**
+
+Un producto puede ser visible y usable en Compra Inteligente aunque no tenga un
+match seguro en otra cadena. Sólo identidades suficientemente fuertes pueden
+recibir ranking, best price, savings o recomendaciones competitivas.
+
+Reglas mínimas:
+
+- mismo GTIN/EAN válido es evidencia fuerte, pero conflictos descriptivos pueden
+  bloquear;
+- GTIN distintos no se fusionan como el mismo producto;
+- marca + tipo genérico + tamaño no bastan;
+- Los Andes `code` es SKU, no EAN;
+- placeholders de marca no cuentan como marca de consumidor;
+- imágenes son evidencia auxiliar, no autoridad de matching;
+- candidatos por similitud quedan en `review_required`, nunca se auto-publican
+  como equivalentes sólo por score.
+
+La cola privada de revisión puede materializar candidatos fuzzy, conflictos de
+GTIN y gaps de taxonomía. No se publica al B2C y no muta perfiles automáticamente.
+
+## Freshness y métricas
+
+Cada oferta/ubicación debe conservar `as_of`/`observed_at`, último run aceptado,
+edad y estado de freshness.
+
+Estados conceptuales:
 
 ```text
-SPS válido
-+
-TGU válido
-+
-SQLite limpio validado
+FRESH
+STALE
+UNAVAILABLE
 ```
 
-Antes de importar/verificar:
+Datos stale/unavailable o temporalmente incompatibles pueden seguir visibles como
+último dato válido, pero no generan ranking/PCI/recomendación competitiva nueva.
 
-- `PRAGMA integrity_check`;
-- foreign keys;
-- una fila de supermercado;
-- dos ubicaciones;
-- conteos de productos/histórico/runs;
-- precios;
-- `location_id`;
-- ausencia de periodos actuales duplicados.
+Toda métrica comparativa debe conservar cobertura/denominador y faltantes.
 
-## Tráfico live
+## Compra Inteligente B2C
 
-Los markers/IDs versionados no conceden autorización nueva.
+Compra Inteligente es un **planificador/comparador**, no una tienda ni checkout.
 
-- no reutilizar autorizaciones consumidas;
-- no generar solicitudes nuevas contra La Colonia sin autorización humana explícita vigente;
-- artifacts y datos ya obtenidos pueden reutilizarse offline;
-- no evadir CAPTCHA, login, 403, 429 ni controles anti-bot;
-- una autorización puntual no autoriza recurrencia diaria.
+Flujo principal:
+
+```text
+FILTRAR
+→ COMPARAR
+→ PONER CANTIDAD
+→ ELEGIR SUPERMERCADO
+→ AGREGAR
+→ SEGUIR COMPRANDO
+→ VER MI LISTA
+```
+
+Los filtros son navegación principal. La búsqueda textual es secundaria.
+
+Cascada preferida:
+
+```text
+Categoría
+→ Producto / Tipo
+→ Marca
+→ Presentación
+```
+
+Reglas de decisión:
+
+- la tabla/tarjetas muestran sólo resultados que cumplen los filtros activos;
+- cantidad existe una sola vez por producto/fila;
+- sólo una oferta/supermercado puede estar seleccionada por producto;
+- elegir otra oferta reemplaza la selección de esa fila;
+- nunca auto-seleccionar el precio más bajo;
+- faltante se representa como `—`, nunca como precio cero;
+- selección manual del usuario y ranking visual son estados distintos.
+
+Ranking visual sólo para ofertas realmente comparables y frescas:
+
+- mínimo: verde;
+- máximo: rojo;
+- intermedios: amarillo/ámbar;
+- dos ofertas: verde/rojo;
+- empates comparten estado;
+- todas iguales: equivalente/neutro;
+- una sola oferta, single-source, review-required o no comparable: neutral.
+
+Los colores requieren texto/estado accesible.
+
+Mi lista usa:
+
+```text
+Producto | Cantidad | Precio unitario | Total
+```
+
+con:
+
+```text
+line_total = current_price * quantity
+retailer_subtotal = sum(line_total)
+grand_total = sum(retailer_subtotal)
+```
+
+No inventar ISV, impuestos, delivery, service fees, membership fees ni costos de
+checkout. Un faltante deja el total dependiente incompleto; no vale cero.
+
+La lista debe conservar identidad exacta y retailer seleccionado. Refresh no puede
+hacer sustituciones silenciosas. CSV/PDF y compartir por WhatsApp son salidas
+locales del planificador, no órdenes de compra.
+
+En desktop puede usarse matriz; en móvil transformar a tarjetas/ofertas apiladas,
+no comprimir una tabla ancha hasta volverla ilegible.
+
+## Publicación B2C
+
+Cadena autorizada:
+
+```text
+Turso
+→ homologación derivada
+→ Python analytics
+→ marts/catálogo
+→ validación schema/scope/hash/secretos
+→ publicación atómica en portfolio-data
+→ navegador estático
+```
+
+El navegador realiza **cero lecturas a Turso** y no recibe RAW, secretos ni colas
+privadas.
+
+Consumer Catalog v3 debe seguir particionado: manifest/facetas pequeños, índices y
+particiones bajo demanda, detalle/historia cuando sea necesario. No volver a un
+JSON monolítico con catálogo + historia completa.
+
+Una publicación fallida conserva el último contrato público válido.
+
+## Power BI B2B
+
+Power BI consume `rpi-business-mart/v1` y presenta las nueve superficies del
+producto. Los assets reproducibles viven en `powerbi/rpi/`.
+
+No inventar un `.pbix` binario ni afirmar que existe si no fue construido y
+verificado realmente. Python sigue calculando identidad, PCI, ranking, freshness,
+deltas y clasificación histórica.
+
+## Operación recurrente y recuperación
+
+La ejecución diaria productiva ya está autorizada y existe. No volver a tratar la
+recurrencia como pendiente ni exigir autorización humana para cada run programado.
+
+La adquisición diaria está aislada por cadena. Cada cadena emite handoff sólo si
+supera validaciones; la persistencia global sigue fail-closed y exige todos los
+handoffs requeridos.
+
+La recuperación programada puede reejecutar jobs fallidos/dependencias dentro del
+mismo run, reutilizando handoffs aceptados de intentos previos. Mantener los límites
+y contratos de seguridad documentados en `PROJECT_STATE.md` y en los workflows
+vigentes.
+
+No provocar crawls manuales/live sólo para fabricar evidencia.
+
+## Tráfico live y autorizaciones ad hoc
+
+La recurrencia productiva ya configurada tiene su propia autoridad operativa.
+Fuera de ella, una observación/probe/crawl manual nuevo requiere la autoridad que
+corresponda al workflow y alcance actuales.
+
+Nunca:
+
+- reutilizar un marker temporal consumido como autorización abierta;
+- evadir CAPTCHA, login, 403, 429, rate limits o anti-bot;
+- explotar vulnerabilidades;
+- usar fuentes privadas/no públicas;
+- aumentar tráfico por estética o para obtener una métrica que puede derivarse
+  offline.
+
+Preferir fuentes estructuradas/batch, caching, concurrencia baja y retries
+acotados.
+
+## Vercel y fronteras con PAGOS
+
+El proyecto Vercel `pagos-whatsapp-residencial` pertenece a PAGOS, no a RPI.
+Cambios RPI no deben modificar su app, variables, dominios ni secretos.
+
+Si Compra Inteligente se despliega en Vercel, debe ser un proyecto independiente
+con root RPI/B2C y aislamiento propio del monorepo. `portfolio-data` es una rama de
+datos publicados, no una aplicación PAGOS.
+
+No reutilizar el proyecto Vercel de PAGOS para servir Compra Inteligente.
+
+## Gate de simplicidad
+
+Antes de crear archivo de producción, módulo, clase, adapter, workflow, tabla,
+dependencia o servicio:
+
+1. ¿Cuál es el blocker exacto?
+2. ¿Existe ya una capacidad que lo resuelva?
+3. ¿Puede resolverse con una operación puntual o módulo existente?
+4. ¿Cuál es el cambio más pequeño correcto?
+5. ¿Qué evidencia real justifica la complejidad?
+
+Orden preferido:
+
+```text
+capacidad existente
+> operación puntual
+> función/módulo existente
+> cambio específico pequeño
+> abstracción nueva
+> infraestructura nueva
+```
+
+No crear microservicios, backend B2C, login, app móvil, BigQuery/Cloud Run o ML por
+anticipación. Incorporarlos sólo cuando resuelvan una necesidad demostrada.
 
 ## Desarrollo
 
 ```text
 AUDITAR
--> IMPLEMENTAR
--> PROBAR
--> CORREGIR
--> CI
--> REVISAR
--> MERGE
--> VERIFICAR
--> SIGUIENTE BLOQUE
+→ IMPLEMENTAR
+→ PROBAR
+→ CORREGIR
+→ CI
+→ REVISAR
+→ MERGE
+→ VERIFICAR EN PRODUCCIÓN
+→ SIGUIENTE BLOQUE
 ```
 
-Fusionar sólo con CI verde.
-
-No usar force push, reset destructivo ni rebase destructivo.
-
-Actualizar documentación sólo con evidencia real.
-
-## Deuda y visualización
-
-BigQuery, Google Sheets, Cloudflare y código histórico pueden permanecer inactivos
-si no bloquean el MVP.
-
-La visualización se diseñará después, cuando existan más supermercados y se sepa
-qué campos son realmente comparables entre fuentes.
+- Fusionar sólo con CI verde.
+- No usar force push, reset destructivo ni rebase destructivo.
+- No mezclar proyectos en un mismo PR.
+- No usar PRs de PAGOS/MUNDIAL como checkpoints RPI.
+- Actualizar documentación únicamente con evidencia real demostrada.
+- No detener el trabajo por una deuda histórica que no bloquea el objetivo actual.
 
 **Cuando compitan una arquitectura más completa y el camino más corto correcto al
-MVP, elegir el segundo.**
+producto, elegir el segundo.**
