@@ -35,6 +35,7 @@ _BRAND_CANONICAL = {
     "gallina feliz": "Gallina Feliz",
     "great value": "Great Value",
     "hellmann s": "Hellmann's",
+    "hellmanns": "Hellmann's",
     "kraft": "Kraft",
     "marca marketside": "Marketside",
     "marketside": "Marketside",
@@ -67,6 +68,10 @@ _OUNCE_RE = re.compile(
     r"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>oz|onza|onzas)(?!\w)",
     re.IGNORECASE,
 )
+_GALLON_RE = re.compile(
+    r"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>gal|gl|galon|galones)(?!\w)",
+    re.IGNORECASE,
+)
 _EGG_COUNT_RE = re.compile(
     rf"(?<!\w)(?P<count>\d{{1,3}})\s*(?:p|m|g|l|xl|jumbo)?\s*{_COUNT_UNIT_PATTERN}(?!\w)",
     re.IGNORECASE,
@@ -78,6 +83,7 @@ _VALID_PROFILE_PRESENTATION = frozenset(
 _EGG_FALSE_POSITIVES = frozenset(
     {"tallarin", "fideo", "mayonesa", "claras", "clara", "kinder", "toro"}
 )
+_GENERIC_PRESENTATIONS = frozenset({"un", "unidad", "unidades"})
 
 
 def _clean(value: object) -> str | None:
@@ -221,6 +227,7 @@ def _from_text(value: object) -> str | None:
         (_MASS_RE, "mass"),
         (_VOLUME_RE, "volume"),
         (_OUNCE_RE, "ounce"),
+        (_GALLON_RE, "gallon"),
     ):
         matches.extend((match.start(), kind, match) for match in regex.finditer(text))
     if not matches:
@@ -240,6 +247,8 @@ def _from_text(value: object) -> str | None:
         if unit in {"l", "lt", "litro", "litros"}:
             amount *= 1000
         return _from_dimension("volume_ml", amount)
+    if kind == "gallon":
+        return f"{_format_decimal(amount)} gal"
     return _from_dimension("ounce", amount)
 
 
@@ -267,4 +276,13 @@ def canonical_presentation(
         if normalized is not None:
             return normalized
 
-    return _from_text(source_presentation) or _from_text(product_name)
+    normalized = _from_text(source_presentation) or _from_text(product_name)
+    if normalized is not None:
+        return normalized
+
+    # No destruimos una presentación fuente todavía no modelada (p. ej. una
+    # unidad comercial rara). Los placeholders genéricos sí se ocultan.
+    source = _clean(source_presentation)
+    if source is not None and (_fold(source) or "") not in _GENERIC_PRESENTATIONS:
+        return source
+    return None
