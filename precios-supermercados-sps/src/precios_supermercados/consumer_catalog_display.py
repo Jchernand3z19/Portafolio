@@ -1,8 +1,9 @@
 """Normalización de presentación y marca para superficies públicas B2C.
 
-Esta capa es sólo de presentación/consumo. No cambia identidad canónica, matching,
-precios ni el histórico persistido. Las inferencias de marca se limitan a aliases
-explícitos presentes en el nombre del producto.
+La identidad y la magnitud canónica se resuelven aguas arriba. Esta capa sólo
+elige un ``display_value`` legible, preservando cuando es posible la unidad
+comercial escrita por la fuente (por ejemplo ``1.2 lb``) en lugar de exponer el
+valor técnico de conversión (por ejemplo ``544.310844 g``).
 """
 from __future__ import annotations
 
@@ -27,9 +28,6 @@ _GENERIC_BRAND_KEYS = frozenset(
     }
 )
 
-# Alias explícitos: además de fijar capitalización, permiten recuperar la marca
-# desde el nombre cuando la fuente sólo expone placeholders conocidos o cuando
-# una etiqueta fuente contradice una única marca reconocible escrita en el nombre.
 _BRAND_CANONICAL = {
     "bonovo": "Bonovo",
     "don cristobal": "Don Cristobal",
@@ -60,11 +58,11 @@ _COUNT_RE = re.compile(
     re.IGNORECASE,
 )
 _MASS_RE = re.compile(
-    r"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>kg|kilogramos?|g|gr|gramos?)(?!\w)",
+    r"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>mg|kg|kilogramos?|g|grs?|gramos?|lb|lbs|libra|libras)(?!\w)",
     re.IGNORECASE,
 )
 _VOLUME_RE = re.compile(
-    r"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>ml|l|lt|litros?)(?!\w)",
+    r"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*(?P<unit>ml|l|lt|lts|litros?)(?!\w)",
     re.IGNORECASE,
 )
 _OUNCE_RE = re.compile(
@@ -84,7 +82,7 @@ _VALID_PROFILE_PRESENTATION = frozenset(
     {"confirmed", "name_only", "source_only", "name_preferred_source_conflict"}
 )
 _EGG_FALSE_POSITIVES = frozenset(
-    {"tallarin", "fideo", "mayonesa", "claras", "clara", "kinder", "toro"}
+    {"tallarin", "tallarines", "fideo", "fideos", "mayonesa", "claras", "clara", "kinder", "toro"}
 )
 _GENERIC_PRESENTATIONS = frozenset({"un", "unidad", "unidades"})
 
@@ -101,9 +99,7 @@ def _fold(value: object) -> str | None:
     if cleaned is None:
         return None
     decomposed = unicodedata.normalize("NFKD", cleaned)
-    without_marks = "".join(
-        char for char in decomposed if not unicodedata.combining(char)
-    )
+    without_marks = "".join(char for char in decomposed if not unicodedata.combining(char))
     normalized = re.sub(r"[^0-9a-zA-Z]+", " ", without_marks).casefold()
     return " ".join(normalized.split()) or None
 
@@ -121,7 +117,6 @@ def _format_decimal(value: Decimal) -> str:
 
 
 def _smart_brand_case(value: str) -> str:
-    """Arregla fuentes ALL CAPS/all lowercase sin reescribir marcas ya cuidadas."""
     if value.isupper() or value.islower():
         value = value.title()
         value = re.sub(r"'S\b", "'s", value)
@@ -129,7 +124,6 @@ def _smart_brand_case(value: str) -> str:
 
 
 def _brand_from_name(product_name: object) -> str | None:
-    """Acepta sólo una marca conocida no ambigua escrita en el nombre."""
     name = _fold(product_name) or ""
     matches = {
         display
@@ -140,7 +134,7 @@ def _brand_from_name(product_name: object) -> str | None:
 
 
 def canonical_brand(raw_brand: object, product_name: object) -> str | None:
-    """Devuelve marca pública estable sin publicar placeholders o conflictos obvios."""
+    """Capitaliza la marca canónica y oculta placeholders conocidos."""
     raw = _clean(raw_brand)
     key = _fold(raw)
     name_brand = _brand_from_name(product_name)
@@ -163,7 +157,6 @@ def _is_shell_egg(product_name: object, product_type: object) -> bool:
 
 
 def canonical_egg_size(product_name: object, product_type: object) -> str | None:
-    """Normaliza tamaño de huevo sin confundir la G de grado con gramos."""
     if not _is_shell_egg(product_name, product_type):
         return None
     name = _fold(product_name) or ""
@@ -173,17 +166,11 @@ def canonical_egg_size(product_name: object, product_type: object) -> str | None
         return "Extra grande"
     if re.search(r"\bjumbo\b", name):
         return "Jumbo"
-    if re.search(r"\b(?:pequeno|pequenos|pequena|pequenas)\b", name) or re.search(
-        r"\bcarton\s+p\b", name
-    ):
+    if re.search(r"\b(?:pequeno|pequenos|pequena|pequenas)\b", name) or re.search(r"\bcarton\s+p\b", name):
         return "Pequeño"
-    if re.search(r"\b(?:mediano|medianos|mediana|medianas)\b", name) or re.search(
-        r"\bcarton\s+m\b", name
-    ) or re.search(r"\bhuevo(?:s)?\s+(?:liso\s+)?m\b", name):
+    if re.search(r"\b(?:mediano|medianos|mediana|medianas)\b", name) or re.search(r"\bcarton\s+m\b", name) or re.search(r"\bhuevo(?:s)?\s+(?:liso\s+)?m\b", name):
         return "Mediano"
-    if re.search(r"\b(?:grande|grandes)\b", name) or re.search(
-        r"\bcarton\s+g\b", name
-    ) or re.search(r"\bhuevo(?:s)?\s+g\b", name) or re.search(
+    if re.search(r"\b(?:grande|grandes)\b", name) or re.search(r"\bcarton\s+g\b", name) or re.search(r"\bhuevo(?:s)?\s+g\b", name) or re.search(
         rf"\d+\s*g\s*{_COUNT_UNIT_PATTERN}\b", name
     ):
         return "Grande"
@@ -193,9 +180,7 @@ def canonical_egg_size(product_name: object, product_type: object) -> str | None
 def _egg_count(product_name: object, source_presentation: object, product_type: object) -> int | None:
     if not _is_shell_egg(product_name, product_type):
         return None
-    combined = " ".join(
-        value for value in (_clean(product_name), _clean(source_presentation)) if value
-    )
+    combined = " ".join(value for value in (_clean(product_name), _clean(source_presentation)) if value)
     matches = list(_EGG_COUNT_RE.finditer(combined))
     if not matches:
         return None
@@ -214,11 +199,15 @@ def _from_dimension(dimension: object, total_base: object) -> str | None:
     if dimension == "mass_g":
         if total >= 1000 and total % 1000 == 0:
             return f"{_format_decimal(total / 1000)} kg"
-        return f"{_format_decimal(total)} g"
+        # La base canónica puede venir de una conversión imperial con muchos
+        # decimales. Si no existe texto comercial, redondeamos sólo display.
+        rounded = total.quantize(Decimal("0.01"))
+        return f"{_format_decimal(rounded)} g"
     if dimension == "volume_ml":
         if total >= 1000 and total % 1000 == 0:
             return f"{_format_decimal(total / 1000)} L"
-        return f"{_format_decimal(total)} ml"
+        rounded = total.quantize(Decimal("0.01"))
+        return f"{_format_decimal(rounded)} ml"
     if dimension == "ounce":
         return f"{_format_decimal(total)} oz"
     return None
@@ -245,18 +234,22 @@ def _from_text(value: object) -> str | None:
         return None
     unit = match.group("unit").casefold()
     if kind == "count":
-        return _from_dimension("count", amount)
+        return f"{int(amount)} unidades" if amount == amount.to_integral_value() else None
     if kind == "mass":
+        if unit == "mg":
+            return f"{_format_decimal(amount)} mg"
         if unit.startswith("kg") or unit.startswith("kilo"):
-            amount *= 1000
-        return _from_dimension("mass_g", amount)
+            return f"{_format_decimal(amount)} kg"
+        if unit in {"lb", "lbs", "libra", "libras"}:
+            return f"{_format_decimal(amount)} lb"
+        return f"{_format_decimal(amount)} g"
     if kind == "volume":
-        if unit in {"l", "lt", "litro", "litros"}:
-            amount *= 1000
-        return _from_dimension("volume_ml", amount)
+        if unit in {"l", "lt", "lts", "litro", "litros"}:
+            return f"{_format_decimal(amount)} L"
+        return f"{_format_decimal(amount)} ml"
     if kind == "gallon":
         return f"{_format_decimal(amount)} gal"
-    return _from_dimension("ounce", amount)
+    return f"{_format_decimal(amount)} oz"
 
 
 def canonical_presentation(
@@ -268,27 +261,25 @@ def canonical_presentation(
     presentation_total_base: object,
     presentation_status: object,
 ) -> str | None:
-    """Presentación pública estable a partir de evidencia ya aceptada.
-
-    Para huevos con cáscara, el conteo explícito del nombre tiene precedencia para
-    evitar interpretar ``30G UND`` como 30 gramos: G es el tamaño/grado y UND el
-    conteo. Para el resto se prioriza la firma normalizada persistida.
-    """
+    """Elige display comercial sin alterar la magnitud canónica de matching."""
     egg_count = _egg_count(product_name, source_presentation, product_type)
     if egg_count is not None:
         return f"{egg_count} unidades"
+
+    # raw/display antes de canonical base: conserva 1.2 lb como 1.2 lb y evita
+    # publicar 544.310844 g. La magnitud convertida sigue disponible para matching.
+    source_display = _from_text(source_presentation)
+    name_display = _from_text(product_name)
+    if source_display is not None:
+        return source_display
+    if name_display is not None:
+        return name_display
 
     if presentation_status in _VALID_PROFILE_PRESENTATION:
         normalized = _from_dimension(presentation_dimension, presentation_total_base)
         if normalized is not None:
             return normalized
 
-    normalized = _from_text(source_presentation) or _from_text(product_name)
-    if normalized is not None:
-        return normalized
-
-    # No destruimos una presentación fuente todavía no modelada (p. ej. una
-    # unidad comercial rara). Los placeholders genéricos sí se ocultan.
     source = _clean(source_presentation)
     if source is not None and (_fold(source) or "") not in _GENERIC_PRESENTATIONS:
         return source
