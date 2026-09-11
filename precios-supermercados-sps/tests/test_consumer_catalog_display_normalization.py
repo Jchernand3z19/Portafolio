@@ -89,10 +89,50 @@ def test_egg_grade_g_before_und_is_not_interpreted_as_grams() -> None:
     assert rows[0]["variant"] == "Grande"
 
 
+def test_shell_egg_pack_is_normalized_as_count() -> None:
+    item = offer(
+        name="Nutri yema huevo grande 60 pack",
+        brand="Marca COMANDES",
+        presentation=None,
+        dimension=None,
+        total=None,
+        status="missing",
+    )
+    rows = MODULE.build_rows(
+        (item,),
+        {("colonial", "colonial_sps"): "FRESH"},
+    )
+    assert rows[0]["brand"] == "Nutri Yema"
+    assert rows[0]["presentation"] == "60 unidades"
+    assert rows[0]["variant"] == "Grande"
+
+
 def test_placeholder_brand_is_recovered_only_from_explicit_alias() -> None:
     assert MODULE.canonical_brand("RMS", "Bonovo Huevo G 30 und") == "Bonovo"
     assert MODULE.canonical_brand("Marca COMANDES", "Nutri yema huevos 30 unds") == "Nutri Yema"
     assert MODULE.canonical_brand("RMS", "Producto sin marca reconocible 30 und") is None
+
+
+def test_unique_explicit_name_brand_overrides_conflicting_source_brand_for_display() -> None:
+    assert (
+        MODULE.canonical_brand(
+            "DON CRISTOBAL",
+            "Huevo de Gallina Marketside Jumbo - 20 Unidades",
+        )
+        == "Marketside"
+    )
+    assert (
+        MODULE.canonical_brand(
+            "MARKETSIDE",
+            "Huevo de Gallina Don Cristobal Marron - 15 Unidades",
+        )
+        == "Don Cristobal"
+    )
+
+
+def test_non_generic_source_brand_is_kept_without_an_explicit_conflicting_alias() -> None:
+    assert MODULE.canonical_brand("DON CRISTOBAL", "Huevo de Gallina Marron - 15 Unidades") == "Don Cristobal"
+    assert MODULE.canonical_brand("Marca Propia", "Producto sin marca reconocible 30 und") == "Marca Propia"
 
 
 def test_brand_case_and_accent_aliases_are_canonical() -> None:
@@ -121,6 +161,7 @@ def test_egg_sizes_are_separate_from_pack_count() -> None:
         "Bonovo Huevo G 30 und": "Grande",
         "Norteño Huevos 30XL UND": "Extra grande",
         "Bonovo jumbo huevos carton 10 und": "Jumbo",
+        "Nutri yema huevo grande 60 pack": "Grande",
     }
     for name, expected in cases.items():
         assert MODULE.canonical_egg_size(name, "Huevo") == expected
