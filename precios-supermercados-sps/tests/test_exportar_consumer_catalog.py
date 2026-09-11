@@ -150,13 +150,14 @@ def test_exports_partitioned_visible_catalog_with_safe_comparability(tmp_path: P
     assert database.read_bytes() == before
     assert manifest["schema"] == "rpi-consumer-catalog-manifest/v3"
     assert manifest["catalog_schema"] == "rpi-consumer-catalog/v3"
-    assert manifest["visible_rows"] == 6
-    assert manifest["source_offers"] == 8
+    # Compra Inteligente no publica filas sin ninguna oferta comprable.
+    assert manifest["visible_rows"] == 5
+    assert manifest["source_offers"] == 7
     assert set(manifest["retailer_offer_counts"]) == {item[0] for item in MODULE.EXPECTED_SCOPE}
     assert all(count > 0 for count in manifest["retailer_offer_counts"].values())
     assert manifest["comparability_counts"] == {
         "comparable": 2,
-        "individual": 3,
+        "individual": 2,
         "single_source": 1,
     }
     assert manifest["offers_with_historical_summary"] == 7
@@ -171,6 +172,7 @@ def test_exports_partitioned_visible_catalog_with_safe_comparability(tmp_path: P
     assert all(item["bytes"] > 0 and item["gzip_bytes"] > 0 for item in manifest["files"])
 
     rows = all_rows(output, manifest)
+    assert all(row["product_name"] != "Artículo sin clasificar" for row in rows)
     milk = next(row for row in rows if row["canonical_product_id"] == "gtin:leche")
     assert milk["comparability"] == "comparable"
     assert [offer["relative_price_state"] for offer in milk["offers"]] == ["best", "highest"]
@@ -197,24 +199,21 @@ def test_exports_partitioned_visible_catalog_with_safe_comparability(tmp_path: P
     assert "review_required" not in json.dumps(manifest) + json.dumps(rows)
 
 
-def test_facets_preserve_unknowns_and_type_indexes_point_to_partitions(tmp_path: Path) -> None:
+def test_facets_exclude_unshoppable_rows_and_type_indexes_point_to_partitions(tmp_path: Path) -> None:
     database = tmp_path / "source.sqlite"
     output = tmp_path / "public"
     build_db(database)
     manifest = export(database, output)
     facets = json.loads((output / "facets-sps.json").read_text())
     assert facets["schema"] == "rpi-consumer-facets/v3"
-    assert facets["coverage"]["category"] == {"known": 5, "unknown": 1}
-    unknown = next(item for item in facets["categories"] if item["value"] is None)
-    assert unknown["label"] == "Sin categoría normalizada"
-    assert unknown["navigation"] == "search"
-    paths = [entry["path"] for entry in unknown["search_indexes"]]
-    paths.extend(
+    assert facets["coverage"]["category"] == {"known": 5, "unknown": 0}
+    assert all(item["value"] is not None for item in facets["categories"])
+    paths = [
         product_type["index_path"]
         for category in facets["categories"]
         if category["navigation"] == "facets"
         for product_type in category["product_types"]
-    )
+    ]
     indexes = [json.loads((output / path).read_text()) for path in paths]
     assert sum(index["row_count"] for index in indexes) == manifest["visible_rows"]
     assert all((output / row["partition"]).is_file() for index in indexes for row in index["rows"])
