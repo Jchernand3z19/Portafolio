@@ -7,7 +7,10 @@ normalización de lectura antes de escribir archivos públicos.
 """
 from __future__ import annotations
 
+import re
 import sys
+import unicodedata
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -31,6 +34,51 @@ for _name in dir(_core):
 _ORIGINAL_BUILD_ROWS = _core.build_rows
 _ORIGINAL_EXPORT = _core.export_consumer_catalog
 _ORIGINAL_MAIN = _core.main
+
+
+def _fold_public(value: object) -> str:
+    """Normaliza texto sólo para reglas públicas explícitas y auditables."""
+    if not isinstance(value, str):
+        return ""
+    decomposed = unicodedata.normalize("NFKD", value)
+    ascii_text = "".join(char for char in decomposed if not unicodedata.combining(char))
+    normalized = re.sub(r"[^0-9a-zA-Z]+", " ", ascii_text).casefold()
+    return " ".join(normalized.split())
+
+
+def _normalize_public_taxonomy(row: dict[str, object]) -> None:
+    """Completa taxonomía pública cuando el nombre aporta evidencia inequívoca.
+
+    No toca identidad canónica ni comparabilidad. ``Egg Beaters`` es una marca
+    explícita y suficientemente distintiva para evitar que sus productos terminen
+    en ``Sin categoría`` cuando la fuente trae ``RMS`` y un nombre en inglés.
+    """
+    name = _fold_public(row.get("product_name"))
+    if re.search(r"(?<!\w)egg\s+beaters(?!\w)", name):
+        row["brand"] = "Egg Beaters"
+        if not row.get("category"):
+            row["category"] = "Alimentos"
+        if not row.get("product_type"):
+            row["product_type"] = "Huevo"
+
+
+def _row_is_shoppable(row: dict[str, object]) -> bool:
+    """Compra Inteligente sólo indexa filas con al menos una oferta comprable."""
+    offers = row.get("offers")
+    if not isinstance(offers, list):
+        return False
+    for offer in offers:
+        if not isinstance(offer, dict):
+            continue
+        if offer.get("availability") == "out_of_stock" or offer.get("freshness_status") == "UNAVAILABLE":
+            continue
+        try:
+            price = Decimal(str(offer.get("current_price")))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+        if price.is_finite() and price > 0:
+            return True
+    return False
 
 
 def _derived_presentation(offer: VisibleOffer) -> str | None:
@@ -59,14 +107,18 @@ def build_rows(
         history_by_offer,
         as_of_utc=as_of_utc,
     )
+    visible: list[dict[str, object]] = []
     for row in rows:
         row["brand"] = canonical_brand(row.get("brand"), row.get("product_name"))
+        _normalize_public_taxonomy(row)
         size = canonical_egg_size(row.get("product_name"), row.get("product_type"))
         if size is not None:
             # Campo aditivo: la presentación sigue siendo el conteo; el tamaño de
             # huevo no vuelve a fragmentar el selector de presentación.
             row["variant"] = size
-    return rows
+        if _row_is_shoppable(row):
+            visible.append(row)
+    return visible
 
 
 def _sync_core() -> None:
