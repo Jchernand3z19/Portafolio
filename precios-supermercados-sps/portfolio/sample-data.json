@@ -1,7 +1,7 @@
 {
   "comparison_policy": "fail_closed_strong_identity_and_commercial_consistency",
   "currency": "HNL",
-  "published_at_utc": "2026-09-12T20:55:59Z",
+  "published_at_utc": "2026-09-13T15:26:57Z",
   "row_count": 10,
   "rows": [
     {
@@ -203,39 +203,6 @@
       "savings_vs_highest_pct": "33.04"
     },
     {
-      "best_price": "100.50",
-      "best_supermarket_id": "walmart",
-      "canonical_gtin": "07500435183697",
-      "canonical_product_id": "prod_gtin_07500435183697",
-      "highest_price": "125.90",
-      "offers": [
-        {
-          "current_price": "125.90",
-          "is_best_price": false,
-          "location_id": "la_colonia_sps",
-          "source_brand": "Old Spice",
-          "source_category": "Cuidado personal",
-          "source_name": "Desodorante Barra Old Spice Mar Profundo 85 Gr",
-          "source_presentation": "85 Gr",
-          "source_record_id": "la_colonia:2122",
-          "supermarket_id": "la_colonia"
-        },
-        {
-          "current_price": "100.50",
-          "is_best_price": true,
-          "location_id": "walmart_sps",
-          "source_brand": "OLD SPICE",
-          "source_category": "Cuidado personal",
-          "source_name": "Barra Desodorante Old Spice Mar Profundo - 85 g",
-          "source_presentation": null,
-          "source_record_id": "walmart:21717",
-          "supermarket_id": "walmart"
-        }
-      ],
-      "savings_vs_highest": "25.40",
-      "savings_vs_highest_pct": "20.17"
-    },
-    {
       "best_price": "77.90",
       "best_supermarket_id": "walmart",
       "canonical_gtin": "00884394002495",
@@ -333,6 +300,39 @@
       ],
       "savings_vs_highest": "21.65",
       "savings_vs_highest_pct": "7.29"
+    },
+    {
+      "best_price": "224.50",
+      "best_supermarket_id": "la_colonia",
+      "canonical_gtin": "07500435155847",
+      "canonical_product_id": "prod_gtin_07500435155847",
+      "highest_price": "246.00",
+      "offers": [
+        {
+          "current_price": "224.50",
+          "is_best_price": true,
+          "location_id": "la_colonia_sps",
+          "source_brand": "Pantene",
+          "source_category": "Cuidado personal",
+          "source_name": "Shampoo Pantene Pro-V Bambu Nutre Y Crece 400 Ml",
+          "source_presentation": "400 Ml",
+          "source_record_id": "la_colonia:2543",
+          "supermarket_id": "la_colonia"
+        },
+        {
+          "current_price": "246.00",
+          "is_best_price": false,
+          "location_id": "walmart_sps",
+          "source_brand": "PANTENE",
+          "source_category": "Cuidado personal",
+          "source_name": "Shampoo Pantene Pro-V Bambú Nutre Crece - 400 ml",
+          "source_presentation": null,
+          "source_record_id": "walmart:19217",
+          "supermarket_id": "walmart"
+        }
+      ],
+      "savings_vs_highest": "21.50",
+      "savings_vs_highest_pct": "8.74"
     }
   ],
   "schema": "precios-sps-safe-portfolio-sample/v1",
@@ -347,8 +347,8 @@
     }
   ],
   "selection_rule": "highest_absolute_savings_within_safe_common_comparable_universe",
-  "source_as_of": "2026-09-12T20:53:28.078845Z",
+  "source_as_of": "2026-09-13T15:24:23.191257Z",
   "source_head_sha": "db906a1ac762e0f1a0d788183cc28241935e5ce6",
   "source_schema": "rpi-consumer-mart/v2",
-  "source_workflow_run_id": 34718371352
+  "source_workflow_run_id": 34765481183
 }
