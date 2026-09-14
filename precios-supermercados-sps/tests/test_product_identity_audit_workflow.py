@@ -37,7 +37,7 @@ def test_request_is_closed_read_only_and_versioned() -> None:
         "action": "export_private_product_identity_audit",
         "read_only": True,
         "reason": "baseline_quality_audit",
-        "sequence": 1,
+        "sequence": 2,
     }
 
 
@@ -62,6 +62,13 @@ def test_identity_audit_uses_registered_read_only_entrypoint() -> None:
     audit = workflow["jobs"]["audit"]
     assert "permissions" not in audit
     assert "environment" not in audit
+    identity_step = next(
+        step
+        for step in audit["steps"]
+        if step.get("name")
+        == "Generar auditoría privada de identidad sin mutaciones ni scraping"
+    )
+    assert identity_step["if"] == "${{ !cancelled() }}"
 
 
 def test_identity_audit_is_private_fail_closed_and_non_mutating() -> None:

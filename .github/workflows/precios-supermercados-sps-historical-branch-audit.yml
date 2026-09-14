@@ -111,6 +111,7 @@ jobs:
           --markdown-output branch-audit-strict-v2.md
 
       - name: Generar auditoría privada de identidad sin mutaciones ni scraping
+        if: ${{ !cancelled() }}
         working-directory: precios-supermercados-sps
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
