@@ -27,6 +27,7 @@
         ".github/workflows/precios-supermercados-sps-cloudflare-probe.yml",
         ".github/workflows/precios-supermercados-sps-google-sheets-storage.yml",
         ".github/workflows/precios-supermercados-sps-historical-branch-audit.yml",
+        ".github/workflows/precios-supermercados-sps-identity-audit.yml",
         ".github/workflows/precios-supermercados-sps-homologation-refresh.yml",
         ".github/workflows/precios-supermercados-sps-la-colonia-command.yml",
         ".github/workflows/precios-supermercados-sps-la-colonia-diagnostic.yml",
