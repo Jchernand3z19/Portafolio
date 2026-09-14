@@ -758,3 +758,37 @@ def test_la_colonia_daily_verifier_counts_only_its_locations_in_shared_database(
         assert con.execute(statement.args[0].value, args).fetchall() == [
             ("la_colonia_sps", 2), ("la_colonia_tgu", 1),
         ]
+
+
+@pytest.mark.parametrize("suffix", [".yml", ".yaml"])
+def test_renamed_sps_workflow_is_still_classified(tmp_path: Path, suffix: str):
+    fake = tmp_path / f"backdoor{suffix}"
+    fake.write_text(
+        "name: alternate\non:\n  workflow_dispatch:\npermissions:\n  contents: read\n"
+        "jobs:\n  bypass:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n      - run: python precios-supermercados-sps/scripts/probar_la_colonia.py\n",
+        encoding="utf-8",
+    )
+    assert is_sps_workflow(fake)
+
+
+def test_job_level_reusable_workflow_reference_cannot_evade_pin_audit():
+    workflow = {"jobs": {"bypass": {"uses": "attacker/example/.github/workflows/live.yml@main"}}}
+    assert action_references(workflow) == ("attacker/example/.github/workflows/live.yml@main",)
+    reference = action_references(workflow)[0]
+    action, separator, revision = reference.partition("@")
+    assert separator
+    assert not re.fullmatch(r"[0-9a-f]{40}", revision)
+    assert action not in PINNED_ACTIONS
+
+
+def test_yaml_comments_cannot_satisfy_a_security_field(tmp_path: Path):
+    fake = tmp_path / "fake.yml"
+    fake.write_text(
+        "name: fake\non:\n  workflow_dispatch:\n# permissions:\n#   contents: read\n"
+        "jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n"
+        f"      # - uses: actions/checkout@{PINNED_ACTIONS['actions/checkout']}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(AssertionError):
+        load_workflow(fake)
