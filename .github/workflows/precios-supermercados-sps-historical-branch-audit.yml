@@ -9,6 +9,9 @@ on:
       - "precios-supermercados-sps/scripts/auditar_ramas_historicas.py"
       - "precios-supermercados-sps/scripts/auditar_ramas_historicas_v2.py"
       - "precios-supermercados-sps/scripts/resumir_delta_auditoria_ramas_v2.py"
+      - "precios-supermercados-sps/scripts/exportar_revision_homologacion.py"
+      - "precios-supermercados-sps/src/precios_supermercados/product_identity_v2.py"
+      - "precios-supermercados-sps/.automation/product-identity-audit-request.json"
       - "precios-supermercados-sps/docs/audits/precios-sps-historical-branch-overrides.json"
       - "precios-supermercados-sps/docs/audits/precios-sps-historical-branch-decisions-v2.json"
       - ".github/workflows/precios-supermercados-sps-historical-branch-audit.yml"
@@ -38,6 +41,42 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+
+      - name: Validar solicitud cerrada de auditoría de identidad
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('.automation/product-identity-audit-request.json')
+          document = json.loads(path.read_text(encoding='utf-8'))
+          expected_keys = {'schema', 'action', 'read_only', 'reason', 'sequence'}
+          if set(document) != expected_keys:
+              raise SystemExit('product_identity_audit_request_closed_set_mismatch')
+          if document.get('schema') != 'precios-sps-product-identity-audit-request/v1':
+              raise SystemExit('product_identity_audit_request_schema_invalid')
+          if document.get('action') != 'export_private_product_identity_audit':
+              raise SystemExit('product_identity_audit_request_action_invalid')
+          if document.get('read_only') is not True:
+              raise SystemExit('product_identity_audit_request_read_only_required')
+          if document.get('reason') not in {'baseline_quality_audit', 'operator_requested_audit'}:
+              raise SystemExit('product_identity_audit_request_reason_invalid')
+          if type(document.get('sequence')) is not int or document['sequence'] < 1:
+              raise SystemExit('product_identity_audit_request_sequence_invalid')
+          print(json.dumps({
+              'schema': document['schema'],
+              'read_only': document['read_only'],
+              'sequence': document['sequence'],
+          }, sort_keys=True))
+          PY
+
+      - name: Instalar dependencias verificadas para identidad
+        run: |
+          set -euo pipefail
+          python -m pip install -r precios-supermercados-sps/requirements.txt
+          python -m pip check
 
       - name: Refrescar inventario remoto de ramas
         run: git fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'
@@ -71,6 +110,18 @@ jobs:
           --json-output branch-audit-strict-v2.json
           --markdown-output branch-audit-strict-v2.md
 
+      - name: Generar auditoría privada de identidad sin mutaciones ni scraping
+        working-directory: precios-supermercados-sps
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p run-artifacts/product-identity-audit
+          python scripts/exportar_revision_homologacion.py \
+            --output run-artifacts/product-identity-audit/review-queue.json \
+            | tee run-artifacts/product-identity-audit/audit-summary.json
+
       - name: Conservar evidencia sanitizada
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v6.0.0
@@ -82,5 +133,7 @@ jobs:
             branch-audit-delta-v2.md
             branch-audit-strict-v2.json
             branch-audit-strict-v2.md
+            precios-supermercados-sps/run-artifacts/product-identity-audit/review-queue.json
+            precios-supermercados-sps/run-artifacts/product-identity-audit/audit-summary.json
           if-no-files-found: error
           retention-days: 30
