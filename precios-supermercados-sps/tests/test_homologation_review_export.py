@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from precios_supermercados.product_homologation import SourceProductRecord, homologate_products
+from precios_supermercados.product_identity_v2 import homologate_products_v2
 from scripts.exportar_revision_homologacion import SCHEMA, build_review_queue
 
 
@@ -78,3 +79,44 @@ def test_review_queue_limits_large_human_review_sections_deterministically() -> 
     assert queue["taxonomy_gaps"]["total"] == 5
     assert queue["taxonomy_gaps"]["included"] == 2
     assert queue["taxonomy_gaps"]["truncated"] is True
+
+
+def test_review_v2_exposes_raw_canonical_fields_and_before_after_metrics() -> None:
+    records = (
+        product(
+            "colonial:1",
+            "colonial",
+            "Nutri Yema Claras de Huevo 554gr",
+            brand="Nutri Yema",
+        ),
+        product(
+            "andes:2",
+            "comisariato_los_andes",
+            "Nutri Yema Claras de Huevo Líquidas 1.2 lb",
+            brand="Nutri Yema",
+            presentation="UN",
+        ),
+    )
+    baseline = homologate_products(records)
+    result = homologate_products_v2(records)
+    queue = build_review_queue(
+        result,
+        baseline_result=baseline,
+        generated_at_utc="2026-09-14T21:00:00Z",
+    )
+
+    assert queue["before_after"]["before_engine"] == "product-homologation-v1"
+    assert queue["before_after"]["after_engine"] == "product-homologation-v2"
+    candidate = queue["review_candidates"]["rows"][0]
+    assert candidate["confidence_level"] == "STRONG"
+    assert candidate["decision_state"] == "review_required"
+    products = {
+        item["source_record_id"]: item
+        for item in (candidate["left"], candidate["right"])
+    }
+    assert products["colonial:1"]["raw_presentation"] is None
+    assert products["colonial:1"]["normalized_quantity"] == "554"
+    assert products["colonial:1"]["normalized_unit"] == "g"
+    assert products["andes:2"]["source_presentation"] == "UN"
+    assert products["andes:2"]["canonical_total"] == "544.310844"
+    assert queue["summary"]["image_signal_status"] == "not_persisted_in_products_table"
