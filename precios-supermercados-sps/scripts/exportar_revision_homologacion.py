@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Exporta una cola privada de revisión de homologación desde Turso.
+"""Exporta una cola privada y explicable de revisión de identidad desde Turso.
 
-No modifica perfiles, precios ni ejecuciones y no consulta supermercados. Está
-pensado para ejecución manual: lee `products` una sola vez, ejecuta el mismo motor
-de homologación y materializa los casos que requieren trabajo humano o nuevas
-reglas. El artefacto nunca forma parte del serving B2C público.
+No modifica perfiles, precios ni ejecuciones y no consulta supermercados. Lee
+``products`` una vez, ejecuta identidad v2 y materializa candidatos/conflictos.
+El artefacto nunca forma parte del serving B2C público.
 """
 from __future__ import annotations
 
@@ -12,6 +11,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -27,16 +27,36 @@ from precios_supermercados.product_homologation import (  # noqa: E402
     ProductProfile,
     SourceProductRecord,
     homologate_products,
+    normalize_brand,
+)
+from precios_supermercados.product_identity_v2 import (  # noqa: E402
+    IDENTITY_NORMALIZATION_VERSION,
+    audit_identity_quality,
+    canonical_presentation_fields,
+    canonical_egg_size,
+    explain_candidate,
+    homologate_products_v2,
 )
 
-SCHEMA = "precios-sps-homologation-review/v1"
+SCHEMA = "precios-sps-homologation-review/v2"
 DEFAULT_CANDIDATE_LIMIT = 5000
 DEFAULT_GAP_LIMIT = 5000
 
 
+def _brand_evidence(profile: ProductProfile) -> str:
+    source = normalize_brand(profile.record.source_brand)
+    if source is not None and source == profile.normalized_brand:
+        return "source"
+    if source is None and profile.normalized_brand is not None:
+        return "name_known_brand"
+    if source is not None and profile.normalized_brand != source:
+        return "source_conflict"
+    return "missing"
+
+
 def _product_payload(profile: ProductProfile) -> dict[str, object]:
     record = profile.record
-    presentation = profile.presentation
+    presentation = canonical_presentation_fields(record, profile.taxonomy)
     return {
         "source_record_id": record.source_record_id,
         "supermarket_id": record.supermarket_id,
@@ -45,15 +65,27 @@ def _product_payload(profile: ProductProfile) -> dict[str, object]:
         "source_presentation": record.source_presentation,
         "source_category": record.source_category,
         "barcode": record.barcode,
+        "raw_brand": record.source_brand,
         "normalized_brand": profile.normalized_brand,
+        "canonical_brand": profile.normalized_brand,
+        "brand_evidence": _brand_evidence(profile),
         "canonical_gtin": profile.canonical_gtin,
         "category": profile.taxonomy.category,
         "subcategory": profile.taxonomy.subcategory,
         "product_type": profile.taxonomy.product_type,
-        "presentation_status": profile.presentation_status,
-        "presentation_dimension": None if presentation is None else presentation.dimension,
-        "presentation_total_base": None if presentation is None else format(presentation.total_base.normalize(), "f"),
-        "presentation_pack_count": None if presentation is None else presentation.pack_count,
+        "taxonomy_rule_id": profile.taxonomy.rule_id,
+        "egg_size": canonical_egg_size(record, profile.taxonomy),
+        "raw_presentation": presentation.raw_presentation,
+        "normalized_quantity": None if presentation.normalized_quantity is None else format(presentation.normalized_quantity.normalize(), "f"),
+        "normalized_unit": presentation.normalized_unit,
+        "normalized_pack_count": presentation.normalized_pack_count,
+        "canonical_total": None if presentation.canonical_total is None else format(presentation.canonical_total.normalize(), "f"),
+        "display_presentation": presentation.display_presentation,
+        "presentation_status": presentation.status,
+        "presentation_dimension": None if profile.presentation is None else profile.presentation.dimension,
+        "presentation_total_base": None if profile.presentation is None else format(profile.presentation.total_base.normalize(), "f"),
+        "presentation_pack_count": None if profile.presentation is None else profile.presentation.pack_count,
+        "matching_tokens": list(profile.matching_tokens),
     }
 
 
@@ -61,6 +93,8 @@ def build_review_queue(
     result: HomologationResult,
     *,
     generated_at_utc: str,
+    baseline_result: HomologationResult | None = None,
+    runtime_seconds: dict[str, float] | None = None,
     candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
     taxonomy_gap_limit: int = DEFAULT_GAP_LIMIT,
 ) -> dict[str, object]:
@@ -72,59 +106,93 @@ def build_review_queue(
     for candidate in result.candidates[:candidate_limit]:
         left = profiles[candidate.left_source_record_id]
         right = profiles[candidate.right_source_record_id]
-        candidates.append({
-            "left": _product_payload(left),
-            "right": _product_payload(right),
-            "score": format(candidate.score, "f"),
-            "reason": candidate.reason,
-            "recommended_action": "human_review",
-            "allowed_decisions": ["same_product", "different_products", "pending"],
-        })
+        evidence = explain_candidate(left, right)
+        candidates.append(
+            {
+                "left": _product_payload(left),
+                "right": _product_payload(right),
+                "candidate_ranking_score": format(candidate.score, "f"),
+                "score_semantics": "review_queue_ranking_only_not_probability",
+                "decision_state": evidence.decision_state,
+                "confidence_level": evidence.confidence_level,
+                "matching_signals": list(evidence.matching_signals),
+                "conflict_signals": list(evidence.conflict_signals),
+                "reason": candidate.reason,
+                "recommended_action": "human_review",
+                "allowed_decisions": ["same_product", "different_products", "pending"],
+            }
+        )
 
     exact_conflicts = []
     for group in result.exact_gtin_groups:
         if group.comparison_status != "review_required":
             continue
-        exact_conflicts.append({
-            "canonical_gtin": group.canonical_gtin,
-            "canonical_product_id": group.canonical_product_id,
-            "conflict_reasons": list(group.conflict_reasons),
-            "products": [_product_payload(profiles[source_id]) for source_id in group.source_record_ids],
-            "recommended_action": "verify_same_gtin_commercial_consistency",
-        })
+        exact_conflicts.append(
+            {
+                "canonical_gtin": group.canonical_gtin,
+                "canonical_product_id": group.canonical_product_id,
+                "conflict_reasons": list(group.conflict_reasons),
+                "products": [_product_payload(profiles[source_id]) for source_id in group.source_record_ids],
+                "recommended_action": "verify_same_gtin_commercial_consistency",
+            }
+        )
 
-    gaps = [
-        profile
-        for profile in result.profiles
-        if profile.taxonomy.product_type is None
-    ]
+    gaps = [profile for profile in result.profiles if profile.taxonomy.product_type is None]
     gap_sample = [_product_payload(profile) for profile in gaps[:taxonomy_gap_limit]]
 
     without_gtin = sum(profile.canonical_gtin is None for profile in result.profiles)
     with_gtin = len(result.profiles) - without_gtin
     ready_groups = sum(group.comparison_status == "ready" for group in result.exact_gtin_groups)
     review_groups = len(result.exact_gtin_groups) - ready_groups
+    quality = audit_identity_quality(result)
+    baseline_summary = None if baseline_result is None else dict(baseline_result.summary)
+    before_after = None
+    if baseline_summary is not None:
+        after_summary = dict(result.summary)
+        comparable_keys = sorted(set(baseline_summary) & set(after_summary))
+        before_after = {
+            "before_engine": "product-homologation-v1",
+            "after_engine": IDENTITY_NORMALIZATION_VERSION,
+            "before": baseline_summary,
+            "after": after_summary,
+            "delta": {
+                key: int(after_summary[key]) - int(baseline_summary[key])
+                for key in comparable_keys
+            },
+            "runtime_seconds": runtime_seconds or {},
+        }
+    summary = {
+        **result.summary,
+        **quality,
+        "normalization_version": IDENTITY_NORMALIZATION_VERSION,
+        "with_valid_gtin": with_gtin,
+        "without_valid_gtin": without_gtin,
+        "exact_gtin_groups_ready": ready_groups,
+        "exact_gtin_groups_needing_review": review_groups,
+        "review_candidates_total": len(result.candidates),
+        "fuzzy_review_candidates_total": len(result.candidates),
+        "taxonomy_gaps_total": len(gaps),
+        "image_reference_available": 0,
+        "image_signal_status": "not_persisted_in_products_table",
+    }
+    candidate_section = {
+        "total": len(result.candidates),
+        "included": len(candidates),
+        "truncated": len(candidates) < len(result.candidates),
+        "rows": candidates,
+    }
     return {
         "schema": SCHEMA,
         "generated_at_utc": generated_at_utc,
+        "normalization_version": IDENTITY_NORMALIZATION_VERSION,
         "private_review_artifact": True,
         "public_serving_allowed": False,
-        "decision_policy": "candidates_never_become_comparable_without_strong_identity_or_explicit_accepted_evidence",
-        "summary": {
-            **result.summary,
-            "with_valid_gtin": with_gtin,
-            "without_valid_gtin": without_gtin,
-            "exact_gtin_groups_ready": ready_groups,
-            "exact_gtin_groups_needing_review": review_groups,
-            "fuzzy_review_candidates_total": len(result.candidates),
-            "taxonomy_gaps_total": len(gaps),
-        },
-        "fuzzy_candidates": {
-            "total": len(result.candidates),
-            "included": len(candidates),
-            "truncated": len(candidates) < len(result.candidates),
-            "rows": candidates,
-        },
+        "decision_policy": "candidate_generation_is_broad_but_identity_confirmation_remains_fail_closed",
+        "summary": summary,
+        "before_after": before_after,
+        "review_candidates": candidate_section,
+        # Compatibilidad aditiva con consumidores privados v1.
+        "fuzzy_candidates": candidate_section,
         "exact_gtin_conflicts": {
             "total": len(exact_conflicts),
             "rows": exact_conflicts,
@@ -147,16 +215,29 @@ def export_review(
     taxonomy_gap_limit: int = DEFAULT_GAP_LIMIT,
 ) -> dict[str, object]:
     records = tuple(record for _, record in products)
-    result = homologate_products(records, candidate_threshold=Decimal("0.72"))
+    baseline_started = time.monotonic()
+    baseline_result = homologate_products(records, candidate_threshold=Decimal("0.72"))
+    baseline_seconds = time.monotonic() - baseline_started
+    candidate_started = time.monotonic()
+    result = homologate_products_v2(records, candidate_threshold=Decimal("0.72"))
+    candidate_seconds = time.monotonic() - candidate_started
     document = build_review_queue(
         result,
         generated_at_utc=generated_at_utc,
+        baseline_result=baseline_result,
+        runtime_seconds={
+            "before": round(baseline_seconds, 3),
+            "after": round(candidate_seconds, 3),
+        },
         candidate_limit=candidate_limit,
         taxonomy_gap_limit=taxonomy_gap_limit,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp")
-    temporary.write_text(json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
     temporary.replace(output)
     return document
 
@@ -183,13 +264,19 @@ def main() -> int:
         candidate_limit=args.candidate_limit,
         taxonomy_gap_limit=args.taxonomy_gap_limit,
     )
-    print(json.dumps({
-        "schema": document["schema"],
-        "output": str(args.output),
-        "summary": document["summary"],
-        "fuzzy_candidates_included": document["fuzzy_candidates"]["included"],
-        "taxonomy_gaps_included": document["taxonomy_gaps"]["included"],
-    }, ensure_ascii=False, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "schema": document["schema"],
+                "output": str(args.output),
+                "summary": document["summary"],
+                "review_candidates_included": document["review_candidates"]["included"],
+                "taxonomy_gaps_included": document["taxonomy_gaps"]["included"],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
     return 0
 
 
