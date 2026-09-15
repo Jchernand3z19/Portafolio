@@ -19,6 +19,7 @@ from collections import defaultdict
 from dataclasses import dataclass, replace
 from decimal import Decimal, ROUND_HALF_UP
 from difflib import SequenceMatcher
+from functools import lru_cache
 from typing import Iterable
 
 from .identifiers import generate_gtin_product_id
@@ -39,7 +40,7 @@ from .product_homologation import (
     resolve_presentation,
 )
 
-IDENTITY_NORMALIZATION_VERSION = "product-homologation-v2.2"
+IDENTITY_NORMALIZATION_VERSION = "product-homologation-v2.3"
 
 _GENERIC_BRANDS = frozenset(
     {
@@ -104,8 +105,13 @@ _FRACTION_WITH_UNIT_RE = re.compile(
     re.IGNORECASE,
 )
 _NATURAL_MULTIPACK_RE = re.compile(
-    rf"(?<!\w)(?P<count>\d{{1,3}})\s*(?:{_COUNT_ALIASES})\s+"
+    rf"(?<!\w)(?P<count>\d{{1,3}})\s*(?:{_COUNT_ALIASES})\s*"
     r"(?:de|x)\s*(?P<amount>\d+(?:[.,]\d+)?)\s*"
+    r"(?P<unit>mg|kg|grs?|gramos?|g|lbs?|libras?|oz|onzas?|ml|lts?|litros?|l)(?!\w)",
+    re.IGNORECASE,
+)
+_COMPACT_SLASH_MULTIPACK_RE = re.compile(
+    r"(?<![\d/])(?P<count>\d{1,3})\s*/\s*(?P<amount>\d+(?:[.,]\d+)?)\s*"
     r"(?P<unit>mg|kg|grs?|gramos?|g|lbs?|libras?|oz|onzas?|ml|lts?|litros?|l)(?!\w)",
     re.IGNORECASE,
 )
@@ -156,6 +162,7 @@ _FLAVOR_ALIASES = {
     "lima": "lima",
     "lime": "lima",
     "limon": "limón",
+    "limon rosa": "limón_rosa",
     "lavanda": "lavanda",
     "lavender": "lavanda",
     "mandarina": "mandarina",
@@ -206,6 +213,10 @@ _PACKAGING_ALIASES = {
 
 _PRODUCT_ATTRIBUTE_ALIASES = {
     "Aceite comestible": {
+        "oil_blend": {
+            "blend": "blend",
+            "mezcla": "blend",
+        },
         "oil_base": {
             "aceite vegetal": "vegetal",
             "aguacate": "aguacate",
@@ -267,6 +278,17 @@ _PRODUCT_ATTRIBUTE_ALIASES = {
             "protect": "protect",
         },
     },
+    "Queso": {
+        "cheese_kind": {
+            "americano": "americano",
+            "cheddar": "cheddar",
+            "mozzarella": "mozzarella",
+            "parmesano": "parmesano",
+            "semi seco": "semiseco",
+            "suizo": "suizo",
+            "seco": "seco",
+        },
+    },
     "Jugo": {
         "pulp_status": {
             "c pulpa": "with_pulp",
@@ -284,6 +306,23 @@ _PRODUCT_ATTRIBUTE_ALIASES = {
         "pepper_kind": {
             "chile cabro": "cabro",
             "habanero": "habanero",
+            "jalapeno": "jalapeño",
+        },
+    },
+    "Sardina": {
+        "spice_status": {
+            "picante": "spicy",
+        },
+    },
+    "Sopa": {
+        "spice_status": {
+            "con chile": "spicy",
+            "picante": "spicy",
+        },
+    },
+    "Atún": {
+        "smoke_status": {
+            "ahumado": "smoked",
         },
     },
     "Vino": {
@@ -302,6 +341,7 @@ _STRONG_ATTRIBUTE_PREFIXES = (
     "bean_kind:",
     "bean_style:",
     "beer_color:",
+    "cheese_kind:",
     "diaper_size:",
     "diaper_stage:",
     "diaper_line:",
@@ -310,9 +350,12 @@ _STRONG_ATTRIBUTE_PREFIXES = (
     "hair_shade:",
     "heat_level:",
     "oil_base:",
+    "oil_blend:",
     "pasta_shape:",
     "pepper_kind:",
     "pulp_status:",
+    "smoke_status:",
+    "spice_status:",
     "wine_color:",
 )
 
@@ -597,6 +640,7 @@ def _normalize_parser_text(
     text = " ".join(value.split())
     text = _FRACTION_WITH_UNIT_RE.sub(_replace_fraction_with_unit, text)
     text = _NATURAL_MULTIPACK_RE.sub(_replace_natural_multipack, text)
+    text = _COMPACT_SLASH_MULTIPACK_RE.sub(_replace_natural_multipack, text)
     if shell_egg:
         text = _EGG_COUNT_RE.sub(lambda match: f"{match.group('count')} unidades", text)
     else:
@@ -720,6 +764,7 @@ def _name_similarity(left: ProductProfile, right: ProductProfile) -> Decimal:
     return (jaccard * Decimal("0.6") + sequence * Decimal("0.4")).quantize(Decimal("0.0001"))
 
 
+@lru_cache(maxsize=131_072)
 def _variant_labels(profile: ProductProfile) -> frozenset[str]:
     text = fold_text(profile.record.source_name) or ""
     labels: set[str] = set()
@@ -797,16 +842,20 @@ def _hard_conflicts(left: ProductProfile, right: ProductProfile) -> tuple[str, .
         ("bean_kind:", "bean_kind_conflict"),
         ("bean_style:", "bean_style_conflict"),
         ("beer_color:", "beer_color_conflict"),
+        ("cheese_kind:", "cheese_kind_conflict"),
         ("diaper_size:", "diaper_size_conflict"),
         ("diaper_stage:", "diaper_stage_conflict"),
         ("diaper_line:", "diaper_line_conflict"),
         ("hair_shade:", "hair_shade_conflict"),
         ("heat_level:", "heat_level_conflict"),
         ("oil_base:", "oil_base_conflict"),
+        ("oil_blend:", "oil_blend_conflict"),
         ("packaging:", "packaging_conflict"),
         ("pasta_shape:", "pasta_shape_conflict"),
         ("pepper_kind:", "pepper_kind_conflict"),
         ("pulp_status:", "pulp_status_conflict"),
+        ("smoke_status:", "smoke_status_conflict"),
+        ("spice_status:", "spice_status_conflict"),
         ("wine_color:", "wine_color_conflict"),
     ):
         left_values = {item for item in left_labels if item.startswith(prefix)}
