@@ -5,10 +5,10 @@ import {
   manifestIsCompatible, moneyToMinor, normalizeText, offerIsUsable, offersByRetailer,
   partitionPaths, prepareBatch, quantityValue, reconcileDependentFilters, relativePriceState,
   refreshCartPrices, saveCart, searchIndexForPrefix,
-} from "./catalog.js";
-import {analysisIsCompatible, renderConsumerAnalysis} from "./analysis.js";
+} from "./catalog.js?v=20260915-2";
+import {analysisIsCompatible, renderConsumerAnalysis} from "./analysis.js?v=20260915-2";
 
-export * from "./catalog.js";
+export * from "./catalog.js?v=20260915-2";
 
 const RESULT_PAGE_SIZE = 40;
 

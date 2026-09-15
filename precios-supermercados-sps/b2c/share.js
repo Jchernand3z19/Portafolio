@@ -1,4 +1,4 @@
-import {CART_KEY, LEGACY_CART_KEY, RETAILERS, cartSummary, formatHnl} from "./catalog.js";
+import {CART_KEY, LEGACY_CART_KEY, RETAILERS, cartSummary, formatHnl} from "./catalog.js?v=20260915-2";
 
 function dateTimeHn(value) {
   const date = value instanceof Date ? value : new Date(value);
