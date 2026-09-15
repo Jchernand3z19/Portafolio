@@ -7,7 +7,9 @@ import pytest
 from precios_supermercados.product_homologation import SourceProductRecord
 from precios_supermercados.product_identity_v2 import (
     IDENTITY_NORMALIZATION_VERSION,
+    audit_identity_quality,
     assign_taxonomy_v2,
+    canonicalize_brand_key,
     canonical_presentation_fields,
     canonical_egg_size,
     candidate_presentations_compatible,
@@ -16,6 +18,7 @@ from precios_supermercados.product_identity_v2 import (
     resolve_brand,
     resolve_presentation_v2,
     build_brand_lexicon,
+    source_brand_role,
 )
 
 
@@ -242,7 +245,7 @@ def test_candidate_graph_does_not_create_transitive_canonical_identity() -> None
 
 
 def test_identity_v2_is_versioned_without_changing_persisted_v1() -> None:
-    assert IDENTITY_NORMALIZATION_VERSION == "product-homologation-v2"
+    assert IDENTITY_NORMALIZATION_VERSION == "product-homologation-v2.1"
 
 
 def test_canonical_presentation_fields_preserve_raw_and_separate_pack() -> None:
@@ -293,3 +296,132 @@ def test_profile_v2_preserves_raw_evidence() -> None:
     assert profile.record.source_presentation == "UN"
     assert profile.normalized_brand == "bonovo"
     assert profile.presentation is not None and profile.presentation.total_base == Decimal("30")
+
+
+@pytest.mark.parametrize(
+    ("observed", "expected"),
+    [
+        ("Buchanan's", "buchanan"),
+        ("Mott’s", "mott"),
+        ("Wrigleys", "wrigley"),
+        ("Elmigo", "el migo"),
+    ],
+)
+def test_brand_aliases_require_observed_catalog_evidence(observed: str, expected: str) -> None:
+    assert canonicalize_brand_key(observed) == expected
+
+
+@pytest.mark.parametrize("placeholder", ["RMS", "Marca COMANDES", "COMANDES"])
+def test_retailer_placeholders_are_not_promoted_to_commercial_brands(placeholder: str) -> None:
+    assert canonicalize_brand_key(placeholder) is None
+    assert source_brand_role(placeholder) == "retailer_placeholder"
+
+
+def test_exact_gtin_brand_label_disagreement_is_measured_but_not_fragmented() -> None:
+    result = homologate_products_v2(
+        (
+            product(
+                "a",
+                "colonial",
+                "Purina Dentalife Snack Dental 198 g",
+                brand="Purina",
+                barcode="012656001065",
+            ),
+            product(
+                "b",
+                "walmart",
+                "Purina Dentalife Snack Dental 198 g",
+                brand="Purina Dentalife",
+                barcode="012656001065",
+            ),
+        )
+    )
+    assert len(result.exact_gtin_groups) == 1
+    assert result.exact_gtin_groups[0].comparison_status == "ready"
+    assert result.exact_gtin_groups[0].conflict_reasons == ()
+    assert audit_identity_quality(result)["exact_gtin_brand_label_disagreement_groups"] == 1
+
+
+def test_exact_gtin_taxonomy_gap_is_measured_but_not_fragmented() -> None:
+    result = homologate_products_v2(
+        (
+            product(
+                "a",
+                "colonial",
+                "Arroz Demo 1 lb",
+                brand="Demo",
+                barcode="012656001065",
+            ),
+            product(
+                "b",
+                "walmart",
+                "Demo Especial 1 lb",
+                brand="Demo",
+                barcode="012656001065",
+            ),
+        )
+    )
+    assert len(result.exact_gtin_groups) == 1
+    assert result.exact_gtin_groups[0].comparison_status == "ready"
+    assert audit_identity_quality(result)["exact_gtin_taxonomy_disagreement_groups"] == 1
+
+
+def test_exact_gtin_with_two_conflicting_known_types_stays_in_review() -> None:
+    result = homologate_products_v2(
+        (
+            product(
+                "a",
+                "colonial",
+                "Arroz Demo 1 lb",
+                brand="Demo",
+                barcode="012656001065",
+            ),
+            product(
+                "b",
+                "walmart",
+                "Jugo Demo 1 lb",
+                brand="Demo",
+                barcode="012656001065",
+            ),
+        )
+    )
+    assert len(result.exact_gtin_groups) == 1
+    assert result.exact_gtin_groups[0].comparison_status == "review_required"
+    assert "product_type_conflict" in result.exact_gtin_groups[0].conflict_reasons
+
+
+@pytest.mark.parametrize(
+    ("left_name", "right_name"),
+    [
+        ("Jugo Sula Pera 1 L", "Jugo Sula Manzana 1 L"),
+        ("Jugo Sula Naranja Mandarina 1 L", "Jugo Sula Naranja Zanahoria 1 L"),
+        ("Yogur Sula Banano Fresa 1 L", "Yogur Sula Fresa 1 L"),
+        ("Baby Nutrine Pañal Talla L/G 30 unidades", "Baby Nutrine Pañal Talla M 30 unidades"),
+        ("Nutrisse Tinte para Cabello Tono 6.60 50 ml", "Nutrisse Tinte para Cabello Tono 7.1 50 ml"),
+    ],
+)
+def test_material_flavor_size_and_shade_differences_block_candidates(
+    left_name: str,
+    right_name: str,
+) -> None:
+    result = homologate_products_v2(
+        (
+            product("a", "colonial", left_name, brand="Sula" if "Sula" in left_name else "Demo"),
+            product("b", "walmart", right_name, brand="Sula" if "Sula" in right_name else "Demo"),
+        ),
+        candidate_threshold=Decimal("0"),
+    )
+    assert result.candidates == ()
+
+
+def test_flavor_translation_is_compatible_without_confirming_identity() -> None:
+    result = homologate_products_v2(
+        (
+            product("a", "colonial", "Jugo Sula Fresa 1 L", brand="Sula"),
+            product("b", "walmart", "Jugo Sula Strawberry 1 L", brand="Sula"),
+        ),
+        candidate_threshold=Decimal("0"),
+    )
+    assert len(result.candidates) == 1
+    assert result.candidates[0].status == "review_required"
+    assert all(profile.canonical_product_id is None for profile in result.profiles)
