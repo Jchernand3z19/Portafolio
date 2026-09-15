@@ -154,6 +154,7 @@ def test_exports_partitioned_visible_catalog_with_safe_comparability(tmp_path: P
     assert database.read_bytes() == before
     assert manifest["schema"] == "rpi-consumer-catalog-manifest/v3"
     assert manifest["catalog_schema"] == "rpi-consumer-catalog/v3"
+    assert manifest["analysis_file"] == "analysis-sps.json"
     # Compra Inteligente no publica filas sin ninguna oferta comprable.
     assert manifest["visible_rows"] == 5
     assert manifest["source_offers"] == 7
@@ -201,6 +202,27 @@ def test_exports_partitioned_visible_catalog_with_safe_comparability(tmp_path: P
     assert all(row["comparability"] == "individual" and len(row["offers"]) == 1 for row in review_rows)
     assert len({row["row_id"] for row in rows}) == len(rows)
     assert "review_required" not in json.dumps(manifest) + json.dumps(rows)
+
+    analysis = json.loads((output / "analysis-sps.json").read_text())
+    assert analysis["schema"] == "rpi-consumer-analysis/v1"
+    assert analysis["summary"] == {
+        "visible_products": 5,
+        "comparable_products": 2,
+        "comparable_products_with_price_spread": 1,
+        "active_promotions": 1,
+        "observed_unit_savings": "2.00",
+        "price_movements": {
+            "decreased": 1,
+            "increased": 0,
+            "unchanged": 0,
+            "insufficient_history": 6,
+        },
+        "recent_low_opportunities": 1,
+    }
+    assert analysis["opportunities"]["price_drops"][0]["product_name"] == "Leche entera Sula 1 L"
+    assert analysis["opportunities"]["promotions"][0]["discount_pct"] == "23.08"
+    assert analysis["methodology"]["identity"] == "only_persisted_ready_cross_retailer_identity"
+    assert "raw_brand" not in json.dumps(analysis)
 
 
 def test_facets_exclude_unshoppable_rows_and_type_indexes_point_to_partitions(tmp_path: Path) -> None:

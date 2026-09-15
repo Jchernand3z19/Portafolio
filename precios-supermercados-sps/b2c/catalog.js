@@ -37,6 +37,7 @@ export function manifestIsCompatible(manifest) {
     paths.add(file?.path);
     return valid;
   }) || !paths.has("facets-sps.json")) return false;
+  if (manifest.analysis_file !== "analysis-sps.json" || !paths.has(manifest.analysis_file)) return false;
   return RETAILERS.every((retailer, index) => {
     const scope = manifest.scope[index];
     return scope?.supermarket_id === retailer.supermarket_id && scope?.location_id === retailer.location_id;

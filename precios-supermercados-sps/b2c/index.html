@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#123d31">
-  <meta name="description" content="Compara precios públicos observados y planifica tu lista de compra por supermercado.">
-  <title>Compra Inteligente · RPI Honduras</title>
+  <meta name="description" content="Analiza precios públicos y planifica tu compra del hogar en cinco supermercados de San Pedro Sula.">
+  <title>Precios para tu hogar · RPI Honduras</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body
@@ -15,18 +15,52 @@
   <header class="app-header">
     <a class="brand" href="../../index.html" aria-label="Volver al portafolio">RPI</a>
     <nav aria-label="Secciones">
-      <a href="#comparar">Comparar</a>
+      <a href="#analisis" data-tab-link="analysis-panel">Análisis</a>
+      <a href="#compra-inteligente" data-tab-link="shopping-panel">Compra inteligente</a>
       <a class="cart-link" href="#mi-compra">Mi lista <span id="cart-count" aria-label="productos en Mi lista">0</span></a>
     </nav>
   </header>
 
   <main>
-    <section class="hero" id="comparar">
+    <section class="hero">
       <p class="eyebrow">Retail Price Intelligence · San Pedro Sula</p>
-      <h1>Compra Inteligente</h1>
-      <p>Compara precios públicos y planifica tu lista antes de visitar el supermercado. Esta página no vende productos ni procesa pagos.</p>
+      <h1>Precios para comprar mejor</h1>
+      <p>Descubre movimientos, promociones y oportunidades; después compara productos y planifica tu lista. Esta página no vende productos ni procesa pagos.</p>
       <p id="dataset-status" class="data-status" role="status" aria-live="polite">Comprobando fecha del último corte válido…</p>
     </section>
+
+    <nav class="primary-tabs" aria-label="Dashboard B2C" role="tablist">
+      <button id="analysis-tab" class="primary-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="analysis-panel">Análisis</button>
+      <button id="shopping-tab" class="primary-tab" type="button" role="tab" aria-selected="false" aria-controls="shopping-panel">Compra Inteligente</button>
+    </nav>
+
+    <section id="analysis-panel" class="tab-panel analysis-panel" role="tabpanel" aria-labelledby="analysis-tab">
+      <div class="analysis-heading">
+        <div><p class="eyebrow">PANORAMA DEL HOGAR</p><h2>Qué está pasando con los precios</h2></div>
+        <p>Las comparaciones usan únicamente identidades homologadas y ofertas vigentes. Los faltantes no se convierten en ceros.</p>
+      </div>
+      <p id="analysis-status" class="data-status" role="status" aria-live="polite">Cargando análisis del corte verificado…</p>
+      <div id="analysis-summary" class="metric-grid" aria-label="Indicadores principales"></div>
+
+      <section class="analysis-section" aria-labelledby="retailer-analysis-title">
+        <div class="section-heading"><div><p class="eyebrow">DÓNDE CONVIENE COMPRAR</p><h3 id="retailer-analysis-title">Panorama por supermercado</h3></div><p>Los “mejores precios” sólo cuentan productos comparables y frescos.</p></div>
+        <div id="analysis-retailers" class="retailer-analysis-grid"></div>
+      </section>
+
+      <section class="analysis-section" aria-labelledby="opportunities-title">
+        <div class="section-heading"><div><p class="eyebrow">OPORTUNIDADES</p><h3 id="opportunities-title">Productos para revisar hoy</h3></div><p>Bajadas y subidas usan el precio anterior aceptado; promoción es lo declarado por cada comercio.</p></div>
+        <div id="analysis-opportunities" class="opportunity-grid"></div>
+      </section>
+
+      <section class="analysis-section" aria-labelledby="category-analysis-title">
+        <div class="section-heading"><div><p class="eyebrow">CATEGORÍAS</p><h3 id="category-analysis-title">Liderazgo de precio por categoría</h3></div><p>Se muestra cobertura para evitar conclusiones con bases incompletas.</p></div>
+        <div id="analysis-categories" class="analysis-table-wrap"></div>
+      </section>
+
+      <div class="analysis-cta"><div><strong>¿Ya sabes qué necesitas?</strong><p>Compara los cinco supermercados y arma distintos escenarios de compra.</p></div><button class="primary-button" type="button" data-open-shopping>Ir a Compra Inteligente</button></div>
+    </section>
+
+    <div id="shopping-panel" class="tab-panel" role="tabpanel" aria-labelledby="shopping-tab" hidden>
 
     <section class="workspace" aria-label="Filtros y resumen de la lista">
       <div class="filter-panel">
@@ -103,6 +137,7 @@
         <p>Total estimado calculado con los precios públicos observados en cada supermercado. Los precios pueden cambiar en tienda.</p>
       </div>
     </section>
+    </div>
   </main>
 
   <a class="mobile-cart" href="#mi-compra" aria-label="Abrir Mi lista">Mi lista · <span id="mobile-cart-count">0</span> ↑</a>

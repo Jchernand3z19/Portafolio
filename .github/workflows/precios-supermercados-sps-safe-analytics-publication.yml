@@ -161,6 +161,7 @@ jobs:
           sample = json.loads((root / 'portfolio-sample.json').read_text(encoding='utf-8'))
           catalog_root = root / 'consumer-v3'
           catalog_manifest = json.loads((catalog_root / 'manifest.json').read_text(encoding='utf-8'))
+          catalog_analysis = json.loads((catalog_root / 'analysis-sps.json').read_text(encoding='utf-8'))
           tgu_root = root / 'consumer-v3-tgu'
           tgu_manifest = json.loads((tgu_root / 'manifest.json').read_text(encoding='utf-8'))
           policy = 'fail_closed_strong_identity_and_commercial_consistency'
@@ -217,6 +218,15 @@ jobs:
           assert set(catalog_manifest['retailer_offer_counts']) == {item['supermarket_id'] for item in expected_catalog_scope}
           assert all(count > 0 for count in catalog_manifest['retailer_offer_counts'].values())
           assert catalog_manifest['partition_count'] > 0
+          assert catalog_manifest['analysis_file'] == 'analysis-sps.json'
+          assert catalog_analysis['schema'] == 'rpi-consumer-analysis/v1'
+          assert catalog_analysis['as_of'] == catalog_manifest['as_of']
+          assert catalog_analysis['location'] == {'city': 'San Pedro Sula', 'country_code': 'HN'}
+          assert [item['supermarket_id'] for item in catalog_analysis['retailers']] == [
+              item['supermarket_id'] for item in expected_catalog_scope
+          ]
+          assert catalog_analysis['summary']['visible_products'] == catalog_manifest['visible_rows']
+          assert catalog_analysis['methodology']['identity'] == 'only_persisted_ready_cross_retailer_identity'
           assert catalog_manifest['public_boundary'] == {
               'direct_turso_reads': 0,
               'contains_business_mart': False,
@@ -286,6 +296,7 @@ jobs:
               'consumer_v3_visible_rows': catalog_manifest['visible_rows'],
               'consumer_v3_source_offers': catalog_manifest['source_offers'],
               'consumer_v3_partitions': catalog_manifest['partition_count'],
+              'consumer_v3_comparable_products': catalog_analysis['summary']['comparable_products'],
               'consumer_v3_tgu_visible_rows': tgu_manifest['visible_rows'],
               'consumer_v3_tgu_source_offers': tgu_manifest['source_offers'],
               'consumer_v3_tgu_partitions': tgu_manifest['partition_count'],

@@ -13,6 +13,7 @@ CATALOG = ROOT / "b2c" / "catalog.js"
 EXPORTS = ROOT / "b2c" / "exports.js"
 SHARE = ROOT / "b2c" / "share.js"
 STATUS = ROOT / "b2c" / "status.js"
+ANALYSIS = ROOT / "b2c" / "analysis.js"
 HTML = ROOT / "b2c" / "index.html"
 CSS = ROOT / "b2c" / "styles.css"
 
@@ -51,12 +52,16 @@ def test_b2c_static_contract_is_accessible_responsive_and_safe() -> None:
         "product-search", "results", "batch-add", "update-confirmation",
         "cart-groups", "price-refresh", "basket-analysis", "export-csv", "export-pdf",
         "share-whatsapp", "share-status", "dataset-status",
+        "analysis-tab", "shopping-tab", "analysis-panel", "shopping-panel",
+        "analysis-summary", "analysis-retailers", "analysis-opportunities",
+        "analysis-categories",
     ):
         assert f'id="{element_id}"' in html
     assert 'data-catalog-url="https://raw.githubusercontent.com/' in html
     assert 'type="module" src="app.js"' in html
     assert 'type="module" src="status.js"' in html
     assert 'type="module" src="share.js"' in html
+    assert "Análisis" in html and "Compra Inteligente" in html
     assert "Esta página no vende productos ni procesa pagos" in html
     assert "Total estimado calculado con los precios públicos observados" in html
     assert "reported_regular_price" in js
@@ -76,6 +81,9 @@ def test_b2c_static_contract_is_accessible_responsive_and_safe() -> None:
     assert ".comparison-matrix tbody tr{display:grid" in css
     assert "@media(max-width:799px)" in css
     assert ".price-best" in css and ".price-highest" in css
+    assert ".metric-grid" in css and ".opportunity-grid" in css
+    assert "min-width:960px" in css
+    assert 'for (const label of ["Producto", "Cantidad"' in js
 
 
 def test_catalog_contract_filters_batch_totals_and_storage(tmp_path: Path) -> None:
@@ -84,7 +92,7 @@ import assert from "node:assert/strict";
 const c = await import(process.argv[1]);
 
 const scope = c.RETAILERS.map(({supermarket_id,location_id})=>({supermarket_id,location_id}));
-const manifest = {schema:"rpi-consumer-catalog-manifest/v3",catalog_schema:"rpi-consumer-catalog/v3",scope,files:[{path:"facets-sps.json",sha256:"a".repeat(64),bytes:10}],initial_payload:{request_count:2}};
+const manifest = {schema:"rpi-consumer-catalog-manifest/v3",catalog_schema:"rpi-consumer-catalog/v3",scope,analysis_file:"analysis-sps.json",files:[{path:"facets-sps.json",sha256:"a".repeat(64),bytes:10},{path:"analysis-sps.json",sha256:"b".repeat(64),bytes:20}],initial_payload:{request_count:2}};
 assert.equal(c.manifestIsCompatible(manifest), true);
 assert.equal(c.manifestIsCompatible({...manifest,scope:[...scope,{supermarket_id:"paiz",location_id:"paiz_sps"}]}), false);
 assert.equal(c.manifestIsCompatible({...manifest,files:[{path:"https://evil.test/data.json",sha256:"a".repeat(64),bytes:10}]}), false);
@@ -195,7 +203,7 @@ import assert from "node:assert/strict";
 const s = await import(process.argv[1]);
 const c = await import(new URL("./catalog.js", process.argv[1]).href);
 const scope=c.RETAILERS.map(({supermarket_id,location_id})=>({supermarket_id,location_id}));
-const base={schema:"rpi-consumer-catalog-manifest/v3",catalog_schema:"rpi-consumer-catalog/v3",scope,files:[{path:"facets-sps.json",sha256:"a".repeat(64),bytes:10}],initial_payload:{request_count:2}};
+const base={schema:"rpi-consumer-catalog-manifest/v3",catalog_schema:"rpi-consumer-catalog/v3",scope,analysis_file:"analysis-sps.json",files:[{path:"facets-sps.json",sha256:"a".repeat(64),bytes:10},{path:"analysis-sps.json",sha256:"b".repeat(64),bytes:20}],initial_payload:{request_count:2}};
 let status=s.datasetStatus({...base,as_of:"2026-09-10T13:00:00Z"},new Date("2026-09-10T20:00:00Z"));
 assert.equal(status.state,"current");
 assert.ok(status.text.includes("Datos actualizados hoy"));
@@ -206,3 +214,18 @@ status=s.datasetStatus({...base,as_of:"not-a-date"},new Date("2026-09-10T20:00:0
 assert.equal(status.state,"invalid");
 '''
     run_module(tmp_path, STATUS, script)
+
+
+def test_consumer_analysis_contract_is_closed_and_bound_to_manifest(tmp_path: Path) -> None:
+    script = r'''
+import assert from "node:assert/strict";
+const a = await import(process.argv[1]);
+const manifest={as_of:"2026-09-15T12:00:00Z"};
+const retailers=["la_colonia","colonial","walmart","pricesmart","comisariato_los_andes"].map(supermarket_id=>({supermarket_id}));
+const analysis={schema:"rpi-consumer-analysis/v1",as_of:manifest.as_of,summary:{visible_products:10},retailers,categories:[],opportunities:{price_drops:[],price_increases:[],promotions:[],recent_lows:[]}};
+assert.equal(a.analysisIsCompatible(analysis,manifest),true);
+assert.equal(a.analysisIsCompatible({...analysis,as_of:"2026-09-14T12:00:00Z"},manifest),false);
+assert.equal(a.analysisIsCompatible({...analysis,retailers:retailers.slice(1)},manifest),false);
+assert.equal(a.analysisIsCompatible({...analysis,opportunities:{...analysis.opportunities,price_drops:null}},manifest),false);
+'''
+    run_module(tmp_path, ANALYSIS, script)
