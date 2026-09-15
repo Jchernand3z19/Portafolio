@@ -342,7 +342,7 @@ def test_controlled_rpi_publication_request_is_closed_and_read_only() -> None:
         ],
         "read_only": True,
         "reason": "operator_requested_republication",
-        "sequence": 7,
+        "sequence": 8,
     }
 
 
