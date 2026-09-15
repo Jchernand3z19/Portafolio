@@ -39,7 +39,7 @@ from .product_homologation import (
     resolve_presentation,
 )
 
-IDENTITY_NORMALIZATION_VERSION = "product-homologation-v2.1"
+IDENTITY_NORMALIZATION_VERSION = "product-homologation-v2.2"
 
 _GENERIC_BRANDS = frozenset(
     {
@@ -98,13 +98,24 @@ _MG_RE = re.compile(r"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*mg(?!\w)", re.IGNOREC
 _LIBRA_RE = re.compile(r"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*libras?(?!\w)", re.IGNORECASE)
 _GRAMOS_RE = re.compile(r"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*grs?(?:\.)?(?!\w)", re.IGNORECASE)
 _LITROS_RE = re.compile(r"(?<!\w)(?P<amount>\d+(?:[.,]\d+)?)\s*lts?(?:\.)?(?!\w)", re.IGNORECASE)
+_FRACTION_WITH_UNIT_RE = re.compile(
+    r"(?<![\d/])(?P<fraction>1\s*/\s*2|1\s*/\s*4|3\s*/\s*4)"
+    r"(?=\s*(?:mg|kg|grs?|gramos?|g|lbs?|libras?|oz|onzas?|ml|lts?|litros?|l)(?!\w))",
+    re.IGNORECASE,
+)
+_NATURAL_MULTIPACK_RE = re.compile(
+    rf"(?<!\w)(?P<count>\d{{1,3}})\s*(?:{_COUNT_ALIASES})\s+"
+    r"(?:de|x)\s*(?P<amount>\d+(?:[.,]\d+)?)\s*"
+    r"(?P<unit>mg|kg|grs?|gramos?|g|lbs?|libras?|oz|onzas?|ml|lts?|litros?|l)(?!\w)",
+    re.IGNORECASE,
+)
 
 _EGG_FALSE_CONTEXT = frozenset(
     {"tallarin", "tallarines", "fideo", "fideos", "mayonesa", "kinder", "toro"}
 )
 
 _VARIANT_GROUPS = (
-    frozenset({"original", "regular"}),
+    frozenset({"clasico", "orig", "original", "normal", "regular"}),
     frozenset({"zero", "sin azucar"}),
     frozenset({"light", "diet", "bajo en azucar"}),
     frozenset({"entera", "entero"}),
@@ -120,28 +131,40 @@ _FLAVOR_ALIASES = {
     "blackberry": "mora",
     "blueberry": "arándano",
     "cacao": "chocolate",
+    "cajeta": "cajeta",
+    "camaron": "camarón",
+    "caramel": "caramelo",
+    "caramelo": "caramelo",
     "carrot": "zanahoria",
     "cereza": "cereza",
     "cherry": "cereza",
     "chocolate": "chocolate",
+    "chicken": "pollo",
     "coco": "coco",
     "coconut": "coco",
     "durazno": "melocotón",
     "fresa": "fresa",
+    "fresas": "fresa",
     "frambuesa": "frambuesa",
+    "fig": "higo",
     "grape": "uva",
     "guava": "guayaba",
     "guayaba": "guayaba",
+    "higo": "higo",
+    "higos": "higo",
     "lemon": "limón",
     "lima": "lima",
     "lime": "lima",
     "limon": "limón",
+    "lavanda": "lavanda",
+    "lavender": "lavanda",
     "mandarina": "mandarina",
     "mango": "mango",
     "manzana": "manzana",
     "maracuya": "maracuyá",
     "melocoton": "melocotón",
     "mora": "mora",
+    "moras": "mora",
     "naranja": "naranja",
     "orange": "naranja",
     "papaya": "papaya",
@@ -152,15 +175,146 @@ _FLAVOR_ALIASES = {
     "pina": "piña",
     "pineapple": "piña",
     "raspberry": "frambuesa",
+    "shrimp": "camarón",
     "sandia": "sandía",
     "strawberry": "fresa",
+    "sweet potato": "camote",
     "tangerine": "mandarina",
     "uva": "uva",
     "vainilla": "vainilla",
     "vanilla": "vainilla",
+    "vegetable": "vegetales",
+    "vegetales": "vegetales",
     "watermelon": "sandía",
     "zanahoria": "zanahoria",
+    "anis": "anís",
+    "anise": "anís",
+    "camote": "camote",
+    "pollo": "pollo",
+    "tutti frutti": "tutti_frutti",
 }
+
+_PACKAGING_ALIASES = {
+    "bolsa": "bag",
+    "botella": "bottle",
+    "caja": "box",
+    "carton": "box",
+    "doy pack": "doypack",
+    "doypack": "doypack",
+    "lata": "can",
+}
+
+_PRODUCT_ATTRIBUTE_ALIASES = {
+    "Aceite comestible": {
+        "oil_base": {
+            "aceite vegetal": "vegetal",
+            "aguacate": "aguacate",
+            "canola": "canola",
+            "coco": "coco",
+            "girasol": "girasol",
+            "maiz": "maíz",
+            "oliva": "oliva",
+            "soya": "soya",
+        },
+    },
+    "Cerveza": {
+        "beer_color": {
+            "clara": "light",
+            "dunkel": "dark",
+            "oscura": "dark",
+        },
+    },
+    "Frijol": {
+        "bean_kind": {
+            "blanco": "blanco",
+            "blancos": "blanco",
+            "carita": "carita",
+            "negro": "negro",
+            "negros": "negro",
+            "pinto": "pinto",
+            "pintos": "pinto",
+            "rojo": "rojo",
+            "rojos": "rojo",
+        },
+        "bean_style": {
+            "enteros": "entero",
+            "molidos": "refrito",
+            "refritos": "refrito",
+            "volteados": "refrito",
+        },
+    },
+    "Pasta": {
+        "pasta_shape": {
+            "codito": "codito",
+            "coditos": "codito",
+            "espagueti": "spaghetti",
+            "fusilli": "tornillo",
+            "lasagna": "lasagna",
+            "lasana": "lasagna",
+            "macaroni": "macarrón",
+            "macarron": "macarrón",
+            "penne": "penne",
+            "pluma": "penne",
+            "spaghetti": "spaghetti",
+            "tagliatelle": "tagliatelle",
+            "tornillo": "tornillo",
+        },
+    },
+    "Pañal": {
+        "diaper_line": {
+            "classic": "classic",
+            "prot": "protect",
+            "protect": "protect",
+        },
+    },
+    "Jugo": {
+        "pulp_status": {
+            "c pulpa": "with_pulp",
+            "con pulpa": "with_pulp",
+            "s pulpa": "without_pulp",
+            "sin pulpa": "without_pulp",
+        },
+    },
+    "Salsa": {
+        "heat_level": {
+            "hot": "hot",
+            "medium": "medium",
+            "mild": "mild",
+        },
+        "pepper_kind": {
+            "chile cabro": "cabro",
+            "habanero": "habanero",
+        },
+    },
+    "Vino": {
+        "wine_color": {
+            "blanco": "white",
+            "red": "red",
+            "rosado": "rose",
+            "rose": "rose",
+            "tinto": "red",
+            "white": "white",
+        },
+    },
+}
+
+_STRONG_ATTRIBUTE_PREFIXES = (
+    "bean_kind:",
+    "bean_style:",
+    "beer_color:",
+    "diaper_size:",
+    "diaper_stage:",
+    "diaper_line:",
+    "egg_size:",
+    "flavor:",
+    "hair_shade:",
+    "heat_level:",
+    "oil_base:",
+    "pasta_shape:",
+    "pepper_kind:",
+    "pulp_status:",
+    "wine_color:",
+)
 
 _MATCH_STOPWORDS = frozenset(
     {
@@ -385,8 +539,26 @@ def assign_taxonomy_v2(record: SourceProductRecord) -> TaxonomyAssignment:
     """Corrige falsos positivos demostrados antes de aplicar la taxonomía v1."""
     text = fold_text(record.source_name) or ""
     tokens = set(text.split())
-    if {"tallarin", "tallarines", "fideo", "fideos"} & tokens and "huevo" in tokens:
-        return TaxonomyAssignment("Alimentos", "Pastas", "Pasta", "v2_egg_noodle")
+    if "abrillantador" in tokens and "calzado" in tokens:
+        return TaxonomyAssignment(
+            "Hogar",
+            "Cuidado del calzado",
+            "Abrillantador de calzado",
+            "v2_shoe_polish_before_cafe_color",
+        )
+    if (
+        "miel de abeja" in text
+        and not (
+            tokens
+            & {"cereal", "galleta", "galletas", "jabon", "shampoo", "te", "yogurt"}
+        )
+    ):
+        return TaxonomyAssignment("Alimentos", "Miel", "Miel", "v2_honey_before_panal_brand")
+    if "yogur" in tokens:
+        return TaxonomyAssignment("Alimentos", "Lácteos", "Yogurt", "v2_yogur_alias")
+    if {"tallarin", "tallarines", "fideo", "fideos"} & tokens:
+        rule_id = "v2_egg_noodle" if "huevo" in tokens else "v2_noodle_alias"
+        return TaxonomyAssignment("Alimentos", "Pastas", "Pasta", rule_id)
     if "mayonesa" in tokens:
         return TaxonomyAssignment("Alimentos", "Salsas y aderezos", "Mayonesa", "v2_mayonesa")
     if "kinder" in tokens and "huevo" in tokens:
@@ -401,6 +573,20 @@ def _replace_mg(match: re.Match[str]) -> str:
     return f"{format(amount.normalize(), 'f')} g"
 
 
+def _replace_fraction_with_unit(match: re.Match[str]) -> str:
+    fraction = match.group("fraction").replace(" ", "")
+    values = {
+        "1/2": Decimal("0.5"),
+        "1/4": Decimal("0.25"),
+        "3/4": Decimal("0.75"),
+    }
+    return format(values[fraction].normalize(), "f")
+
+
+def _replace_natural_multipack(match: re.Match[str]) -> str:
+    return f"{match.group('count')} x {match.group('amount')} {match.group('unit')}"
+
+
 def _normalize_parser_text(
     value: str | None,
     *,
@@ -409,6 +595,8 @@ def _normalize_parser_text(
     if value is None:
         return None
     text = " ".join(value.split())
+    text = _FRACTION_WITH_UNIT_RE.sub(_replace_fraction_with_unit, text)
+    text = _NATURAL_MULTIPACK_RE.sub(_replace_natural_multipack, text)
     if shell_egg:
         text = _EGG_COUNT_RE.sub(lambda match: f"{match.group('count')} unidades", text)
     else:
@@ -539,10 +727,19 @@ def _variant_labels(profile: ProductProfile) -> frozenset[str]:
         for label in group:
             if _phrase_present(text, label):
                 labels.add(label)
-    tokens = set(text.split())
     for alias, canonical in _FLAVOR_ALIASES.items():
-        if alias in tokens:
+        if _phrase_present(text, alias):
             labels.add(f"flavor:{canonical}")
+    for alias, canonical in _PACKAGING_ALIASES.items():
+        if _phrase_present(text, alias):
+            labels.add(f"packaging:{canonical}")
+    for attribute, aliases in _PRODUCT_ATTRIBUTE_ALIASES.get(
+        profile.taxonomy.product_type or "",
+        {},
+    ).items():
+        for alias, canonical in aliases.items():
+            if _phrase_present(text, alias):
+                labels.add(f"{attribute}:{canonical}")
     egg_size = canonical_egg_size(profile.record, profile.taxonomy)
     if egg_size is not None:
         labels.add(f"egg_size:{fold_text(egg_size)}")
@@ -551,6 +748,11 @@ def _variant_labels(profile: ProductProfile) -> frozenset[str]:
         stage = re.search(r"\b(?:etapa|stage)\s*([1-7])(?!\d)", text)
         if size is not None:
             labels.add(f"diaper_size:{size.group(1)}")
+        for standalone_size in re.findall(
+            r"(?<!\w)(xxg|xxl|xg|xl|g|l|m|s)(?!\w)",
+            text,
+        ):
+            labels.add(f"diaper_size:{standalone_size}")
         if stage is not None:
             labels.add(f"diaper_stage:{stage.group(1)}")
     if profile.taxonomy.product_type == "Tinte para cabello":
@@ -592,9 +794,20 @@ def _hard_conflicts(left: ProductProfile, right: ProductProfile) -> tuple[str, .
     if left_flavors and right_flavors and left_flavors != right_flavors:
         conflicts.add("flavor_conflict")
     for prefix, reason in (
+        ("bean_kind:", "bean_kind_conflict"),
+        ("bean_style:", "bean_style_conflict"),
+        ("beer_color:", "beer_color_conflict"),
         ("diaper_size:", "diaper_size_conflict"),
         ("diaper_stage:", "diaper_stage_conflict"),
+        ("diaper_line:", "diaper_line_conflict"),
         ("hair_shade:", "hair_shade_conflict"),
+        ("heat_level:", "heat_level_conflict"),
+        ("oil_base:", "oil_base_conflict"),
+        ("packaging:", "packaging_conflict"),
+        ("pasta_shape:", "pasta_shape_conflict"),
+        ("pepper_kind:", "pepper_kind_conflict"),
+        ("pulp_status:", "pulp_status_conflict"),
+        ("wine_color:", "wine_color_conflict"),
     ):
         left_values = {item for item in left_labels if item.startswith(prefix)}
         right_values = {item for item in right_labels if item.startswith(prefix)}
@@ -614,6 +827,26 @@ def _hard_conflicts(left: ProductProfile, right: ProductProfile) -> tuple[str, .
     if left_group is not None and right_group is not None and left_group != right_group:
         conflicts.add("variant_conflict")
     return tuple(sorted(conflicts))
+
+
+def _has_asymmetric_strong_attribute(
+    left: ProductProfile,
+    right: ProductProfile,
+) -> bool:
+    """Evita llamar STRONG a un candidato con un atributo material omitido."""
+
+    left_labels = _variant_labels(left)
+    right_labels = _variant_labels(right)
+    for prefix in _STRONG_ATTRIBUTE_PREFIXES:
+        left_values = {item for item in left_labels if item.startswith(prefix)}
+        right_values = {item for item in right_labels if item.startswith(prefix)}
+        if bool(left_values) != bool(right_values):
+            return True
+
+    def formulation_declared(labels: frozenset[str]) -> bool:
+        return any(any(label in labels for label in group) for group in _VARIANT_GROUPS)
+
+    return formulation_declared(left_labels) != formulation_declared(right_labels)
 
 
 def _candidate_score(left: ProductProfile, right: ProductProfile) -> tuple[Decimal, tuple[str, ...]]:
@@ -862,8 +1095,9 @@ def explain_candidate(
     ):
         level = "EXACT"
     elif (
-        score >= Decimal("0.85")
+        score >= Decimal("0.8875")
         and "presentation_candidate_compatible" in signals
+        and not _has_asymmetric_strong_attribute(left, right)
         and (
             "same_canonical_brand" in signals
             or left.normalized_name == right.normalized_name
@@ -895,8 +1129,12 @@ def audit_identity_quality(result: HomologationResult) -> dict[str, object]:
     retailer_collisions = 0
     exact_brand_label_disagreements = 0
     exact_taxonomy_disagreements = 0
+    profiles_by_id = {
+        profile.record.source_record_id: profile
+        for profile in profiles
+    }
     for group in exact_multi:
-        members = [profile for profile in profiles if profile.record.source_record_id in group.source_record_ids]
+        members = [profiles_by_id[source_id] for source_id in group.source_record_ids]
         supermarkets = [profile.record.supermarket_id for profile in members]
         if len(supermarkets) != len(set(supermarkets)):
             retailer_collisions += 1
@@ -933,7 +1171,6 @@ def audit_identity_quality(result: HomologationResult) -> dict[str, object]:
             profile_blockers[f"presentation_{profile.presentation_status}"] += 1
         if profile.canonical_gtin is None:
             profile_blockers["global_identifier_missing"] += 1
-    profiles_by_id = {profile.record.source_record_id: profile for profile in profiles}
     confidence_distribution: defaultdict[str, int] = defaultdict(int)
     candidate_type_distribution: defaultdict[str, int] = defaultdict(int)
     retailer_pair_distribution: defaultdict[str, int] = defaultdict(int)
