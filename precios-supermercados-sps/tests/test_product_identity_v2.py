@@ -245,7 +245,7 @@ def test_candidate_graph_does_not_create_transitive_canonical_identity() -> None
 
 
 def test_identity_v2_is_versioned_without_changing_persisted_v1() -> None:
-    assert IDENTITY_NORMALIZATION_VERSION == "product-homologation-v2.2"
+    assert IDENTITY_NORMALIZATION_VERSION == "product-homologation-v2.3"
 
 
 def test_canonical_presentation_fields_preserve_raw_and_separate_pack() -> None:
@@ -395,6 +395,7 @@ def test_exact_gtin_with_two_conflicting_known_types_stays_in_review() -> None:
     [
         ("Jugo Sula Pera 1 L", "Jugo Sula Manzana 1 L"),
         ("Jugo Sula Naranja Mandarina 1 L", "Jugo Sula Naranja Zanahoria 1 L"),
+        ("Jugo Zumo Limón 1 L", "Jugo Zumo Limón Rosa 1 L"),
         ("Yogur Sula Banano Fresa 1 L", "Yogur Sula Fresa 1 L"),
         ("Yogurt Yoplait Moras 145 g", "Yogurt Yoplait Fresas 145 g"),
         ("Baby Nutrine Pañal Talla L/G 30 unidades", "Baby Nutrine Pañal Talla M 30 unidades"),
@@ -448,10 +449,12 @@ def test_common_unit_fractions_are_parsed_as_fractions(
     assert signature.total_base == expected_total
 
 
-def test_pack_notation_is_not_silently_reduced_as_a_fraction() -> None:
+def test_compact_slash_pack_notation_keeps_pack_structure() -> None:
     signature, _ = resolve_presentation_v2(product("a", "x", "Sazonador 4/8gr"))
     assert signature is not None
-    assert signature.total_base == Decimal("8")
+    assert signature.pack_count == 4
+    assert signature.unit_amount_base == Decimal("8")
+    assert signature.total_base == Decimal("32")
 
 
 def test_natural_language_multipack_keeps_pack_structure() -> None:
@@ -464,6 +467,17 @@ def test_natural_language_multipack_keeps_pack_structure() -> None:
     assert multi.pack_count == 6
     assert multi.total_base == Decimal("72")
     assert not candidate_presentations_compatible(multi, single)
+
+
+def test_compact_count_alias_multipack_keeps_pack_structure() -> None:
+    multi, _ = resolve_presentation_v2(
+        product("a", "x", "Pack Néctar variado 8Unx200Ml")
+    )
+    assert multi is not None
+    assert multi.dimension == "volume_ml"
+    assert multi.pack_count == 8
+    assert multi.unit_amount_base == Decimal("200")
+    assert multi.total_base == Decimal("1600")
 
 
 @pytest.mark.parametrize(
@@ -524,6 +538,17 @@ def test_pasta_shape_aliases_remain_compatible_review_candidates() -> None:
     assert result.candidates[0].status == "review_required"
 
 
+def test_different_declared_cheese_kinds_block_candidates() -> None:
+    result = homologate_products_v2(
+        (
+            product("a", "colonial", "Queso Leyde Mozzarella 227 g", brand="Leyde"),
+            product("b", "walmart", "Queso Leyde Parmesano 227 g", brand="Leyde"),
+        ),
+        candidate_threshold=Decimal("0"),
+    )
+    assert result.candidates == ()
+
+
 @pytest.mark.parametrize(
     ("left_name", "right_name", "brand"),
     [
@@ -531,6 +556,11 @@ def test_pasta_shape_aliases_remain_compatible_review_candidates() -> None:
         ("Huevos Rica Yema 30 unidades", "Huevos Rica Yema Medianos 30 unidades", "Rica Yema"),
         ("Cerveza Toña Lata 350 ml", "Cerveza Toña Light Lata 350 ml", "Toña"),
         ("Pasta Ina 200 g", "Pasta Ina Tornillo 200 g", "Ina"),
+        ("Queso Leyde Procesado 227 g", "Queso Leyde Procesado Suizo 227 g", "Leyde"),
+        ("Aceite Mazola Oliva 750 ml", "Aceite Mazola Blend Oliva 750 ml", "Mazola"),
+        ("Atún Bumble Bee En Aceite 142 g", "Atún Bumble Bee En Aceite Ahumado 142 g", "Bumble Bee"),
+        ("Sopa Issima Pollo 64 g", "Sopa Issima Pollo Con Chile 64 g", "Issima"),
+        ("Sardina La Sirena Salsa Tomate 425 g", "Sardina La Sirena Salsa Tomate Picante 425 g", "La Sirena"),
     ],
 )
 def test_missing_salient_attribute_cannot_receive_strong_confidence(
