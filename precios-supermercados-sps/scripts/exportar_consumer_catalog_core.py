@@ -33,6 +33,7 @@ from precios_supermercados.product_homologation_persistence import (  # noqa: E4
 SCHEMA, MANIFEST_SCHEMA = "rpi-consumer-catalog/v3", "rpi-consumer-catalog-manifest/v3"
 FACETS_SCHEMA, INDEX_SCHEMA = "rpi-consumer-facets/v3", "rpi-consumer-index/v3"
 PARTITION_SCHEMA = "rpi-consumer-catalog-partition/v3"
+ANALYSIS_SCHEMA = "rpi-consumer-analysis/v1"
 MAX_PARTITION_ROWS = 250
 EXPECTED_SCOPE = (
     ("la_colonia", "la_colonia_sps"), ("colonial", "colonial_sps"),
@@ -100,6 +101,34 @@ def _money(minor: int | None) -> str | None:
     if minor is None or minor <= 0:
         return None
     return format(Decimal(minor) / Decimal(100), ".2f")
+
+
+def _nonnegative_money(minor: int) -> str:
+    if not isinstance(minor, int) or minor < 0:
+        raise ExportError("consumer_analysis_money_invalid")
+    return format(Decimal(minor) / Decimal(100), ".2f")
+
+
+def _money_minor(value: object) -> int | None:
+    if not isinstance(value, str) or not re.fullmatch(r"\d+(?:\.\d{1,2})?", value):
+        return None
+    amount = Decimal(value)
+    minor = amount * 100
+    return int(minor) if minor == minor.to_integral_value() and minor > 0 else None
+
+
+def _change_pct(current: int, baseline: int) -> str | None:
+    if current <= 0 or baseline <= 0:
+        return None
+    value = (Decimal(current - baseline) * 100 / Decimal(baseline)).quantize(Decimal("0.01"))
+    return format(value, ".2f")
+
+
+def _discount_pct(current: int, regular: int) -> str | None:
+    if current <= 0 or regular <= current:
+        return None
+    value = (Decimal(regular - current) * 100 / Decimal(regular)).quantize(Decimal("0.01"))
+    return format(value, ".2f")
 def _slug(value: str | None) -> str:
     raw = "sin-categoria" if value is None else value
     folded = unicodedata.normalize("NFKD", raw)
@@ -472,6 +501,220 @@ def build_rows(
     if len({str(row["row_id"]) for row in rows}) != len(rows):
         raise ExportError("consumer_catalog_row_id_collision")
     return rows
+
+
+def build_consumer_analysis(
+    rows: Sequence[dict[str, object]],
+    *,
+    as_of_utc: datetime,
+) -> dict[str, object]:
+    """Resume señales B2C ya validadas sin recalcular identidad en frontend."""
+
+    retailers = {
+        supermarket_id: {
+            "supermarket_id": supermarket_id,
+            "name": RETAILER_NAMES[supermarket_id],
+            "visible_offers": 0,
+            "active_promotions": 0,
+            "comparable_products": 0,
+            "best_price_wins": 0,
+            "price_decreases": 0,
+            "price_increases": 0,
+            "unchanged_prices": 0,
+        }
+        for supermarket_id, _ in EXPECTED_SCOPE
+    }
+    categories: dict[str, dict[str, object]] = {}
+    price_drops: list[dict[str, object]] = []
+    price_increases: list[dict[str, object]] = []
+    promotions: list[dict[str, object]] = []
+    recent_lows: list[dict[str, object]] = []
+    comparable_products = 0
+    comparable_with_spread = 0
+    unit_savings_minor = 0
+    promotion_count = 0
+    movements = {"decreased": 0, "increased": 0, "unchanged": 0, "insufficient_history": 0}
+
+    def item(
+        row: dict[str, object],
+        offer: dict[str, object],
+        current: int,
+        **extra: object,
+    ) -> dict[str, object]:
+        return {
+            "row_id": row["row_id"],
+            "product_name": row["product_name"],
+            "brand": row.get("brand"),
+            "presentation": row.get("presentation"),
+            "category": row.get("category"),
+            "supermarket_id": offer["supermarket_id"],
+            "retailer_name": RETAILER_NAMES[str(offer["supermarket_id"])],
+            "current_price": _money(current),
+            **extra,
+        }
+
+    for row in rows:
+        offers = [offer for offer in row.get("offers", []) if isinstance(offer, dict)]
+        fresh_prices: list[tuple[dict[str, object], int]] = []
+        for offer in offers:
+            supermarket_id = offer.get("supermarket_id")
+            if supermarket_id not in retailers:
+                raise ExportError("consumer_analysis_retailer_invalid")
+            current = _money_minor(offer.get("current_price"))
+            if current is None or offer.get("availability") == "out_of_stock":
+                continue
+            retailer = retailers[str(supermarket_id)]
+            retailer["visible_offers"] = int(retailer["visible_offers"]) + 1
+            if offer.get("freshness_status") == "FRESH":
+                fresh_prices.append((offer, current))
+            if offer.get("is_promotion") is True:
+                promotion_count += 1
+                retailer["active_promotions"] = int(retailer["active_promotions"]) + 1
+                regular = _money_minor(offer.get("reported_regular_price"))
+                promotions.append(
+                    item(
+                        row,
+                        offer,
+                        current,
+                        reported_regular_price=_money(regular),
+                        discount_pct=_discount_pct(current, regular) if regular is not None else None,
+                    )
+                )
+
+            history = offer.get("historical_summary")
+            if not isinstance(history, dict):
+                movements["insufficient_history"] += 1
+                continue
+            previous = _money_minor(history.get("previous_price"))
+            if history.get("historical_position") == "historically_low":
+                recent_lows.append(item(row, offer, current))
+            if previous is None:
+                movements["insufficient_history"] += 1
+                continue
+            movement_item = item(
+                row,
+                offer,
+                current,
+                previous_price=_money(previous),
+                change_pct=_change_pct(current, previous),
+            )
+            if current < previous:
+                movements["decreased"] += 1
+                retailer["price_decreases"] = int(retailer["price_decreases"]) + 1
+                price_drops.append(movement_item)
+            elif current > previous:
+                movements["increased"] += 1
+                retailer["price_increases"] = int(retailer["price_increases"]) + 1
+                price_increases.append(movement_item)
+            else:
+                movements["unchanged"] += 1
+                retailer["unchanged_prices"] = int(retailer["unchanged_prices"]) + 1
+
+        if row.get("comparability") != "comparable" or len(fresh_prices) < 2:
+            continue
+        comparable_products += 1
+        for offer, _ in fresh_prices:
+            retailer = retailers[str(offer["supermarket_id"])]
+            retailer["comparable_products"] = int(retailer["comparable_products"]) + 1
+        prices = [price for _, price in fresh_prices]
+        minimum, maximum = min(prices), max(prices)
+        winners = sorted(
+            str(offer["supermarket_id"])
+            for offer, price in fresh_prices
+            if price == minimum
+        )
+        for supermarket_id in winners:
+            retailer = retailers[supermarket_id]
+            retailer["best_price_wins"] = int(retailer["best_price_wins"]) + 1
+        spread = maximum - minimum
+        if spread > 0:
+            comparable_with_spread += 1
+            unit_savings_minor += spread
+        category_name = row.get("category") if isinstance(row.get("category"), str) else "Sin categoría normalizada"
+        category = categories.setdefault(
+            category_name,
+            {"category": category_name, "comparable_products": 0, "unit_savings_minor": 0, "wins": defaultdict(int)},
+        )
+        category["comparable_products"] = int(category["comparable_products"]) + 1
+        category["unit_savings_minor"] = int(category["unit_savings_minor"]) + spread
+        for supermarket_id in winners:
+            category["wins"][supermarket_id] += 1
+
+    retailer_rows = []
+    for retailer in retailers.values():
+        visible = int(retailer["visible_offers"])
+        comparable = int(retailer["comparable_products"])
+        retailer_rows.append(
+            {
+                **retailer,
+                "promotion_rate_pct": (
+                    format((Decimal(int(retailer["active_promotions"])) * 100 / Decimal(visible)).quantize(Decimal("0.01")), ".2f")
+                    if visible
+                    else None
+                ),
+                "best_price_rate_pct": (
+                    format((Decimal(int(retailer["best_price_wins"])) * 100 / Decimal(comparable)).quantize(Decimal("0.01")), ".2f")
+                    if comparable
+                    else None
+                ),
+            }
+        )
+
+    category_rows = []
+    for category in categories.values():
+        wins = dict(sorted(category["wins"].items()))
+        maximum_wins = max(wins.values(), default=0)
+        leaders = [RETAILER_NAMES[key] for key, value in wins.items() if value == maximum_wins]
+        category_rows.append(
+            {
+                "category": category["category"],
+                "comparable_products": category["comparable_products"],
+                "unit_savings": _nonnegative_money(int(category["unit_savings_minor"])),
+                "best_price_leaders": leaders,
+                "best_price_wins": wins,
+            }
+        )
+    category_rows.sort(key=lambda value: (-int(value["comparable_products"]), str(value["category"])))
+
+    price_drops.sort(key=lambda value: (Decimal(str(value["change_pct"])), str(value["product_name"])))
+    price_increases.sort(key=lambda value: (-Decimal(str(value["change_pct"])), str(value["product_name"])))
+    promotions.sort(
+        key=lambda value: (
+            value["discount_pct"] is None,
+            -Decimal(str(value["discount_pct"] or "0")),
+            str(value["product_name"]),
+        )
+    )
+    recent_lows.sort(key=lambda value: (_money_minor(value["current_price"]) or 0, str(value["product_name"])))
+    return {
+        "schema": ANALYSIS_SCHEMA,
+        "as_of": as_of_utc.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "location": {"city": "San Pedro Sula", "country_code": "HN"},
+        "summary": {
+            "visible_products": len(rows),
+            "comparable_products": comparable_products,
+            "comparable_products_with_price_spread": comparable_with_spread,
+            "active_promotions": promotion_count,
+            "observed_unit_savings": _nonnegative_money(unit_savings_minor),
+            "price_movements": movements,
+            "recent_low_opportunities": len(recent_lows),
+        },
+        "retailers": retailer_rows,
+        "categories": category_rows,
+        "opportunities": {
+            "price_drops": price_drops[:12],
+            "price_increases": price_increases[:12],
+            "promotions": promotions[:12],
+            "recent_lows": recent_lows[:12],
+        },
+        "methodology": {
+            "identity": "only_persisted_ready_cross_retailer_identity",
+            "freshness": "competitive_metrics_require_fresh_offers",
+            "savings": "sum_of_current_unit_price_spreads_not_a_household_basket",
+            "promotions": "retailer_reported_active_promotions",
+            "movements": "current_price_vs_previous_accepted_observation",
+        },
+    }
 def _json_bytes(value: object) -> bytes:
     return (json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
 def _atomic_bytes(path: Path, content: bytes) -> None:
@@ -521,6 +764,7 @@ def export_consumer_catalog(
         history,
         as_of_utc=as_of_utc,
     )
+    analysis = build_consumer_analysis(rows, as_of_utc=as_of_utc)
     output_directory.mkdir(parents=True, exist_ok=True)
     categories: dict[str | None, list[dict[str, object]]] = defaultdict(list)
     for row in rows:
@@ -587,7 +831,8 @@ def export_consumer_catalog(
         "categories": category_facets,
     }
     _atomic_bytes(output_directory / "facets-sps.json", _json_bytes(facets))
-    data_files = ["facets-sps.json", *index_paths, *partition_paths]
+    _atomic_bytes(output_directory / "analysis-sps.json", _json_bytes(analysis))
+    data_files = ["facets-sps.json", "analysis-sps.json", *index_paths, *partition_paths]
     metadata = [_file_metadata(output_directory, relative) for relative in data_files]
     offer_count = sum(len(row["offers"]) for row in rows)
     mode_counts = {
@@ -623,6 +868,7 @@ def export_consumer_catalog(
         "partition_count": len(partition_paths),
         "max_partition_rows": MAX_PARTITION_ROWS,
         "initial_files": ["facets-sps.json"],
+        "analysis_file": "analysis-sps.json",
         "files": metadata,
         "initial_payload": {
             "bytes": next(item["bytes"] for item in metadata if item["path"] == "facets-sps.json"),

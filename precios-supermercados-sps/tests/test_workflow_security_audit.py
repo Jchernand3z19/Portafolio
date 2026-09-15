@@ -295,6 +295,8 @@ def test_safe_analytics_publication_is_trusted_read_only_and_fail_closed() -> No
     assert "rpi-consumer-mart/v2" in raw
     assert "rpi-consumer-catalog-manifest/v3" in raw
     assert "rpi-consumer-catalog/v3" in raw
+    assert "rpi-consumer-analysis/v1" in raw
+    assert "only_persisted_ready_cross_retailer_identity" in raw
     assert "rpi-marts-manifest/v1" in raw
     assert "precios-sps-safe-portfolio-sample/v1" in raw
     assert "business/fact_price_history.csv" in raw

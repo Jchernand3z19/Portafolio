@@ -6,6 +6,7 @@ import {
   partitionPaths, prepareBatch, quantityValue, reconcileDependentFilters, relativePriceState,
   refreshCartPrices, saveCart, searchIndexForPrefix,
 } from "./catalog.js";
+import {analysisIsCompatible, renderConsumerAnalysis} from "./analysis.js";
 
 export * from "./catalog.js";
 
@@ -51,7 +52,7 @@ function stateLabel(value) {
 
 function createApp() {
   const state = {
-    manifest: null, facets: null, baseUrl: null, files: new Map(), indexEntries: [],
+    manifest: null, facets: null, analysis: null, baseUrl: null, files: new Map(), indexEntries: [],
     rows: new Map(), visibleRows: [], partitions: new Map(), staging: new Map(),
     pendingUpdates: [], cart: loadCart(localStorage), requestToken: 0,
     displayLimit: RESULT_PAGE_SIZE, matchingCount: 0,
@@ -64,7 +65,20 @@ function createApp() {
     "mobile-cart-count", "mini-cart-stats", "mini-cart-retailers", "mini-cart-total", "cart-stats",
     "cart-groups", "cart-total", "price-refresh", "price-refresh-message", "price-refresh-button",
     "export-csv", "export-pdf", "export-status", "basket-analysis", "basket-analysis-content",
+    "analysis-tab", "shopping-tab", "analysis-panel", "shopping-panel", "analysis-status",
+    "analysis-summary", "analysis-retailers", "analysis-opportunities", "analysis-categories",
   ].map((id) => [id, document.getElementById(id)]));
+
+  function showTab(panelId, {updateHash = true} = {}) {
+    const analysisSelected = panelId === "analysis-panel";
+    ui["analysis-panel"].hidden = !analysisSelected;
+    ui["shopping-panel"].hidden = analysisSelected;
+    ui["analysis-tab"].classList.toggle("is-active", analysisSelected);
+    ui["shopping-tab"].classList.toggle("is-active", !analysisSelected);
+    ui["analysis-tab"].setAttribute("aria-selected", String(analysisSelected));
+    ui["shopping-tab"].setAttribute("aria-selected", String(!analysisSelected));
+    if (updateHash) history.replaceState(null, "", analysisSelected ? "#analisis" : "#compra-inteligente");
+  }
 
   async function digestHex(bytes) {
     const hash = await crypto.subtle.digest("SHA-256", bytes);
@@ -245,14 +259,19 @@ function createApp() {
     const table = el("table", "comparison-matrix");
     const caption = el("caption", "sr-only", "Comparación de precios por producto y supermercado");
     const thead = el("thead"), head = el("tr");
-    for (const label of ["Producto", "Marca", "Presentación", "Cantidad", ...RETAILERS.map((item) => item.name)]) head.append(el("th", null, label));
+    for (const label of ["Producto", "Cantidad", ...RETAILERS.map((item) => item.name)]) head.append(el("th", null, label));
     thead.append(head); const tbody = el("tbody");
     for (const row of state.visibleRows) {
       const staged = state.staging.get(row.row_id) ?? {quantity: 1, source_product_id: null, partition: row._partition};
       state.staging.set(row.row_id, staged);
       const tr = el("tr"); tr.dataset.productId = row.row_id;
-      const product = el("th", "product-cell"); product.scope = "row"; product.append(el("strong", null, row.product_name), el("small", null, row.comparability === "comparable" ? "Comparación disponible" : "Oferta individual"));
-      tr.append(product, el("td", "attribute-cell", row.brand ?? "Sin normalizar"), el("td", "attribute-cell", row.presentation ?? "Sin normalizar"));
+      const product = el("th", "product-cell"); product.scope = "row";
+      product.append(
+        el("strong", null, row.product_name),
+        el("small", "product-meta", [row.brand, row.presentation].filter(Boolean).join(" · ") || "Datos de presentación no disponibles"),
+        el("small", null, row.comparability === "comparable" ? "Comparación disponible" : "Oferta individual"),
+      );
+      tr.append(product);
       const quantity = el("td", "quantity-cell"); quantity.dataset.label = "Cantidad"; quantity.append(quantityControl(row, staged)); tr.append(quantity);
       const offers = offersByRetailer(row);
       for (const retailer of RETAILERS) { const cell = el("td", "price-cell"); cell.dataset.label = retailer.name; cell.append(priceChoice(row, retailer, offers.get(retailer.supermarket_id), staged)); tr.append(cell); }
@@ -362,10 +381,18 @@ function createApp() {
   ui["confirm-updates"].addEventListener("click", () => { state.cart = confirmLineUpdates(state.cart, state.pendingUpdates); for (const line of state.pendingUpdates) state.staging.delete(line.row_id); state.pendingUpdates = []; ui["update-confirmation"].hidden = true; persistCart(); renderMatrix(); });
   ui["price-refresh-button"].addEventListener("click", async () => { await ensureCartRows(); state.cart = refreshCartPrices(state.cart, state.rows); persistCart(); });
   ui["export-csv"].addEventListener("click", () => { void exportCart("csv"); }); ui["export-pdf"].addEventListener("click", () => { void exportCart("pdf"); });
+  ui["analysis-tab"].addEventListener("click", () => showTab("analysis-panel"));
+  ui["shopping-tab"].addEventListener("click", () => showTab("shopping-panel"));
+  for (const link of document.querySelectorAll("[data-tab-link]")) link.addEventListener("click", (event) => { event.preventDefault(); showTab(link.dataset.tabLink); });
+  for (const button of document.querySelectorAll("[data-open-shopping]")) button.addEventListener("click", () => { showTab("shopping-panel"); ui["category-filter"].focus(); });
+  for (const link of document.querySelectorAll('a[href="#mi-compra"]')) link.addEventListener("click", () => { showTab("shopping-panel", {updateHash: false}); setTimeout(() => document.getElementById("mi-compra")?.scrollIntoView(), 0); });
 
   async function start() {
-    renderCart(); const manifestUrl = globalThis.RPI_CONSUMER_CATALOG_URL || document.body.dataset.catalogUrl;
-    try { const started = performance.now(); state.manifest = await fetchJson(manifestUrl, {manifest: true}); if (!manifestIsCompatible(state.manifest)) throw new Error("catalog_manifest_invalid"); state.baseUrl = new URL(".", manifestUrl); state.files = new Map(state.manifest.files.map((item) => [item.path, item])); state.facets = await fetchJson("facets-sps.json"); if (!facetsAreCompatible(state.facets, state.manifest)) throw new Error("catalog_facets_invalid"); renderFilters(); await ensureCartRows(); renderCart(); renderRefresh(); renderBasketAnalysis(); ui["data-status"].textContent = `${state.manifest.visible_rows.toLocaleString("es-HN")} productos visibles · 5 supermercados · ${Math.round(performance.now() - started)} ms de carga inicial.`; }
+    renderCart(); showTab(["#compra-inteligente", "#mi-compra"].includes(location.hash) ? "shopping-panel" : "analysis-panel", {updateHash: false}); const manifestUrl = globalThis.RPI_CONSUMER_CATALOG_URL || document.body.dataset.catalogUrl;
+    try { const started = performance.now(); state.manifest = await fetchJson(manifestUrl, {manifest: true}); if (!manifestIsCompatible(state.manifest)) throw new Error("catalog_manifest_invalid"); state.baseUrl = new URL(".", manifestUrl); state.files = new Map(state.manifest.files.map((item) => [item.path, item])); state.facets = await fetchJson("facets-sps.json"); if (!facetsAreCompatible(state.facets, state.manifest)) throw new Error("catalog_facets_invalid"); renderFilters(); await ensureCartRows(); renderCart(); renderRefresh(); renderBasketAnalysis(); ui["data-status"].textContent = `${state.manifest.visible_rows.toLocaleString("es-HN")} productos visibles · 5 supermercados · ${Math.round(performance.now() - started)} ms de carga inicial.`;
+      try { state.analysis = await fetchJson(state.manifest.analysis_file); if (!analysisIsCompatible(state.analysis, state.manifest)) throw new Error("consumer_analysis_invalid"); renderConsumerAnalysis({summary: ui["analysis-summary"], retailers: ui["analysis-retailers"], opportunities: ui["analysis-opportunities"], categories: ui["analysis-categories"]}, state.analysis); ui["analysis-status"].textContent = "Análisis calculado en Python desde el mismo corte verificado del catálogo."; }
+      catch (error) { ui["analysis-status"].dataset.error = error instanceof Error ? error.message : "unknown_error"; ui["analysis-status"].textContent = "El análisis no está disponible. Compra Inteligente y tu lista local siguen funcionando."; }
+    }
     catch (error) { ui["data-status"].dataset.error = error instanceof Error ? error.message : "unknown_error"; ui["data-status"].textContent = "No fue posible verificar el catálogo. Tu compra local permanece disponible."; }
   }
   void start();

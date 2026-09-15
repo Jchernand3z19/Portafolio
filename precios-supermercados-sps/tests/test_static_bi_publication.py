@@ -25,6 +25,8 @@ def test_rpi_consumer_publication_reuses_safe_artifact_without_turso_reads_and_i
     assert "portfolio_sync_product_count_mismatch" in raw
     assert "portfolio_sync_hash_mismatch" in raw
     assert "portfolio_sync_secret_material_detected" in raw
+    assert "portfolio_sync_consumer_analysis_invalid" in raw
+    assert "rpi-consumer-analysis/v1" in raw
     assert "source_workflow_run_id" in raw
     assert "source_head_sha" in raw
     assert 'published="$repository/precios-supermercados-sps/published/rpi"' in raw

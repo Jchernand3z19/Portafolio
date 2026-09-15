@@ -109,6 +109,12 @@ jobs:
           sample = json.loads(sample_path.read_text(encoding='utf-8'))
           catalog_manifest = json.loads(catalog_manifest_path.read_text(encoding='utf-8'))
           tgu_manifest = json.loads(tgu_manifest_path.read_text(encoding='utf-8'))
+          analysis_file = catalog_manifest.get('analysis_file')
+          if analysis_file != 'analysis-sps.json':
+              raise SystemExit('portfolio_sync_consumer_analysis_path_invalid')
+          catalog_analysis = json.loads(
+              (catalog_manifest_path.parent / analysis_file).read_text(encoding='utf-8')
+          )
 
           if consumer.get('schema') != 'rpi-consumer-mart/v2':
               raise SystemExit('portfolio_sync_consumer_schema_invalid')
@@ -143,6 +149,17 @@ jobs:
               raise SystemExit('portfolio_sync_tgu_city_invalid')
           if tgu_manifest.get('initial_files') != ['facets-tgu.json']:
               raise SystemExit('portfolio_sync_tgu_facets_contract_invalid')
+          if (
+              catalog_analysis.get('schema') != 'rpi-consumer-analysis/v1'
+              or catalog_analysis.get('as_of') != catalog_manifest.get('as_of')
+              or catalog_analysis.get('location') != {'city': 'San Pedro Sula', 'country_code': 'HN'}
+              or catalog_analysis.get('summary', {}).get('visible_products') != catalog_manifest.get('visible_rows')
+              or [item.get('supermarket_id') for item in catalog_analysis.get('retailers', [])]
+                 != [item['supermarket_id'] for item in expected_catalog_scope]
+              or catalog_analysis.get('methodology', {}).get('identity')
+                 != 'only_persisted_ready_cross_retailer_identity'
+          ):
+              raise SystemExit('portfolio_sync_consumer_analysis_invalid')
           context_counts = tgu_manifest.get('context_offer_counts')
           if (
               not isinstance(context_counts, list)
@@ -261,6 +278,7 @@ jobs:
               'sample': sample,
               'catalog_manifest': catalog_manifest,
               'tgu_manifest': tgu_manifest,
+              'catalog_analysis': catalog_analysis,
           }, ensure_ascii=False).casefold()
           serialized += '\n'.join(
               path.read_text(encoding='utf-8', errors='strict').casefold()
@@ -320,6 +338,7 @@ jobs:
               'consumer_v3_visible_rows': catalog_manifest['visible_rows'],
               'consumer_v3_source_offers': catalog_manifest['source_offers'],
               'consumer_v3_partitions': catalog_manifest['partition_count'],
+              'consumer_v3_comparable_products': catalog_analysis['summary']['comparable_products'],
               'consumer_v3_tgu_visible_rows': tgu_manifest['visible_rows'],
               'consumer_v3_tgu_source_offers': tgu_manifest['source_offers'],
               'consumer_v3_tgu_partitions': tgu_manifest['partition_count'],
