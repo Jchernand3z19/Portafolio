@@ -81,6 +81,21 @@ def _text(value: object) -> str | None:
         return None
     cleaned = " ".join(value.split())
     return cleaned or None
+
+
+_BRAND_DISPLAY_OVERRIDES = {
+    "norteno": "Norteño",
+    "nutri yema": "Nutri Yema",
+    "rica yema": "Rica Yema",
+    "marketside": "Marketside",
+}
+
+
+def _display_brand(value: object) -> str | None:
+    normalized = _text(value)
+    if normalized is None:
+        return None
+    return _BRAND_DISPLAY_OVERRIDES.get(normalized.casefold(), normalized.title())
 def _money(minor: int | None) -> str | None:
     if minor is None or minor <= 0:
         return None
@@ -130,7 +145,8 @@ def fetch_visible_offers(
     while True:
         rows = backend.query(
             f"""
-            SELECT p.product_id,p.supermarket_id,p.name,p.brand,p.presentation,
+            SELECT p.product_id,p.supermarket_id,p.name,
+                   hp.normalized_brand,hp.display_presentation,
                    h.location_id,h.current_price_minor,h.reported_regular_price_minor,
                    h.is_promotion,h.availability,h.valid_from_utc,
                    hp.canonical_product_id,hp.category,hp.product_type,
@@ -183,7 +199,7 @@ def fetch_visible_offers(
                     supermarket_id=supermarket_id,
                     location_id=location_id,
                     product_name=_text(name) or "",
-                    brand=_text(brand),
+                    brand=_display_brand(brand),
                     presentation=_text(presentation),
                     current_price_minor=current_price,
                     reported_regular_price_minor=regular_price,

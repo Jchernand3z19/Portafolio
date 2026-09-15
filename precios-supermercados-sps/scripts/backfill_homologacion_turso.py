@@ -28,6 +28,8 @@ from actualizar_mvp_turso_la_colonia import (  # noqa: E402
 )
 from precios_supermercados.product_homologation_persistence import (  # noqa: E402
     NORMALIZATION_VERSION,
+    LEGACY_PROFILE_COLUMNS,
+    PROFILE_COLUMNS,
     TABLE_NAME,
     ProductHomologationPersistenceError,
     ProductHomologationRow,
@@ -36,28 +38,8 @@ from precios_supermercados.product_homologation_persistence import (  # noqa: E4
 )
 
 STAGE_TABLE = "product_homologation_profiles_stage"
-EXPECTED_COLUMNS = (
-    "product_id",
-    "supermarket_id",
-    "normalized_name",
-    "normalized_brand",
-    "canonical_gtin",
-    "canonical_product_id",
-    "category",
-    "subcategory",
-    "product_type",
-    "taxonomy_rule_id",
-    "presentation_dimension",
-    "presentation_total_base",
-    "presentation_pack_count",
-    "presentation_unit_amount_base",
-    "presentation_status",
-    "comparison_status",
-    "conflict_reasons_json",
-    "normalization_version",
-    "profile_hash",
-    "updated_at_utc",
-)
+EXPECTED_COLUMNS = PROFILE_COLUMNS
+LEGACY_COLUMNS = LEGACY_PROFILE_COLUMNS
 
 TARGET_TABLE_SQL = f"""CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
     product_id INTEGER PRIMARY KEY,
@@ -86,6 +68,23 @@ TARGET_TABLE_SQL = f"""CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
     normalization_version TEXT NOT NULL,
     profile_hash TEXT NOT NULL CHECK (length(profile_hash) = 64),
     updated_at_utc TEXT NOT NULL,
+    raw_brand TEXT,
+    source_brand_role TEXT NOT NULL CHECK (
+        source_brand_role IN ('unknown','retailer_placeholder','retailer_reported_brand')
+    ),
+    brand_resolution_source TEXT NOT NULL CHECK (
+        brand_resolution_source IN ('source','name_known_brand','source_conflict','missing')
+    ),
+    raw_presentation TEXT,
+    normalized_quantity TEXT,
+    normalized_unit TEXT CHECK (
+        normalized_unit IS NULL OR normalized_unit IN ('g','ml','unit','oz')
+    ),
+    normalized_pack_count INTEGER CHECK (
+        normalized_pack_count IS NULL OR normalized_pack_count > 0
+    ),
+    canonical_total TEXT,
+    display_presentation TEXT,
     FOREIGN KEY (product_id, supermarket_id) REFERENCES products(product_id, supermarket_id),
     CHECK ((canonical_gtin IS NULL) = (canonical_product_id IS NULL)),
     CHECK (
@@ -114,8 +113,45 @@ STAGE_TABLE_SQL = f"""CREATE TABLE {STAGE_TABLE} (
     conflict_reasons_json TEXT NOT NULL,
     normalization_version TEXT NOT NULL,
     profile_hash TEXT NOT NULL,
-    updated_at_utc TEXT NOT NULL
+    updated_at_utc TEXT NOT NULL,
+    raw_brand TEXT,
+    source_brand_role TEXT NOT NULL,
+    brand_resolution_source TEXT NOT NULL,
+    raw_presentation TEXT,
+    normalized_quantity TEXT,
+    normalized_unit TEXT,
+    normalized_pack_count INTEGER,
+    canonical_total TEXT,
+    display_presentation TEXT
 ) STRICT"""
+
+MIGRATION_STEPS = (
+    ("raw_brand", f"ALTER TABLE {TABLE_NAME} ADD COLUMN raw_brand TEXT"),
+    (
+        "source_brand_role",
+        f"ALTER TABLE {TABLE_NAME} ADD COLUMN source_brand_role TEXT NOT NULL DEFAULT 'unknown' "
+        "CHECK (source_brand_role IN ('unknown','retailer_placeholder','retailer_reported_brand'))",
+    ),
+    (
+        "brand_resolution_source",
+        f"ALTER TABLE {TABLE_NAME} ADD COLUMN brand_resolution_source TEXT NOT NULL DEFAULT 'missing' "
+        "CHECK (brand_resolution_source IN ('source','name_known_brand','source_conflict','missing'))",
+    ),
+    ("raw_presentation", f"ALTER TABLE {TABLE_NAME} ADD COLUMN raw_presentation TEXT"),
+    ("normalized_quantity", f"ALTER TABLE {TABLE_NAME} ADD COLUMN normalized_quantity TEXT"),
+    (
+        "normalized_unit",
+        f"ALTER TABLE {TABLE_NAME} ADD COLUMN normalized_unit TEXT "
+        "CHECK (normalized_unit IS NULL OR normalized_unit IN ('g','ml','unit','oz'))",
+    ),
+    (
+        "normalized_pack_count",
+        f"ALTER TABLE {TABLE_NAME} ADD COLUMN normalized_pack_count INTEGER "
+        "CHECK (normalized_pack_count IS NULL OR normalized_pack_count > 0)",
+    ),
+    ("canonical_total", f"ALTER TABLE {TABLE_NAME} ADD COLUMN canonical_total TEXT"),
+    ("display_presentation", f"ALTER TABLE {TABLE_NAME} ADD COLUMN display_presentation TEXT"),
+)
 
 INDEX_STEPS = (
     ("index_canonical", f"CREATE INDEX IF NOT EXISTS idx_product_homologation_canonical ON {TABLE_NAME}(canonical_product_id) WHERE canonical_product_id IS NOT NULL", ()),
@@ -151,9 +187,28 @@ def _ensure_schema(url: str, token: str) -> None:
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
         (TABLE_NAME,),
     )
+    columns_before: tuple[str, ...] = ()
+    if exists:
+        columns_before = tuple(
+            str(row[0])
+            for row in _query(
+                url,
+                token,
+                "SELECT name FROM pragma_table_info(?) ORDER BY cid",
+                (TABLE_NAME,),
+            )
+        )
+        if columns_before not in {LEGACY_COLUMNS, EXPECTED_COLUMNS}:
+            raise SnapshotError("homologation_turso_schema_mismatch")
+
     steps: list[tuple[str, str, tuple[object, ...]]] = [("begin", "BEGIN IMMEDIATE", ())]
     if not exists:
         steps.append(("create_target", TARGET_TABLE_SQL, ()))
+    elif columns_before == LEGACY_COLUMNS:
+        steps.extend(
+            (f"add_{column}", sql, ())
+            for column, sql in MIGRATION_STEPS
+        )
     steps.extend(INDEX_STEPS)
     steps.append(("commit", "COMMIT", ()))
     _run_batch(url, token, steps)
@@ -248,7 +303,16 @@ SELECT
     json_extract(value,'$.conflict_reasons_json'),
     json_extract(value,'$.normalization_version'),
     json_extract(value,'$.profile_hash'),
-    json_extract(value,'$.updated_at_utc')
+    json_extract(value,'$.updated_at_utc'),
+    json_extract(value,'$.raw_brand'),
+    json_extract(value,'$.source_brand_role'),
+    json_extract(value,'$.brand_resolution_source'),
+    json_extract(value,'$.raw_presentation'),
+    json_extract(value,'$.normalized_quantity'),
+    json_extract(value,'$.normalized_unit'),
+    CAST(json_extract(value,'$.normalized_pack_count') AS INTEGER),
+    json_extract(value,'$.canonical_total'),
+    json_extract(value,'$.display_presentation')
 FROM json_each(?)"""
 
 _TARGET_UPSERT = f"""INSERT INTO {TABLE_NAME} ({','.join(EXPECTED_COLUMNS)})
@@ -272,7 +336,16 @@ ON CONFLICT(product_id) DO UPDATE SET
     conflict_reasons_json=excluded.conflict_reasons_json,
     normalization_version=excluded.normalization_version,
     profile_hash=excluded.profile_hash,
-    updated_at_utc=excluded.updated_at_utc
+    updated_at_utc=excluded.updated_at_utc,
+    raw_brand=excluded.raw_brand,
+    source_brand_role=excluded.source_brand_role,
+    brand_resolution_source=excluded.brand_resolution_source,
+    raw_presentation=excluded.raw_presentation,
+    normalized_quantity=excluded.normalized_quantity,
+    normalized_unit=excluded.normalized_unit,
+    normalized_pack_count=excluded.normalized_pack_count,
+    canonical_total=excluded.canonical_total,
+    display_presentation=excluded.display_presentation
 WHERE {TABLE_NAME}.profile_hash <> excluded.profile_hash
    OR {TABLE_NAME}.normalization_version <> excluded.normalization_version"""
 
@@ -442,16 +515,11 @@ def backfill_turso(
     auth_token: str,
     *,
     updated_at_utc: str | None = None,
+    apply: bool = True,
 ) -> dict[str, object]:
     if not database_url.strip() or not auth_token.strip():
         raise ProductHomologationPersistenceError("turso_credentials_missing")
     before = _source_preflight(database_url, auth_token)
-    if before["profiles"] == 0:
-        _ensure_schema(database_url, auth_token)
-        after_schema = _preflight(database_url, auth_token)
-        if after_schema != before:
-            raise SnapshotError("homologation_source_changed_during_schema_transition")
-
     products = _fetch_products(database_url, auth_token)
     if len(products) != before["products"]:
         raise SnapshotError("homologation_source_changed_during_read")
@@ -464,7 +532,15 @@ def backfill_turso(
         row.product_id: (row.profile_hash, row.normalization_version)
         for row in derived
     }
-    existing_state = _fetch_profile_state(database_url, auth_token)
+    target_exists = before["profiles"] > 0 or bool(
+        _query(
+            database_url,
+            auth_token,
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (TABLE_NAME,),
+        )
+    )
+    existing_state = _fetch_profile_state(database_url, auth_token) if target_exists else {}
     extra_profiles = set(existing_state) - set(derived_state)
     if extra_profiles:
         raise SnapshotError("homologation_profile_ids_not_in_products")
@@ -473,6 +549,27 @@ def backfill_turso(
         row for row in derived
         if existing_state.get(row.product_id) != (row.profile_hash, row.normalization_version)
     )
+    inserted = sum(row.product_id not in existing_state for row in changed)
+    updated = len(changed) - inserted
+    status_counts: dict[str, int] = {}
+    for row in derived:
+        status_counts[row.comparison_status] = status_counts.get(row.comparison_status, 0) + 1
+    if not apply:
+        return {
+            "normalization_version": NORMALIZATION_VERSION,
+            "processed": len(derived),
+            "inserted": inserted,
+            "updated": updated,
+            "unchanged": len(derived) - len(changed),
+            "no_op": not changed,
+            "dry_run": True,
+            "staging_written": False,
+            "comparison_status": dict(sorted(status_counts.items())),
+            "products_unchanged": True,
+            "price_history_unchanged": True,
+            "scrape_runs_unchanged": True,
+        }
+
     if not changed:
         post = _postflight(database_url, auth_token, before, len(derived))
         return {
@@ -483,8 +580,14 @@ def backfill_turso(
             "unchanged": len(derived),
             "no_op": True,
             "staging_written": False,
+            "dry_run": False,
             **post,
         }
+
+    _ensure_schema(database_url, auth_token)
+    after_schema = _preflight(database_url, auth_token)
+    if after_schema != before:
+        raise SnapshotError("homologation_source_changed_during_schema_transition")
 
     delta: dict[str, int] = {}
     post: dict[str, object] = {}
@@ -511,6 +614,7 @@ def backfill_turso(
         "processed": len(derived),
         "no_op": False,
         "staging_written": True,
+        "dry_run": False,
         **delta,
         **post,
     }
@@ -519,11 +623,15 @@ def backfill_turso(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--updated-at-utc")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     result = backfill_turso(
         os.environ.get("TURSO_DATABASE_URL", ""),
         os.environ.get("TURSO_AUTH_TOKEN", ""),
         updated_at_utc=args.updated_at_utc,
+        apply=args.apply,
     )
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
 

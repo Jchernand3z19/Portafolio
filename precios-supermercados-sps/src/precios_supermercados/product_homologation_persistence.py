@@ -13,11 +13,66 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Iterable
 
-from .product_homologation import SourceProductRecord, homologate_products
+from .product_homologation import SourceProductRecord
+from .product_identity_v2 import (
+    IDENTITY_NORMALIZATION_VERSION,
+    build_brand_lexicon,
+    canonical_presentation_fields,
+    homologate_products_v2,
+    resolve_brand,
+    source_brand_role,
+)
 
-NORMALIZATION_VERSION = "product-homologation-v1"
+NORMALIZATION_VERSION = IDENTITY_NORMALIZATION_VERSION
 TABLE_NAME = "product_homologation_profiles"
 COMPARISON_STATUSES = frozenset({"ready", "review_required", "single_source", "unmapped"})
+PROFILE_COLUMNS = (
+    "product_id",
+    "supermarket_id",
+    "normalized_name",
+    "normalized_brand",
+    "canonical_gtin",
+    "canonical_product_id",
+    "category",
+    "subcategory",
+    "product_type",
+    "taxonomy_rule_id",
+    "presentation_dimension",
+    "presentation_total_base",
+    "presentation_pack_count",
+    "presentation_unit_amount_base",
+    "presentation_status",
+    "comparison_status",
+    "conflict_reasons_json",
+    "normalization_version",
+    "profile_hash",
+    "updated_at_utc",
+    "raw_brand",
+    "source_brand_role",
+    "brand_resolution_source",
+    "raw_presentation",
+    "normalized_quantity",
+    "normalized_unit",
+    "normalized_pack_count",
+    "canonical_total",
+    "display_presentation",
+)
+LEGACY_PROFILE_COLUMNS = PROFILE_COLUMNS[:-9]
+SQLITE_MIGRATION_STEPS = (
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN raw_brand TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN source_brand_role TEXT NOT NULL DEFAULT 'unknown' "
+    "CHECK (source_brand_role IN ('unknown','retailer_placeholder','retailer_reported_brand'))",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN brand_resolution_source TEXT NOT NULL DEFAULT 'missing' "
+    "CHECK (brand_resolution_source IN ('source','name_known_brand','source_conflict','missing'))",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN raw_presentation TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN normalized_quantity TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN normalized_unit TEXT "
+    "CHECK (normalized_unit IS NULL OR normalized_unit IN ('g','ml','unit','oz'))",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN normalized_pack_count INTEGER "
+    "CHECK (normalized_pack_count IS NULL OR normalized_pack_count > 0)",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN canonical_total TEXT",
+    f"ALTER TABLE {TABLE_NAME} ADD COLUMN display_presentation TEXT",
+)
 
 
 class ProductHomologationPersistenceError(ValueError):
@@ -58,6 +113,15 @@ class ProductHomologationRow:
     normalization_version: str
     profile_hash: str
     updated_at_utc: str
+    raw_brand: str | None = None
+    source_brand_role: str = "unknown"
+    brand_resolution_source: str = "missing"
+    raw_presentation: str | None = None
+    normalized_quantity: str | None = None
+    normalized_unit: str | None = None
+    normalized_pack_count: int | None = None
+    canonical_total: str | None = None
+    display_presentation: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.product_id) is not int or self.product_id <= 0:
@@ -86,6 +150,21 @@ class ProductHomologationRow:
             raise ProductHomologationPersistenceError("version_or_hash_invalid")
         if not self.updated_at_utc.endswith("Z"):
             raise ProductHomologationPersistenceError("updated_at_invalid")
+        if self.source_brand_role not in {
+            "unknown",
+            "retailer_placeholder",
+            "retailer_reported_brand",
+        }:
+            raise ProductHomologationPersistenceError("source_brand_role_invalid")
+        if self.brand_resolution_source not in {
+            "source",
+            "name_known_brand",
+            "source_conflict",
+            "missing",
+        }:
+            raise ProductHomologationPersistenceError("brand_resolution_source_invalid")
+        if self.normalized_unit not in {None, "g", "ml", "unit", "oz"}:
+            raise ProductHomologationPersistenceError("normalized_unit_invalid")
 
 
 def _row_hash(payload: dict[str, object]) -> str:
@@ -115,7 +194,9 @@ def build_homologation_rows(
     if not isinstance(normalization_version, str) or not normalization_version.strip():
         raise ProductHomologationPersistenceError("normalization_version_invalid")
 
-    result = homologate_products(record for _, record in entries)
+    records = tuple(record for _, record in entries)
+    result = homologate_products_v2(records)
+    brand_lexicon = build_brand_lexicon(records)
     profile_by_source = {profile.record.source_record_id: profile for profile in result.profiles}
     group_by_source: dict[str, tuple[str, tuple[str, ...]]] = {}
     for group in result.exact_gtin_groups:
@@ -138,6 +219,8 @@ def build_homologation_rows(
             conflict_reasons = ()
 
         presentation = profile.presentation
+        canonical_presentation = canonical_presentation_fields(record, profile.taxonomy)
+        brand_resolution = resolve_brand(record, brand_lexicon=brand_lexicon)
         payload: dict[str, object] = {
             "product_id": product_id,
             "supermarket_id": record.supermarket_id,
@@ -157,6 +240,15 @@ def build_homologation_rows(
             "comparison_status": comparison_status,
             "conflict_reasons_json": json.dumps(list(conflict_reasons), ensure_ascii=False, separators=(",", ":")),
             "normalization_version": normalization_version,
+            "raw_brand": record.source_brand,
+            "source_brand_role": source_brand_role(record.source_brand),
+            "brand_resolution_source": brand_resolution.source,
+            "raw_presentation": canonical_presentation.raw_presentation,
+            "normalized_quantity": _decimal_text(canonical_presentation.normalized_quantity),
+            "normalized_unit": canonical_presentation.normalized_unit,
+            "normalized_pack_count": canonical_presentation.normalized_pack_count,
+            "canonical_total": _decimal_text(canonical_presentation.canonical_total),
+            "display_presentation": canonical_presentation.display_presentation,
         }
         rows.append(
             ProductHomologationRow(
@@ -202,6 +294,23 @@ CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
     normalization_version TEXT NOT NULL,
     profile_hash TEXT NOT NULL CHECK (length(profile_hash) = 64),
     updated_at_utc TEXT NOT NULL,
+    raw_brand TEXT,
+    source_brand_role TEXT NOT NULL CHECK (
+        source_brand_role IN ('unknown','retailer_placeholder','retailer_reported_brand')
+    ),
+    brand_resolution_source TEXT NOT NULL CHECK (
+        brand_resolution_source IN ('source','name_known_brand','source_conflict','missing')
+    ),
+    raw_presentation TEXT,
+    normalized_quantity TEXT,
+    normalized_unit TEXT CHECK (
+        normalized_unit IS NULL OR normalized_unit IN ('g','ml','unit','oz')
+    ),
+    normalized_pack_count INTEGER CHECK (
+        normalized_pack_count IS NULL OR normalized_pack_count > 0
+    ),
+    canonical_total TEXT,
+    display_presentation TEXT,
     FOREIGN KEY (product_id, supermarket_id)
         REFERENCES products(product_id, supermarket_id),
     CHECK ((canonical_gtin IS NULL) = (canonical_product_id IS NULL)),
@@ -231,8 +340,11 @@ INSERT INTO {TABLE_NAME} (
     canonical_product_id,category,subcategory,product_type,taxonomy_rule_id,
     presentation_dimension,presentation_total_base,presentation_pack_count,
     presentation_unit_amount_base,presentation_status,comparison_status,
-    conflict_reasons_json,normalization_version,profile_hash,updated_at_utc
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    conflict_reasons_json,normalization_version,profile_hash,updated_at_utc,
+    raw_brand,source_brand_role,brand_resolution_source,raw_presentation,
+    normalized_quantity,normalized_unit,normalized_pack_count,canonical_total,
+    display_presentation
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(product_id) DO UPDATE SET
     supermarket_id=excluded.supermarket_id,
     normalized_name=excluded.normalized_name,
@@ -252,7 +364,16 @@ ON CONFLICT(product_id) DO UPDATE SET
     conflict_reasons_json=excluded.conflict_reasons_json,
     normalization_version=excluded.normalization_version,
     profile_hash=excluded.profile_hash,
-    updated_at_utc=excluded.updated_at_utc
+    updated_at_utc=excluded.updated_at_utc,
+    raw_brand=excluded.raw_brand,
+    source_brand_role=excluded.source_brand_role,
+    brand_resolution_source=excluded.brand_resolution_source,
+    raw_presentation=excluded.raw_presentation,
+    normalized_quantity=excluded.normalized_quantity,
+    normalized_unit=excluded.normalized_unit,
+    normalized_pack_count=excluded.normalized_pack_count,
+    canonical_total=excluded.canonical_total,
+    display_presentation=excluded.display_presentation
 WHERE {TABLE_NAME}.profile_hash <> excluded.profile_hash
    OR {TABLE_NAME}.normalization_version <> excluded.normalization_version
 """
@@ -280,11 +401,34 @@ def _values(row: ProductHomologationRow) -> tuple[object, ...]:
         row.normalization_version,
         row.profile_hash,
         row.updated_at_utc,
+        row.raw_brand,
+        row.source_brand_role,
+        row.brand_resolution_source,
+        row.raw_presentation,
+        row.normalized_quantity,
+        row.normalized_unit,
+        row.normalized_pack_count,
+        row.canonical_total,
+        row.display_presentation,
     )
 
 
 def ensure_sqlite_schema(con: sqlite3.Connection) -> None:
+    exists = con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (TABLE_NAME,),
+    ).fetchone()
+    if exists:
+        columns = tuple(row[1] for row in con.execute(f"PRAGMA table_info({TABLE_NAME})"))
+        if columns == LEGACY_PROFILE_COLUMNS:
+            for statement in SQLITE_MIGRATION_STEPS:
+                con.execute(statement)
+        elif columns != PROFILE_COLUMNS:
+            raise ProductHomologationPersistenceError("profile_schema_mismatch")
     con.executescript(SCHEMA_SQL)
+    columns = tuple(row[1] for row in con.execute(f"PRAGMA table_info({TABLE_NAME})"))
+    if columns != PROFILE_COLUMNS:
+        raise ProductHomologationPersistenceError("profile_schema_mismatch")
 
 
 def persist_sqlite_rows(

@@ -75,14 +75,18 @@ def build_db(path: Path) -> None:
                 canonical_product_id TEXT, category TEXT,
                 product_type TEXT, presentation_dimension TEXT,
                 presentation_total_base TEXT, presentation_status TEXT NOT NULL,
-                comparison_status TEXT NOT NULL, normalization_version TEXT NOT NULL
+                comparison_status TEXT NOT NULL, normalization_version TEXT NOT NULL,
+                normalized_brand TEXT, display_presentation TEXT
             );
             """
         )
         connection.executemany("INSERT INTO products VALUES(?,?,?,?,?,?)", products)
         connection.executemany(
-            "INSERT INTO product_homologation_profiles VALUES(?,?,?,?,?,?,?,?,?,?)",
-            profiles,
+            "INSERT INTO product_homologation_profiles VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                (*profile, products[index][3].casefold() if products[index][3] else None, products[index][4])
+                for index, profile in enumerate(profiles)
+            ),
         )
         connection.executemany(
             "INSERT INTO price_history VALUES(?,?,?,?,?,?,?,?,?)",

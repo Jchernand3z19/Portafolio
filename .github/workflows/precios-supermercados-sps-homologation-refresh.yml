@@ -42,13 +42,23 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Refrescar perfiles derivados
+      - name: Validar plan de perfiles derivados
         working-directory: precios-supermercados-sps
         run: |
           set -euo pipefail
           mkdir -p run-artifacts/homologation
           python scripts/backfill_homologacion_turso.py \
             --updated-at-utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --dry-run \
+            | tee run-artifacts/homologation/daily-refresh-plan.json
+
+      - name: Refrescar perfiles derivados
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python scripts/backfill_homologacion_turso.py \
+            --updated-at-utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --apply \
             | tee run-artifacts/homologation/daily-refresh.json
 
       - name: Generar cola privada de revisión
