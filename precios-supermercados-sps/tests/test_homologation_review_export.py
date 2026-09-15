@@ -106,7 +106,9 @@ def test_review_v2_exposes_raw_canonical_fields_and_before_after_metrics() -> No
     )
 
     assert queue["before_after"]["before_engine"] == "product-homologation-v1"
-    assert queue["before_after"]["after_engine"] == "product-homologation-v2"
+    assert queue["before_after"]["after_engine"] == "product-homologation-v2.1"
+    assert "normalized_brand" in queue["before_after"]["before"]
+    assert "normalized_brand" in queue["before_after"]["after"]
     candidate = queue["review_candidates"]["rows"][0]
     assert candidate["confidence_level"] == "STRONG"
     assert candidate["decision_state"] == "review_required"
@@ -119,4 +121,9 @@ def test_review_v2_exposes_raw_canonical_fields_and_before_after_metrics() -> No
     assert products["colonial:1"]["normalized_unit"] == "g"
     assert products["andes:2"]["source_presentation"] == "UN"
     assert products["andes:2"]["canonical_total"] == "544.310844"
+    assert products["colonial:1"]["source_brand_role"] == "retailer_reported_brand"
+    assert products["colonial:1"]["normalized_brand_role"] == "commercial_brand_candidate"
+    assert products["colonial:1"]["manufacturer_brand"] is None
+    assert products["colonial:1"]["owner_brand"] is None
+    assert products["colonial:1"]["manufacturer_owner_status"] == "not_exposed_by_source"
     assert queue["summary"]["image_signal_status"] == "not_persisted_in_products_table"
