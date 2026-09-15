@@ -13,20 +13,24 @@
   data-city-name="San Pedro Sula"
   data-catalog-url="https://raw.githubusercontent.com/Jchernand3z19/Portafolio/portfolio-data/precios-supermercados-sps/published/rpi/v3/manifest.json">
   <header class="app-header">
-    <a class="brand" href="../../index.html" aria-label="Volver al portafolio">RPI</a>
+    <a class="brand" href="../../index.html" aria-label="Volver al portafolio"><span class="brand-mark" aria-hidden="true">R</span><span>RPI <small>Precios</small></span></a>
     <nav aria-label="Secciones">
-      <a href="#analisis" data-tab-link="analysis-panel">Análisis</a>
-      <a href="#compra-inteligente" data-tab-link="shopping-panel">Compra inteligente</a>
       <a class="cart-link" href="#mi-compra">Mi lista <span id="cart-count" aria-label="productos en Mi lista">0</span></a>
     </nav>
   </header>
 
   <main>
     <section class="hero">
-      <p class="eyebrow">Retail Price Intelligence · San Pedro Sula</p>
-      <h1>Precios para comprar mejor</h1>
-      <p>Descubre movimientos, promociones y oportunidades; después compara productos y planifica tu lista. Esta página no vende productos ni procesa pagos.</p>
-      <p id="dataset-status" class="data-status" role="status" aria-live="polite">Comprobando fecha del último corte válido…</p>
+      <div class="hero-copy">
+        <p class="eyebrow">PRECIOS PÚBLICOS · SAN PEDRO SULA</p>
+        <h1>Compara precios.<br><span>Compra con claridad.</span></h1>
+        <p>Revisa cambios y promociones, compara supermercados y arma tu lista con precios observados.</p>
+      </div>
+      <aside class="trust-card" aria-label="Información del servicio">
+        <span class="trust-icon" aria-hidden="true">✓</span>
+        <div><strong>Información para planificar</strong><p>Esta página no vende productos ni procesa pagos.</p></div>
+        <p id="dataset-status" class="data-status" role="status" aria-live="polite">Comprobando último corte válido…</p>
+      </aside>
     </section>
 
     <nav class="primary-tabs" aria-label="Dashboard B2C" role="tablist">
@@ -36,14 +40,16 @@
 
     <section id="analysis-panel" class="tab-panel analysis-panel" role="tabpanel" aria-labelledby="analysis-tab">
       <div class="analysis-heading">
-        <div><p class="eyebrow">PANORAMA DEL HOGAR</p><h2>Qué está pasando con los precios</h2></div>
+        <div><p class="eyebrow">PANORAMA DEL HOGAR</p><h2>Los precios de hoy, en contexto</h2></div>
         <p>Las comparaciones usan únicamente identidades homologadas y ofertas vigentes. Los faltantes no se convierten en ceros.</p>
       </div>
       <p id="analysis-status" class="data-status" role="status" aria-live="polite">Cargando análisis del corte verificado…</p>
-      <div id="analysis-summary" class="metric-grid" aria-label="Indicadores principales"></div>
+      <div id="analysis-summary" class="metric-grid is-loading" aria-label="Indicadores principales" aria-busy="true">
+        <span class="skeleton-card"></span><span class="skeleton-card"></span><span class="skeleton-card"></span><span class="skeleton-card"></span>
+      </div>
 
       <section class="analysis-section" aria-labelledby="retailer-analysis-title">
-        <div class="section-heading"><div><p class="eyebrow">DÓNDE CONVIENE COMPRAR</p><h3 id="retailer-analysis-title">Panorama por supermercado</h3></div><p>Los “mejores precios” sólo cuentan productos comparables y frescos.</p></div>
+        <div class="section-heading"><div><p class="eyebrow">SUPERMERCADOS</p><h3 id="retailer-analysis-title">Cobertura y precios comparables</h3></div><p>Los “mejores precios” sólo cuentan productos homologados y frescos. Sin cobertura no significa precio más alto.</p></div>
         <div id="analysis-retailers" class="retailer-analysis-grid"></div>
       </section>
 

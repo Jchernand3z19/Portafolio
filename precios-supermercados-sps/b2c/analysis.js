@@ -10,7 +10,8 @@ function node(tag, className, text) {
 }
 
 function hnl(value) {
-  return typeof value === "string" && /^\d+(?:\.\d{2})$/.test(value) ? `L ${value}` : "—";
+  if (typeof value !== "string" || !/^\d+(?:\.\d{2})$/.test(value)) return "—";
+  return `L ${Number(value).toLocaleString("es-HN", {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 }
 
 function percent(value) {
@@ -31,11 +32,24 @@ function metric(label, value, note) {
   return card;
 }
 
+export function uniqueOpportunities(rows) {
+  const seen = new Set();
+  return rows.filter((item) => {
+    const key = [item.product_name, item.brand, item.presentation, item.retailer_name, item.current_price]
+      .map((value) => String(value || "").trim().toLocaleLowerCase("es-HN"))
+      .join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function opportunityList(title, rows, mode) {
   const card = node("article", "opportunity-card");
   card.append(node("h4", null, title));
   const list = node("ol");
-  for (const item of rows.slice(0, 6)) {
+  const uniqueRows = uniqueOpportunities(rows);
+  for (const item of uniqueRows.slice(0, 6)) {
     const entry = node("li");
     const copy = node("div");
     copy.append(node("strong", null, item.product_name), node("small", null, [item.brand, item.presentation, item.retailer_name].filter(Boolean).join(" · ")));
@@ -45,13 +59,15 @@ function opportunityList(title, rows, mode) {
     if (mode === "promotion" && item.discount_pct) price.append(node("small", "trend-down", `${percent(item.discount_pct)} menos`));
     entry.append(copy, price); list.append(entry);
   }
-  if (!rows.length) list.append(node("li", "empty-inline", "Aún no hay evidencia suficiente en este corte."));
+  if (!uniqueRows.length) list.append(node("li", "empty-inline", "Aún no hay evidencia suficiente en este corte."));
   card.append(list);
   return card;
 }
 
 export function renderConsumerAnalysis(targets, analysis) {
   const summary = analysis.summary;
+  targets.summary.classList.remove("is-loading");
+  targets.summary.removeAttribute("aria-busy");
   targets.summary.replaceChildren(
     metric("Productos visibles", Number(summary.visible_products).toLocaleString("es-HN"), "con al menos una oferta pública"),
     metric("Comparables seguros", Number(summary.comparable_products).toLocaleString("es-HN"), "identidad ready y precio fresco"),
@@ -62,13 +78,16 @@ export function renderConsumerAnalysis(targets, analysis) {
   );
 
   targets.retailers.replaceChildren(...analysis.retailers.map((retailer) => {
-    const card = node("article", "retailer-analysis-card");
-    card.append(node("h4", null, retailer.name));
+    const hasComparison = Number(retailer.comparable_products) > 0;
+    const card = node("article", `retailer-analysis-card${hasComparison ? "" : " has-no-comparison"}`);
+    const header = node("div", "retailer-card-heading");
+    header.append(node("h4", null, retailer.name), node("span", `coverage-badge ${hasComparison ? "is-covered" : "is-uncovered"}`, hasComparison ? "Comparable" : "Sin cobertura"));
+    card.append(header);
     const values = node("dl");
     for (const [label, value] of [
       ["Ofertas visibles", Number(retailer.visible_offers).toLocaleString("es-HN")],
-      ["Mejores precios", Number(retailer.best_price_wins).toLocaleString("es-HN")],
-      ["Cobertura comparable", Number(retailer.comparable_products).toLocaleString("es-HN")],
+      ["Mejores precios", hasComparison ? Number(retailer.best_price_wins).toLocaleString("es-HN") : "—"],
+      ["Productos comparables", hasComparison ? Number(retailer.comparable_products).toLocaleString("es-HN") : "—"],
       ["Promociones", `${Number(retailer.active_promotions).toLocaleString("es-HN")} · ${percent(retailer.promotion_rate_pct)}`],
     ]) {
       values.append(node("dt", null, label), node("dd", null, value));
