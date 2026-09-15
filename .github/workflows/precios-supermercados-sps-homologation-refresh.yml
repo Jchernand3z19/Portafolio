@@ -1,6 +1,11 @@
 name: Precios SPS - Refrescar homologación derivada
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "precios-supermercados-sps/.automation/product-identity-persistence-request.json"
   workflow_run:
     workflows:
       - "La Colonia - Actualización MVP"
@@ -20,6 +25,7 @@ jobs:
     if: >-
       ${{ github.repository == 'Jchernand3z19/Portafolio' &&
           (github.event_name == 'workflow_dispatch' ||
+           (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
            (github.event_name == 'workflow_run' &&
             github.event.workflow_run.conclusion == 'success' &&
             github.event.workflow_run.head_branch == 'main' &&
@@ -41,6 +47,46 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+
+      - name: Validar solicitud cerrada de persistencia derivada
+        working-directory: precios-supermercados-sps
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          document = json.loads(
+              Path('.automation/product-identity-persistence-request.json').read_text(
+                  encoding='utf-8'
+              )
+          )
+          expected = {
+              'schema', 'action', 'normalization_version',
+              'source_tables_read_only', 'derived_write', 'reason', 'sequence',
+          }
+          if set(document) != expected:
+              raise SystemExit('product_identity_persistence_request_closed_set_mismatch')
+          if document['schema'] != 'precios-sps-product-identity-persistence-request/v1':
+              raise SystemExit('product_identity_persistence_request_schema_invalid')
+          if document['action'] != 'apply_audited_product_identity_v23':
+              raise SystemExit('product_identity_persistence_request_action_invalid')
+          if document['normalization_version'] != 'product-homologation-v2.3':
+              raise SystemExit('product_identity_persistence_request_version_invalid')
+          if document['source_tables_read_only'] is not True:
+              raise SystemExit('product_identity_persistence_source_read_only_required')
+          if document['derived_write'] is not True:
+              raise SystemExit('product_identity_persistence_derived_write_required')
+          if document['reason'] != 'audited_identity_v23_rollout':
+              raise SystemExit('product_identity_persistence_reason_invalid')
+          if type(document['sequence']) is not int or document['sequence'] < 1:
+              raise SystemExit('product_identity_persistence_sequence_invalid')
+          print(json.dumps({
+              'schema': document['schema'],
+              'normalization_version': document['normalization_version'],
+              'sequence': document['sequence'],
+          }, sort_keys=True))
+          PY
 
       - name: Validar plan de perfiles derivados
         working-directory: precios-supermercados-sps

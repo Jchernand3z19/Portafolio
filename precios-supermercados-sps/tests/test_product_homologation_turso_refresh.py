@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -202,6 +203,9 @@ def test_refresh_workflow_runs_after_successful_daily_update() -> None:
 
     assert '"La Colonia - Actualización MVP"' in workflow
     assert "workflow_run:" in workflow
+    assert "push:" in workflow
+    assert '"precios-supermercados-sps/.automation/product-identity-persistence-request.json"' in workflow
+    assert "github.event_name == 'push' && github.ref == 'refs/heads/main'" in workflow
     assert "github.event.workflow_run.conclusion == 'success'" in workflow
     assert "github.event.workflow_run.head_branch == 'main'" in workflow
     assert "github.event.workflow_run.head_sha" in workflow
@@ -211,3 +215,29 @@ def test_refresh_workflow_runs_after_successful_daily_update() -> None:
     assert "permissions:\n  contents: read" in workflow
     assert "persist-credentials: false" in workflow
     assert "schedule:" not in workflow
+
+
+def test_rollout_request_is_closed_and_scoped_to_derived_state() -> None:
+    request = json.loads(
+        (ROOT / ".automation" / "product-identity-persistence-request.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert request == {
+        "schema": "precios-sps-product-identity-persistence-request/v1",
+        "action": "apply_audited_product_identity_v23",
+        "normalization_version": "product-homologation-v2.3",
+        "source_tables_read_only": True,
+        "derived_write": True,
+        "reason": "audited_identity_v23_rollout",
+        "sequence": 1,
+    }
+    workflow = (
+        ROOT.parent
+        / ".github"
+        / "workflows"
+        / "precios-supermercados-sps-homologation-refresh.yml"
+    ).read_text(encoding="utf-8")
+    assert "product_identity_persistence_request_closed_set_mismatch" in workflow
+    assert "product_identity_persistence_source_read_only_required" in workflow
+    assert "product_identity_persistence_derived_write_required" in workflow

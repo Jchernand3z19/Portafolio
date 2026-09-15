@@ -59,6 +59,9 @@ base.EXPECTED_PERMISSIONS[base.PORTFOLIO_DATA_SYNC_WORKFLOW] = {
     "contents": "write",
 }
 base.EXPECTED_TRIGGERS[base.PORTFOLIO_DATA_SYNC_WORKFLOW] = {"workflow_run"}
+base.EXPECTED_TRIGGERS[base.HOMOLOGATION_REFRESH_WORKFLOW] = {
+    "workflow_dispatch", "workflow_run", "push"
+}
 
 
 def _checkout_identity_with_derived_workflows() -> None:
