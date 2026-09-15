@@ -1,0 +1,9 @@
+{
+  "schema": "precios-sps-product-identity-persistence-request/v1",
+  "action": "apply_audited_product_identity_v23",
+  "normalization_version": "product-homologation-v2.3",
+  "source_tables_read_only": true,
+  "derived_write": true,
+  "reason": "audited_identity_v23_rollout",
+  "sequence": 1
+}
