@@ -1,4 +1,4 @@
-import {manifestIsCompatible} from "./catalog.js";
+import {manifestIsCompatible} from "./catalog.js?v=20260915-2";
 
 const HN_TIME_ZONE = "America/Tegucigalpa";
 

@@ -58,9 +58,10 @@ def test_b2c_static_contract_is_accessible_responsive_and_safe() -> None:
     ):
         assert f'id="{element_id}"' in html
     assert 'data-catalog-url="https://raw.githubusercontent.com/' in html
-    assert 'type="module" src="app.js"' in html
-    assert 'type="module" src="status.js"' in html
-    assert 'type="module" src="share.js"' in html
+    assert 'type="module" src="app.js?v=' in html
+    assert 'type="module" src="status.js?v=' in html
+    assert 'type="module" src="share.js?v=' in html
+    assert 'rel="stylesheet" href="styles.css?v=' in html
     assert "Análisis" in html and "Compra Inteligente" in html
     assert "Esta página no vende productos ni procesa pagos" in html
     assert "Total estimado calculado con los precios públicos observados" in html
