@@ -37,7 +37,7 @@ def test_request_is_closed_read_only_and_versioned() -> None:
         "action": "export_private_product_identity_audit",
         "read_only": True,
         "reason": "baseline_quality_audit",
-        "sequence": 4,
+        "sequence": 5,
     }
     validation = next(
         step
