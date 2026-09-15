@@ -145,6 +145,18 @@ assert.equal(c.saveCart({setItem(){throw new Error("blocked")}},cart),false);
     run_module(tmp_path, CATALOG, script)
 
 
+def test_analysis_deduplicates_opportunities_and_formats_honest_coverage(tmp_path: Path) -> None:
+    script = r'''
+import assert from "node:assert/strict";
+globalThis.document={createElement(){return {className:"",textContent:"",append(){},replaceChildren(){},classList:{remove(){}},removeAttribute(){}}}};
+const a = await import(process.argv[1]);
+const repeated={product_name:"Tacos",brand:"Marca",presentation:"12 u",retailer_name:"Tienda",current_price:"100.00"};
+const rows=[repeated,{...repeated},{...repeated,current_price:"95.00"}];
+assert.equal(a.uniqueOpportunities(rows).length,2);
+'''
+    run_module(tmp_path, ANALYSIS, script)
+
+
 def test_exports_use_current_price_totals_and_safe_csv(tmp_path: Path) -> None:
     script = r'''
 import assert from "node:assert/strict";
