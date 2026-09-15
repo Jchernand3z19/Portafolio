@@ -39,11 +39,12 @@ from .product_homologation import (
     resolve_presentation,
 )
 
-IDENTITY_NORMALIZATION_VERSION = "product-homologation-v2"
+IDENTITY_NORMALIZATION_VERSION = "product-homologation-v2.1"
 
 _GENERIC_BRANDS = frozenset(
     {
         "rms",
+        "comandes",
         "marca comandes",
         "sin marca",
         "sin marca definida",
@@ -75,6 +76,15 @@ _BRAND_ALIASES = {
     "suli": "suli",
 }
 
+# Variantes ortográficas demostradas por grupos con el mismo GTIN. No se usa
+# distancia difusa para marcas: cada alias debe incorporarse con evidencia.
+_BRAND_CANONICAL_ALIASES = {
+    "buchanan s": "buchanan",
+    "elmigo": "el migo",
+    "mott s": "mott",
+    "wrigleys": "wrigley",
+}
+
 _COUNT_ALIASES = r"u|uni|un|und|unds|unid|unids|ud|uds|unidad|unidades"
 _COUNT_RE = re.compile(
     rf"(?<!\w)(?P<count>\d{{1,4}})\s*(?P<unit>{_COUNT_ALIASES})(?!\w)",
@@ -101,20 +111,56 @@ _VARIANT_GROUPS = (
     frozenset({"descremada", "descremado"}),
     frozenset({"semidescremada", "semidescremado"}),
 )
-_FLAVORS = frozenset(
-    {
-        "vainilla",
-        "chocolate",
-        "fresa",
-        "limon",
-        "naranja",
-        "manzana",
-        "uva",
-        "pina",
-        "coco",
-        "mango",
-    }
-)
+_FLAVOR_ALIASES = {
+    "apple": "manzana",
+    "arandano": "arándano",
+    "arandanos": "arándano",
+    "banana": "banano",
+    "banano": "banano",
+    "blackberry": "mora",
+    "blueberry": "arándano",
+    "cacao": "chocolate",
+    "carrot": "zanahoria",
+    "cereza": "cereza",
+    "cherry": "cereza",
+    "chocolate": "chocolate",
+    "coco": "coco",
+    "coconut": "coco",
+    "durazno": "melocotón",
+    "fresa": "fresa",
+    "frambuesa": "frambuesa",
+    "grape": "uva",
+    "guava": "guayaba",
+    "guayaba": "guayaba",
+    "lemon": "limón",
+    "lima": "lima",
+    "lime": "lima",
+    "limon": "limón",
+    "mandarina": "mandarina",
+    "mango": "mango",
+    "manzana": "manzana",
+    "maracuya": "maracuyá",
+    "melocoton": "melocotón",
+    "mora": "mora",
+    "naranja": "naranja",
+    "orange": "naranja",
+    "papaya": "papaya",
+    "passionfruit": "maracuyá",
+    "peach": "melocotón",
+    "pear": "pera",
+    "pera": "pera",
+    "pina": "piña",
+    "pineapple": "piña",
+    "raspberry": "frambuesa",
+    "sandia": "sandía",
+    "strawberry": "fresa",
+    "tangerine": "mandarina",
+    "uva": "uva",
+    "vainilla": "vainilla",
+    "vanilla": "vainilla",
+    "watermelon": "sandía",
+    "zanahoria": "zanahoria",
+}
 
 _MATCH_STOPWORDS = frozenset(
     {
@@ -213,10 +259,33 @@ def build_brand_lexicon(records: Iterable[SourceProductRecord]) -> frozenset[str
     values = {
         brand
         for record in records
-        if (brand := normalize_brand(record.source_brand)) is not None
+        if (brand := canonicalize_brand_key(record.source_brand)) is not None
     }
     values.update(_BRAND_ALIASES.values())
     return frozenset(values)
+
+
+def canonicalize_brand_key(value: str | None) -> str | None:
+    """Normaliza sólo alias de marca respaldados por evidencia del catálogo."""
+
+    folded = fold_text(value)
+    if folded is None or folded in _GENERIC_BRANDS:
+        return None
+    brand = normalize_brand(value)
+    if brand is None:
+        return None
+    return _BRAND_CANONICAL_ALIASES.get(brand, brand)
+
+
+def source_brand_role(value: str | None) -> str:
+    """Clasifica el campo fuente sin atribuir fabricante ni propietario."""
+
+    folded = fold_text(value)
+    if folded is None:
+        return "unknown"
+    if folded in _GENERIC_BRANDS:
+        return "retailer_placeholder"
+    return "retailer_reported_brand"
 
 
 def _brands_in_name(name: str, brand_lexicon: frozenset[str]) -> set[str]:
@@ -242,11 +311,14 @@ def resolve_brand(
     *,
     brand_lexicon: frozenset[str],
 ) -> BrandResolution:
-    source_brand = normalize_brand(record.source_brand)
+    source_brand = canonicalize_brand_key(record.source_brand)
     name = fold_text(record.source_name) or ""
     matches = _brands_in_name(name, brand_lexicon)
 
     for alias, canonical in _BRAND_ALIASES.items():
+        if _phrase_present(name, alias):
+            matches.add(canonical)
+    for alias, canonical in _BRAND_CANONICAL_ALIASES.items():
         if _phrase_present(name, alias):
             matches.add(canonical)
 
@@ -467,12 +539,26 @@ def _variant_labels(profile: ProductProfile) -> frozenset[str]:
         for label in group:
             if _phrase_present(text, label):
                 labels.add(label)
-    for flavor in _FLAVORS:
-        if _phrase_present(text, flavor):
-            labels.add(f"flavor:{flavor}")
+    tokens = set(text.split())
+    for alias, canonical in _FLAVOR_ALIASES.items():
+        if alias in tokens:
+            labels.add(f"flavor:{canonical}")
     egg_size = canonical_egg_size(profile.record, profile.taxonomy)
     if egg_size is not None:
         labels.add(f"egg_size:{fold_text(egg_size)}")
+    if profile.taxonomy.product_type == "Pañal":
+        size = re.search(r"\btalla\s+(xxg|xxl|xg|xl|g|l|m|s|p)(?!\w)", text)
+        stage = re.search(r"\b(?:etapa|stage)\s*([1-7])(?!\d)", text)
+        if size is not None:
+            labels.add(f"diaper_size:{size.group(1)}")
+        if stage is not None:
+            labels.add(f"diaper_stage:{stage.group(1)}")
+    if profile.taxonomy.product_type == "Tinte para cabello":
+        for shade in re.findall(
+            r"(?<!\w)(?:tono\s*)?(\d{1,2}(?:[.,]\d{1,2})?)(?![\d.,])(?!\s*(?:g|gr|ml|oz)\b)",
+            text,
+        ):
+            labels.add(f"hair_shade:{shade.replace(',', '.')}")
     return frozenset(labels)
 
 
@@ -480,7 +566,11 @@ def _hard_conflicts(left: ProductProfile, right: ProductProfile) -> tuple[str, .
     conflicts: set[str] = set()
     if left.canonical_gtin is not None and right.canonical_gtin is not None and left.canonical_gtin != right.canonical_gtin:
         conflicts.add("different_valid_gtin")
-    if left.taxonomy.product_type != right.taxonomy.product_type:
+    if (
+        left.taxonomy.product_type is not None
+        and right.taxonomy.product_type is not None
+        and left.taxonomy.product_type != right.taxonomy.product_type
+    ):
         conflicts.add("product_type_conflict")
     if left.normalized_brand and right.normalized_brand and left.normalized_brand != right.normalized_brand:
         conflicts.add("brand_conflict")
@@ -501,6 +591,15 @@ def _hard_conflicts(left: ProductProfile, right: ProductProfile) -> tuple[str, .
     right_flavors = {item for item in right_labels if item.startswith("flavor:")}
     if left_flavors and right_flavors and left_flavors != right_flavors:
         conflicts.add("flavor_conflict")
+    for prefix, reason in (
+        ("diaper_size:", "diaper_size_conflict"),
+        ("diaper_stage:", "diaper_stage_conflict"),
+        ("hair_shade:", "hair_shade_conflict"),
+    ):
+        left_values = {item for item in left_labels if item.startswith(prefix)}
+        right_values = {item for item in right_labels if item.startswith(prefix)}
+        if left_values and right_values and left_values != right_values:
+            conflicts.add(reason)
 
     # Grupos de formulación: sólo contradicen si ambos productos declaran de
     # forma explícita grupos diferentes.
@@ -597,7 +696,11 @@ def _exact_groups(profiles: tuple[ProductProfile, ...]) -> tuple[ExactGtinGroup,
             conflicts.add("source_presentation_conflict")
         if any(member.presentation_status == "ambiguous_multipack" for member in members):
             conflicts.add("ambiguous_multipack_presentation")
-        types = {member.taxonomy.product_type for member in members if member.taxonomy.product_type is not None}
+        types = {
+            member.taxonomy.product_type
+            for member in members
+            if member.taxonomy.product_type is not None
+        }
         if len(types) > 1:
             conflicts.add("product_type_conflict")
         for idx, left in enumerate(members):
@@ -608,7 +711,11 @@ def _exact_groups(profiles: tuple[ProductProfile, ...]) -> tuple[ExactGtinGroup,
                 for reason in pair_conflicts:
                     if reason == "presentation_conflict":
                         conflicts.add("cross_source_presentation_conflict")
-                    elif reason not in {"different_valid_gtin", "presentation_missing"}:
+                    elif reason not in {
+                        "brand_conflict",
+                        "different_valid_gtin",
+                        "presentation_missing",
+                    }:
                         conflicts.add(reason)
         groups.append(
             ExactGtinGroup(
@@ -786,11 +893,30 @@ def audit_identity_quality(result: HomologationResult) -> dict[str, object]:
     for group in exact_multi:
         cluster_sizes[str(len(group.source_record_ids))] += 1
     retailer_collisions = 0
+    exact_brand_label_disagreements = 0
+    exact_taxonomy_disagreements = 0
     for group in exact_multi:
         members = [profile for profile in profiles if profile.record.source_record_id in group.source_record_ids]
         supermarkets = [profile.record.supermarket_id for profile in members]
         if len(supermarkets) != len(set(supermarkets)):
             retailer_collisions += 1
+        brands = {
+            brand
+            for profile in members
+            if (brand := canonicalize_brand_key(profile.record.source_brand)) is not None
+        }
+        if len(brands) > 1:
+            exact_brand_label_disagreements += 1
+        product_types = {
+            profile.taxonomy.product_type
+            for profile in members
+            if profile.taxonomy.product_type is not None
+        }
+        if len(product_types) > 1 or (
+            product_types
+            and any(profile.taxonomy.product_type is None for profile in members)
+        ):
+            exact_taxonomy_disagreements += 1
     profile_blockers: defaultdict[str, int] = defaultdict(int)
     retailer_distribution: defaultdict[str, int] = defaultdict(int)
     category_distribution: defaultdict[str, int] = defaultdict(int)
@@ -834,6 +960,8 @@ def audit_identity_quality(result: HomologationResult) -> dict[str, object]:
         "multi_retailer_clusters": len(exact_multi),
         "cluster_size_distribution": dict(sorted(cluster_sizes.items(), key=lambda item: int(item[0]))),
         "retailer_collision_clusters": retailer_collisions,
+        "exact_gtin_brand_label_disagreement_groups": exact_brand_label_disagreements,
+        "exact_gtin_taxonomy_disagreement_groups": exact_taxonomy_disagreements,
         "individual_without_global_identity": sum(profile.canonical_gtin is None for profile in profiles),
         "profile_blockers": dict(sorted(profile_blockers.items())),
         "retailer_distribution": dict(sorted(retailer_distribution.items())),
