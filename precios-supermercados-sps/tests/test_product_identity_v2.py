@@ -245,7 +245,7 @@ def test_candidate_graph_does_not_create_transitive_canonical_identity() -> None
 
 
 def test_identity_v2_is_versioned_without_changing_persisted_v1() -> None:
-    assert IDENTITY_NORMALIZATION_VERSION == "product-homologation-v2.1"
+    assert IDENTITY_NORMALIZATION_VERSION == "product-homologation-v2.2"
 
 
 def test_canonical_presentation_fields_preserve_raw_and_separate_pack() -> None:
@@ -396,7 +396,9 @@ def test_exact_gtin_with_two_conflicting_known_types_stays_in_review() -> None:
         ("Jugo Sula Pera 1 L", "Jugo Sula Manzana 1 L"),
         ("Jugo Sula Naranja Mandarina 1 L", "Jugo Sula Naranja Zanahoria 1 L"),
         ("Yogur Sula Banano Fresa 1 L", "Yogur Sula Fresa 1 L"),
+        ("Yogurt Yoplait Moras 145 g", "Yogurt Yoplait Fresas 145 g"),
         ("Baby Nutrine Pañal Talla L/G 30 unidades", "Baby Nutrine Pañal Talla M 30 unidades"),
+        ("Plenitud Pañal Adulto XG 8 unidades", "Plenitud Pañal Adulto G/XG 8 unidades"),
         ("Nutrisse Tinte para Cabello Tono 6.60 50 ml", "Nutrisse Tinte para Cabello Tono 7.1 50 ml"),
     ],
 )
@@ -425,3 +427,126 @@ def test_flavor_translation_is_compatible_without_confirming_identity() -> None:
     assert len(result.candidates) == 1
     assert result.candidates[0].status == "review_required"
     assert all(profile.canonical_product_id is None for profile in result.profiles)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected_total"),
+    [
+        ("Mantequilla 1/2 lb", Decimal("226.796185")),
+        ("Mantequilla 1/4 lb", Decimal("113.3980925")),
+        ("Mantequilla 3/4 lb", Decimal("340.1942775")),
+    ],
+)
+def test_common_unit_fractions_are_parsed_as_fractions(
+    name: str,
+    expected_total: Decimal,
+) -> None:
+    signature, status = resolve_presentation_v2(product("a", "x", name))
+    assert status == "name_only"
+    assert signature is not None
+    assert signature.dimension == "mass_g"
+    assert signature.total_base == expected_total
+
+
+def test_pack_notation_is_not_silently_reduced_as_a_fraction() -> None:
+    signature, _ = resolve_presentation_v2(product("a", "x", "Sazonador 4/8gr"))
+    assert signature is not None
+    assert signature.total_base == Decimal("8")
+
+
+def test_natural_language_multipack_keeps_pack_structure() -> None:
+    multi, _ = resolve_presentation_v2(
+        product("a", "x", "Cerveza Imperial por 6 unid de 12oz")
+    )
+    single, _ = resolve_presentation_v2(product("b", "y", "Cerveza Imperial 12oz"))
+    assert multi is not None and single is not None
+    assert multi.dimension == "ounce"
+    assert multi.pack_count == 6
+    assert multi.total_base == Decimal("72")
+    assert not candidate_presentations_compatible(multi, single)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected_type"),
+    [
+        ("El Panal Miel de Abeja 1000grs", "Miel"),
+        ("Ross Abrillantador Café Calzado 9ml", "Abrillantador de calzado"),
+        ("Yogur Sula Fresa 125g", "Yogurt"),
+        ("Tallarin Roma 400 g", "Pasta"),
+    ],
+)
+def test_head_nouns_outrank_brand_or_color_tokens(name: str, expected_type: str) -> None:
+    assert assign_taxonomy_v2(product("a", "x", name)).product_type == expected_type
+
+
+@pytest.mark.parametrize(
+    ("left_name", "right_name", "brand"),
+    [
+        ("Aceite Elmigo Canola 1 L", "Aceite Elmigo Girasol 1 L", "Elmigo"),
+        ("Pasta Ina Tornillo 200 g", "Pasta Ina Penne 200 g", "Ina"),
+        ("Frijoles Goya Negros 400 g", "Frijoles Goya Rojos 400 g", "Goya"),
+        ("Salsa Pace Medium 453 g", "Salsa Pace Hot 453 g", "Pace"),
+        ("Salsa Don Julio Habanero 165 ml", "Salsa Don Julio Chile Cabro 165 ml", "Don Julio"),
+        ("Vino Barefoot Blanco Moscato 750 ml", "Vino Barefoot Red Moscato 750 ml", "Barefoot"),
+        ("Cerveza Coors Light Botella 354 ml", "Cerveza Coors Light Lata 354 ml", "Coors"),
+        ("Cerveza Tucher Weizen Clara 500 ml", "Cerveza Tucher Weizen Dunkel 500 ml", "Tucher"),
+        ("Jugo Sula Naranja Con Pulpa 473 ml", "Jugo Sula Naranja Sin Pulpa 473 ml", "Sula"),
+        ("Galleta Gamesa Florentina Fresa 83 g", "Galleta Gamesa Florentina Cajeta 83 g", "Gamesa"),
+        ("Sopa Elmigo Pollo 64 g", "Sopa Elmigo Camarón 64 g", "Elmigo"),
+        ("Sopa Issima Camarón 64 g", "Sopa Issima Camarón Vegetales 64 g", "Issima"),
+        ("Pañal Plenitud Protect G/XG 20 unidades", "Pañal Plenitud Classic G/XG 20 unidades", "Plenitud"),
+    ],
+)
+def test_observed_commercial_attributes_block_false_candidates(
+    left_name: str,
+    right_name: str,
+    brand: str,
+) -> None:
+    result = homologate_products_v2(
+        (
+            product("a", "colonial", left_name, brand=brand),
+            product("b", "walmart", right_name, brand=brand),
+        ),
+        candidate_threshold=Decimal("0"),
+    )
+    assert result.candidates == ()
+
+
+def test_pasta_shape_aliases_remain_compatible_review_candidates() -> None:
+    result = homologate_products_v2(
+        (
+            product("a", "colonial", "Pasta Ina Pluma 200 g", brand="Ina"),
+            product("b", "walmart", "Pasta Ina Penne 200 g", brand="Ina"),
+        ),
+        candidate_threshold=Decimal("0"),
+    )
+    assert len(result.candidates) == 1
+    assert result.candidates[0].status == "review_required"
+
+
+@pytest.mark.parametrize(
+    ("left_name", "right_name", "brand"),
+    [
+        ("Té Lipton Frío 1 L", "Té Lipton Frío Limón 1 L", "Lipton"),
+        ("Huevos Rica Yema 30 unidades", "Huevos Rica Yema Medianos 30 unidades", "Rica Yema"),
+        ("Cerveza Toña Lata 350 ml", "Cerveza Toña Light Lata 350 ml", "Toña"),
+        ("Pasta Ina 200 g", "Pasta Ina Tornillo 200 g", "Ina"),
+    ],
+)
+def test_missing_salient_attribute_cannot_receive_strong_confidence(
+    left_name: str,
+    right_name: str,
+    brand: str,
+) -> None:
+    result = homologate_products_v2(
+        (
+            product("a", "colonial", left_name, brand=brand),
+            product("b", "walmart", right_name, brand=brand),
+        ),
+        candidate_threshold=Decimal("0"),
+    )
+    assert len(result.candidates) == 1
+    profiles = {profile.record.source_record_id: profile for profile in result.profiles}
+    from precios_supermercados.product_identity_v2 import explain_candidate
+
+    assert explain_candidate(profiles["a"], profiles["b"]).confidence_level != "STRONG"
