@@ -3,5 +3,5 @@
   "action": "export_private_product_identity_audit",
   "read_only": true,
   "reason": "baseline_quality_audit",
-  "sequence": 4
+  "sequence": 5
 }
