@@ -27,15 +27,16 @@ from precios_supermercados.product_homologation import (  # noqa: E402
     ProductProfile,
     SourceProductRecord,
     homologate_products,
-    normalize_brand,
 )
 from precios_supermercados.product_identity_v2 import (  # noqa: E402
     IDENTITY_NORMALIZATION_VERSION,
     audit_identity_quality,
+    canonicalize_brand_key,
     canonical_presentation_fields,
     canonical_egg_size,
     explain_candidate,
     homologate_products_v2,
+    source_brand_role,
 )
 
 SCHEMA = "precios-sps-homologation-review/v2"
@@ -44,7 +45,7 @@ DEFAULT_GAP_LIMIT = 5000
 
 
 def _brand_evidence(profile: ProductProfile) -> str:
-    source = normalize_brand(profile.record.source_brand)
+    source = canonicalize_brand_key(profile.record.source_brand)
     if source is not None and source == profile.normalized_brand:
         return "source"
     if source is None and profile.normalized_brand is not None:
@@ -69,6 +70,15 @@ def _product_payload(profile: ProductProfile) -> dict[str, object]:
         "normalized_brand": profile.normalized_brand,
         "canonical_brand": profile.normalized_brand,
         "brand_evidence": _brand_evidence(profile),
+        "source_brand_role": source_brand_role(record.source_brand),
+        "normalized_brand_role": (
+            "commercial_brand_candidate"
+            if profile.normalized_brand is not None
+            else "unknown"
+        ),
+        "manufacturer_brand": None,
+        "owner_brand": None,
+        "manufacturer_owner_status": "not_exposed_by_source",
         "canonical_gtin": profile.canonical_gtin,
         "category": profile.taxonomy.category,
         "subcategory": profile.taxonomy.subcategory,
@@ -145,11 +155,23 @@ def build_review_queue(
     ready_groups = sum(group.comparison_status == "ready" for group in result.exact_gtin_groups)
     review_groups = len(result.exact_gtin_groups) - ready_groups
     quality = audit_identity_quality(result)
-    baseline_summary = None if baseline_result is None else dict(baseline_result.summary)
+    baseline_summary = None
+    if baseline_result is not None:
+        baseline_summary = {
+            **baseline_result.summary,
+            **audit_identity_quality(baseline_result),
+        }
     before_after = None
     if baseline_summary is not None:
-        after_summary = dict(result.summary)
-        comparable_keys = sorted(set(baseline_summary) & set(after_summary))
+        after_summary = {**result.summary, **quality}
+        comparable_keys = sorted(
+            key
+            for key in set(baseline_summary) & set(after_summary)
+            if isinstance(baseline_summary[key], int)
+            and not isinstance(baseline_summary[key], bool)
+            and isinstance(after_summary[key], int)
+            and not isinstance(after_summary[key], bool)
+        )
         before_after = {
             "before_engine": "product-homologation-v1",
             "after_engine": IDENTITY_NORMALIZATION_VERSION,
