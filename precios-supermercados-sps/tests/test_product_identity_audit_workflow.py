@@ -36,9 +36,15 @@ def test_request_is_closed_read_only_and_versioned() -> None:
         "schema": "precios-sps-product-identity-audit-request/v1",
         "action": "export_private_product_identity_audit",
         "read_only": True,
-        "reason": "precision_regression_audit",
+        "reason": "baseline_quality_audit",
         "sequence": 3,
     }
+    validation = next(
+        step
+        for step in _workflow()["jobs"]["audit"]["steps"]
+        if step.get("name") == "Validar solicitud cerrada de auditoría de identidad"
+    )
+    assert repr(document["reason"]) in validation["run"]
 
 
 def test_identity_audit_uses_registered_read_only_entrypoint() -> None:
