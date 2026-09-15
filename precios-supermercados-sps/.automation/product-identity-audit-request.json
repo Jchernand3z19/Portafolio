@@ -2,6 +2,6 @@
   "schema": "precios-sps-product-identity-audit-request/v1",
   "action": "export_private_product_identity_audit",
   "read_only": true,
-  "reason": "precision_regression_audit",
+  "reason": "baseline_quality_audit",
   "sequence": 3
 }
