@@ -110,6 +110,8 @@ def test_refresh_stages_only_new_or_changed_profiles(monkeypatch: pytest.MonkeyP
         captured["profile_expected"] = profile_expected
 
     monkeypatch.setattr(turso, "_stage_rows", stage)
+    monkeypatch.setattr(turso, "_ensure_schema", lambda *_: captured.__setitem__("schema_checked", True))
+    monkeypatch.setattr(turso, "_preflight", lambda *_: before)
     monkeypatch.setattr(turso, "_delta_counts", lambda *_: {"inserted": 1, "updated": 1, "unchanged": 0})
     monkeypatch.setattr(turso, "_apply_stage", apply)
     monkeypatch.setattr(turso, "_postflight", lambda *_, **__: postflight(3))
@@ -119,6 +121,7 @@ def test_refresh_stages_only_new_or_changed_profiles(monkeypatch: pytest.MonkeyP
 
     assert captured == {
         "staged_ids": [2, 3],
+        "schema_checked": True,
         "staged_expected": 2,
         "profile_expected": 3,
         "stage_dropped": True,
@@ -128,6 +131,43 @@ def test_refresh_stages_only_new_or_changed_profiles(monkeypatch: pytest.MonkeyP
     assert result["unchanged"] == 1
     assert result["no_op"] is False
     assert result["staging_written"] is True
+
+
+def test_dry_run_computes_delta_without_schema_or_staging_writes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = {"products": 2, "price_history": 7, "scrape_runs": 3, "profiles": 1}
+    derived = (row(1, "a"), row(2, "b"))
+    monkeypatch.setattr(turso, "_source_preflight", lambda *_: before)
+    monkeypatch.setattr(turso, "_fetch_products", lambda *_: ((1, object()), (2, object())))
+    monkeypatch.setattr(turso, "build_homologation_rows", lambda *_, **__: derived)
+    monkeypatch.setattr(
+        turso,
+        "_fetch_profile_state",
+        lambda *_: {1: ("x" * 64, NORMALIZATION_VERSION)},
+    )
+    monkeypatch.setattr(
+        turso,
+        "_ensure_schema",
+        lambda *_: pytest.fail("dry-run must not mutate schema"),
+    )
+    monkeypatch.setattr(
+        turso,
+        "_stage_rows",
+        lambda *_: pytest.fail("dry-run must not stage rows"),
+    )
+
+    result = turso.backfill_turso(
+        "https://db.example",
+        "token",
+        updated_at_utc="2026-09-05T05:00:00Z",
+        apply=False,
+    )
+
+    assert result["dry_run"] is True
+    assert result["inserted"] == 1
+    assert result["updated"] == 1
+    assert result["staging_written"] is False
 
 
 def test_refresh_fails_closed_if_profile_exists_without_product(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -166,6 +206,8 @@ def test_refresh_workflow_runs_after_successful_daily_update() -> None:
     assert "github.event.workflow_run.head_branch == 'main'" in workflow
     assert "github.event.workflow_run.head_sha" in workflow
     assert "python scripts/backfill_homologacion_turso.py" in workflow
+    assert "--dry-run" in workflow
+    assert "--apply" in workflow
     assert "permissions:\n  contents: read" in workflow
     assert "persist-credentials: false" in workflow
     assert "schedule:" not in workflow

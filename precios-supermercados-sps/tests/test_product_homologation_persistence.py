@@ -8,6 +8,8 @@ import pytest
 
 from precios_supermercados.product_homologation import SourceProductRecord
 from precios_supermercados.product_homologation_persistence import (
+    LEGACY_PROFILE_COLUMNS,
+    PROFILE_COLUMNS,
     TABLE_NAME,
     ProductHomologationPersistenceError,
     build_homologation_rows,
@@ -154,6 +156,26 @@ def test_schema_is_separate_from_products_and_price_history(tmp_path: Path) -> N
         con.close()
 
 
+def test_legacy_profile_schema_migrates_without_rewriting_source_tables(tmp_path: Path) -> None:
+    con = create_base_db(tmp_path / "legacy.sqlite")
+    try:
+        definitions = [
+            f"{column} {'INTEGER PRIMARY KEY' if column == 'product_id' else 'TEXT'}"
+            for column in LEGACY_PROFILE_COLUMNS
+        ]
+        con.execute(f"CREATE TABLE {TABLE_NAME} ({','.join(definitions)})")
+        ensure_sqlite_schema(con)
+
+        columns = tuple(
+            row[1] for row in con.execute(f"PRAGMA table_info({TABLE_NAME})")
+        )
+        assert columns == PROFILE_COLUMNS
+        assert con.execute("SELECT COUNT(*) FROM products").fetchone() == (0,)
+        assert con.execute("SELECT COUNT(*) FROM price_history").fetchone() == (0,)
+    finally:
+        con.close()
+
+
 def test_exact_gtin_group_persists_ready_and_unmapped_states() -> None:
     rows = build_homologation_rows(
         (
@@ -206,6 +228,59 @@ def test_valid_gtin_seen_in_one_supermarket_is_single_source() -> None:
     )
     assert rows[0].comparison_status == "single_source"
     assert rows[0].canonical_gtin == "07590002040003"
+
+
+def test_v23_persists_raw_and_canonical_brand_and_presentation_fields() -> None:
+    rows = build_homologation_rows(
+        (
+            source(
+                1,
+                "la_colonia",
+                "Bonovo Huevo G 30 und",
+                brand="RMS",
+                presentation="30Un",
+            ),
+        ),
+        updated_at_utc="2026-09-04T20:00:00Z",
+    )
+
+    row = rows[0]
+    assert row.normalization_version == "product-homologation-v2.3"
+    assert row.raw_brand == "RMS"
+    assert row.source_brand_role == "retailer_placeholder"
+    assert row.normalized_brand == "bonovo"
+    assert row.brand_resolution_source == "name_known_brand"
+    assert row.raw_presentation == "30Un"
+    assert row.normalized_quantity == "30"
+    assert row.normalized_unit == "unit"
+    assert row.normalized_pack_count == 1
+    assert row.canonical_total == "30"
+    assert row.display_presentation == "30 unidades"
+
+
+def test_review_candidate_without_gtin_remains_unmapped_in_persistence() -> None:
+    rows = build_homologation_rows(
+        (
+            source(
+                1,
+                "colonial",
+                "Nutri Yema Claras De Huevo 554gr",
+                brand="Nutri Yema",
+                presentation="554gr",
+            ),
+            source(
+                2,
+                "comisariato_los_andes",
+                "Claras de huevo liquidas Nutri Yema doy pack 1.2 lb",
+                brand="COMANDES",
+                presentation="1.2 lb",
+            ),
+        ),
+        updated_at_utc="2026-09-04T20:00:00Z",
+    )
+
+    assert {row.comparison_status for row in rows} == {"unmapped"}
+    assert all(row.canonical_product_id is None for row in rows)
 
 
 def test_same_gtin_with_presentation_conflict_persists_review_reason() -> None:
