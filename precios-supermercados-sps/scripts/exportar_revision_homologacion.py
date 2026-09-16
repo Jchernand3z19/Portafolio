@@ -38,8 +38,18 @@ from precios_supermercados.product_identity_v2 import (  # noqa: E402
     homologate_products_v2,
     source_brand_role,
 )
+from precios_supermercados.product_identity_decisions import (  # noqa: E402
+    IDENTITY_POLICY_VERSION,
+    ReviewedIdentityDecision,
+    assess_product_relation,
+    build_reviewed_identity_groups,
+    candidate_id,
+    index_reviewed_decisions,
+    load_reviewed_decisions,
+    profile_evidence_fingerprint,
+)
 
-SCHEMA = "precios-sps-homologation-review/v2"
+SCHEMA = "precios-sps-homologation-review/v3"
 DEFAULT_CANDIDATE_LIMIT = 5000
 DEFAULT_GAP_LIMIT = 5000
 
@@ -96,6 +106,7 @@ def _product_payload(profile: ProductProfile) -> dict[str, object]:
         "presentation_total_base": None if profile.presentation is None else format(profile.presentation.total_base.normalize(), "f"),
         "presentation_pack_count": None if profile.presentation is None else profile.presentation.pack_count,
         "matching_tokens": list(profile.matching_tokens),
+        "evidence_fingerprint": profile_evidence_fingerprint(profile),
     }
 
 
@@ -107,18 +118,32 @@ def build_review_queue(
     runtime_seconds: dict[str, float] | None = None,
     candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
     taxonomy_gap_limit: int = DEFAULT_GAP_LIMIT,
+    reviewed_decisions: Iterable[ReviewedIdentityDecision] = (),
 ) -> dict[str, object]:
     if candidate_limit < 0 or taxonomy_gap_limit < 0:
         raise ValueError("review_limit_invalid")
     profiles = {profile.record.source_record_id: profile for profile in result.profiles}
+    decisions = tuple(reviewed_decisions)
+    decisions_by_candidate = index_reviewed_decisions(decisions)
+    reviewed_groups = build_reviewed_identity_groups(result.profiles, decisions)
 
     candidates = []
     for candidate in result.candidates[:candidate_limit]:
         left = profiles[candidate.left_source_record_id]
         right = profiles[candidate.right_source_record_id]
         evidence = explain_candidate(left, right)
+        pair_id = candidate_id(
+            candidate.left_source_record_id,
+            candidate.right_source_record_id,
+        )
+        relation = assess_product_relation(
+            left,
+            right,
+            decisions_by_candidate.get(pair_id),
+        )
         candidates.append(
             {
+                "candidate_id": pair_id,
                 "left": _product_payload(left),
                 "right": _product_payload(right),
                 "candidate_ranking_score": format(candidate.score, "f"),
@@ -128,8 +153,26 @@ def build_review_queue(
                 "matching_signals": list(evidence.matching_signals),
                 "conflict_signals": list(evidence.conflict_signals),
                 "reason": candidate.reason,
+                "reviewed_relation": relation.relation,
+                "reviewed_decision_state": relation.decision_state,
+                "reviewed_master_product_id": relation.master_product_id,
+                "reviewed_evidence_codes": list(relation.evidence_codes),
+                "reviewed_reasons": list(relation.reasons),
                 "recommended_action": "human_review",
                 "allowed_decisions": ["same_product", "different_products", "pending"],
+                "allowed_relations": [
+                    "VERIFIED_EQUIVALENT",
+                    "PRODUCT_VARIANT",
+                    "COMPARABLE_ALTERNATIVE",
+                    "CONFLICT",
+                    "UNRESOLVED",
+                ],
+                "decision_contract": {
+                    "policy_version": IDENTITY_POLICY_VERSION,
+                    "left_evidence_fingerprint": profile_evidence_fingerprint(left),
+                    "right_evidence_fingerprint": profile_evidence_fingerprint(right),
+                    "public_serving_allowed": False,
+                },
             }
         )
 
@@ -187,6 +230,7 @@ def build_review_queue(
         **result.summary,
         **quality,
         "normalization_version": IDENTITY_NORMALIZATION_VERSION,
+        "identity_policy_version": IDENTITY_POLICY_VERSION,
         "with_valid_gtin": with_gtin,
         "without_valid_gtin": without_gtin,
         "exact_gtin_groups_ready": ready_groups,
@@ -196,6 +240,8 @@ def build_review_queue(
         "taxonomy_gaps_total": len(gaps),
         "image_reference_available": 0,
         "image_signal_status": "not_persisted_in_products_table",
+        "reviewed_decisions_total": len(decisions),
+        "reviewed_identity_groups_total": len(reviewed_groups),
     }
     candidate_section = {
         "total": len(result.candidates),
@@ -225,6 +271,19 @@ def build_review_queue(
             "truncated": len(gap_sample) < len(gaps),
             "rows": gap_sample,
         },
+        "reviewed_identity_groups": {
+            "total": len(reviewed_groups),
+            "rows": [
+                {
+                    "master_product_id": group.master_product_id,
+                    "source_record_ids": list(group.source_record_ids),
+                    "supermarket_ids": list(group.supermarket_ids),
+                    "relation": group.relation,
+                    "public_serving_allowed": False,
+                }
+                for group in reviewed_groups
+            ],
+        },
     }
 
 
@@ -235,6 +294,7 @@ def export_review(
     generated_at_utc: str,
     candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
     taxonomy_gap_limit: int = DEFAULT_GAP_LIMIT,
+    reviewed_decisions: Iterable[ReviewedIdentityDecision] = (),
 ) -> dict[str, object]:
     records = tuple(record for _, record in products)
     baseline_started = time.monotonic()
@@ -253,6 +313,7 @@ def export_review(
         },
         candidate_limit=candidate_limit,
         taxonomy_gap_limit=taxonomy_gap_limit,
+        reviewed_decisions=reviewed_decisions,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp")
@@ -269,6 +330,11 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--candidate-limit", type=int, default=DEFAULT_CANDIDATE_LIMIT)
     parser.add_argument("--taxonomy-gap-limit", type=int, default=DEFAULT_GAP_LIMIT)
+    parser.add_argument(
+        "--decision-registry",
+        type=Path,
+        default=ROOT / "config" / "homologation" / "reviewed-decisions-v1.json",
+    )
     args = parser.parse_args()
     url = os.environ.get("TURSO_DATABASE_URL", "")
     token = os.environ.get("TURSO_AUTH_TOKEN", "")
@@ -285,6 +351,7 @@ def main() -> int:
         generated_at_utc=generated,
         candidate_limit=args.candidate_limit,
         taxonomy_gap_limit=args.taxonomy_gap_limit,
+        reviewed_decisions=load_reviewed_decisions(args.decision_registry),
     )
     print(
         json.dumps(

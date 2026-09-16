@@ -110,6 +110,7 @@ def test_review_v2_exposes_raw_canonical_fields_and_before_after_metrics() -> No
     assert "normalized_brand" in queue["before_after"]["before"]
     assert "normalized_brand" in queue["before_after"]["after"]
     candidate = queue["review_candidates"]["rows"][0]
+    assert candidate["candidate_id"].startswith("candidate_")
     assert candidate["confidence_level"] == "STRONG"
     assert candidate["decision_state"] == "review_required"
     products = {
@@ -126,4 +127,8 @@ def test_review_v2_exposes_raw_canonical_fields_and_before_after_metrics() -> No
     assert products["colonial:1"]["manufacturer_brand"] is None
     assert products["colonial:1"]["owner_brand"] is None
     assert products["colonial:1"]["manufacturer_owner_status"] == "not_exposed_by_source"
+    assert len(products["colonial:1"]["evidence_fingerprint"]) == 64
+    assert candidate["decision_contract"]["policy_version"] == "precios-sps-product-identity-policy/v1"
+    assert candidate["decision_contract"]["public_serving_allowed"] is False
+    assert "VERIFIED_EQUIVALENT" in candidate["allowed_relations"]
     assert queue["summary"]["image_signal_status"] == "not_persisted_in_products_table"
