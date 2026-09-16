@@ -18,7 +18,7 @@ def _workflow() -> dict[str, object]:
 def test_daily_workflow_uses_one_matrix_child_per_retailer_and_keeps_schedule() -> None:
     workflow = _workflow()
     assert workflow["on"] == {
-        "schedule": [{"cron": "17 11 * * *"}],
+        "schedule": [{"cron": "43 7 * * *"}],
         "workflow_dispatch": {
             "inputs": {
                 "live_read_only_authorized": {

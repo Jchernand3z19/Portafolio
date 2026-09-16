@@ -27,6 +27,8 @@ DEFAULT_DELAY = 1.0
 DEFAULT_MAX_RETRIES = 2
 MAX_RETRIES_HARD = 2
 MAX_REQUESTS_HARD = 700
+FINAL_DRIFT_STABILIZATION_DELAYS = (120.0, 600.0)
+FINAL_DRIFT_CONFIRMATION_DELAY = 60.0
 RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 UA = "Mozilla/5.0 (compatible; PreciosSupermercadosSPS-Walmart/1.0; read-only)"
 CATEGORY2_PARTITIONS = {"articulos-para-el-hogar", "ropa-y-zapateria"}
@@ -594,6 +596,166 @@ def _capture_category(
         return products, evidence, expected_total, recovery
 
 
+def _probe_category_stability(
+    capture: Capture,
+    *,
+    seller: str,
+    category: str,
+    common: dict[str, str],
+    facets_root: str,
+    search_root: str,
+    expected_categories: set[str],
+    cycle: int,
+    probe: int,
+) -> dict:
+    tag_prefix = (
+        f"{seller}/category-1/{category}/stabilization-cycle-{cycle}/probe-{probe}"
+    )
+    facet_doc, facet_record = capture.get(
+        seller,
+        f"{tag_prefix}/facets",
+        facets_root,
+        common,
+    )
+    counts = facet_counts(facet_doc, "category-1")
+    if set(counts) != expected_categories:
+        raise RuntimeError(f"catalog_category_shape_changed:{seller}")
+
+    search_doc, search_record = capture.get(
+        seller,
+        f"{tag_prefix}/search",
+        f"{search_root}/category-1/{category}",
+        {**common, "count": "1", "page": "1"},
+    )
+    search_total = search_doc.get("recordsFiltered")
+    products = search_doc.get("products")
+    search_response_valid = (
+        type(search_total) is int
+        and search_total > 0
+        and isinstance(products, list)
+        and len(products) == 1
+    )
+    facet_total = counts[category]
+    return {
+        "cycle": cycle,
+        "probe": probe,
+        "facet_total": facet_total,
+        "search_total": search_total if type(search_total) is int else None,
+        "sources_agree": search_response_valid and facet_total == search_total,
+        "facet_tag": facet_record["tag"],
+        "facet_sha256": facet_record["sha256"],
+        "facet_observed_at": facet_record["observed_at"],
+        "search_tag": search_record["tag"],
+        "search_sha256": search_record["sha256"],
+        "search_observed_at": search_record["observed_at"],
+    }
+
+
+def _recover_final_facet_category(
+    capture: Capture,
+    *,
+    seller: str,
+    category: str,
+    previous_total: int,
+    common: dict[str, str],
+    facets_root: str,
+    search_root: str,
+    expected_categories: set[str],
+    trigger_record: dict,
+) -> tuple[dict[str, dict], list[dict], int, dict]:
+    observations: list[dict] = []
+    for cycle, stabilization_delay in enumerate(
+        FINAL_DRIFT_STABILIZATION_DELAYS, start=1
+    ):
+        if stabilization_delay:
+            time.sleep(stabilization_delay)
+        first = _probe_category_stability(
+            capture,
+            seller=seller,
+            category=category,
+            common=common,
+            facets_root=facets_root,
+            search_root=search_root,
+            expected_categories=expected_categories,
+            cycle=cycle,
+            probe=1,
+        )
+        observations.append(first)
+        if FINAL_DRIFT_CONFIRMATION_DELAY:
+            time.sleep(FINAL_DRIFT_CONFIRMATION_DELAY)
+        second = _probe_category_stability(
+            capture,
+            seller=seller,
+            category=category,
+            common=common,
+            facets_root=facets_root,
+            search_root=search_root,
+            expected_categories=expected_categories,
+            cycle=cycle,
+            probe=2,
+        )
+        observations.append(second)
+
+        stable_total = second["facet_total"]
+        if not (
+            first["sources_agree"]
+            and second["sources_agree"]
+            and first["facet_total"] == stable_total
+        ):
+            continue
+
+        try:
+            products, evidence, recovered_total, nested_recovery = _capture_category(
+                capture,
+                seller=seller,
+                category=category,
+                expected_total=stable_total,
+                common=common,
+                facets_root=facets_root,
+                tag_suffix=f"/recovery-final-facet-stabilization-{cycle}",
+                allow_total_recovery=False,
+            )
+        except RuntimeError as exc:
+            if str(exc).startswith(
+                (
+                    "category_changed_during_final_recovery:",
+                    "category2_total_mismatch:",
+                )
+            ):
+                second["recapture_result"] = "source_changed_again"
+                continue
+            raise
+        if nested_recovery is not None or recovered_total != stable_total:
+            second["recapture_result"] = "nested_recovery_or_total_mismatch"
+            continue
+
+        second["recapture_result"] = "accepted"
+        return (
+            products,
+            evidence,
+            recovered_total,
+            {
+                "category": category,
+                "strategy": "final_facet_stabilized_category_restart",
+                "trigger_tag": trigger_record["tag"],
+                "trigger_sha256": trigger_record["sha256"],
+                "trigger_observed_at": trigger_record["observed_at"],
+                "previous_total": previous_total,
+                "recovered_total": recovered_total,
+                "stabilization_cycles_used": cycle,
+                "stabilization_delays_seconds": list(
+                    FINAL_DRIFT_STABILIZATION_DELAYS[:cycle]
+                ),
+                "confirmation_delay_seconds": FINAL_DRIFT_CONFIRMATION_DELAY,
+                "stabilization_observations": observations,
+            },
+        )
+
+    raise RuntimeError(
+        f"category_unstable_after_bounded_stabilization:{seller}:{category}"
+    )
+
+
 def capture_store(capture: Capture, seller: str, location_id: str, city: str, store_name: str, home_sha: str) -> dict:
     common = common_query(seller)
     facets_root = f"/api/io/_v/api/intelligent-search/facets/accesscontrollist/{seller}"
@@ -645,37 +807,23 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
         pending_recoveries: list[dict] = []
         for category in changed_categories:
             previous_total = final_category1[category]
-            expected_total = after_category1[category]
-            category_products, category_evidence, recovered_total, nested_recovery = (
-                _capture_category(
+            category_products, category_evidence, recovered_total, recovery = (
+                _recover_final_facet_category(
                     capture,
                     seller=seller,
                     category=category,
-                    expected_total=expected_total,
+                    previous_total=previous_total,
                     common=common,
                     facets_root=facets_root,
-                    tag_suffix="/recovery-final-facet",
-                    allow_total_recovery=False,
+                    search_root=search_root,
+                    expected_categories=set(final_category1),
+                    trigger_record=after_record,
                 )
             )
-            if nested_recovery is not None or recovered_total != expected_total:
-                raise RuntimeError(
-                    f"final_facet_category_recovery_incomplete:{seller}:{category}"
-                )
             products_by_category[category] = category_products
             evidence_by_category[category] = category_evidence
             final_category1[category] = recovered_total
-            pending_recoveries.append(
-                {
-                    "category": category,
-                    "strategy": "final_facet_exact_category_restart",
-                    "trigger_tag": after_record["tag"],
-                    "trigger_sha256": after_record["sha256"],
-                    "trigger_observed_at": after_record["observed_at"],
-                    "previous_total": previous_total,
-                    "recovered_total": recovered_total,
-                }
-            )
+            pending_recoveries.append(recovery)
         confirmation, recovery_confirmation_record = capture.get(
             seller,
             f"{seller}/facets-after/recovery-confirmation",
