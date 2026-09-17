@@ -110,6 +110,10 @@ Desde el PR **#460** existe una cola privada de revisión que puede materializar
 
 La cola no se publica a Compra Inteligente, no modifica precios ni perfiles por sí sola y no añade una lectura completa diaria de Turso.
 
+La siguiente fase incorpora evidencia auxiliar de imágenes para las seis cadenas. Cada oferta puede conservar varias imágenes con orden, procedencia y vigencia en la tabla derivada `product_images`; una captura completa abre, refresca o cierra periodos sin borrar el historial. La cola privada puede mostrarlas, pero marca explícitamente `identity_authority = false`: una imagen nunca crea ni confirma por sí sola una identidad de producto.
+
+El rollout permanece cerrado: la migración idempotente de `product_images` sólo se ejecuta mediante el workflow manual autorizado de schema migration. Hasta que esa migración sea aprobada y validada, esta fase no debe fusionarse ni activar captura pública, homologaciones o cambios en Compra Inteligente.
+
 ## Operación recurrente
 
 El workflow `.github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml` corre diariamente a `17 11 * * *` (05:17 `America/Tegucigalpa`) y cubre seis cadenas / once contextos productivos demostrados:
