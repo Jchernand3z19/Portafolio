@@ -431,17 +431,37 @@ def _parsed_products(
 
 
 def final_facet_drift_responses(*, confirmation_electronica: int = 1) -> dict[str, dict]:
-    return {
+    responses = {
         "seller/facets-before": facets("category-1", electronica=2, abarrotes=2),
         "seller/root-before": page(4, "root"),
         "seller/category-1/electronica/page-001": page(2, "1", "2"),
         "seller/category-1/abarrotes/page-001": page(2, "3", "4"),
         "seller/facets-after": facets("category-1", electronica=1, abarrotes=2),
-        "seller/category-1/electronica/recovery-final-facet/page-001": page(1, "1"),
+        "seller/category-1/electronica/recovery-final-facet-stabilization-1/page-001": page(
+            1, "1"
+        ),
         "seller/facets-after/recovery-confirmation": facets(
             "category-1", electronica=confirmation_electronica, abarrotes=2
         ),
         "seller/root-after": page(3, "root"),
+    }
+    responses.update(_stability_probe_responses(cycle=1, facet_total=1, search_total=1))
+    return responses
+
+
+def _stability_probe_responses(
+    *, cycle: int, facet_total: int, search_total: int
+) -> dict[str, dict]:
+    prefix = f"seller/category-1/electronica/stabilization-cycle-{cycle}"
+    return {
+        f"{prefix}/probe-1/facets": facets(
+            "category-1", electronica=facet_total, abarrotes=2
+        ),
+        f"{prefix}/probe-1/search": page(search_total, "1"),
+        f"{prefix}/probe-2/facets": facets(
+            "category-1", electronica=facet_total, abarrotes=2
+        ),
+        f"{prefix}/probe-2/search": page(search_total, "1"),
     }
 
 
@@ -449,6 +469,8 @@ def test_final_facet_drift_recaptures_only_changed_category_and_confirms(monkeyp
     monkeypatch.setattr(operational, "PAGE_SIZE", 2)
     monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
     monkeypatch.setattr(operational, "parse_products", _parsed_products)
+    waits: list[float] = []
+    monkeypatch.setattr(operational.time, "sleep", waits.append)
     capture = FakeCapture(final_facet_drift_responses())
 
     snapshot = operational.capture_store(
@@ -464,13 +486,21 @@ def test_final_facet_drift_recaptures_only_changed_category_and_confirms(monkeyp
     assert snapshot["unique_products_extracted"] == 3
     assert {row["source_key"] for row in snapshot["products"]} == {"1", "3", "4"}
     assert [item["strategy"] for item in snapshot["category_total_recoveries"]] == [
-        "final_facet_exact_category_restart"
+        "final_facet_stabilized_category_restart"
     ]
-    assert snapshot["category_total_recoveries"][0]["previous_total"] == 2
-    assert snapshot["category_total_recoveries"][0]["recovered_total"] == 1
+    recovery = snapshot["category_total_recoveries"][0]
+    assert recovery["previous_total"] == 2
+    assert recovery["recovered_total"] == 1
+    assert recovery["stabilization_cycles_used"] == 1
+    assert len(recovery["stabilization_observations"]) == 2
+    assert all(item["sources_agree"] for item in recovery["stabilization_observations"])
+    assert waits == [120.0, 60.0]
     evidence_tags = {item["tag"] for item in snapshot["page_evidence"]}
     assert "seller/category-1/electronica/page-001" not in evidence_tags
-    assert "seller/category-1/electronica/recovery-final-facet/page-001" in evidence_tags
+    assert (
+        "seller/category-1/electronica/"
+        "recovery-final-facet-stabilization-1/page-001"
+    ) in evidence_tags
     assert "seller/category-1/abarrotes/page-001" in evidence_tags
     assert snapshot["binding_evidence"]["facet_recovery_confirmation_sha256"]
 
@@ -478,6 +508,7 @@ def test_final_facet_drift_recaptures_only_changed_category_and_confirms(monkeyp
 def test_final_facet_recovery_fails_if_catalog_changes_again(monkeypatch):
     monkeypatch.setattr(operational, "PAGE_SIZE", 2)
     monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    monkeypatch.setattr(operational.time, "sleep", lambda _seconds: None)
     responses = final_facet_drift_responses(confirmation_electronica=2)
 
     with pytest.raises(RuntimeError, match="catalog_changed_during_final_recovery"):
@@ -511,12 +542,21 @@ def test_final_facet_recovery_fails_on_category_shape_change(monkeypatch):
 def test_final_facet_category_restart_rejects_another_total_change(monkeypatch):
     monkeypatch.setattr(operational, "PAGE_SIZE", 2)
     monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    monkeypatch.setattr(operational.time, "sleep", lambda _seconds: None)
     responses = final_facet_drift_responses()
-    responses["seller/category-1/electronica/recovery-final-facet/page-001"] = page(
-        2, "1"
-    )
+    responses[
+        "seller/category-1/electronica/"
+        "recovery-final-facet-stabilization-1/page-001"
+    ] = page(2, "1")
+    responses.update(_stability_probe_responses(cycle=2, facet_total=2, search_total=2))
+    responses[
+        "seller/category-1/electronica/"
+        "recovery-final-facet-stabilization-2/page-001"
+    ] = page(3, "1", "2")
 
-    with pytest.raises(RuntimeError, match="category_changed_during_final_recovery"):
+    with pytest.raises(
+        RuntimeError, match="category_unstable_after_bounded_stabilization"
+    ):
         operational.capture_store(
             FakeCapture(responses),
             seller="seller",
@@ -525,3 +565,54 @@ def test_final_facet_category_restart_rejects_another_total_change(monkeypatch):
             store_name="store",
             home_sha="h" * 64,
         )
+
+
+def test_final_facet_recovery_waits_until_facets_and_search_agree(monkeypatch):
+    monkeypatch.setattr(operational, "PAGE_SIZE", 2)
+    monkeypatch.setattr(operational, "CATEGORY2_PARTITIONS", set())
+    monkeypatch.setattr(operational, "parse_products", _parsed_products)
+    waits: list[float] = []
+    monkeypatch.setattr(operational.time, "sleep", waits.append)
+    responses = final_facet_drift_responses(confirmation_electronica=3)
+    responses["seller/facets-after"] = facets(
+        "category-1", electronica=3, abarrotes=2
+    )
+    responses.update(_stability_probe_responses(cycle=1, facet_total=3, search_total=2))
+    responses.update(_stability_probe_responses(cycle=2, facet_total=3, search_total=3))
+    responses[
+        "seller/category-1/electronica/"
+        "recovery-final-facet-stabilization-2/page-001"
+    ] = page(3, "1", "2")
+    responses[
+        "seller/category-1/electronica/"
+        "recovery-final-facet-stabilization-2/page-002"
+    ] = page(3, "5")
+    responses["seller/root-after"] = page(5, "root")
+
+    snapshot = operational.capture_store(
+        FakeCapture(responses),
+        seller="seller",
+        location_id="location",
+        city="city",
+        store_name="store",
+        home_sha="h" * 64,
+    )
+
+    assert snapshot["catalog_products_reported"] == 5
+    assert {row["source_key"] for row in snapshot["products"]} == {
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+    }
+    recovery = snapshot["category_total_recoveries"][0]
+    assert recovery["stabilization_cycles_used"] == 2
+    assert recovery["recovered_total"] == 3
+    assert [item["sources_agree"] for item in recovery["stabilization_observations"]] == [
+        False,
+        False,
+        True,
+        True,
+    ]
+    assert waits == [120.0, 60.0, 600.0, 60.0]
