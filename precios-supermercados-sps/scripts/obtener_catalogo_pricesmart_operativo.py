@@ -20,6 +20,7 @@ from precios_supermercados.scrapers.pricesmart import (
     ENDPOINT,
     parse_catalog_memberships,
 )
+from precios_supermercados.product_image_evidence import detail_image_extension
 
 ROWS = 200
 DEFAULT_DELAY = 0.5
@@ -235,7 +236,10 @@ def capture_club(capture: Capture, club: str) -> dict:
         if total:
             groups.append({"category_id": key, "category_name": name, "documents": documents})
 
-    rows, details, parser_summary = parse_catalog_memberships(groups, club)
+    rows, details, parser_summary = parse_catalog_memberships(
+        groups, club, include_images=True
+    )
+    image_extension = detail_image_extension(rows, details)
     product_ids = {row["product_id"] for row in rows}
     sku_ids = {row["source_key"] for row in rows}
     if len(sku_ids) != len(rows):
@@ -278,6 +282,7 @@ def capture_club(capture: Capture, club: str) -> dict:
         "root_counts": root_counts,
         "products": rows,
         "source_details": details,
+        **image_extension,
         "page_evidence": evidence,
         "binding_evidence": {
             "club_id": club,

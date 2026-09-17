@@ -85,7 +85,9 @@ def test_preflight_checks_all_eleven_locations_without_mutation(tmp_path, monkey
     )
     assert {item["status"] for item in result["locations"]} == {"new"}
     assert len(generic_calls) == 8
-    assert los_andes_calls == [{"run_id": "run-1-los-andes"}]
+    assert los_andes_calls == [
+        {"run_id": "run-1-los-andes", "require_product_images": False}
+    ]
     assert {item["run_id"] for item in paiz_calls} == {
         "run-1-paiz-multiplaza",
         "run-1-paiz-proceres",

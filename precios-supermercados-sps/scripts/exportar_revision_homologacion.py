@@ -15,13 +15,18 @@ import time
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
-from backfill_homologacion_turso import _fetch_products, _source_preflight  # noqa: E402
+from backfill_homologacion_turso import (  # noqa: E402
+    _fetch_products,
+    _query,
+    _scalar,
+    _source_preflight,
+)
 from precios_supermercados.product_homologation import (  # noqa: E402
     HomologationResult,
     ProductProfile,
@@ -65,10 +70,13 @@ def _brand_evidence(profile: ProductProfile) -> str:
     return "missing"
 
 
-def _product_payload(profile: ProductProfile) -> dict[str, object]:
+def _product_payload(
+    profile: ProductProfile,
+    image_evidence_by_source: Mapping[str, tuple[dict[str, object], ...]] | None = None,
+) -> dict[str, object]:
     record = profile.record
     presentation = canonical_presentation_fields(record, profile.taxonomy)
-    return {
+    payload = {
         "source_record_id": record.source_record_id,
         "supermarket_id": record.supermarket_id,
         "source_name": record.source_name,
@@ -108,6 +116,11 @@ def _product_payload(profile: ProductProfile) -> dict[str, object]:
         "matching_tokens": list(profile.matching_tokens),
         "evidence_fingerprint": profile_evidence_fingerprint(profile),
     }
+    if image_evidence_by_source is not None:
+        payload["image_evidence"] = list(
+            image_evidence_by_source.get(record.source_record_id, ())
+        )
+    return payload
 
 
 def build_review_queue(
@@ -119,6 +132,7 @@ def build_review_queue(
     candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
     taxonomy_gap_limit: int = DEFAULT_GAP_LIMIT,
     reviewed_decisions: Iterable[ReviewedIdentityDecision] = (),
+    image_evidence_by_source: Mapping[str, tuple[dict[str, object], ...]] | None = None,
 ) -> dict[str, object]:
     if candidate_limit < 0 or taxonomy_gap_limit < 0:
         raise ValueError("review_limit_invalid")
@@ -144,8 +158,8 @@ def build_review_queue(
         candidates.append(
             {
                 "candidate_id": pair_id,
-                "left": _product_payload(left),
-                "right": _product_payload(right),
+                "left": _product_payload(left, image_evidence_by_source),
+                "right": _product_payload(right, image_evidence_by_source),
                 "candidate_ranking_score": format(candidate.score, "f"),
                 "score_semantics": "review_queue_ranking_only_not_probability",
                 "decision_state": evidence.decision_state,
@@ -185,13 +199,19 @@ def build_review_queue(
                 "canonical_gtin": group.canonical_gtin,
                 "canonical_product_id": group.canonical_product_id,
                 "conflict_reasons": list(group.conflict_reasons),
-                "products": [_product_payload(profiles[source_id]) for source_id in group.source_record_ids],
+                "products": [
+                    _product_payload(profiles[source_id], image_evidence_by_source)
+                    for source_id in group.source_record_ids
+                ],
                 "recommended_action": "verify_same_gtin_commercial_consistency",
             }
         )
 
     gaps = [profile for profile in result.profiles if profile.taxonomy.product_type is None]
-    gap_sample = [_product_payload(profile) for profile in gaps[:taxonomy_gap_limit]]
+    gap_sample = [
+        _product_payload(profile, image_evidence_by_source)
+        for profile in gaps[:taxonomy_gap_limit]
+    ]
 
     without_gtin = sum(profile.canonical_gtin is None for profile in result.profiles)
     with_gtin = len(result.profiles) - without_gtin
@@ -226,6 +246,14 @@ def build_review_queue(
             },
             "runtime_seconds": runtime_seconds or {},
         }
+    image_profiles = (
+        0
+        if image_evidence_by_source is None
+        else sum(
+            bool(image_evidence_by_source.get(profile.record.source_record_id))
+            for profile in result.profiles
+        )
+    )
     summary = {
         **result.summary,
         **quality,
@@ -238,8 +266,14 @@ def build_review_queue(
         "review_candidates_total": len(result.candidates),
         "fuzzy_review_candidates_total": len(result.candidates),
         "taxonomy_gaps_total": len(gaps),
-        "image_reference_available": 0,
-        "image_signal_status": "not_persisted_in_products_table",
+        "image_reference_available": image_profiles,
+        "image_signal_status": (
+            "not_loaded"
+            if image_evidence_by_source is None
+            else "current_product_images_available"
+            if image_profiles
+            else "product_images_table_empty"
+        ),
         "reviewed_decisions_total": len(decisions),
         "reviewed_identity_groups_total": len(reviewed_groups),
     }
@@ -295,6 +329,7 @@ def export_review(
     candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
     taxonomy_gap_limit: int = DEFAULT_GAP_LIMIT,
     reviewed_decisions: Iterable[ReviewedIdentityDecision] = (),
+    image_evidence_by_source: Mapping[str, tuple[dict[str, object], ...]] | None = None,
 ) -> dict[str, object]:
     records = tuple(record for _, record in products)
     baseline_started = time.monotonic()
@@ -314,6 +349,7 @@ def export_review(
         candidate_limit=candidate_limit,
         taxonomy_gap_limit=taxonomy_gap_limit,
         reviewed_decisions=reviewed_decisions,
+        image_evidence_by_source=image_evidence_by_source,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp")
@@ -323,6 +359,119 @@ def export_review(
     )
     temporary.replace(output)
     return document
+
+
+def _fetch_current_image_evidence(
+    url: str, token: str
+) -> dict[str, tuple[dict[str, object], ...]] | None:
+    """Lee una vez la evidencia vigente; ``None`` indica esquema aún no migrado."""
+
+    exists = _query(
+        url,
+        token,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='product_images'",
+    )
+    if not exists:
+        return None
+    if exists != [["product_images"]]:
+        raise SystemExit("homologation_review_product_images_schema_invalid")
+
+    expected = _scalar(
+        url,
+        token,
+        "SELECT COUNT(*) FROM product_images WHERE valid_to_utc IS NULL",
+    )
+    grouped: dict[str, list[dict[str, object]]] = {}
+    cursor = 0
+    loaded = 0
+    while True:
+        rows = _query(
+            url,
+            token,
+            """SELECT product_image_id,product_id,supermarket_id,location_id,
+                image_url,source_position,is_primary,source_image_id,
+                valid_from_utc,first_seen_run_id,last_seen_run_id
+            FROM product_images
+            WHERE valid_to_utc IS NULL AND product_image_id>?
+            ORDER BY product_image_id LIMIT 2000""",
+            (cursor,),
+        )
+        if not rows:
+            break
+        for raw in rows:
+            if len(raw) != 11:
+                raise SystemExit("homologation_review_product_image_row_invalid")
+            (
+                image_id,
+                product_id,
+                supermarket_id,
+                location_id,
+                image_url,
+                position,
+                is_primary,
+                source_image_id,
+                valid_from_utc,
+                first_seen_run_id,
+                last_seen_run_id,
+            ) = raw
+            if (
+                type(image_id) is not int
+                or type(product_id) is not int
+                or type(position) is not int
+                or is_primary not in {0, 1}
+                or not all(
+                    isinstance(value, str) and value
+                    for value in (
+                        supermarket_id,
+                        location_id,
+                        image_url,
+                        valid_from_utc,
+                        first_seen_run_id,
+                        last_seen_run_id,
+                    )
+                )
+                or not str(image_url).startswith("https://")
+                or (source_image_id is not None and not isinstance(source_image_id, str))
+            ):
+                raise SystemExit("homologation_review_product_image_row_invalid")
+            source_record_id = f"{supermarket_id}:{product_id}"
+            grouped.setdefault(source_record_id, []).append(
+                {
+                    "location_id": location_id,
+                    "image_url": image_url,
+                    "source_position": position,
+                    "is_primary": bool(is_primary),
+                    "source_image_id": source_image_id,
+                    "valid_from_utc": valid_from_utc,
+                    "first_seen_run_id": first_seen_run_id,
+                    "last_seen_run_id": last_seen_run_id,
+                    "identity_authority": False,
+                }
+            )
+            cursor = image_id
+            loaded += 1
+        if len(rows) < 2000:
+            break
+    confirmed = _scalar(
+        url,
+        token,
+        "SELECT COUNT(*) FROM product_images WHERE valid_to_utc IS NULL",
+    )
+    if loaded != expected or confirmed != expected:
+        raise SystemExit("homologation_review_product_images_changed_during_read")
+    return {
+        source_id: tuple(
+            sorted(
+                evidence,
+                key=lambda item: (
+                    str(item["location_id"]),
+                    int(item["source_position"]),
+                    str(item["image_url"]),
+                ),
+            )
+        )
+        for source_id, evidence in grouped.items()
+    }
 
 
 def main() -> int:
@@ -342,6 +491,7 @@ def main() -> int:
         raise SystemExit("turso_credentials_missing")
     before = _source_preflight(url, token)
     products = _fetch_products(url, token)
+    image_evidence = _fetch_current_image_evidence(url, token)
     if len(products) != before["products"]:
         raise SystemExit("homologation_review_source_changed_during_read")
     generated = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -352,6 +502,7 @@ def main() -> int:
         candidate_limit=args.candidate_limit,
         taxonomy_gap_limit=args.taxonomy_gap_limit,
         reviewed_decisions=load_reviewed_decisions(args.decision_registry),
+        image_evidence_by_source=image_evidence,
     )
     print(
         json.dumps(

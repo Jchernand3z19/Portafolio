@@ -14,6 +14,12 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from precios_supermercados.product_image_evidence import (
+    build_product_image_rows,
+    detail_image_extension,
+    image_pairs_from_mappings,
+)
+
 SUPERMARKET_ID = "comisariato_los_andes"
 LOCATION_ID = "comisariato_los_andes_sps"
 CITY = "San Pedro Sula"
@@ -140,6 +146,32 @@ def _image_url(product: dict[str, Any]) -> str | None:
     return IMAGE_BASE + filename.strip().lstrip("/")
 
 
+def _product_images(product: dict[str, Any], source_key: str) -> list[dict[str, object]]:
+    images = product.get("images")
+    if images is None:
+        mapped: list[dict[str, object]] = []
+    else:
+        require(isinstance(images, list), "images_invalid")
+        mapped = []
+        for image in images:
+            require(isinstance(image, dict), "image_entry_invalid")
+            if image.get("active") != "1":
+                continue
+            filename = image.get("fileName")
+            require(isinstance(filename, str) and filename.strip(), "image_filename_invalid")
+            mapped.append({
+                "url": IMAGE_BASE + filename.strip().lstrip("/"),
+                "id": image.get("id"),
+                "position": image.get("position"),
+            })
+    pairs = image_pairs_from_mappings(
+        mapped, url_key="url", id_key="id", position_key="position"
+    )
+    return build_product_image_rows(
+        source_key_type="sku", source_key=source_key, images=pairs
+    )
+
+
 def _availability(product: dict[str, Any]) -> tuple[str, Decimal | None]:
     """Conserva la señal fuente sin inventarle semántica de disponibilidad."""
     signal = _number(
@@ -213,7 +245,7 @@ def _pricing(
 
 
 def parse_products(
-    products: list[dict[str, Any]],
+    products: list[dict[str, Any]], *, include_images: bool = False
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     require(isinstance(products, list), "products_invalid")
     rows: list[dict[str, Any]] = []
@@ -275,11 +307,14 @@ def parse_products(
             "source_is_adult": product.get("is_adult"),
             "image_url": _image_url(product),
         }
+        if include_images:
+            details[code]["product_images"] = _product_images(product, code)
     return rows, details
 
 
 def parse_catalog_page(
-    payload: dict[str, Any], *, expected_skip: int, take: int = PAGE_SIZE
+    payload: dict[str, Any], *, expected_skip: int, take: int = PAGE_SIZE,
+    include_images: bool = False,
 ) -> dict[str, Any]:
     require(isinstance(payload, dict), "catalog_payload_invalid")
     expected_skip = _positive_int(
@@ -298,7 +333,7 @@ def parse_catalog_page(
     require(item_per_page == len(data), "item_per_page_mismatch")
     require(current_page == expected_skip // take + 1, "current_page_mismatch")
     require(pages == math.ceil(total / take), "total_pages_mismatch")
-    rows, details = parse_products(data)
+    rows, details = parse_products(data, include_images=include_images)
     return {
         "total_items": total,
         "total_pages": pages,
@@ -334,7 +369,35 @@ def _read_json_record(directory: Path, record: dict[str, Any]) -> object:
         raise LosAndesError("raw_json_invalid") from exc
 
 
-def reconcile_capture(directory: str | Path) -> dict[str, Any]:
+def capture_image_extension(directory: str | Path) -> dict[str, object]:
+    """Reconstruye las galerías desde los RAW aceptados sin abrir sockets."""
+
+    directory = Path(directory)
+    try:
+        ledger = json.loads((directory / "ledger.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise LosAndesError("ledger_invalid") from exc
+    records = ledger.get("pages")
+    require(isinstance(records, list) and records, "page_ledger_invalid")
+    rows: list[dict[str, Any]] = []
+    details: dict[str, dict[str, Any]] = {}
+    for record in records:
+        require(isinstance(record, dict), "page_ledger_invalid")
+        payload = _read_json_record(directory, record)
+        require(isinstance(payload, dict), "catalog_payload_invalid")
+        data = payload.get("data")
+        require(isinstance(data, list), "catalog_data_invalid")
+        page_rows, page_details = parse_products(data, include_images=True)
+        rows.extend(page_rows)
+        for key, detail in page_details.items():
+            require(key not in details, "cross_page_source_code_duplicate")
+            details[key] = detail
+    return detail_image_extension(rows, details)
+
+
+def reconcile_capture(
+    directory: str | Path, *, include_images: bool = False
+) -> dict[str, Any]:
     """Reproduce un crawl SPS completo exclusivamente desde RAW + ledger."""
     directory = Path(directory)
     ledger_path = directory / "ledger.json"
@@ -391,7 +454,9 @@ def reconcile_capture(directory: str | Path) -> dict[str, Any]:
         require(record.get("url") == request_url, "page_url_mismatch")
         require(record.get("request_body") == request_body, "page_body_mismatch")
         payload = _read_json_record(directory, record)
-        parsed = parse_catalog_page(payload, expected_skip=skip, take=take)
+        parsed = parse_catalog_page(
+            payload, expected_skip=skip, take=take, include_images=include_images
+        )
         totals.add(parsed["total_items"])
         page_counts.add(parsed["total_pages"])
         for row in parsed["rows"]:
@@ -435,7 +500,9 @@ def reconcile_capture(directory: str | Path) -> dict[str, Any]:
     require(final_record.get("url") == final_url, "final_recheck_url_mismatch")
     require(final_record.get("request_body") == final_body, "final_recheck_body_mismatch")
     final_payload = _read_json_record(directory, final_record)
-    final_parsed = parse_catalog_page(final_payload, expected_skip=0, take=PAGE_SIZE)
+    final_parsed = parse_catalog_page(
+        final_payload, expected_skip=0, take=PAGE_SIZE, include_images=include_images
+    )
     require(final_parsed["total_items"] == total, "final_total_recheck_mismatch")
     require(final_parsed["total_pages"] == total_pages, "final_pages_recheck_mismatch")
 
@@ -481,6 +548,7 @@ def reconcile_capture(directory: str | Path) -> dict[str, Any]:
         "products": all_rows,
         "source_details": all_details,
         "page_evidence": page_evidence,
+        **(detail_image_extension(all_rows, all_details) if include_images else {}),
         "request_count": request_count,
         "retry_count": retry_count,
     }

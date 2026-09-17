@@ -227,6 +227,44 @@ def create_schema(con: sqlite3.Connection) -> None:
     )
 
 
+def create_product_image_schema(con: sqlite3.Connection) -> None:
+    """Añade la tabla derivada sin alterar el fingerprint histórico de cinco tablas."""
+
+    con.executescript(
+        """
+        CREATE TABLE product_images (
+            product_image_id INTEGER PRIMARY KEY,
+            product_id INTEGER NOT NULL,
+            supermarket_id TEXT NOT NULL,
+            location_id TEXT NOT NULL,
+            image_url TEXT NOT NULL CHECK (image_url GLOB 'https://*'),
+            source_position INTEGER NOT NULL CHECK (source_position >= 0),
+            is_primary INTEGER NOT NULL CHECK (is_primary IN (0, 1)),
+            source_image_id TEXT,
+            valid_from_utc TEXT NOT NULL,
+            valid_to_utc TEXT,
+            first_seen_run_id TEXT NOT NULL,
+            last_seen_run_id TEXT NOT NULL,
+            FOREIGN KEY (product_id, supermarket_id)
+                REFERENCES products(product_id, supermarket_id),
+            FOREIGN KEY (location_id, supermarket_id)
+                REFERENCES locations(location_id, supermarket_id),
+            FOREIGN KEY (first_seen_run_id) REFERENCES scrape_runs(scrape_run_id),
+            FOREIGN KEY (last_seen_run_id) REFERENCES scrape_runs(scrape_run_id),
+            UNIQUE (product_id, location_id, image_url, valid_from_utc),
+            CHECK (valid_to_utc IS NULL OR valid_to_utc > valid_from_utc)
+        ) STRICT;
+
+        CREATE UNIQUE INDEX idx_product_images_current
+            ON product_images(product_id, location_id, image_url)
+            WHERE valid_to_utc IS NULL;
+        CREATE INDEX idx_product_images_current_primary
+            ON product_images(location_id, product_id, is_primary, source_position)
+            WHERE valid_to_utc IS NULL;
+        """
+    )
+
+
 def create_database(snapshot: dict, output: Path) -> dict[str, int | str]:
     if output.exists():
         fail(f"output_exists:{output}")

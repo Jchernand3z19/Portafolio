@@ -184,6 +184,7 @@ def _process_page(
     unique_skus: set[tuple[str, str]],
     bucket_products: set[str],
     all_products: list[dict[str, Any]],
+    all_product_images: list[dict[str, object]],
     diagnostic: dict[str, Any],
     recovery: bool,
 ) -> None:
@@ -219,6 +220,12 @@ def _process_page(
             continue
         unique_skus.add(identity)
         all_products.append(product)
+        images = parsed.raw_values.get("product_images", [])
+        if not isinstance(images, list):
+            raise full.FullCatalogError(
+                "product_images_not_parseable", diagnostic=diagnostic
+            )
+        all_product_images.extend(images)
         if product.get("current_price") is not None:
             diagnostic["skus_with_price"] += 1
     diagnostic["pages_completed"] += 1
@@ -248,6 +255,7 @@ def _fetch_known_total_page(
     unique_skus: set[tuple[str, str]],
     bucket_products: set[str],
     all_products: list[dict[str, Any]],
+    all_product_images: list[dict[str, object]],
     diagnostic: dict[str, Any],
     recovery: bool,
 ) -> int:
@@ -309,6 +317,7 @@ def _fetch_known_total_page(
         unique_skus=unique_skus,
         bucket_products=bucket_products,
         all_products=all_products,
+        all_product_images=all_product_images,
         diagnostic=diagnostic,
         recovery=recovery,
     )
@@ -398,6 +407,7 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
     unique_products: set[str] = set()
     unique_skus: set[tuple[str, str]] = set()
     all_products: list[dict[str, Any]] = []
+    all_product_images: list[dict[str, object]] = []
 
     with sync_playwright() as pw:
         browser, _ = full.launch_compatible_chromium(pw)
@@ -556,6 +566,7 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                     unique_skus=unique_skus,
                     bucket_products=bucket_products,
                     all_products=all_products,
+                    all_product_images=all_product_images,
                     diagnostic=diagnostic,
                     recovery=False,
                 )
@@ -577,6 +588,7 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                         unique_skus=unique_skus,
                         bucket_products=bucket_products,
                         all_products=all_products,
+                        all_product_images=all_product_images,
                         diagnostic=diagnostic,
                         recovery=False,
                     )
@@ -603,6 +615,7 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                             unique_skus=unique_skus,
                             bucket_products=bucket_products,
                             all_products=all_products,
+                            all_product_images=all_product_images,
                             diagnostic=diagnostic,
                             recovery=True,
                         )
@@ -693,6 +706,8 @@ def _run_catalog(*, page_size: int, delay_seconds: float) -> dict[str, Any]:
                 "validation_passed": True,
                 "observed_at_utc": full._utc_text(),
                 "products": all_products,
+                "image_capture_status": "complete",
+                "product_images": all_product_images,
                 "raw_context_persisted": False,
                 "commercial_persistence": False,
                 "production_authority": False,

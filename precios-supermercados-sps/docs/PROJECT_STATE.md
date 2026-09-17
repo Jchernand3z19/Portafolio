@@ -110,9 +110,13 @@ Desde el PR **#460** existe una cola privada de revisión que puede materializar
 
 La cola no se publica a Compra Inteligente, no modifica precios ni perfiles por sí sola y no añade una lectura completa diaria de Turso.
 
+La siguiente fase incorpora evidencia auxiliar de imágenes para las seis cadenas. Cada oferta puede conservar varias imágenes con orden, procedencia y vigencia en la tabla derivada `product_images`; una captura completa abre, refresca o cierra periodos sin borrar el historial. La cola privada puede mostrarlas, pero marca explícitamente `identity_authority = false`: una imagen nunca crea ni confirma por sí sola una identidad de producto.
+
+El rollout permanece cerrado: la migración idempotente de `product_images` sólo se ejecuta mediante el workflow manual autorizado de schema migration. Hasta que esa migración sea aprobada y validada, esta fase no debe fusionarse ni activar captura pública, homologaciones o cambios en Compra Inteligente.
+
 ## Operación recurrente
 
-El workflow `.github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml` corre diariamente a `17 11 * * *` (05:17 `America/Tegucigalpa`) y cubre seis cadenas / once contextos productivos demostrados:
+El workflow `.github/workflows/precios-supermercados-sps-la-colonia-mvp-update.yml` está configurado diariamente a `43 7 * * *` (01:43 `America/Tegucigalpa`) y cubre seis cadenas / once contextos productivos demostrados. Este adelanto compensa el retraso sistemático observado en el scheduler de GitHub y reduce la probabilidad de que la captura real coincida con el tráfico comercial de la mañana:
 
 | Cadena | Ubicaciones/contextos productivos |
 | --- | --- |
@@ -138,6 +142,8 @@ Los PR **#461** y **#462** completaron la recuperación operativa posterior al i
 - el operador revisa el run programado del mismo día a las **08:17** y **12:17** de Honduras;
 - sólo `failure`/`timed_out` son recuperables automáticamente y el límite es **tres intentos totales** (inicial + hasta dos recuperaciones);
 - la recuperación vuelve a ejecutar los jobs fallidos y sus dependencias, no crea un crawl programado nuevo si el run diario no existe.
+
+Walmart aplica además una recuperación local y acotada cuando el total de una categoría cambia durante la comprobación final. El extractor espera 120 segundos, exige dos lecturas concordantes —facetas y búsqueda— separadas por 60 segundos y vuelve a descargar únicamente la categoría afectada. Si las fuentes aún discrepan o cambian durante la recaptura, realiza un segundo y último ciclo después de 600 segundos. Nunca mezcla páginas anteriores y posteriores al cambio; si no logra una membresía exacta y una confirmación final estable, conserva el último snapshot válido y deja que el operador global reintente sólo el job fallido.
 
 No se provocó scraping live adicional para probar estos cambios. La siguiente corrida programada será la primera evidencia productiva del nuevo esquema; hasta entonces, el último estado aceptado continúa siendo la fuente válida.
 

@@ -28,10 +28,12 @@ from actualizar_mvp_sqlite_la_colonia import (  # noqa: E402
 )
 
 EXPECTED_TABLES = {"supermarkets", "locations", "products", "price_history", "scrape_runs"}
-OPTIONAL_DERIVED_TABLES = {"product_homologation_profiles"}
+OPTIONAL_DERIVED_TABLES = {"product_homologation_profiles", "product_images"}
 
 
-def _validate_table_names(names: object) -> None:
+def _validate_table_names(
+    names: object, *, require_product_images: bool = False
+) -> None:
     try:
         observed = {str(name) for name in names}
     except TypeError as exc:
@@ -40,6 +42,8 @@ def _validate_table_names(names: object) -> None:
         raise SnapshotError("turso_schema_mismatch")
     if not observed <= EXPECTED_TABLES | OPTIONAL_DERIVED_TABLES:
         raise SnapshotError("turso_schema_mismatch")
+    if require_product_images and "product_images" not in observed:
+        raise SnapshotError("product_images_schema_migration_required")
 
 
 def _http_url(value: str) -> str:
@@ -134,8 +138,28 @@ def _normalised_json(snapshot: dict[str, Any]) -> str:
     return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
 
 
+def _normalised_images_json(snapshot: dict[str, Any]) -> str | None:
+    """Serializa la galería sólo cuando la fuente declaró captura completa."""
+
+    status = snapshot.get("image_capture_status")
+    if status is None or status == "unsupported":
+        return None
+    if status != "complete":
+        raise SnapshotError("snapshot_images_status_invalid")
+    rows = snapshot.get("product_images")
+    if not isinstance(rows, list):
+        raise SnapshotError("snapshot_images_invalid")
+    return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+
+
 def _preflight(
-    url: str, token: str, *, location_id: str, run_id: str, supermarket_id: str = SUPERMARKET_ID
+    url: str,
+    token: str,
+    *,
+    location_id: str,
+    run_id: str,
+    supermarket_id: str = SUPERMARKET_ID,
+    require_product_images: bool = False,
 ) -> dict[str, object] | None:
     queries = [
         (
@@ -164,7 +188,10 @@ def _preflight(
     results = data.get("results")
     if not isinstance(results, list) or len(results) < 3:
         raise SnapshotError("turso_preflight_response_invalid")
-    _validate_table_names(str(row[0]) for row in _execute_rows(results[0]))
+    _validate_table_names(
+        (str(row[0]) for row in _execute_rows(results[0])),
+        require_product_images=require_product_images,
+    )
     locations = {
         SUPERMARKET_ID: LOCATIONS, "colonial": COLONIAL_LOCATIONS,
         "walmart": WALMART_LOCATIONS, "pricesmart": PRICESMART_LOCATIONS,
@@ -199,10 +226,17 @@ def _mutation_steps(
     artifact_id: str | None,
     digest: str,
     supermarket_id: str = SUPERMARKET_ID,
+    incoming_images: str | None = None,
+    image_count: int = 0,
 ) -> list[tuple[str, str, tuple[object, ...]]]:
     # incoming se materializa e indexa una sola vez. Dentro de la transacción se
     # materializa delta para no repetir la misma comparación current-vs-snapshot
     # en guardas, cierre y apertura de histórico.
+    if incoming_images is None and image_count != 0:
+        raise SnapshotError("image_count_without_complete_capture")
+    if image_count < 0:
+        raise SnapshotError("image_count_invalid")
+
     steps = [
         # Turso puede reutilizar la misma sesión Hrana aun después de `close`.
         # Limpiar staging residual evita que una segunda ubicación falle por
@@ -387,6 +421,151 @@ def _mutation_steps(
         ("commit", "COMMIT", ()),
     ]
 
+    if incoming_images is not None:
+        guard_index = next(i for i, step in enumerate(steps) if step[0] == "guard_table")
+        steps[guard_index:guard_index] = [
+            ("drop_incoming_images_table", "DROP TABLE IF EXISTS temp.incoming_images", ()),
+            (
+                "incoming_images_table",
+                """CREATE TEMP TABLE incoming_images(
+                    source_key_type TEXT NOT NULL,
+                    source_key TEXT NOT NULL,
+                    image_url TEXT NOT NULL,
+                    source_position INTEGER NOT NULL CHECK(source_position>=0),
+                    is_primary INTEGER NOT NULL CHECK(is_primary IN (0,1)),
+                    source_image_id TEXT,
+                    UNIQUE(source_key_type,source_key,image_url)) STRICT""",
+                (),
+            ),
+            (
+                "incoming_images_load",
+                """INSERT INTO incoming_images SELECT
+                    json_extract(value,'$.source_key_type'),
+                    json_extract(value,'$.source_key'),
+                    json_extract(value,'$.image_url'),
+                    CAST(json_extract(value,'$.source_position') AS INTEGER),
+                    CAST(json_extract(value,'$.is_primary') AS INTEGER),
+                    json_extract(value,'$.source_image_id')
+                    FROM json_each(?)""",
+                (incoming_images,),
+            ),
+        ]
+        begin_index = next(i for i, step in enumerate(steps) if step[0] == "begin")
+        steps[begin_index:begin_index] = [
+            (
+                "guard_incoming_images",
+                "INSERT INTO guard_ok SELECT CASE WHEN COUNT(*)=? THEN 0 ELSE 1 END FROM incoming_images",
+                (image_count,),
+            ),
+        ]
+
+        insert_run_index = next(i for i, step in enumerate(steps) if step[0] == "insert_run")
+        image_steps = [
+            (
+                "guard_images_out_of_order",
+                """INSERT INTO guard_ok SELECT CASE WHEN EXISTS(
+                    SELECT 1 FROM product_images pi
+                    WHERE pi.supermarket_id=? AND pi.location_id=?
+                      AND julianday(?)<=julianday(pi.valid_from_utc)
+                ) THEN 1 ELSE 0 END""",
+                (supermarket_id, location_id, observed_at),
+            ),
+            (
+                "close_images",
+                """UPDATE product_images AS pi SET valid_to_utc=?
+                    WHERE pi.supermarket_id=? AND pi.location_id=?
+                      AND pi.valid_to_utc IS NULL
+                      AND NOT EXISTS(
+                        SELECT 1 FROM incoming_images im JOIN products p
+                          ON p.supermarket_id=?
+                         AND p.source_key_type=im.source_key_type
+                         AND p.source_key=im.source_key
+                        WHERE p.product_id=pi.product_id
+                          AND im.image_url=pi.image_url
+                          AND im.source_position=pi.source_position
+                          AND im.is_primary=pi.is_primary
+                          AND im.source_image_id IS pi.source_image_id
+                      )""",
+                (observed_at, supermarket_id, location_id, supermarket_id),
+            ),
+            (
+                "refresh_images",
+                """UPDATE product_images AS pi SET last_seen_run_id=?
+                    WHERE pi.supermarket_id=? AND pi.location_id=?
+                      AND pi.valid_to_utc IS NULL
+                      AND EXISTS(
+                        SELECT 1 FROM incoming_images im JOIN products p
+                          ON p.supermarket_id=?
+                         AND p.source_key_type=im.source_key_type
+                         AND p.source_key=im.source_key
+                        WHERE p.product_id=pi.product_id
+                          AND im.image_url=pi.image_url
+                          AND im.source_position=pi.source_position
+                          AND im.is_primary=pi.is_primary
+                          AND im.source_image_id IS pi.source_image_id
+                      )""",
+                (run_id, supermarket_id, location_id, supermarket_id),
+            ),
+            (
+                "open_images",
+                """INSERT INTO product_images(
+                    product_id,supermarket_id,location_id,image_url,
+                    source_position,is_primary,source_image_id,
+                    valid_from_utc,valid_to_utc,first_seen_run_id,last_seen_run_id)
+                    SELECT p.product_id,?,?,im.image_url,im.source_position,
+                      im.is_primary,im.source_image_id,?,NULL,?,?
+                    FROM incoming_images im JOIN products p
+                      ON p.supermarket_id=?
+                     AND p.source_key_type=im.source_key_type
+                     AND p.source_key=im.source_key
+                    LEFT JOIN product_images pi
+                      ON pi.product_id=p.product_id
+                     AND pi.location_id=?
+                     AND pi.image_url=im.image_url
+                     AND pi.valid_to_utc IS NULL
+                    WHERE pi.product_image_id IS NULL""",
+                (
+                    supermarket_id,
+                    location_id,
+                    observed_at,
+                    run_id,
+                    run_id,
+                    supermarket_id,
+                    location_id,
+                ),
+            ),
+            (
+                "guard_current_images",
+                """INSERT INTO guard_ok SELECT CASE WHEN
+                    (SELECT COUNT(*) FROM product_images pi
+                     WHERE pi.supermarket_id=? AND pi.location_id=?
+                       AND pi.valid_to_utc IS NULL)=?
+                    AND NOT EXISTS(
+                      SELECT 1 FROM incoming_images im JOIN products p
+                        ON p.supermarket_id=?
+                       AND p.source_key_type=im.source_key_type
+                       AND p.source_key=im.source_key
+                      LEFT JOIN product_images pi
+                        ON pi.product_id=p.product_id
+                       AND pi.location_id=?
+                       AND pi.image_url=im.image_url
+                       AND pi.source_position=im.source_position
+                       AND pi.is_primary=im.is_primary
+                       AND pi.source_image_id IS im.source_image_id
+                       AND pi.valid_to_utc IS NULL
+                      WHERE pi.product_image_id IS NULL
+                    ) THEN 0 ELSE 1 END""",
+                (
+                    supermarket_id,
+                    location_id,
+                    image_count,
+                    supermarket_id,
+                    location_id,
+                ),
+            ),
+        ]
+        steps[insert_run_index + 1:insert_run_index + 1] = image_steps
+
     if supermarket_id in {"colonial", "walmart", "pricesmart"}:
         name = {
             "colonial": "Supermercados Colonial",
@@ -505,7 +684,12 @@ def persist_snapshot(
     digest = hashlib.sha256(raw).hexdigest()
     location_id = str(snapshot["location_id"])
     previous = _preflight(
-        database_url, auth_token, location_id=location_id, run_id=run_id, supermarket_id=supermarket_id
+        database_url,
+        auth_token,
+        location_id=location_id,
+        run_id=run_id,
+        supermarket_id=supermarket_id,
+        require_product_images=snapshot.get("image_capture_status") == "complete",
     )
     if previous is not None:
         if (
@@ -525,6 +709,7 @@ def persist_snapshot(
             }
         raise SnapshotError("run_id_conflict")
 
+    incoming_images = _normalised_images_json(snapshot)
     steps = _mutation_steps(
         _normalised_json(snapshot),
         location_id=location_id,
@@ -535,10 +720,12 @@ def persist_snapshot(
         artifact_id=source_artifact_id,
         digest=digest,
         supermarket_id=supermarket_id,
+        incoming_images=incoming_images,
+        image_count=len(snapshot.get("product_images", [])) if incoming_images is not None else 0,
     )
     results = _run_batch(database_url, auth_token, steps)
     opened = _affected(results, steps, "open_history")
-    return {
+    result = {
         "run_id": run_id,
         "location_id": location_id,
         "source_json_sha256": digest,
@@ -548,6 +735,15 @@ def persist_snapshot(
         "history_closed": _affected(results, steps, "close_history"),
         "history_unchanged": len(snapshot["products"]) - opened,
     }
+    if incoming_images is not None:
+        result.update(
+            {
+                "images_opened": _affected(results, steps, "open_images"),
+                "images_closed": _affected(results, steps, "close_images"),
+                "images_refreshed": _affected(results, steps, "refresh_images"),
+            }
+        )
+    return result
 
 
 def main() -> None:

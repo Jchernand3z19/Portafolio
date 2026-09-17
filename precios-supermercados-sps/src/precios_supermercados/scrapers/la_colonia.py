@@ -13,6 +13,10 @@ from urllib.parse import parse_qs, urlsplit
 from precios_supermercados.enums import AvailabilityStatus, LocationStatus
 from precios_supermercados.identifiers import select_source_key
 from precios_supermercados.models import RawProduct
+from precios_supermercados.product_image_evidence import (
+    build_product_image_rows,
+    image_pairs_from_mappings,
+)
 
 from .base import (
     EmptyResponseError,
@@ -313,6 +317,13 @@ class LaColoniaExtractor:
         )
         source_presentation = _presentation(presentation_source)
         images = _mapping_sequence(item.get("images"))
+        product_images = build_product_image_rows(
+            source_key_type=source_key_type.value,
+            source_key=source_key,
+            images=image_pairs_from_mappings(
+                list(images), url_key="imageUrl", id_key="imageId"
+            ),
+        )
         image_url = next(
             (
                 value
@@ -351,6 +362,7 @@ class LaColoniaExtractor:
             "measurement_unit": measurement_unit,
             "unit_multiplier": _decimal_text(unit_multiplier),
             "weighted_product": _is_weighted(source_name, measurement_unit),
+            "product_images": product_images,
         }
 
         return RawProduct(

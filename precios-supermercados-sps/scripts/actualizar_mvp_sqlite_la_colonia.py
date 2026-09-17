@@ -15,7 +15,15 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from generar_mvp_sqlite_la_colonia import create_schema  # noqa: E402
+sys.path.insert(0, str(ROOT / "src"))
+from generar_mvp_sqlite_la_colonia import (  # noqa: E402
+    create_product_image_schema,
+    create_schema,
+)
+from precios_supermercados.product_image_evidence import (  # noqa: E402
+    ProductImageEvidenceError,
+    validate_snapshot_images,
+)
 
 SUPERMARKET_ID = "la_colonia"
 LOCATIONS = {"la_colonia_sps": "San Pedro Sula", "la_colonia_tgu": "Tegucigalpa"}
@@ -119,6 +127,11 @@ def validate_snapshot_bytes(raw: bytes, *, supermarket_id: str = SUPERMARKET_ID)
             raise SnapshotError("snapshot_promotion_invalid")
         if row["availability"] not in {"in_stock", "out_of_stock", "unknown"}:
             raise SnapshotError("snapshot_availability_invalid")
+
+    try:
+        validate_snapshot_images(data, product_identities=identities)
+    except ProductImageEvidenceError as exc:
+        raise SnapshotError(f"snapshot_images_invalid:{exc}") from exc
 
     reported = data.get("catalog_products_reported")
     if (
@@ -284,6 +297,7 @@ def initialize_database(path: Path) -> None:
     try:
         con.execute("PRAGMA foreign_keys=ON")
         create_schema(con)
+        create_product_image_schema(con)
         con.execute("INSERT INTO supermarkets VALUES (?, ?, ?)", (SUPERMARKET_ID, "La Colonia", "HN"))
         con.executemany(
             "INSERT INTO locations VALUES (?, ?, ?, ?)",
@@ -361,6 +375,103 @@ def _apply_state(
     return 1, int(current is not None), 0
 
 
+def _apply_images(
+    con: sqlite3.Connection,
+    *,
+    snapshot: dict[str, Any],
+    product_ids: dict[tuple[str, str], int],
+    location_id: str,
+    observed_at: str,
+    run_id: str,
+) -> tuple[int, int, int]:
+    """Actualiza vigencias de imágenes sólo para una captura declarada completa."""
+
+    if snapshot.get("image_capture_status") != "complete":
+        return 0, 0, 0
+    incoming_rows = validate_snapshot_images(
+        snapshot,
+        product_identities=set(product_ids),
+    )
+    incoming: dict[int, dict[str, dict[str, object]]] = {
+        product_id: {} for product_id in product_ids.values()
+    }
+    for row in incoming_rows:
+        identity = (str(row["source_key_type"]), str(row["source_key"]))
+        incoming[product_ids[identity]][str(row["image_url"])] = row
+
+    current_product_ids = {
+        int(row[0])
+        for row in con.execute(
+            """SELECT DISTINCT product_id FROM product_images
+            WHERE supermarket_id=? AND location_id=? AND valid_to_utc IS NULL""",
+            (SUPERMARKET_ID, location_id),
+        ).fetchall()
+    }
+
+    opened = closed = refreshed = 0
+    for product_id in sorted(set(incoming) | current_product_ids):
+        gallery = incoming.get(product_id, {})
+        latest = con.execute(
+            "SELECT MAX(valid_from_utc) FROM product_images WHERE product_id=? AND location_id=?",
+            (product_id, location_id),
+        ).fetchone()[0]
+        if latest is not None and _utc(observed_at) <= _utc(latest):
+            raise SnapshotError("snapshot_images_out_of_order")
+
+        current = con.execute(
+            """SELECT product_image_id,image_url,source_position,is_primary,source_image_id
+            FROM product_images WHERE product_id=? AND location_id=? AND valid_to_utc IS NULL""",
+            (product_id, location_id),
+        ).fetchall()
+        unchanged_urls: set[str] = set()
+        for existing in current:
+            url = str(existing["image_url"])
+            candidate = gallery.get(url)
+            unchanged = candidate is not None and (
+                int(existing["source_position"]) == int(candidate["source_position"])
+                and bool(existing["is_primary"]) is bool(candidate["is_primary"])
+                and existing["source_image_id"] == candidate["source_image_id"]
+            )
+            if unchanged:
+                con.execute(
+                    "UPDATE product_images SET last_seen_run_id=? WHERE product_image_id=?",
+                    (run_id, int(existing["product_image_id"])),
+                )
+                unchanged_urls.add(url)
+                refreshed += 1
+            else:
+                con.execute(
+                    "UPDATE product_images SET valid_to_utc=? WHERE product_image_id=?",
+                    (observed_at, int(existing["product_image_id"])),
+                )
+                closed += 1
+
+        for url, row in gallery.items():
+            if url in unchanged_urls:
+                continue
+            con.execute(
+                """INSERT INTO product_images(
+                    product_id,supermarket_id,location_id,image_url,source_position,
+                    is_primary,source_image_id,valid_from_utc,valid_to_utc,
+                    first_seen_run_id,last_seen_run_id)
+                VALUES(?,?,?,?,?,?,?,?,NULL,?,?)""",
+                (
+                    product_id,
+                    SUPERMARKET_ID,
+                    location_id,
+                    url,
+                    int(row["source_position"]),
+                    int(bool(row["is_primary"])),
+                    row["source_image_id"],
+                    observed_at,
+                    run_id,
+                    run_id,
+                ),
+            )
+            opened += 1
+    return opened, closed, refreshed
+
+
 def apply_snapshot(
     database: Path, raw: bytes, *, run_id: str, source_artifact_id: str | None = None,
 ) -> dict[str, Any]:
@@ -375,6 +486,7 @@ def apply_snapshot(
         "run_id": run_id, "location_id": location_id, "source_json_sha256": digest,
         "replayed": False, "products_inserted": 0, "products_updated": 0,
         "history_opened": 0, "history_closed": 0, "history_unchanged": 0,
+        "images_opened": 0, "images_closed": 0, "images_refreshed": 0,
     }
 
     con = sqlite3.connect(database)
@@ -406,8 +518,10 @@ def apply_snapshot(
             (run_id, SUPERMARKET_ID, location_id, observed_at, len(rows),
              snapshot["catalog_products_reported"], source_artifact_id, digest),
         )
+        product_ids: dict[tuple[str, str], int] = {}
         for row in rows:
             product_id, inserted = _upsert_product(con, row)
+            product_ids[(str(row["source_key_type"]), str(row["source_key"]))] = product_id
             summary["products_inserted" if inserted else "products_updated"] += 1
             opened, closed, unchanged = _apply_state(
                 con, product_id, location_id, observed_at, run_id, row
@@ -415,6 +529,17 @@ def apply_snapshot(
             summary["history_opened"] += opened
             summary["history_closed"] += closed
             summary["history_unchanged"] += unchanged
+        image_opened, image_closed, image_refreshed = _apply_images(
+            con,
+            snapshot=snapshot,
+            product_ids=product_ids,
+            location_id=str(location_id),
+            observed_at=str(observed_at),
+            run_id=run_id,
+        )
+        summary["images_opened"] = image_opened
+        summary["images_closed"] = image_closed
+        summary["images_refreshed"] = image_refreshed
         if con.execute("PRAGMA foreign_key_check").fetchall():
             raise SnapshotError("database_foreign_key_check_failed")
         con.commit()
@@ -437,11 +562,21 @@ def validate_database(database: Path) -> dict[str, Any]:
                 GROUP BY product_id, location_id HAVING COUNT(*)>1
             )"""
         ).fetchone()[0]
-        if integrity != "ok" or foreign_keys or duplicate_open:
+        duplicate_images = con.execute(
+            """SELECT COUNT(*) FROM (
+                SELECT product_id,location_id,image_url FROM product_images
+                WHERE valid_to_utc IS NULL
+                GROUP BY product_id,location_id,image_url HAVING COUNT(*)>1
+            )"""
+        ).fetchone()[0]
+        if integrity != "ok" or foreign_keys or duplicate_open or duplicate_images:
             raise SnapshotError("database_integrity_failed")
         result = {
             table: con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            for table in ("supermarkets", "locations", "products", "price_history", "scrape_runs")
+            for table in (
+                "supermarkets", "locations", "products", "price_history",
+                "scrape_runs", "product_images",
+            )
         }
         result["open_price_history"] = con.execute(
             "SELECT COUNT(*) FROM price_history WHERE valid_to_utc IS NULL"

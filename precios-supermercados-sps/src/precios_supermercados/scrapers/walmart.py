@@ -10,6 +10,11 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from precios_supermercados.product_image_evidence import (
+    build_product_image_rows,
+    image_pairs_from_mappings,
+)
+
 STORES = {
     "walmarthnwm947": ("walmart_sps", "San Pedro Sula", "Walmart Boulevard del Norte"),
     "walmarthnwm4041": ("walmart_tgu_ffaa", "Tegucigalpa", "Walmart Boulevard FFAA - Fuerzas Armadas"),
@@ -37,7 +42,7 @@ def money(value):
     return format(amount, ".2f")
 
 
-def parse_products(products):
+def parse_products(products, *, include_images=False):
     rows, details = [], {}
     for product in products:
         pid = product.get("productId")
@@ -78,6 +83,13 @@ def parse_products(products):
                             "available_quantity_signal": quantity,
                             "measurement_unit": item.get("measurementUnit"), "unit_multiplier": item.get("unitMultiplier"),
                             "offer_origin": item.get("offerOrigin"), "seller_id": sellers[0].get("sellerId")}
+            if include_images:
+                details[sku]["product_images"] = build_product_image_rows(
+                    source_key_type="item_id", source_key=sku,
+                    images=image_pairs_from_mappings(
+                        item.get("images"), url_key="imageUrl", id_key="imageId"
+                    ),
+                )
     return rows, details
 
 

@@ -11,6 +11,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from precios_supermercados.product_image_evidence import (
+    build_product_image_rows,
+    image_pairs_from_mappings,
+)
+
 SUPERMARKET_ID = "paiz"
 SUPERMARKET_NAME = "Paiz"
 SCOPE = "public_ecommerce_selected_store_not_universal_city_price"
@@ -81,7 +86,9 @@ def _presentation(product: dict) -> str | None:
     return None
 
 
-def parse_products(products: list[dict]) -> tuple[list[dict], dict[str, dict]]:
+def parse_products(
+    products: list[dict], *, include_images: bool = False
+) -> tuple[list[dict], dict[str, dict]]:
     rows: list[dict] = []
     details: dict[str, dict] = {}
     for product in products:
@@ -138,6 +145,13 @@ def parse_products(products: list[dict]) -> tuple[list[dict], dict[str, dict]]:
                 "seller_id": seller.get("sellerId"),
                 "seller_name": seller.get("sellerName"),
             }
+            if include_images:
+                details[sku]["product_images"] = build_product_image_rows(
+                    source_key_type="item_id", source_key=sku,
+                    images=image_pairs_from_mappings(
+                        item.get("images"), url_key="imageUrl", id_key="imageId"
+                    ),
+                )
     return rows, details
 
 

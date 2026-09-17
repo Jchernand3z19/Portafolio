@@ -29,16 +29,24 @@ def product(
 
 
 def snapshot(
-    when: str, rows: list[dict[str, object]], location: str = "la_colonia_sps"
+    when: str,
+    rows: list[dict[str, object]],
+    location: str = "la_colonia_sps",
+    images: list[dict[str, object]] | None = None,
 ) -> bytes:
     total = len({str(row["product_id"]) for row in rows})
-    return json.dumps({
+    document = {
         "result": "success", "supermarket_id": "la_colonia", "location_id": location,
         "city": sqlite_updater.LOCATIONS[location], "catalog_complete": True,
         "validation_passed": True, "location_verified_same_run": True,
         "observed_at_utc": when, "skus_extracted": len(rows), "skus_with_price": len(rows),
         "catalog_products_reported": total, "unique_products_extracted": total, "products": rows,
-    }, separators=(",", ":")).encode()
+    }
+    if images is not None:
+        document.update(
+            {"image_capture_status": "complete", "product_images": images}
+        )
+    return json.dumps(document, separators=(",", ":")).encode()
 
 
 def database(path: Path) -> Path:
@@ -50,6 +58,7 @@ def apply_remote_sql_locally(
     path: Path, raw: bytes, *, run_id: str, artifact_id: str = "artifact"
 ) -> None:
     snap = sqlite_updater.validate_snapshot_bytes(raw)
+    incoming_images = turso_updater._normalised_images_json(snap)
     steps = turso_updater._mutation_steps(
         turso_updater._normalised_json(snap),
         location_id=str(snap["location_id"]),
@@ -59,6 +68,8 @@ def apply_remote_sql_locally(
         catalog_count=int(snap["catalog_products_reported"]),
         artifact_id=artifact_id,
         digest=hashlib.sha256(raw).hexdigest(),
+        incoming_images=incoming_images,
+        image_count=len(snap.get("product_images", [])) if incoming_images is not None else 0,
     )
     # Hrana ejecuta las sentencias anteriores a BEGIN en autocommit. Esta conexión
     # reproduce ese comportamiento y permite comprobar la misma secuencia SQL.
@@ -221,6 +232,134 @@ def test_exact_replay_short_circuits_remote_mutation(monkeypatch: pytest.MonkeyP
         auth_token="token", run_id="run-2",
     )
     assert result["replayed"] is True
+
+
+def test_image_gallery_is_temporal_and_only_disappeared_rows_are_closed(
+    tmp_path: Path,
+) -> None:
+    path = database(tmp_path / "mvp.db")
+    front = {
+        "source_key_type": "item_id",
+        "source_key": "sku-1",
+        "image_url": "https://cdn.example/front.jpg",
+        "source_position": 0,
+        "is_primary": True,
+        "source_image_id": "front",
+    }
+    back = {
+        "source_key_type": "item_id",
+        "source_key": "sku-1",
+        "image_url": "https://cdn.example/back.jpg",
+        "source_position": 1,
+        "is_primary": False,
+        "source_image_id": "back",
+    }
+    apply_remote_sql_locally(
+        path,
+        snapshot("2026-09-16T01:00:00Z", [product()], images=[front, back]),
+        run_id="run-1",
+    )
+    apply_remote_sql_locally(
+        path,
+        snapshot("2026-09-16T02:00:00Z", [product()], images=[front, back]),
+        run_id="run-2",
+    )
+    apply_remote_sql_locally(
+        path,
+        snapshot("2026-09-16T03:00:00Z", [product()], images=[front]),
+        run_id="run-3",
+    )
+
+    con = sqlite3.connect(path)
+    try:
+        current = con.execute(
+            """SELECT image_url,first_seen_run_id,last_seen_run_id
+            FROM product_images WHERE valid_to_utc IS NULL"""
+        ).fetchall()
+        closed = con.execute(
+            """SELECT image_url,valid_from_utc,valid_to_utc,last_seen_run_id
+            FROM product_images WHERE valid_to_utc IS NOT NULL"""
+        ).fetchall()
+    finally:
+        con.close()
+    assert current == [("https://cdn.example/front.jpg", "run-1", "run-3")]
+    assert closed == [
+        (
+            "https://cdn.example/back.jpg",
+            "2026-09-16T01:00:00Z",
+            "2026-09-16T03:00:00Z",
+            "run-2",
+        )
+    ]
+
+
+def test_missing_image_extension_never_closes_previous_evidence(tmp_path: Path) -> None:
+    path = database(tmp_path / "mvp.db")
+    image = {
+        "source_key_type": "item_id",
+        "source_key": "sku-1",
+        "image_url": "https://cdn.example/front.jpg",
+        "source_position": 0,
+        "is_primary": True,
+        "source_image_id": None,
+    }
+    apply_remote_sql_locally(
+        path,
+        snapshot("2026-09-16T01:00:00Z", [product()], images=[image]),
+        run_id="run-1",
+    )
+    apply_remote_sql_locally(
+        path,
+        snapshot("2026-09-16T02:00:00Z", [product()]),
+        run_id="run-2",
+    )
+    con = sqlite3.connect(path)
+    try:
+        assert con.execute(
+            "SELECT valid_to_utc,last_seen_run_id FROM product_images"
+        ).fetchall() == [(None, "run-1")]
+    finally:
+        con.close()
+
+
+def test_complete_image_capture_closes_images_for_removed_product(
+    tmp_path: Path,
+) -> None:
+    path = database(tmp_path / "mvp.db")
+    image = {
+        "source_key_type": "item_id",
+        "source_key": "sku-1",
+        "image_url": "https://cdn.example/front.jpg",
+        "source_position": 0,
+        "is_primary": True,
+        "source_image_id": None,
+    }
+    apply_remote_sql_locally(
+        path,
+        snapshot(
+            "2026-09-16T01:00:00Z",
+            [product(), product("sku-2", "product-2", "item-2")],
+            images=[image],
+        ),
+        run_id="run-1",
+    )
+    apply_remote_sql_locally(
+        path,
+        snapshot(
+            "2026-09-16T02:00:00Z",
+            [product("sku-2", "product-2", "item-2")],
+            images=[],
+        ),
+        run_id="run-2",
+    )
+
+    con = sqlite3.connect(path)
+    try:
+        assert con.execute(
+            "SELECT valid_to_utc,last_seen_run_id FROM product_images"
+        ).fetchall() == [("2026-09-16T02:00:00Z", "run-1")]
+    finally:
+        con.close()
 
 
 def test_unchanged_catalog_history_check_has_bounded_sql_work(tmp_path: Path) -> None:
