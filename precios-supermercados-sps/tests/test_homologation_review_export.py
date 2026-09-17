@@ -131,4 +131,55 @@ def test_review_v2_exposes_raw_canonical_fields_and_before_after_metrics() -> No
     assert candidate["decision_contract"]["policy_version"] == "precios-sps-product-identity-policy/v1"
     assert candidate["decision_contract"]["public_serving_allowed"] is False
     assert "VERIFIED_EQUIVALENT" in candidate["allowed_relations"]
-    assert queue["summary"]["image_signal_status"] == "not_persisted_in_products_table"
+    assert queue["summary"]["image_signal_status"] == "not_loaded"
+
+
+def test_review_queue_attaches_current_images_as_non_authoritative_evidence() -> None:
+    result = homologate_products_v2(
+        (
+            product(
+                "colonial:1",
+                "colonial",
+                "Nutri Yema Claras de Huevo 554 g",
+                brand="Nutri Yema",
+            ),
+            product(
+                "andes:2",
+                "comisariato_los_andes",
+                "Nutri Yema Claras de Huevo 1.2 lb",
+                brand="Nutri Yema",
+            ),
+        ),
+        candidate_threshold=Decimal("0.65"),
+    )
+    evidence = {
+        "colonial:1": (
+            {
+                "location_id": "colonial_sps",
+                "image_url": "https://cdn.example/front.jpg",
+                "source_position": 0,
+                "is_primary": True,
+                "source_image_id": "front",
+                "valid_from_utc": "2026-09-16T08:00:00Z",
+                "first_seen_run_id": "run-1",
+                "last_seen_run_id": "run-2",
+                "identity_authority": False,
+            },
+        )
+    }
+
+    queue = build_review_queue(
+        result,
+        generated_at_utc="2026-09-16T21:00:00Z",
+        image_evidence_by_source=evidence,
+    )
+
+    candidate = queue["review_candidates"]["rows"][0]
+    products = {
+        item["source_record_id"]: item
+        for item in (candidate["left"], candidate["right"])
+    }
+    assert products["colonial:1"]["image_evidence"][0]["identity_authority"] is False
+    assert products["andes:2"]["image_evidence"] == []
+    assert queue["summary"]["image_reference_available"] == 1
+    assert queue["summary"]["image_signal_status"] == "current_product_images_available"

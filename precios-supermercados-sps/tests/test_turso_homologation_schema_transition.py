@@ -17,6 +17,18 @@ def test_preflight_accepts_base_schema_and_optional_homologation_table_only() ->
     updater._validate_table_names(
         updater.EXPECTED_TABLES | {"product_homologation_profiles"}
     )
+    updater._validate_table_names(
+        updater.EXPECTED_TABLES | {"product_images"},
+        require_product_images=True,
+    )
+
+
+def test_image_enabled_snapshot_requires_migrated_table() -> None:
+    with pytest.raises(SnapshotError, match="product_images_schema_migration_required"):
+        updater._validate_table_names(
+            updater.EXPECTED_TABLES,
+            require_product_images=True,
+        )
 
 
 def test_preflight_still_rejects_missing_or_unknown_tables() -> None:
@@ -32,5 +44,6 @@ def test_all_turso_persistors_share_optional_derived_table_guard() -> None:
         "actualizar_mvp_turso_paiz.py",
     ):
         source = (ROOT / "scripts" / filename).read_text(encoding="utf-8")
-        assert "_validate_table_names(str(row[0]) for row in _execute_rows(results[0]))" in source
+        assert "_validate_table_names(" in source
+        assert "require_product_images=require_product_images" in source
         assert "!= EXPECTED_TABLES" not in source

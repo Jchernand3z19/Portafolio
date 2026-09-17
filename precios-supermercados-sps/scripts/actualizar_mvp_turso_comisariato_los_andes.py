@@ -13,17 +13,23 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "src"))
 
 from actualizar_mvp_sqlite_la_colonia import SnapshotError, _minor  # noqa: E402
 from actualizar_mvp_turso_la_colonia import (  # noqa: E402
     _affected,
     _execute_rows,
     _mutation_steps,
+    _normalised_images_json,
     _normalised_json,
     _pipeline,
     _run_batch,
     _stmt,
     _validate_table_names,
+)
+from precios_supermercados.product_image_evidence import (  # noqa: E402
+    ProductImageEvidenceError,
+    validate_snapshot_images,
 )
 
 SUPERMARKET_ID = "comisariato_los_andes"
@@ -186,6 +192,13 @@ def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
 
     if set(details) != identities:
         raise SnapshotError("los_andes_source_details_invalid")
+    try:
+        validate_snapshot_images(
+            data,
+            product_identities={("sku", identity) for identity in identities},
+        )
+    except ProductImageEvidenceError as exc:
+        raise SnapshotError(f"los_andes_images_invalid:{exc}") from exc
     membership = hashlib.sha256("\n".join(sorted(identities)).encode()).hexdigest()
     if data.get("membership_sha256") != membership:
         raise SnapshotError("los_andes_membership_hash_invalid")
@@ -201,7 +214,11 @@ def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
 
 
 def _preflight(
-    database_url: str, auth_token: str, *, run_id: str
+    database_url: str,
+    auth_token: str,
+    *,
+    run_id: str,
+    require_product_images: bool = False,
 ) -> dict[str, object] | None:
     requests = [
         {"type": "execute", "stmt": _stmt(
@@ -225,7 +242,10 @@ def _preflight(
     results = data.get("results")
     if not isinstance(results, list) or len(results) < 4:
         raise SnapshotError("los_andes_turso_preflight_invalid")
-    _validate_table_names(str(row[0]) for row in _execute_rows(results[0]))
+    _validate_table_names(
+        (str(row[0]) for row in _execute_rows(results[0])),
+        require_product_images=require_product_images,
+    )
     supermarket = _execute_rows(results[1])
     if supermarket and supermarket != [[SUPERMARKET_NAME, COUNTRY]]:
         raise SnapshotError("los_andes_turso_supermarket_mismatch")
@@ -288,7 +308,12 @@ def persist_snapshot(
     if not auth_token.strip():
         raise SnapshotError("turso_auth_token_missing")
     digest = hashlib.sha256(raw).hexdigest()
-    previous = _preflight(database_url, auth_token, run_id=run_id)
+    previous = _preflight(
+        database_url,
+        auth_token,
+        run_id=run_id,
+        require_product_images=snapshot.get("image_capture_status") == "complete",
+    )
     if previous is not None:
         if (
             previous["location_id"] == LOCATION_ID
@@ -308,6 +333,7 @@ def persist_snapshot(
         raise SnapshotError("run_id_conflict")
 
     _register_scope(database_url, auth_token)
+    incoming_images = _normalised_images_json(snapshot)
     steps = _mutation_steps(
         _normalised_json(snapshot),
         location_id=LOCATION_ID,
@@ -318,11 +344,13 @@ def persist_snapshot(
         artifact_id=source_artifact_id,
         digest=digest,
         supermarket_id=SUPERMARKET_ID,
+        incoming_images=incoming_images,
+        image_count=len(snapshot.get("product_images", [])) if incoming_images is not None else 0,
     )
     results = _run_batch(database_url, auth_token, steps)
     opened = _affected(results, steps, "open_history")
     closed = _affected(results, steps, "close_history")
-    return {
+    result = {
         "run_id": run_id,
         "location_id": LOCATION_ID,
         "source_json_sha256": digest,
@@ -332,6 +360,15 @@ def persist_snapshot(
         "history_closed": closed,
         "history_unchanged": len(snapshot["products"]) - opened,
     }
+    if incoming_images is not None:
+        result.update(
+            {
+                "images_opened": _affected(results, steps, "open_images"),
+                "images_closed": _affected(results, steps, "close_images"),
+                "images_refreshed": _affected(results, steps, "refresh_images"),
+            }
+        )
+    return result
 
 
 def verify_committed_run(

@@ -29,6 +29,7 @@ from precios_supermercados.scrapers.comisariato_los_andes import (
     SUPERMARKET_ID,
     build_catalog_request,
     build_store_request,
+    capture_image_extension,
     reconcile_capture,
 )
 
@@ -230,6 +231,8 @@ def capture_catalog(
     _write_json(raw_directory / "ledger.json", ledger)
 
     snapshot = reconcile_capture(raw_directory)
+    if "products" in snapshot:
+        snapshot.update(capture_image_extension(raw_directory))
     raw_snapshot = json.dumps(
         snapshot, ensure_ascii=False, separators=(",", ":"), sort_keys=True
     ).encode()

@@ -7,6 +7,9 @@ from collections import Counter
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from precios_supermercados.product_image_evidence import (
+    build_product_image_rows,
+)
 ENDPOINT = "https://www.pricesmart.com/api/br_discovery/getProductsByKeyword"
 CATEGORY_URL = "https://www.pricesmart.com/es-hn/categoria/Alimentos-G10D03/G10D03"
 CATEGORY_ID = "G10D03"
@@ -61,7 +64,9 @@ def _commercial_value(doc: dict, variant: dict, key: str) -> object | None:
     if variant_value is not None and document_value is not None:
         require(variant_value == document_value, "variant_document_value_mismatch")
     return variant_value if variant_value is not None else document_value
-def parse_documents(documents: list[dict], club: str) -> tuple[list[dict], dict[str, dict]]:
+def parse_documents(
+    documents: list[dict], club: str, *, include_images: bool = False
+) -> tuple[list[dict], dict[str, dict]]:
     require(club in CLUBS, "club_invalid")
     require(isinstance(documents, list) and documents, "documents_invalid")
     rows: list[dict] = []
@@ -149,11 +154,21 @@ def parse_documents(documents: list[dict], club: str) -> tuple[list[dict], dict[
                 "image_url": doc.get("thumb_image"),
                 "campaign_ids": doc.get("promoid_HN", []),
             }
+            if include_images:
+                details[sku]["product_images"] = build_product_image_rows(
+                    source_key_type="item_id",
+                    source_key=sku,
+                    images=(
+                        [(doc["thumb_image"], None)]
+                        if isinstance(doc.get("thumb_image"), str) and doc["thumb_image"]
+                        else []
+                    ),
+                )
     return rows, details
 
 
 def parse_catalog_memberships(
-    category_documents: list[dict], club: str
+    category_documents: list[dict], club: str, *, include_images: bool = False
 ) -> tuple[list[dict], dict[str, dict], dict]:
     """Deduplicate root memberships and parse one complete club catalog.
 
@@ -189,7 +204,9 @@ def parse_catalog_memberships(
             if pair not in memberships[pid]:
                 memberships[pid].append(pair)
 
-    rows, details = parse_documents(list(documents_by_pid.values()), club)
+    rows, details = parse_documents(
+        list(documents_by_pid.values()), club, include_images=include_images
+    )
     for row in rows:
         pairs = memberships[row["product_id"]]
         row["category"] = " | ".join(name for _, name in pairs)

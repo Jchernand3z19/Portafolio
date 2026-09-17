@@ -16,7 +16,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from precios_supermercados.scrapers.colonial import (  # noqa: E402
-    ORIGIN, SECTION, ColonialError, parse_cards, parse_products, reconcile, sitemap_urls,
+    ORIGIN, SECTION, ColonialError, parse_cards, parse_products_with_images, reconcile, sitemap_urls,
 )
 
 
@@ -118,11 +118,15 @@ def collect(get) -> dict:
     if len(membership) != total:
         raise ColonialError("sitemap_collection_count_mismatch")
     rows = []
+    product_images: list[dict[str, object]] = []
     for page in range(1, preflight["json_pages"] + 1):
-        incoming = parse_products(get(f"{ORIGIN}/products.json?limit=250&page={page}"))
+        incoming, incoming_images = parse_products_with_images(
+            get(f"{ORIGIN}/products.json?limit=250&page={page}")
+        )
         if len({r["product_id"] for r in incoming}) != min(250, total - (page - 1) * 250):
             raise ColonialError("json_page_incomplete")
         rows.extend(incoming)
+        product_images.extend(incoming_images)
     cards = list(first_cards)
     for page in range(2, preflight["html_pages"] + 1):
         count, incoming = parse_cards(get(f"{ORIGIN}/collections/all?section_id={SECTION}&page={page}"))
@@ -142,7 +146,8 @@ def collect(get) -> dict:
             "membership_sha256": hashlib.sha256("\n".join(sorted(membership)).encode()).hexdigest(),
             "membership_count": len(membership), "html_cards_count": len(cards),
             "availability_counts": dict(Counter(p["availability"] for p in products)),
-            "preflight": preflight, "products": products}
+            "preflight": preflight, "products": products,
+            "image_capture_status": "complete", "product_images": product_images}
 
 
 def main() -> None:

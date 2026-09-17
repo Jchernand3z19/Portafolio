@@ -63,6 +63,7 @@ def preflight(root: Path, *, database_url: str, auth_token: str, run_id: str) ->
             location_id=location_id,
             run_id=f"{run_id}-{suffix}",
             supermarket_id=supermarket,
+            require_product_images=snapshot.get("image_capture_status") == "complete",
         )
         results.append(
             {
@@ -79,7 +80,10 @@ def preflight(root: Path, *, database_url: str, auth_token: str, run_id: str) ->
     location_id = str(snapshot["location_id"])
     digest = hashlib.sha256(raw).hexdigest()
     previous = los_andes._preflight(
-        database_url, auth_token, run_id=f"{run_id}-los-andes"
+        database_url,
+        auth_token,
+        run_id=f"{run_id}-los-andes",
+        require_product_images=snapshot.get("image_capture_status") == "complete",
     )
     results.append(
         {
@@ -102,6 +106,7 @@ def preflight(root: Path, *, database_url: str, auth_token: str, run_id: str) ->
             auth_token,
             location_id=location_id,
             run_id=current_run_id,
+            require_product_images=snapshot.get("image_capture_status") == "complete",
         )
         results.append(
             {

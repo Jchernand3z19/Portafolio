@@ -415,7 +415,9 @@ def test_membership_recovery_rejects_changed_confirmation(monkeypatch):
         )
 
 
-def _parsed_products(products: list[dict]) -> tuple[list[dict], dict[str, dict]]:
+def _parsed_products(
+    products: list[dict], *, include_images: bool = False
+) -> tuple[list[dict], dict[str, dict]]:
     rows = [
         {
             "source_key": item["productId"],

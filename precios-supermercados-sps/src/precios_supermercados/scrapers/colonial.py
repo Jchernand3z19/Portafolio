@@ -12,6 +12,11 @@ from html.parser import HTMLParser
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
+from precios_supermercados.product_image_evidence import (
+    build_product_image_rows,
+    image_pairs_from_mappings,
+)
+
 ORIGIN = "https://supercolonial.com"
 SECTION = "template--25869947109668__banner"
 
@@ -40,7 +45,7 @@ def _id(value: object) -> str:
     return str(value)
 
 
-def parse_products(raw: bytes) -> list[dict]:
+def _parse_products_with_images(raw: bytes) -> tuple[list[dict], list[dict[str, object]]]:
     try:
         payload = json.loads(raw)
         products = payload["products"]
@@ -48,7 +53,7 @@ def parse_products(raw: bytes) -> list[dict]:
         raise ColonialError("products_shape_invalid") from exc
     if not isinstance(products, list):
         raise ColonialError("products_shape_invalid")
-    result, ids, variants = [], set(), set()
+    result, product_images, ids, variants = [], [], set(), set()
     for product in products:
         if not isinstance(product, dict):
             raise ColonialError("product_invalid")
@@ -77,6 +82,30 @@ def parse_products(raw: bytes) -> list[dict]:
             title = item.get("title")
             if not isinstance(title, str):
                 raise ColonialError("variant_title_invalid")
+            gallery = product.get("images")
+            if not isinstance(gallery, list):
+                raise ColonialError("images_invalid")
+            applicable = []
+            featured = item.get("featured_image")
+            if featured is not None:
+                if not isinstance(featured, dict):
+                    raise ColonialError("featured_image_invalid")
+                applicable.append(featured)
+            for image in gallery:
+                if not isinstance(image, dict):
+                    raise ColonialError("image_invalid")
+                variant_ids = image.get("variant_ids")
+                if not isinstance(variant_ids, list):
+                    raise ColonialError("image_variant_ids_invalid")
+                if not variant_ids or item["id"] in variant_ids:
+                    applicable.append(image)
+            product_images.extend(build_product_image_rows(
+                source_key_type="item_id",
+                source_key=vid,
+                images=image_pairs_from_mappings(
+                    applicable, url_key="src", id_key="id", position_key="position"
+                ),
+            ))
             result.append({
                 "product_id": pid, "item_id": vid, "source_key_type": "item_id",
                 "source_key": vid, "source_name": name,
@@ -88,7 +117,17 @@ def parse_products(raw: bytes) -> list[dict]:
                 "is_promotion": regular is not None and Decimal(regular) > Decimal(current),
                 "availability": "unknown", "handle": handle,
             })
-    return result
+    return result, product_images
+
+
+def parse_products(raw: bytes) -> list[dict]:
+    return _parse_products_with_images(raw)[0]
+
+
+def parse_products_with_images(raw: bytes) -> tuple[list[dict], list[dict[str, object]]]:
+    """Devuelve ofertas y la galería Shopify aplicable a cada variante."""
+
+    return _parse_products_with_images(raw)
 
 
 class _Cards(HTMLParser):

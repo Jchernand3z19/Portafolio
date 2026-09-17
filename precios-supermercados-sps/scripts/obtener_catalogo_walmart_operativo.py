@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from precios_supermercados.scrapers.walmart import SCOPE, STORES, parse_products, verify_stores
+from precios_supermercados.product_image_evidence import detail_image_extension
 
 BASE = "https://www.walmart.com.hn"
 COUNTRY = "HND"
@@ -707,7 +708,8 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
         raise RuntimeError(f"catalog_membership_incomplete:{seller}")
 
     source_products = [products_by_id[pid] for pid in sorted(products_by_id)]
-    rows, source_details = parse_products(source_products)
+    rows, source_details = parse_products(source_products, include_images=True)
+    image_extension = detail_image_extension(rows, source_details)
     if len(rows) != len(source_details):
         raise RuntimeError(f"sku_membership_overlap:{seller}")
     product_ids = set(products_by_id)
@@ -744,6 +746,7 @@ def capture_store(capture: Capture, seller: str, location_id: str, city: str, st
         },
         "products": rows,
         "source_details": source_details,
+        **image_extension,
         "page_evidence": page_evidence,
         "category_total_recoveries": category_total_recoveries,
         "membership_recoveries": membership_recoveries,

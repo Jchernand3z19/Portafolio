@@ -7,9 +7,13 @@ import base64
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
 from actualizar_mvp_sqlite_la_colonia import SnapshotError, _minor
 from actualizar_mvp_turso_la_colonia import (
@@ -17,11 +21,16 @@ from actualizar_mvp_turso_la_colonia import (
     _execute_rows,
     _mutation_steps,
     _pipeline,
+    _normalised_images_json,
     _run_batch,
     _stmt,
     _validate_table_names,
 )
 from migrar_mvp_paiz import schema_ready_sql
+from precios_supermercados.product_image_evidence import (  # noqa: E402
+    ProductImageEvidenceError,
+    validate_snapshot_images,
+)
 
 SUPERMARKET_ID = "paiz"
 SUPERMARKET_NAME = "Paiz"
@@ -194,6 +203,13 @@ def validate_snapshot_bytes(raw: bytes) -> dict[str, Any]:
 
     if set(details) != identities:
         raise SnapshotError("paiz_source_details_invalid")
+    try:
+        validate_snapshot_images(
+            data,
+            product_identities={("item_id", identity) for identity in identities},
+        )
+    except ProductImageEvidenceError as exc:
+        raise SnapshotError(f"paiz_images_invalid:{exc}") from exc
     if (
         data.get("skus_extracted") != len(rows)
         or data.get("skus_with_price") != priced
@@ -234,7 +250,14 @@ def _normalised_json(snapshot: dict[str, Any]) -> str:
     return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
 
 
-def _preflight(url: str, token: str, *, location_id: str, run_id: str) -> dict[str, object] | None:
+def _preflight(
+    url: str,
+    token: str,
+    *,
+    location_id: str,
+    run_id: str,
+    require_product_images: bool = False,
+) -> dict[str, object] | None:
     data = _pipeline(
         url,
         token,
@@ -250,7 +273,10 @@ def _preflight(url: str, token: str, *, location_id: str, run_id: str) -> dict[s
     results = data.get("results")
     if not isinstance(results, list) or len(results) < 5:
         raise SnapshotError("paiz_turso_preflight_invalid")
-    _validate_table_names(str(row[0]) for row in _execute_rows(results[0]))
+    _validate_table_names(
+        (str(row[0]) for row in _execute_rows(results[0])),
+        require_product_images=require_product_images,
+    )
     ddl = _execute_rows(results[1])
     if len(ddl) != 1 or not schema_ready_sql(ddl[0][0]):
         raise SnapshotError("paiz_schema_migration_required")
@@ -277,7 +303,13 @@ def persist_snapshot(raw: bytes, *, database_url: str, auth_token: str, run_id: 
         raise SnapshotError("turso_auth_token_missing")
     location_id = str(snapshot["location_id"])
     digest = hashlib.sha256(raw).hexdigest()
-    previous = _preflight(database_url, auth_token, location_id=location_id, run_id=run_id)
+    previous = _preflight(
+        database_url,
+        auth_token,
+        location_id=location_id,
+        run_id=run_id,
+        require_product_images=snapshot.get("image_capture_status") == "complete",
+    )
     if previous is not None:
         if previous == {"location_id": location_id, "run_status": "success", "sha": digest}:
             return {
@@ -287,6 +319,7 @@ def persist_snapshot(raw: bytes, *, database_url: str, auth_token: str, run_id: 
             }
         raise SnapshotError("run_id_conflict")
 
+    incoming_images = _normalised_images_json(snapshot)
     steps = _mutation_steps(
         _normalised_json(snapshot),
         location_id=location_id,
@@ -297,6 +330,8 @@ def persist_snapshot(raw: bytes, *, database_url: str, auth_token: str, run_id: 
         artifact_id=source_artifact_id,
         digest=digest,
         supermarket_id=SUPERMARKET_ID,
+        incoming_images=incoming_images,
+        image_count=len(snapshot.get("product_images", [])) if incoming_images is not None else 0,
     )
     begin = next(i for i, step in enumerate(steps) if step[0] == "begin")
     city = str(LOCATIONS[location_id]["city"])
@@ -311,7 +346,7 @@ def persist_snapshot(raw: bytes, *, database_url: str, auth_token: str, run_id: 
     results = _run_batch(database_url, auth_token, steps)
     opened = _affected(results, steps, "open_history")
     closed = _affected(results, steps, "close_history")
-    return {
+    result = {
         "run_id": run_id,
         "location_id": location_id,
         "source_json_sha256": digest,
@@ -321,6 +356,15 @@ def persist_snapshot(raw: bytes, *, database_url: str, auth_token: str, run_id: 
         "history_closed": closed,
         "history_unchanged": len(snapshot["products"]) - opened,
     }
+    if incoming_images is not None:
+        result.update(
+            {
+                "images_opened": _affected(results, steps, "open_images"),
+                "images_closed": _affected(results, steps, "close_images"),
+                "images_refreshed": _affected(results, steps, "refresh_images"),
+            }
+        )
+    return result
 
 
 def verify_committed_run(*, database_url: str, auth_token: str, run_id: str, raw: bytes) -> dict[str, object]:
