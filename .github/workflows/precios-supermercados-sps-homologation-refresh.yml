@@ -93,6 +93,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p run-artifacts/homologation
+          python scripts/evaluar_identidad_productos.py \
+            --output run-artifacts/homologation/identity-evaluation.json
           python scripts/backfill_homologacion_turso.py \
             --updated-at-utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --dry-run \

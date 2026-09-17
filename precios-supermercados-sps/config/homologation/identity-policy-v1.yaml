@@ -1,0 +1,58 @@
+schema: precios-sps-product-identity-policy/v1
+engine_version: product-homologation-v2.3
+
+relations:
+  identity:
+    - EXACT_TRADE_ITEM
+    - VERIFIED_EQUIVALENT
+  non_identity:
+    - PRODUCT_VARIANT
+    - COMPARABLE_ALTERNATIVE
+    - UNRESOLVED
+    - CONFLICT
+
+evidence_priority:
+  - same_valid_gtin
+  - manufacturer_catalog
+  - barcode_visible
+  - package_front
+  - package_back
+  - retailer_detail_page
+  - explicit_unit_conversion
+  - source_title
+
+automatic_identity:
+  allowed:
+    - same_valid_gtin_without_material_conflict
+  forbidden:
+    - title_similarity_only
+    - image_similarity_only
+    - llm_assertion_only
+    - one_brand_plus_type_plus_size
+
+hard_conflicts:
+  - different_valid_gtin
+  - brand_conflict
+  - product_type_conflict
+  - presentation_conflict
+  - variant_conflict
+  - flavor_conflict
+  - packaging_conflict
+
+reviewed_equivalence:
+  required:
+    - current_source_fingerprints
+    - explicit_master_product_id
+    - evidence_codes
+    - reviewer
+    - reviewed_at_utc
+    - rationale
+  stale_when:
+    - source_evidence_changes
+    - engine_version_changes
+    - policy_version_changes
+
+publication:
+  mode: shadow
+  public_serving_allowed: false
+  require_offline_precision_before_enable: true
